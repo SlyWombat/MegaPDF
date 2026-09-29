@@ -273,6 +273,7 @@ Conventions (OQLF, Canadian French):
 | Go | Aller | #506, the button that goes to the typed page number. Shorter than *Aller à la page*, which is the box's own title above it |
 | Settings… | Paramètres… | #512, the iOS ⋯ menu row that opens the settings sheet. *Settings* itself (Paramètres) is already Windows' word for the same screen |
 | Reading | Lecture | #512, the section of reading preferences in the iOS settings sheet. The noun on its own, not *Mode lecture*: the section holds page colours, which apply whether or not reading mode is on |
+| Hide the tools and read the page (Ctrl+H) | Masquer les outils et lire la page (Ctrl+H) | #504, the Windows-only tooltip on the Reading mode command. "The tools", not "the toolbar": on Windows the command also sits in the "…" overflow, where the row itself is not what goes |
 
 ## Français (France)
 

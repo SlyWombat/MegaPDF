@@ -1,5 +1,7 @@
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media.Imaging;
+using Windows.Foundation;
 using Windows.Graphics.Imaging;
 using Windows.Storage.Streams;
 
@@ -148,10 +150,540 @@ internal static class Screenshot
             case "click":
                 return await window.ClickFirstRegionsForTest();
 
+            // #504/#510: reading mode, in a real window. The nearest thing this app has
+            // to the Avalonia leg's --self-test block, and for the same reasons (#462
+            // is open precisely because WinUI has no headless platform and a CI runner
+            // has no desktop session). Needs a document; the exit code is the test.
+            case "reading":
+                return await CheckReadingModeAsync(window);
+
+            // #528: zoom anchoring, in a real window, for the same reason "reading" is —
+            // CI cannot raise this (#462), so this is the by-hand gate. Needs a document;
+            // the exit code is the test.
+            case "zoom-anchor":
+                return await CheckZoomAnchorAsync(window);
+
             default:
                 Console.Error.WriteLine($"unknown --screenshot-state '{state}'");
                 return false;
         }
+    }
+
+    /// <summary>
+    /// Reading mode, end to end (#504 tier 1, #510 tier 2), in the real window this
+    /// process already has open.
+    ///
+    /// Why a window and not a view model: every rule worth breaking here is the
+    /// window's. Whether the toolbar is *out of the tab order* rather than merely
+    /// invisible, whether Escape steps back one level and which one, whether the
+    /// floating bar stops fading when a screen reader is on — a view-model check can
+    /// see none of those, and each of them is how a screen-reader user would meet the
+    /// feature.
+    ///
+    /// Two honest limits, stated here rather than buried:
+    ///
+    /// * A WinUI process cannot synthesise its own key presses, so this drives
+    ///   <c>StepBackFromReadingMode</c> (the ladder itself) rather than the Escape key
+    ///   that calls it, and calls <c>ToggleReadingMode</c> rather than pressing Ctrl+H.
+    ///   That the accelerators are on <c>RootGrid</c> is checked by reading the grid's
+    ///   accelerator list; that Windows delivers those keys is not checkable from here.
+    /// * A screen reader cannot be turned on and off around a test, so
+    ///   <see cref="ScreenReader.OverrideForTest"/> stands in for the answer while the
+    ///   production guard — timer, tick and all — is what runs.
+    ///
+    /// The app's own settings.json is written by the page-colour checks and is put back
+    /// exactly as it was found before this returns.
+    /// </summary>
+    private static async Task<bool> CheckReadingModeAsync(MainWindow window)
+    {
+        if (window.Shell.Active is not { IsDocumentOpen: true } vm || window.PageScroller is not { } scroll)
+        {
+            Console.Error.WriteLine("--screenshot-state reading needs a document.");
+            return false;
+        }
+
+        var ok = true;
+        void Check(string what, bool passed)
+        {
+            Console.Error.WriteLine($"{(passed ? "PASS" : "FAIL")}: {what}");
+            ok &= passed;
+        }
+
+        var settings = window.Shell.Settings;
+        var colours = settings.PageColours;
+        var openInReading = settings.OpenInReadingMode;
+        try
+        {
+            // A throw anywhere below is a FAIL with a stack, not a window left up: an
+            // exception escaping here is posted to the dispatcher and the process hangs
+            // with nothing said, which is exactly how a check becomes worse than none
+            // (measured on the first run of this one — a Brand token misspelt by a
+            // suffix left the app sitting on Dave's desktop).
+            await RunReadingChecksAsync(window, vm, scroll, settings, Check);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"FAIL: the reading-mode check threw: {ex}");
+            ok = false;
+        }
+        finally
+        {
+            // Left as found (the app writes to the real per-user settings.json).
+            settings.PageColours = colours;
+            settings.OpenInReadingMode = openInReading;
+            window.ApplyPageColours();
+        }
+        return ok;
+    }
+
+    private static async Task RunReadingChecksAsync(
+        MainWindow window, DocumentViewModel vm, ScrollViewer scroll,
+        MegaPDF.Core.Services.AppSettings settings, Action<string, bool> Check)
+    {
+        {
+            settings.PageTint = MegaPDF.Core.Engine.PageTint.Normal;
+            window.ApplyPageColours();
+            await Task.Delay(400);
+
+            // --- 1. The two entry points and the accelerators exist -------------
+            var accelerators = window.ReadingAcceleratorsForTest();
+            Check($"Ctrl+H is on the accelerator grid ({string.Join(", ", accelerators)})",
+                  accelerators.Contains("Control+H"));
+            Check("F11 is too", accelerators.Contains("None+F11"));
+            Check("Reading mode is in the zoom flyout and in the More menu",
+                  window.ReadingModeEntryPointsForTest().Count == 2);
+
+            // --- 2. Entering and leaving ---------------------------------------
+            var before = window.FocusableControlIds();
+            Check($"before: the toolbar is in the tab order ({before.Count} focusable controls)",
+                  before.Contains("OpenButton"));
+
+            var zoom = vm.ZoomPercent;
+            var page = vm.CurrentPage;
+            var offset = scroll.VerticalOffset;
+
+            window.ToggleReadingMode();
+            await Task.Delay(500);
+            Check($"Ctrl+H's command turns reading mode on ({window.DescribeReadingMode()})", window.IsReadingMode);
+            Check("  the page host is untouched", scroll.Visibility == Visibility.Visible);
+            Check("  the floating bar is up", window.Shell.Active?.View?.IsReadingBarShown == true);
+            Check($"  and the change is announced (\"{window.Shell.Active?.View?.LastAnnouncement}\")",
+                  window.Shell.Active?.View?.LastAnnouncement == Strings.ReadingModeOn);
+            Check($"  same zoom ({vm.ZoomPercent}%), same page ({vm.CurrentPage}), same scroll offset",
+                  vm.ZoomPercent == zoom && vm.CurrentPage == page
+                  && Math.Abs(scroll.VerticalOffset - offset) < 1);
+
+            // --- 3. The tab order ----------------------------------------------
+            var inside = window.FocusableControlIds();
+            var trapped = inside.Where(id => id is "OpenButton" or "SaveButton" or "SignaturesButton"
+                                                or "AddTextButton" or "WhiteoutButton" or "RedactButton"
+                                                or "UndoButton" or "RedoButton" or "ZoomInButton"
+                                                or "ZoomOutButton" or "ZoomMenuButton").ToList();
+            Check($"no hidden chrome is left in the tab order ({inside.Count} focusable controls)",
+                  trapped.Count == 0);
+            if (trapped.Count > 0)
+                Console.Error.WriteLine($"  still focusable: {string.Join(", ", trapped)}");
+            Check("  and the bar's Exit is, so the way out is reachable from the keyboard",
+                  inside.Contains("ReadingExitButton"));
+
+            // --- 4. Escape steps back exactly one level -------------------------
+            window.ToggleFullScreen();
+            window.Shell.Active?.View?.ShowFindBar();
+            await Task.Delay(400);
+            Check("set up: reading mode, full screen and the find bar, all on",
+                  window.IsReadingMode && window.IsFullScreen
+                  && window.Shell.Active?.View?.IsFindBarOpen == true);
+
+            var step = window.StepBackFromReadingMode();
+            Check($"Escape 1 closes the find bar and nothing else ({step})",
+                  step == MegaPDF.Core.Viewing.ReadingModeStep.CloseFind
+                  && window.Shell.Active?.View?.IsFindBarOpen == false
+                  && window.IsFullScreen && window.IsReadingMode);
+
+            step = window.StepBackFromReadingMode();
+            await Task.Delay(300);
+            Check($"Escape 2 leaves full screen and stays in reading mode ({step})",
+                  step == MegaPDF.Core.Viewing.ReadingModeStep.LeaveFullScreen
+                  && !window.IsFullScreen && window.IsReadingMode);
+
+            step = window.StepBackFromReadingMode();
+            await Task.Delay(300);
+            Check($"Escape 3 leaves reading mode ({step})",
+                  step == MegaPDF.Core.Viewing.ReadingModeStep.LeaveReadingMode && !window.IsReadingMode);
+            Check("  every host is back, and the tab order with them",
+                  window.FocusableControlIds().Contains("OpenButton"));
+            Check($"  and that is announced too (\"{window.Shell.Active?.View?.LastAnnouncement}\")",
+                  window.Shell.Active?.View?.LastAnnouncement == Strings.ReadingModeOff);
+
+            step = window.StepBackFromReadingMode();
+            Check($"Escape 4 is not ours — it still means whatever it meant before ({step})",
+                  step == MegaPDF.Core.Viewing.ReadingModeStep.Nothing);
+
+            // Full screen is offered only inside the mode (plan §2).
+            window.ToggleFullScreen();
+            await Task.Delay(300);
+            Check("F11 outside reading mode does nothing", !window.IsFullScreen);
+
+            // --- 5. Armed tools, and editing off --------------------------------
+            vm.StartWhiteoutMode();
+            Check("set up: a tool is armed", vm.IsWhiteoutMode);
+            window.ToggleReadingMode();
+            await Task.Delay(400);
+            Check("entering reading mode disarms an armed tool", !vm.IsWhiteoutMode);
+            window.ToggleReadingMode();
+            await Task.Delay(400);
+            Check("  and leaving does not put it back", !vm.IsWhiteoutMode);
+
+            var view = window.Shell.Active?.View;
+            var dirtyBefore = vm.HasUnsavedChanges;
+            Check("the click about to be made would change the document",
+                  !dirtyBefore && vm.Pages.Count > 0
+                  && vm.Pages[0].Regions.Any(r => r.Kind == MegaPDF.Core.Engine.PageHitKind.DrawnCheckbox));
+
+            window.ToggleReadingMode();
+            await Task.Delay(400);
+            var aimed = view is not null
+                        && await view.ActivateFirstRegionForTest(MegaPDF.Core.Engine.PageHitKind.DrawnCheckbox);
+            // Long enough that a change on its way would have arrived: "nothing
+            // happened" has to be given the same chance to be wrong as "something
+            // happened" is given below.
+            await Task.Delay(900);
+            Check("a click on the page in reading mode does nothing at all",
+                  aimed && !vm.HasUnsavedChanges && !vm.UndoCommand.CanExecute(null));
+
+            window.ToggleReadingMode();
+            await Task.Delay(400);
+            if (view is not null)
+                await view.ActivateFirstRegionForTest(MegaPDF.Core.Engine.PageHitKind.DrawnCheckbox);
+            await Task.Delay(1200);
+            Check("  and the same click works again once the mode is off", vm.HasUnsavedChanges);
+            while (vm.UndoCommand.CanExecute(null))
+            {
+                vm.UndoCommand.Execute(null);
+                await Task.Delay(400);
+            }
+
+            // --- 6. The bar, and the screen-reader rule -------------------------
+            window.ToggleReadingMode();
+            await Task.Delay(400);
+            view = window.Shell.Active?.View;
+            try
+            {
+                ScreenReader.OverrideForTest = () => true;
+                view!.ShowReadingBar();
+                await Task.Delay(200);
+                Check("with a screen reader running, the bar is up", view.IsReadingBarShown);
+                Check("  and no idle countdown was ever started", !view.ReadingBarIsCountingDown);
+                // Forced anyway: the guard has to be in the tick and not only in
+                // whether the timer was started, or a later change that restarts it
+                // from somewhere else could take the bar away.
+                view.FadeReadingBarNowForTest();
+                Check("  and forcing the idle tick still leaves it up — it never fades",
+                      view.IsReadingBarShown);
+
+                ScreenReader.OverrideForTest = () => false;
+                window.ClickPagesForTest();   // focus off the bar
+                view.ShowReadingBar();
+                await Task.Delay(200);
+                Check("with no screen reader, the bar is up and counting down",
+                      view.IsReadingBarShown && view.ReadingBarIsCountingDown);
+                view.FadeReadingBarNowForTest();
+                Check("  and the idle tick fades it", !view.IsReadingBarShown);
+                view.ShowReadingBar();
+                Check("  movement brings it back", view.IsReadingBarShown);
+
+                view.ReadingExitControl.Focus(FocusState.Keyboard);
+                await Task.Delay(300);
+                Check("keyboard focus in the bar stops the countdown", !view.ReadingBarIsCountingDown);
+                view.FadeReadingBarNowForTest();
+                Check("  and holds it open through an idle tick", view.IsReadingBarShown);
+            }
+            finally
+            {
+                ScreenReader.OverrideForTest = null;
+            }
+
+            // --- 7. Page colours: the engine, against real pixels ---------------
+            Check("the engine tints the page it is asked to", CheckTintedPixels(vm, Check));
+
+            // --- 8. Page colours: the app, the cache and the settings file ------
+            var firstPage = vm.Pages[0];
+            settings.PageTint = MegaPDF.Core.Engine.PageTint.Night;
+            window.ApplyPageColours();
+            await Task.Delay(1500);
+            Check("choosing Night reaches every tab and every page",
+                  vm.Tint == MegaPDF.Core.Engine.PageTint.Night);
+            Check("  the visible page re-rendered in it",
+                  !ReferenceEquals(vm.Pages[0], firstPage)
+                  && vm.Pages[0].Tint == MegaPDF.Core.Engine.PageTint.Night);
+            var faraway = vm.Pages.Skip(6).FirstOrDefault();
+            Check("  and a page nobody is looking at did not",
+                  faraway is null || faraway.Source is null);
+            Check("  the gutter retints to match", scroll.Background is not null);
+
+            settings.OpenInReadingMode = true;
+            var onDisk = new MegaPDF.Core.Services.AppSettings();
+            Check($"Page colours persists to the shared settings.json (\"{onDisk.PageColours}\")",
+                  onDisk.PageColours == "Night");
+            Check("Open documents in reading mode persists beside it", onDisk.OpenInReadingMode);
+
+            settings.PageTint = MegaPDF.Core.Engine.PageTint.Normal;
+            window.ApplyPageColours();
+            await Task.Delay(800);
+            Check("  and Normal hands the gutter back to the theme rather than pinning a colour",
+                  scroll.ReadLocalValue(Control.BackgroundProperty) == DependencyProperty.UnsetValue);
+
+            window.ExitReadingMode();
+            await Task.Delay(300);
+
+            // --- 9. "Open documents in reading mode", and tabs -------------------
+            //
+            // The setting's whole job is to be honoured when a document arrives
+            // (#168 decision 2), and reading mode is the *window's*, so a second tab
+            // is also the only way to see the bar name the file it is showing.
+            var second = Path.Combine(
+                Path.GetDirectoryName(vm.DocumentPath ?? "") ?? "", "demo.pdf");
+            if (File.Exists(second))
+            {
+                settings.OpenInReadingMode = true;
+                await window.Shell.OpenInTabAsync(second);
+                await Task.Delay(2000);
+                Check("with the setting on, a document opens straight into reading mode",
+                      window.IsReadingMode);
+                Check("  and the chrome went with it",
+                      !window.FocusableControlIds().Contains("OpenButton"));
+                Console.Error.WriteLine(
+                    $"  (tabs={window.Shell.Documents.Count}, active={window.Shell.Active?.OpenDocumentName}, "
+                    + $"view={(window.Shell.Active?.View is null ? "none" : "attached")})");
+                Check($"  with two tabs open, the bar names the file "
+                      + $"(\"{window.Shell.Active?.View?.ReadingFileNameText}\")",
+                      window.Shell.Active?.View?.ReadingFileNameText == Path.GetFileName(second));
+                Check("  and both tabs are in the mode — it is the window's, not a document's",
+                      window.Shell.Documents.All(d => d.IsReadingMode));
+
+                window.ExitReadingMode();
+                await Task.Delay(400);
+                Console.Error.WriteLine(
+                    $"  (after leaving: view={(window.Shell.Active?.View is null ? "none" : "attached")}, "
+                    + $"bar name=\"{window.Shell.Active?.View?.ReadingFileNameText}\")");
+                Check("leaving puts the chrome back for both tabs",
+                      window.FocusableControlIds().Contains("OpenButton")
+                      && window.Shell.Documents.All(d => !d.IsReadingMode));
+            }
+            else
+            {
+                Console.Error.WriteLine($"note: {second} is not there, so the "
+                    + "open-in-reading-mode and two-tab checks were skipped.");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Zoom anchoring (#528), in the real window this process already has open. Every
+    /// entry point used to grow the page from <c>PagesScroll</c>'s own origin (its own
+    /// top-left corner), so whatever you were looking at slid out from under the
+    /// pointer or the click that asked for the zoom. Mirrors <see cref="CheckReadingModeAsync"/>'s
+    /// own shape and the Avalonia leg's <c>CheckZoomAnchor</c> (#534) — the nearest
+    /// thing this app has to a self-test for a real window, for the same reason
+    /// reading mode needed one (#462: no headless platform, no CI desktop session).
+    /// Needs a document; the exit code is the test.
+    /// </summary>
+    private static async Task<bool> CheckZoomAnchorAsync(MainWindow window)
+    {
+        if (window.Shell.Active is not { IsDocumentOpen: true } vm
+            || vm.View is not { } view
+            || window.PageScroller is not { } scroll)
+        {
+            Console.Error.WriteLine("--screenshot-state zoom-anchor needs a document.");
+            return false;
+        }
+
+        var ok = true;
+        void Check(string what, bool passed)
+        {
+            Console.Error.WriteLine($"{(passed ? "PASS" : "FAIL")}: {what}");
+            ok &= passed;
+        }
+
+        try
+        {
+            await RunZoomAnchorChecksAsync(vm, view, scroll, Check);
+        }
+        catch (Exception ex)
+        {
+            // Same reasoning as CheckReadingModeAsync's own try/catch: an exception left
+            // to escape here is posted to the dispatcher and the process just hangs, with
+            // nothing said — worse than no check at all.
+            Console.Error.WriteLine($"FAIL: the zoom-anchor check threw: {ex}");
+            ok = false;
+        }
+        finally
+        {
+            // Left at a known zoom, not whatever the last check happened to leave it at —
+            // --window is the caller's to pick, this app's own settings are not touched.
+            await vm.SetZoomPercentAsync(100);
+        }
+        return ok;
+    }
+
+    /// <summary>
+    /// The checks themselves (#528). Each one reads the content point under an anchor
+    /// before a zoom step, computes independently — not by calling
+    /// <see cref="MegaPDF.App.ZoomAnchor.Reanchor"/> itself, which would only prove the
+    /// production code agrees with itself — where that point should land given the
+    /// zoom <see cref="DocumentViewModel"/> actually committed to, and asserts the
+    /// offset landed there rather than wherever an unfixed zoom would have left it (the
+    /// corner, unmoved, no matter the anchor).
+    ///
+    /// Run with a narrower window than the page at every zoom level used below, on
+    /// purpose (<c>--screenshot --window 900x700</c> in the by-hand recipe): at 100%,
+    /// with fit-to-window never triggered (a fresh fixture with no remembered view
+    /// opens at 100%, see <see cref="DocumentViewModel.SetZoomAsync"/>), there is
+    /// nothing yet to correct, and it is also the one place a check could not tell
+    /// "anchored correctly" from "never moved at all" — the corner an unfixed zoom
+    /// already sits at. Every check here first zooms past 100% and moves the offset off
+    /// (0,0) before it measures anything.
+    /// </summary>
+    private static async Task RunZoomAnchorChecksAsync(
+        DocumentViewModel vm, DocumentView view, ScrollViewer scroll, Action<string, bool> check)
+    {
+        // Layout rounding leaves a fraction of a DIP of slack; a real drift from the
+        // corner-anchoring bug is tens to hundreds of DIP, not this.
+        const double Epsilon = 1.5;
+
+        async Task SetOffsetAsync(double x, double y)
+        {
+            scroll.ChangeView(x, y, null, disableAnimation: true);
+            await Task.Delay(200);
+        }
+
+        // --- Menu, toolbar and keyboard: anchored on the viewport's centre ---
+        //
+        // vm.ZoomInCommand.ExecuteAsync(null) is exactly what the toolbar's zoom-in
+        // button (Command-bound in MainWindow.xaml), the keyboard accelerators
+        // (MainWindow.Toolbar.cs) and the reading-mode bar's own zoom button
+        // (DocumentView.ReadingMode.cs) all run.
+        await vm.SetZoomPercentAsync(200);
+        await Task.Delay(300);
+        await SetOffsetAsync(37, 210);
+
+        var viewport = new Point(scroll.ViewportWidth, scroll.ViewportHeight);
+        var centre = new Point(viewport.X / 2, viewport.Y / 2);
+        var centreBeforeOffset = new Point(scroll.HorizontalOffset, scroll.VerticalOffset);
+        var centreBeforeZoom = vm.ZoomFactor;
+        var contentAtCentreBefore = new Point(centreBeforeOffset.X + centre.X, centreBeforeOffset.Y + centre.Y);
+
+        await vm.ZoomInCommand.ExecuteAsync(null);
+        await Task.Delay(300);
+
+        var centreRatio = vm.ZoomFactor / centreBeforeZoom;
+        var expectedAtCentre = new Point(contentAtCentreBefore.X * centreRatio, contentAtCentreBefore.Y * centreRatio);
+        var actualAtCentre = new Point(scroll.HorizontalOffset + centre.X, scroll.VerticalOffset + centre.Y);
+        check($"menu/keyboard zoom in ({centreBeforeZoom * 100:F0}% -> {vm.ZoomPercent}%) keeps the viewport "
+              + $"centre's content under it (expected {Describe(expectedAtCentre)}, got {Describe(actualAtCentre)})",
+              Math.Abs(actualAtCentre.X - expectedAtCentre.X) < Epsilon && Math.Abs(actualAtCentre.Y - expectedAtCentre.Y) < Epsilon);
+
+        // --- The clamp: correct by the ratio actually committed, not the ratio asked for ---
+        //
+        // ZoomInCommand asks for +25 (ZoomStep) every time; at 290% that asks for 315%,
+        // which SetZoomAsync clamps to MaxZoom (300%). The ratio actually applied is
+        // 300/290, not 315/290 — correcting by the requested ratio would land the
+        // anchor point somewhere the committed zoom does not put it.
+        await vm.SetZoomPercentAsync(290);
+        await Task.Delay(300);
+        await SetOffsetAsync(15, 90);
+
+        var clampBeforeOffset = new Point(scroll.HorizontalOffset, scroll.VerticalOffset);
+        var clampBeforeZoom = vm.ZoomFactor; // 2.90
+        var clampAnchor = new Point(viewport.X / 2, viewport.Y / 2);
+        var contentAtClampAnchorBefore = new Point(clampBeforeOffset.X + clampAnchor.X, clampBeforeOffset.Y + clampAnchor.Y);
+
+        await vm.ZoomInCommand.ExecuteAsync(null);
+        await Task.Delay(300);
+
+        check($"zooming in from 290% clamps to {vm.ZoomPercent}% (MaxZoom), not 315%", vm.ZoomPercent == 300);
+        var committedRatio = vm.ZoomFactor / clampBeforeZoom; // 300/290
+        var requestedRatio = 3.15 / clampBeforeZoom;          // 315/290 — what a naive correction would use
+        var expectedByCommitted = new Point(contentAtClampAnchorBefore.X * committedRatio, contentAtClampAnchorBefore.Y * committedRatio);
+        var expectedByRequested = new Point(contentAtClampAnchorBefore.X * requestedRatio, contentAtClampAnchorBefore.Y * requestedRatio);
+        var actualAtClampAnchor = new Point(scroll.HorizontalOffset + clampAnchor.X, scroll.VerticalOffset + clampAnchor.Y);
+        check($"  the correction uses the clamped ratio (expected {Describe(expectedByCommitted)}, got {Describe(actualAtClampAnchor)})",
+              Math.Abs(actualAtClampAnchor.X - expectedByCommitted.X) < Epsilon && Math.Abs(actualAtClampAnchor.Y - expectedByCommitted.Y) < Epsilon);
+        check("  not the requested one (would have landed at "
+              + $"{Describe(expectedByRequested)}, further off than {Epsilon} DIP from where it actually landed)",
+              Math.Abs(actualAtClampAnchor.X - expectedByRequested.X) >= Epsilon || Math.Abs(actualAtClampAnchor.Y - expectedByRequested.Y) >= Epsilon);
+
+        // --- Ctrl+wheel: anchored on the pointer ---
+        await vm.SetZoomPercentAsync(200);
+        await Task.Delay(300);
+        await SetOffsetAsync(20, 150);
+
+        var wheelAnchor = new Point(60, 40);
+        var wheelBeforeOffset = new Point(scroll.HorizontalOffset, scroll.VerticalOffset);
+        var wheelBeforeZoom = vm.ZoomFactor;
+        var contentUnderWheelBefore = new Point(wheelBeforeOffset.X + wheelAnchor.X, wheelBeforeOffset.Y + wheelAnchor.Y);
+
+        // ApplyWheelZoomAsync is exactly what OnPagesPointerWheel runs once it has read
+        // the pointer's position and the wheel's sign off a real PointerRoutedEventArgs
+        // — see that method's own remark on why this test cannot build one of those.
+        await view.ApplyWheelZoomAsync(wheelAnchor, wheelDelta: 120);
+        await Task.Delay(300);
+
+        check($"Ctrl+wheel zooms ({wheelBeforeZoom * 100:F0}% -> {vm.ZoomPercent}%)", vm.ZoomFactor > wheelBeforeZoom);
+        var wheelRatio = vm.ZoomFactor / wheelBeforeZoom;
+        var expectedUnderWheel = new Point(contentUnderWheelBefore.X * wheelRatio, contentUnderWheelBefore.Y * wheelRatio);
+        var actualUnderWheel = new Point(scroll.HorizontalOffset + wheelAnchor.X, scroll.VerticalOffset + wheelAnchor.Y);
+        check($"  anchored on the pointer, not the corner (expected {Describe(expectedUnderWheel)}, got {Describe(actualUnderWheel)})",
+              Math.Abs(actualUnderWheel.X - expectedUnderWheel.X) < Epsilon && Math.Abs(actualUnderWheel.Y - expectedUnderWheel.Y) < Epsilon);
+
+        // --- The pure arithmetic, independent of any window at all ---
+        var pureReanchor = MegaPDF.App.ZoomAnchor.Reanchor(new Point(100, 200), 1.0, 0.5, new Point(50, 50));
+        check($"ZoomAnchor.Reanchor at 0.5x from (100,200) around (50,50) is (25,75) (got {Describe(pureReanchor)})",
+              Math.Abs(pureReanchor.X - 25) < 0.0001 && Math.Abs(pureReanchor.Y - 75) < 0.0001);
+        var pureReanchorAtClamp = MegaPDF.App.ZoomAnchor.Reanchor(new Point(100, 200), 4.0, 4.0, new Point(50, 50));
+        check($"ZoomAnchor.Reanchor with no ratio change leaves the offset alone (got {Describe(pureReanchorAtClamp)})",
+              pureReanchorAtClamp.X == 100 && pureReanchorAtClamp.Y == 200);
+
+        static string Describe(Point p) => $"({p.X:F1}, {p.Y:F1})";
+    }
+
+    /// <summary>
+    /// The engine half of page colours (#509 consumed, not merely passed): the same
+    /// page rendered three ways, asserted on the pixels of a sheet of white paper.
+    /// "The caller ORs a bit" is not evidence that a sepia page is sepia.
+    /// </summary>
+    private static bool CheckTintedPixels(DocumentViewModel vm, Action<string, bool> check)
+    {
+        if (vm.CurrentDocument is not { } document)
+        {
+            check("  a document to render", false);
+            return false;
+        }
+        using var page = document.GetPage(0);
+        var normal = page.Render(200, 260).Bgra;
+        var sepia = page.Render(200, 260, MegaPDF.Core.Engine.PageTint.Sepia).Bgra;
+        var night = page.Render(200, 260, MegaPDF.Core.Engine.PageTint.Night).Bgra;
+
+        var white = -1;
+        for (var i = 0; i + 3 < normal.Length; i += 4)
+        {
+            if (normal[i] == 0xFF && normal[i + 1] == 0xFF && normal[i + 2] == 0xFF)
+            {
+                white = i;
+                break;
+            }
+        }
+        check("  the page has white paper to tint", white >= 0);
+        if (white < 0)
+            return false;
+
+        var sepiaOk = sepia[white] == 0xD8 && sepia[white + 1] == 0xEC && sepia[white + 2] == 0xF4;
+        check($"  sepia turns it into the core's paper white (#{sepia[white + 2]:X2}{sepia[white + 1]:X2}{sepia[white]:X2})", sepiaOk);
+        var nightOk = night[white] <= 0x40 && night[white + 1] <= 0x40 && night[white + 2] <= 0x40;
+        check($"  night turns it dark (#{night[white + 2]:X2}{night[white + 1]:X2}{night[white]:X2})", nightOk);
+        var differ = !normal.SequenceEqual(sepia) && !normal.SequenceEqual(night);
+        check("  and Normal is the page as the document draws it", differ);
+        return sepiaOk && nightOk && differ;
     }
 
     private static async Task<bool> CheckToolbarFocusAsync(MainWindow window)

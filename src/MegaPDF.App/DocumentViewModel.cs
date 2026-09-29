@@ -51,6 +51,14 @@ public sealed record PageView(
     /// </summary>
     public bool IsPreview { get; init; }
 
+    /// <summary>
+    /// The page colours this slot's bitmap was drawn in (#510). Carried on the slot so
+    /// a tint change can be noticed by the viewport loop the same way a stale preview
+    /// is — which means the page keeps showing its old pixels until the new ones
+    /// arrive, instead of blanking while it re-renders.
+    /// </summary>
+    public PageTint Tint { get; init; }
+
     public Visibility FailedVisibility => RenderFailed ? Visibility.Visible : Visibility.Collapsed;
     public string FailedMessage => Strings.PageRenderFailed;
 }
@@ -392,6 +400,44 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
 
     public bool IsDocumentOpen => DocumentPath is not null;
 
+    // --- Reading mode (#504 tier 1, #510 tier 2) ---
+
+    /// <summary>
+    /// Whether the window showing this tab is in reading mode (#504).
+    ///
+    /// The mode itself belongs to the *window* — the chrome it hides is the window's,
+    /// and Ctrl+Tab still switches tabs inside it (plan §2 tier 1, decision 2 on #168)
+    /// — so <see cref="MainWindow"/> owns it and mirrors it onto every tab it holds.
+    /// It lives here because what it changes is what a click on the page means:
+    /// <c>DocumentView.RoutePageActivationAsync</c> returns without dispatching while
+    /// it is on, which is the "suppressed, not rerouted" the plan asks for. Nothing
+    /// about the document changes, the unsaved dot stays as it was, and undo and redo
+    /// stay live — they act on the document, not on the page.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isReadingMode;
+
+    /// <summary>
+    /// Reading mode's page colours (#510), as the engine's render flag. App-level, not
+    /// a property of this document: the window pushes <c>AppSettings.PageTint</c> down
+    /// to every tab it holds. Changing it re-renders the pages that are realised and
+    /// nothing else — see <see cref="OnTintChanged"/> and <see cref="PageView.Tint"/>.
+    /// </summary>
+    [ObservableProperty]
+    private PageTint _tint;
+
+    partial void OnTintChanged(PageTint value)
+    {
+        if (_document is null || Pages.Count == 0)
+            return;
+        // Not a clear and not a placeholder sweep: every realised slot still shows the
+        // old tint's pixels until its replacement arrives, and the viewport loop picks
+        // stale-tint slots up because PageView carries the tint it was drawn in. Pages
+        // outside the window are placeholders already, so this is exactly "the visible
+        // window re-renders, the document does not" (#510).
+        _ = UpdateViewportAsync(_viewFirst, _viewLast);
+    }
+
     // --- Document security (#131, ADR-004 §2, §3) ---
 
     /// <summary>
@@ -614,7 +660,24 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
         recentFiles.Add(path);
         _ = JumpListRecents.RecordAsync(path); // the taskbar's Recent list (#165)
         if (rememberedView is not null)
-            ZoomPercent = Math.Clamp(rememberedView.ZoomPercent, MinZoom, MaxZoom);
+        {
+            // The document's own remembered zoom (#528), not a zoom the user aimed
+            // anywhere in this window — the same reasoning the Avalonia leg's
+            // FitOnOpen guard uses. Correcting it at the viewport's centre would
+            // scroll a document that just (re)opened away from its own top. Pages
+            // here still belongs to whatever this tab showed before (Pages.Clear()
+            // is below), so there would be nothing meaningful to correct against
+            // even unguarded.
+            SuppressZoomAnchor = true;
+            try
+            {
+                ZoomPercent = Math.Clamp(rememberedView.ZoomPercent, MinZoom, MaxZoom);
+            }
+            finally
+            {
+                SuppressZoomAnchor = false;
+            }
+        }
         RecentFilesChanged?.Invoke(this, EventArgs.Empty);
         ResetPageFocus(); // keyboard focus and maps belong to the previous document (#2)
         Pages.Clear();
@@ -675,7 +738,7 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
     private PageView Placeholder(int index, double pointsWidth, double pointsHeight) =>
         new(index, null, pointsWidth, pointsHeight,
             pointsWidth * 96 / 72 * ZoomFactor, pointsHeight * 96 / 72 * ZoomFactor, [])
-        { Highlights = HighlightsFor(index, ZoomFactor) };
+        { Highlights = HighlightsFor(index, ZoomFactor), Tint = Tint };
 
     // --- Viewport-window rendering (SDD §4.2: visible pages ± 2, evict the rest) ---
 
@@ -733,7 +796,13 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
                         if (generation != _openGeneration)
                             return;
                         var slot = Pages[i];
-                        if (!slot.RenderFailed && (preview ? slot.Source is null : slot.Source is null || slot.IsPreview))
+                        // A slot drawn in another tint is stale in exactly the way a
+                        // preview is (#510) — it has pixels, they are the wrong ones —
+                        // so it is re-rendered by the full pass and skipped by the
+                        // preview one, which is what keeps the old page on screen
+                        // rather than blanking it while the new tint arrives.
+                        var stale = slot.Source is null || slot.IsPreview || slot.Tint != Tint;
+                        if (!slot.RenderFailed && (preview ? slot.Source is null : stale))
                             Pages[i] = await RenderPageAsync(doc, i, preview);
                         if (_viewportDirty)
                             break; // the window moved — restart with the new one
@@ -777,6 +846,9 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
         // Render at monitor rasterization scale × zoom so pages stay crisp.
         var scale = (window.Content?.XamlRoot?.RasterizationScale ?? 1.0) * ZoomFactor;
         var zoom = ZoomFactor;
+        // Read on the UI thread and carried into the render, so the slot records the
+        // tint it was actually drawn in even if the choice changes mid-render (#510).
+        var tint = Tint;
 
         RenderedPage rendered;
         double pointsW, pointsH;
@@ -784,7 +856,7 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
         bool isPreview;
         try
         {
-            (rendered, pointsW, pointsH, regions, isPreview) = await Task.Run(() => RenderPage(doc, pageIndex, scale, preview));
+            (rendered, pointsW, pointsH, regions, isPreview) = await Task.Run(() => RenderPage(doc, pageIndex, scale, preview, tint));
         }
         catch (Exception ex)
         {
@@ -797,7 +869,7 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
             var slot = Pages[pageIndex];
             return new PageView(pageIndex, null, slot.PointsWidth, slot.PointsHeight,
                 slot.PointsWidth * 96 / 72 * zoom, slot.PointsHeight * 96 / 72 * zoom, [])
-            { Highlights = HighlightsFor(pageIndex, zoom), RenderFailed = true };
+            { Highlights = HighlightsFor(pageIndex, zoom), RenderFailed = true, Tint = tint };
         }
 
         var bitmap = new WriteableBitmap(rendered.PixelWidth, rendered.PixelHeight);
@@ -807,7 +879,7 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
 
         return new PageView(pageIndex, bitmap, pointsW, pointsH,
             pointsW * 96 / 72 * zoom, pointsH * 96 / 72 * zoom, regions)
-        { Highlights = HighlightsFor(pageIndex, zoom), IsPreview = isPreview };
+        { Highlights = HighlightsFor(pageIndex, zoom), IsPreview = isPreview, Tint = tint };
     }
 
     /// <summary>
@@ -828,11 +900,13 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
     /// is the difference between 20 s and 0 s per zoom click on an 88 MB scan (#94).
     /// </summary>
     private (RenderedPage Rendered, double PointsW, double PointsH, List<InteractiveRegion> Regions, bool IsPreview)
-        RenderPage(IPdfDocument doc, int pageIndex, double scale, bool preview)
+        RenderPage(IPdfDocument doc, int pageIndex, double scale, bool preview, PageTint tint)
     {
         using var page = doc.GetPage(pageIndex);
 
-        if (_cappedRenders.TryGet(pageIndex, out var kept))
+        // Keyed on the tint too (#510): a kept raster holds the colours it was drawn
+        // in, so serving it to another tint would show sepia pixels on a night page.
+        if (_cappedRenders.TryGet(pageIndex, tint, out var kept))
             return (kept, page.Width, page.Height, BuildRegions(page), false);
 
         var idealW = page.Width * 96 / 72 * scale;
@@ -842,14 +916,14 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
             // A quarter of the size is a sixteenth of the work for anything
             // fill-rate bound, and the interaction map can wait for the full pass.
             var (pw, ph) = RenderLimits.Fit(idealW / 4, idealH / 4);
-            return (page.Render(pw, ph), page.Width, page.Height, [], true);
+            return (page.Render(pw, ph, tint), page.Width, page.Height, [], true);
         }
 
         var regions = BuildRegions(page);
         var (w, h) = RenderLimits.Fit(idealW, idealH);
-        var rendered = page.Render(w, h);
+        var rendered = page.Render(w, h, tint);
         if (RenderLimits.IsCapped(idealW, idealH))
-            _cappedRenders.Put(pageIndex, rendered);
+            _cappedRenders.Put(pageIndex, tint, rendered);
         return (rendered, page.Width, page.Height, regions, false);
     }
 
@@ -939,9 +1013,42 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
     private bool CanZoomIn() => IsDocumentOpen && ZoomPercent < MaxZoom;
     private bool CanZoomOut() => IsDocumentOpen && ZoomPercent > MinZoom;
 
+    /// <summary>
+    /// True while a <see cref="ZoomPercent"/> change should not be corrected at the
+    /// viewport's centre by <see cref="DocumentView"/> (#528) — either because the
+    /// caller already anchored the offset on something more specific itself (the
+    /// pointer, for Ctrl+wheel — see <c>DocumentView.ApplyAnchoredZoomAsync</c>) or
+    /// because this change is not a zoom the user aimed anywhere in this window (the
+    /// remembered zoom a freshly reopened document restores, below) — the same
+    /// reasoning the Avalonia leg's <c>_reanchoringZoom</c> guards <c>FitOnOpen</c>
+    /// with. <see cref="DocumentView"/> is the only other thing in this assembly that
+    /// reads or sets it.
+    /// </summary>
+    internal bool SuppressZoomAnchor { get; set; }
+
     private async Task SetZoomAsync(int percent)
     {
         ZoomPercent = Math.Clamp(percent, MinZoom, MaxZoom);
+        if (_document is null)
+            return;
+        await UpdateViewportAsync(_viewFirst, _viewLast);
+    }
+
+    /// <summary>
+    /// Resizes every page slot for the zoom <see cref="ZoomPercent"/>'s own generated
+    /// setter just committed (#528). Runs from that setter, before it raises
+    /// <c>PropertyChanged</c> — CommunityToolkit.Mvvm's source generator calls an
+    /// <c>On&lt;Property&gt;Changed</c> partial method before the notification, the
+    /// same ordering the Avalonia leg's own <c>OnZoomChanged</c> relies on — so by the
+    /// time <see cref="DocumentView"/>'s <c>PropertyChanged</c> handler runs its
+    /// zoom-anchor correction and forces a layout pass to read the new extent, these
+    /// sizes are already the ones that pass produces. Moved out of the old
+    /// <see cref="SetZoomAsync"/> rather than left there for exactly that reason: a
+    /// resize that happened after <c>ZoomPercent</c>'s own notification, as it used to,
+    /// is a resize the correction cannot see yet.
+    /// </summary>
+    partial void OnZoomPercentChanged(int value)
+    {
         if (_document is null)
             return;
         // Resize every slot and re-render just the viewport. A slot that already has
@@ -960,7 +1067,6 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
                     Highlights = HighlightsFor(i, ZoomFactor),
                 };
         }
-        await UpdateViewportAsync(_viewFirst, _viewLast);
     }
 
     private async Task RefreshPageAsync(int pageIndex)

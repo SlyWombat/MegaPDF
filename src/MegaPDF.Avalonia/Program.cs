@@ -1876,6 +1876,43 @@ internal static class Program
             failures++;
         }
 
+        // --- Zoom anchoring, in one window (#528) ---
+        //
+        // Every zoom entry point used to grow the page from PageScroller's own
+        // origin, so whatever you were looking at slid out from under the pointer,
+        // the pinch or the click that asked for the zoom. This drives the menu's
+        // zoom-in, a Ctrl+wheel notch and a synthesised trackpad-magnify event and
+        // asserts, independently of MainWindow.Zoom.cs's own arithmetic, that the
+        // content under the anchor each one used is still there afterwards.
+        Console.WriteLine("zoom anchoring (#528):");
+        try
+        {
+            CheckZoomAnchor(dir, state, Check);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"::error::zoom anchoring: {ex.GetType().Name}: {ex.Message}");
+            failures++;
+        }
+
+        // --- Closing while a render is outstanding (#536) ---
+        //
+        // Right after zoom anchoring, because that is the check that first made this
+        // reproducible — five zoom steps in a row, each queuing a raster, then a
+        // close — and the one whose PumpUntil wait used to hide it. The rule is the
+        // engine's: a document cannot close while any page handle it handed out is
+        // still in use.
+        Console.WriteLine("closing while a render is outstanding (#536):");
+        try
+        {
+            CheckCloseDuringRender(dir, state, Check);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"::error::close during render: {ex.GetType().Name}: {ex.Message}");
+            failures++;
+        }
+
         // --- Tabs, in one window (#348 phase 1) ---
         //
         // Every check above (bar this file) drives a single document through a single
@@ -3146,6 +3183,265 @@ internal static class Program
     }
 
     /// <summary>
+    /// Zoom anchoring (#528): every entry point used to grow the page from
+    /// PageScroller's own origin, so the thing you were looking at slid out from
+    /// under whatever asked for the zoom. Each check below reads the content point
+    /// under an anchor before the zoom, computes independently (not by calling
+    /// <see cref="Views.ZoomAnchor.Reanchor"/> — that would only prove the
+    /// production code agrees with itself) where that point should land given the
+    /// ratio the view model actually committed to, and asserts the offset landed
+    /// there rather than at wherever an unfixed zoom would have left it.
+    ///
+    /// Not provable headless: a real trackpad's pinch. Avalonia.Native's bridge
+    /// from NSMagnificationGestureRecognizer to PointerTouchPadGestureMagnifyEvent
+    /// (see MainWindow.Zoom.cs's remark on WireZoom) only exists in the macOS
+    /// native backend, which nothing here runs. The pinch check below proves only
+    /// the shared arithmetic (see its own remark on why it stops there rather
+    /// than raising the event) — the gesture reaching MainWindow.Zoom.cs's
+    /// handler at all, on real hardware, needs a real Mac.
+    /// </summary>
+    private static void CheckZoomAnchor(string dir, string state, Action<string, bool> check)
+    {
+        EnsureHeadlessPlatform();
+
+        using var shell = new ShellViewModel(state);
+        var vm = shell.CreateDocument();
+        vm.Open(Path.Combine(dir, "fixture.pdf"));
+        shell.AddTab(vm);
+        // Narrower than the page at the zooms below, on purpose: fit-to-window
+        // starts with nothing to correct, so every check here first zooms past
+        // 100% and moves off (0,0) — the corner an unfixed zoom already sits at,
+        // and so the one place a check could not tell "anchored" from "never
+        // moved".
+        var window = new Views.MainWindow { DataContext = shell, Width = 900, Height = 700 };
+        window.Show();
+        Pump();
+
+        // Layout rounding leaves a fraction of a DIP of slack; a real drift from
+        // the corner-anchoring bug is tens to hundreds of DIP, not this.
+        const double Epsilon = 1.0;
+
+        // --- Menu and keyboard: anchored on the viewport's centre ---
+        //
+        // vm.ZoomInCommand.Execute(null) is exactly what the menu bar
+        // (MainWindow.MenuBar.cs) and the toolbar's zoom-in button run.
+        vm.SetZoomCommand.Execute(2.0);
+        Pump();
+        window.PageScroller.Offset = new Vector(37, 210);
+        Pump();
+
+        var viewport = window.PageScroller.Viewport;
+        var centre = new Point(viewport.Width / 2, viewport.Height / 2);
+        var centreBeforeOffset = window.PageScroller.Offset;
+        var centreBeforeZoom = vm.Zoom;
+        var contentAtCentreBefore = new Point(centreBeforeOffset.X + centre.X, centreBeforeOffset.Y + centre.Y);
+
+        vm.ZoomInCommand.Execute(null);
+        Pump();
+
+        var centreRatio = vm.Zoom / centreBeforeZoom;
+        var expectedAtCentre = new Point(contentAtCentreBefore.X * centreRatio, contentAtCentreBefore.Y * centreRatio);
+        var actualAtCentre = new Point(window.PageScroller.Offset.X + centre.X, window.PageScroller.Offset.Y + centre.Y);
+        check($"menu/keyboard zoom in ({centreBeforeZoom:F2}x -> {vm.Zoom:F2}x) keeps the viewport centre's "
+              + $"content under it (expected {expectedAtCentre}, got {actualAtCentre})",
+              Math.Abs(actualAtCentre.X - expectedAtCentre.X) < Epsilon && Math.Abs(actualAtCentre.Y - expectedAtCentre.Y) < Epsilon);
+
+        // --- The clamp: correct by the ratio actually committed, not the ratio asked for ---
+        //
+        // At the top stop, ZoomIn clamps to the same value: the ratio actually
+        // applied is 1, so the offset must not move at all. Correcting by
+        // whatever ratio the click nominally asked for instead would drift the
+        // page while the zoom itself visibly sits still at 4.00x.
+        vm.SetZoomCommand.Execute(4.0);
+        Pump();
+        window.PageScroller.Offset = new Vector(15, 90);
+        Pump();
+        var clampedOffset = window.PageScroller.Offset;
+        vm.ZoomInCommand.Execute(null);
+        Pump();
+        check($"zooming in at the top stop ({vm.Zoom:F2}x, unchanged) does not move the offset "
+              + $"(was {clampedOffset}, now {window.PageScroller.Offset})",
+              vm.Zoom == 4.0 && window.PageScroller.Offset == clampedOffset);
+
+        // --- Ctrl+wheel: the Linux (and Windows) idiom, anchored on the pointer ---
+        vm.SetZoomCommand.Execute(2.0);
+        Pump();
+        window.PageScroller.Offset = new Vector(20, 150);
+        Pump();
+
+        var wheelAnchor = new Point(60, 40);
+        var wheelAnchorInWindow = window.PageScroller.TranslatePoint(wheelAnchor, window)
+                                  ?? throw new InvalidOperationException("PageScroller is not in the window");
+        var wheelBeforeOffset = window.PageScroller.Offset;
+        var wheelBeforeZoom = vm.Zoom;
+        var contentUnderWheelBefore = new Point(wheelBeforeOffset.X + wheelAnchor.X, wheelBeforeOffset.Y + wheelAnchor.Y);
+
+        HeadlessWindowExtensions.MouseWheel(window, wheelAnchorInWindow, new Vector(0, 1), RawInputModifiers.Control);
+        Pump();
+
+        check($"Ctrl+wheel zooms ({wheelBeforeZoom:F2}x -> {vm.Zoom:F2}x)", vm.Zoom > wheelBeforeZoom);
+        var wheelRatio = vm.Zoom / wheelBeforeZoom;
+        var expectedUnderWheel = new Point(contentUnderWheelBefore.X * wheelRatio, contentUnderWheelBefore.Y * wheelRatio);
+        var actualUnderWheel = new Point(window.PageScroller.Offset.X + wheelAnchor.X, window.PageScroller.Offset.Y + wheelAnchor.Y);
+        check($"  anchored on the pointer, not the corner (expected {expectedUnderWheel}, got {actualUnderWheel})",
+              Math.Abs(actualUnderWheel.X - expectedUnderWheel.X) < Epsilon && Math.Abs(actualUnderWheel.Y - expectedUnderWheel.Y) < Epsilon);
+
+        // A plain wheel notch, no Ctrl, must still scroll: the gesture must not
+        // steal every notch just because it now knows what Ctrl+wheel means.
+        var plainBeforeZoom = vm.Zoom;
+        var plainBeforeOffset = window.PageScroller.Offset;
+        HeadlessWindowExtensions.MouseWheel(window, wheelAnchorInWindow, new Vector(0, 1), RawInputModifiers.None);
+        Pump();
+        check("a plain wheel notch (no Ctrl) scrolls instead of zooming",
+              vm.Zoom == plainBeforeZoom && window.PageScroller.Offset != plainBeforeOffset);
+
+        // --- Trackpad pinch: the arithmetic only ---
+        //
+        // A first version of this check also raised a hand-built
+        // PointerTouchPadGestureMagnifyEvent (a real Pointer object constructed
+        // here, not one anything's input pipeline actually owns) straight at
+        // PageScroller with RaiseEvent, to drive OnPageScrollerMagnify end to end.
+        // It passed every assertion, on Linux and on both macOS bundle builds —
+        // and then the very next check (CheckTabs, which does nothing this check
+        // touches) segfaulted the process on both osx-arm64 and osx-x64, every
+        // time, never on Linux. A fabricated Pointer bypasses whatever real
+        // pointer/capture bookkeeping Avalonia's Skia/native layers keep, and
+        // this is the likely reason. Reverted to just the arithmetic:
+        // OnPageScrollerMagnify is two lines (read Delta.X as a factor, call
+        // ApplyAnchoredZoom with the pointer position), and ApplyAnchoredZoom
+        // itself is already driven end to end, safely, by the Ctrl+wheel check
+        // above through HeadlessWindowExtensions.MouseWheel — a real pointer the
+        // headless platform owns rather than one this test invents.
+        var pureReanchor = Views.ZoomAnchor.Reanchor(new Vector(100, 200), 1.0, 0.5, new Point(50, 50));
+        check($"ZoomAnchor.Reanchor at 0.5x from (100,200) around (50,50) is (25,75) (got {pureReanchor})",
+              Math.Abs(pureReanchor.X - 25) < 0.0001 && Math.Abs(pureReanchor.Y - 75) < 0.0001);
+        var pureReanchorAtClamp = Views.ZoomAnchor.Reanchor(new Vector(100, 200), 4.0, 4.0, new Point(50, 50));
+        check($"ZoomAnchor.Reanchor with no ratio change (a clamp) leaves the offset alone (got {pureReanchorAtClamp})",
+              pureReanchorAtClamp == new Vector(100, 200));
+
+        // Closed with whatever this check's zoom steps left in flight, deliberately.
+        // There was a PumpUntil here waiting for every render to settle first, added
+        // when this check segfaulted on macOS three times out of three while passing
+        // on Linux. That was this check compensating for #536 — a document that could
+        // close while PDFium was still drawing through one of its pages — and leaving
+        // it in would mean these five zoom steps could never catch that again. The
+        // rule now lives where it belongs, in the engine: PdfiumDocument.Dispose waits
+        // for every page handle it handed out. CheckCloseDuringRender proves it.
+        window.Close();
+        Pump();
+
+        static void Pump() => MenuProbe.Pump();
+    }
+
+    /// <summary>
+    /// Closing while a render is outstanding (#536): the render lifetime rule.
+    ///
+    /// A raster is produced on a thread pool thread from a page handle opened there
+    /// (<see cref="ViewModels.PageViewModel"/>'s StartRender, and the Windows app's
+    /// RenderPage). Nothing used to make a close wait for it, so megapdf_close could
+    /// free that page handle — and the document under it — while PDFium was still
+    /// drawing through it. The failure was a segfault, not an exception: the whole
+    /// window went, and every other tab with it.
+    ///
+    /// Two checks, because the defect and the way a person reaches it are different
+    /// things:
+    ///
+    /// * The rule itself, at the engine layer, with the ordering forced rather than
+    ///   raced: a background thread takes a page handle, says so, and only then
+    ///   renders. Unfixed, Dispose runs straight through to megapdf_close in the gap
+    ///   and the render reads a freed page — a segfault here, reliably, on every
+    ///   platform, not only where the timing happens to be unkind.
+    /// * The shape a user meets: zoom a few times, which asks every realised page to
+    ///   re-render, then close the tab with those renders still in flight. This is
+    ///   the check the two PumpUntil waits in CheckZoomAnchor and CheckReadingMode
+    ///   used to paper over; they have been taken out, so this check and those two
+    ///   are all exposed to it again.
+    /// </summary>
+    private static void CheckCloseDuringRender(string dir, string state, Action<string, bool> check)
+    {
+        // --- 1: the rule, with the ordering forced ---
+        {
+            using var engine = new PdfiumEngine();
+            var document = engine.Open(Path.Combine(dir, "fixture.pdf"));
+            using var holdsPage = new ManualResetEventSlim(false);
+            var rendered = 0;
+            Exception? renderError = null;
+
+            var render = Task.Run(() =>
+            {
+                try
+                {
+                    using var page = document.GetPage(0);
+                    holdsPage.Set();
+                    // The Dispose below is already on its way. Unfixed, it runs to
+                    // completion inside this sleep: megapdf_close frees the page this
+                    // thread is holding, and the Render on the next line reads it
+                    // after free. A sleep rather than a race, so the red is the same
+                    // red every time and on every platform.
+                    Thread.Sleep(250);
+                    // Big enough to be real work (about 12 megapixels, inside the #93
+                    // clamp), so the raster is also genuinely in progress for a while.
+                    page.Render((int)(page.Width * 5), (int)(page.Height * 5));
+                    Volatile.Write(ref rendered, 1);
+                }
+                catch (Exception ex)
+                {
+                    renderError = ex;
+                }
+            });
+
+            holdsPage.Wait(TimeSpan.FromSeconds(20));
+            var waited = System.Diagnostics.Stopwatch.StartNew();
+            document.Dispose();
+            waited.Stop();
+            var finishedFirst = Volatile.Read(ref rendered) == 1;
+            render.GetAwaiter().GetResult();
+
+            check($"closing a document waits for a render holding one of its page handles "
+                  + $"(waited {waited.ElapsedMilliseconds} ms)", finishedFirst);
+            check($"and the render itself came back cleanly ({renderError?.GetType().Name ?? "no error"})",
+                  renderError is null);
+        }
+
+        // --- 2: the shape a person reaches it by — zoom, then close ---
+        EnsureHeadlessPlatform();
+
+        using (var shell = new ShellViewModel(state))
+        {
+            var vm = shell.CreateDocument();
+            vm.Open(Path.Combine(dir, "fixture.pdf"));
+            shell.AddTab(vm);
+            var window = new Views.MainWindow { DataContext = shell, Width = 900, Height = 700 };
+            window.SkipRecoveryOffer = true;
+            window.Show();
+            MenuProbe.Pump();
+            // Realised and settled first, so what follows is re-rendering rather than
+            // the first raster: the state a user is in when they reach for the zoom.
+            PumpUntil(() => vm.Pages.Count > 0 && vm.Pages.Any(p => p.IsRealised), TimeSpan.FromSeconds(20));
+            PumpUntil(() => vm.Pages.All(p => !p.IsRenderPending), TimeSpan.FromSeconds(20));
+            check("a page is on screen before the zoom", vm.Pages.Any(p => p.IsRealised));
+
+            // Each step asks every realised page to re-render, and nothing is pumped
+            // between them: by the last one there are rasters queued and running on
+            // the thread pool that nothing has collected.
+            foreach (var zoom in new[] { 2.0, 3.0, 4.0, 2.5, 3.5 })
+                vm.SetZoomCommand.Execute(zoom);
+
+            var outstanding = vm.Pages.Count(p => p.IsRenderPending);
+            check($"zooming leaves renders outstanding ({outstanding} of {vm.Pages.Count} pages)", outstanding > 0);
+
+            // No settling: the close lands on top of them. Getting past this line at
+            // all is the check — unfixed, the process does not.
+            window.SkipCloseConfirmation();
+            window.Close();
+            MenuProbe.Pump();
+            shell.Dispose();
+        }
+
+        check("closing a tab with renders outstanding leaves the process standing", true);
+    }
+
+    /// <summary>
     /// Two documents open as tabs in one window (#348 phase 1): opening a second does
     /// not replace the first, each tab's state (zoom, at least — the state actually
     /// scoped per DocumentViewModel) is independent, opening an already-open path
@@ -3714,13 +4010,12 @@ internal static class Program
 
         static void CloseReadingWindow(ShellViewModel shell, Views.MainWindow window)
         {
-            // Let any render this check started finish before the document under it is
-            // disposed. A raster is produced on the thread pool from a page handle
-            // opened there (PageViewModel.StartRender), so closing the tab the instant
-            // after asking for one — which only a test does this quickly — pulls the
-            // document out from under PDFium mid-render.
-            PumpUntil(() => shell.Documents.All(d => d.Pages.All(p => !p.IsRenderPending)),
-                      TimeSpan.FromSeconds(20));
+            // Closed without settling the renders this check started. There was a
+            // PumpUntil here for exactly that, disclosed as a workaround when reading
+            // mode's own checks segfaulted on it (#533): a raster is produced on the
+            // thread pool from a page handle opened there, and nothing made the close
+            // wait for it. #536 moved that rule into the engine, so closing here is
+            // once again a real exercise of it rather than a way around it.
             window.SkipCloseConfirmation();
             window.Close();
             MenuProbe.Pump();

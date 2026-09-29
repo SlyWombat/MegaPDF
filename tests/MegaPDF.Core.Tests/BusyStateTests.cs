@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Time.Testing;
 using MegaPDF.Core.Services;
 using Xunit;
 
@@ -5,8 +6,19 @@ namespace MegaPDF.Core.Tests;
 
 /// <summary>
 /// The busy pattern every app follows (#145): disable at once, show the indicator after a
-/// delay, keep it up for a minimum once shown. Scaled-down timings, with margins wide enough
-/// for a loaded test machine.
+/// delay, keep it up for a minimum once shown.
+///
+/// #515: the two timing-dependent tests drive a clock they control rather than waiting on a
+/// real one. They used to wait on wall time with margins described as "wide enough for a
+/// loaded test machine", and on a runner also building PDFium that stopped being true: the
+/// gap between observing the indicator and disposing the operation is thread-pool scheduling,
+/// unbounded, and losing enough of it in that gap let the minimum-visible window expire
+/// before the assertion that the window was still open. It failed pull requests whose diffs
+/// could not reach any of this code. Widening the margin would only move the threshold; a
+/// clock the test advances removes the race.
+///
+/// The tests that assert on state rather than on elapsed time still use the real provider —
+/// they never wait for a deadline, so there is nothing to race.
 /// </summary>
 public sealed class BusyStateTests
 {
@@ -15,38 +27,70 @@ public sealed class BusyStateTests
 
     private static BusyState NewState() => new(ShowAfter, MinimumVisible, context: null);
 
-    [Fact]
-    public void QuickWork_DisablesAtOnce_AndNeverShowsTheIndicator()
+    /// <summary>A state whose delays and elapsed measurement both come from a clock the test moves.</summary>
+    private static (BusyState Busy, FakeTimeProvider Time) NewControlledState()
     {
-        var busy = NewState();
+        var time = new FakeTimeProvider();
+        return (new BusyState(ShowAfter, MinimumVisible, context: null, time), time);
+    }
+
+    /// <summary>
+    /// Advances the clock and lets the continuations it released actually run. FakeTimeProvider
+    /// fires its timers synchronously, but the awaiting continuation inside BusyState is posted
+    /// to the thread pool, so a bare Advance can return before the state has published. Yielding
+    /// is not a timing margin: it waits for scheduled work, not for a duration.
+    /// </summary>
+    private static async Task AdvanceAsync(FakeTimeProvider time, TimeSpan by)
+    {
+        time.Advance(by);
+        for (var i = 0; i < 100; i++)
+            await Task.Yield();
+    }
+
+    [Fact]
+    public async Task QuickWork_DisablesAtOnce_AndNeverShowsTheIndicator()
+    {
+        var (busy, time) = NewControlledState();
         var operation = busy.Begin("Saving…");
         Assert.True(busy.IsBusy);
         Assert.False(busy.IsIndicatorVisible);
         operation.Dispose();
         Assert.False(busy.IsBusy);
 
-        Thread.Sleep(ShowAfter * 2);
+        // Well past the show delay: work that finished first must never flash an indicator.
+        await AdvanceAsync(time, ShowAfter * 2);
         Assert.False(busy.IsIndicatorVisible);
     }
 
     [Fact]
     public async Task SlowWork_ShowsTheIndicatorAfterTheDelay_AndKeepsItUpForTheMinimum()
     {
-        var busy = NewState();
+        var (busy, time) = NewControlledState();
         var operation = busy.Begin("Saving…");
         Assert.False(busy.IsIndicatorVisible);
 
-        await WaitFor(() => busy.IsIndicatorVisible, TimeSpan.FromSeconds(5));
+        // Not yet: one tick short of the delay the indicator still owes.
+        await AdvanceAsync(time, ShowAfter - TimeSpan.FromMilliseconds(1));
+        Assert.False(busy.IsIndicatorVisible);
+
+        await AdvanceAsync(time, TimeSpan.FromMilliseconds(1));
+        Assert.True(busy.IsIndicatorVisible);
         Assert.True(busy.ShowsStrip);
         Assert.False(busy.ShowsPageSpinner);
         Assert.Equal("Saving…", busy.Label);
 
+        // The work ends immediately after the indicator appeared, which is the case the
+        // minimum exists for. The clock has not moved, so no scheduling delay can eat it.
         operation.Dispose();
         Assert.False(busy.IsBusy);
-        // Just shown, so it lingers rather than flickering off.
         Assert.True(busy.IsIndicatorVisible);
         Assert.Equal("Saving…", busy.Label);
-        await WaitFor(() => !busy.IsIndicatorVisible, TimeSpan.FromSeconds(5));
+
+        // Still up one tick before the minimum is served, gone once it is.
+        await AdvanceAsync(time, MinimumVisible - TimeSpan.FromMilliseconds(1));
+        Assert.True(busy.IsIndicatorVisible);
+        await AdvanceAsync(time, TimeSpan.FromMilliseconds(1));
+        Assert.False(busy.IsIndicatorVisible);
     }
 
     [Fact]

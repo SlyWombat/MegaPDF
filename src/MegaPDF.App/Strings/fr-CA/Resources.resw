@@ -1047,4 +1047,68 @@ Enregistrée sous {2}, prête pour le courriel.</value>
     <value>{0}, modifications non enregistrées, onglet</value>
     <comment>#348 — new French, for francophone review</comment>
   </data>
+  <data name="ReadingMode" xml:space="preserve">
+    <value>Mode lecture</value>
+    <comment>FR-REVIEW #504 — new with reading mode, not yet read by the reviewer. Glossary entry from #505</comment>
+  </data>
+  <data name="ReadingModeTip" xml:space="preserve">
+    <value>Masquer les outils et lire la page (Ctrl+H)</value>
+    <comment>FR-REVIEW #504 — new with reading mode, not yet read by the reviewer.</comment>
+  </data>
+  <data name="ReadingModeOn" xml:space="preserve">
+    <value>Mode lecture activé</value>
+    <comment>FR-REVIEW #504 — new with reading mode, not yet read by the reviewer.</comment>
+  </data>
+  <data name="ReadingModeOff" xml:space="preserve">
+    <value>Mode lecture désactivé</value>
+    <comment>FR-REVIEW #504 — new with reading mode, not yet read by the reviewer.</comment>
+  </data>
+  <data name="ReadingControls" xml:space="preserve">
+    <value>Commandes de lecture</value>
+    <comment>FR-REVIEW #504 — new with reading mode, not yet read by the reviewer.</comment>
+  </data>
+  <data name="Exit" xml:space="preserve">
+    <value>Sortir</value>
+    <comment>FR-REVIEW #504 — new with reading mode, not yet read by the reviewer. Never « Quitter », which is Quit</comment>
+  </data>
+  <data name="ExitReadingMode" xml:space="preserve">
+    <value>Sortir du mode lecture</value>
+    <comment>FR-REVIEW #504 — new with reading mode, not yet read by the reviewer.</comment>
+  </data>
+  <data name="PreviousPage" xml:space="preserve">
+    <value>Page précédente</value>
+    <comment>FR-REVIEW #504 — new with reading mode, not yet read by the reviewer.</comment>
+  </data>
+  <data name="NextPage" xml:space="preserve">
+    <value>Page suivante</value>
+    <comment>FR-REVIEW #504 — new with reading mode, not yet read by the reviewer.</comment>
+  </data>
+  <data name="GoToPage" xml:space="preserve">
+    <value>Aller à la page</value>
+    <comment>FR-REVIEW #504 — new with reading mode, not yet read by the reviewer.</comment>
+  </data>
+  <data name="PageColoursHeading.Text" xml:space="preserve">
+    <value>Couleurs de la page</value>
+    <comment>FR-REVIEW #510 — new with reading preferences, not yet read by the reviewer.</comment>
+  </data>
+  <data name="PageColoursNormal.Text" xml:space="preserve">
+    <value>Normales</value>
+    <comment>FR-REVIEW #510 — new with reading preferences, not yet read by the reviewer. Agrees with « couleurs », the label above it</comment>
+  </data>
+  <data name="PageColoursSepia.Text" xml:space="preserve">
+    <value>Sépia</value>
+    <comment>FR-REVIEW #510 — new with reading preferences, not yet read by the reviewer.</comment>
+  </data>
+  <data name="PageColoursNight.Text" xml:space="preserve">
+    <value>Nuit</value>
+    <comment>FR-REVIEW #510 — new with reading preferences, not yet read by the reviewer.</comment>
+  </data>
+  <data name="NightInvertsNote.Text" xml:space="preserve">
+    <value>Le mode nuit inverse la page, images comprises.</value>
+    <comment>FR-REVIEW #510 — new with reading preferences, not yet read by the reviewer. The #168 trade-off, stated in the settings copy</comment>
+  </data>
+  <data name="ReadingModeToggle.Header" xml:space="preserve">
+    <value>Ouvrir les documents en mode lecture</value>
+    <comment>FR-REVIEW #510 — new with reading preferences, not yet read by the reviewer. Off by default (#168 decision 2)</comment>
+  </data>
 </root>

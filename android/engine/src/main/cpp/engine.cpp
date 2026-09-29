@@ -233,9 +233,14 @@ Java_com_megapdf_engine_PdfiumNative_nativeRenderSize(JNIEnv* env, jobject, jdou
 // Renders into the ARGB_8888 bitmap: the core draws the white ground, the page
 // content and the live form-field values in RGBA byte order to match the
 // buffer, and refuses (false, never a crash) anything past the render clamp.
+//
+// [tintFlags] is MEGAPDF_RENDER_SEPIA or MEGAPDF_RENDER_NIGHT, or 0 for the page as
+// drawn (#513). Contract 7 grew by flag values rather than by parameters, so the tint
+// is ORed onto the byte order this binding already passes; the core refuses both bits
+// at once, and PageTint on the Kotlin side can only ever produce one of them.
 JNIEXPORT jboolean JNICALL
 Java_com_megapdf_engine_PdfiumNative_nativeRenderPage(JNIEnv* env, jobject, jlong handle,
-                                                      jobject bitmap) {
+                                                      jobject bitmap, jint tintFlags) {
     auto* p = reinterpret_cast<Page*>(handle);
 
     AndroidBitmapInfo info;
@@ -248,7 +253,8 @@ Java_com_megapdf_engine_PdfiumNative_nativeRenderPage(JNIEnv* env, jobject, jlon
         return JNI_FALSE;
     }
     const int status = megapdf_render(p->core, pixels, static_cast<int>(info.width), static_cast<int>(info.height),
-                                      static_cast<int>(info.stride), MEGAPDF_RENDER_RGBA);
+                                      static_cast<int>(info.stride),
+                                      MEGAPDF_RENDER_RGBA | static_cast<unsigned>(tintFlags));
     AndroidBitmap_unlockPixels(env, bitmap);
     return status == MEGAPDF_OK ? JNI_TRUE : JNI_FALSE;
 }

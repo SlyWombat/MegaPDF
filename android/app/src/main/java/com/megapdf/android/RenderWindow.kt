@@ -1,5 +1,18 @@
 package com.megapdf.android
 
+import com.megapdf.engine.PageTint
+
+/**
+ * What a held page bitmap was drawn under, and therefore what makes a held bitmap still
+ * usable: its pixel width, and the page colours in force when it was drawn (#513).
+ *
+ * Keyed on width alone — which is all there was before page colours existed — switching
+ * to Sepia or Night left the pages already on screen in their old colours, because the
+ * width had not moved and nothing else had dirtied them. The tint belongs in the key for
+ * the same reason the width does: it is part of what the pixels *are*.
+ */
+data class RenderedPage(val widthPx: Int, val tint: PageTint)
+
 /**
  * Which pages to draw, and how wide.
  *

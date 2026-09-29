@@ -285,4 +285,32 @@
          line in demo-fr.pdf (fr-CA) and demo-fr-FR.pdf (fr-FR, #310). "client
          nommé" never matched: both break it across lines 1 and 2. -->
     <string name="screenshot_redacted_word">sections 1 à 4</string>
+
+    <!-- Mode lecture (#507, #513) -->
+    <string name="reading_mode">Mode lecture</string>
+    <string name="reading_mode_on">Mode lecture activé</string>
+    <string name="reading_mode_off">Mode lecture désactivé</string>
+    <string name="reading_controls">Commandes de lecture</string>
+    <!-- Jamais « Quitter », qui est réservé à Quit -->
+    <string name="exit_reading_mode">Sortir du mode lecture</string>
+    <string name="previous_page">Page précédente</string>
+    <string name="next_page">Page suivante</string>
+    <string name="page_counter">%1$d / %2$d</string>
+    <string name="go_to_page">Aller à la page</string>
+    <string name="page_of">sur %1$d</string>
+    <string name="fit_width">Ajuster à la largeur</string>
+    <string name="fit_page">Ajuster à la page</string>
+    <string name="zoom_in">Agrandir</string>
+    <string name="zoom_out">Réduire</string>
+
+    <!-- Réglages (#513) -->
+    <string name="settings">Réglages</string>
+    <string name="settings_reading">Lecture</string>
+    <string name="page_colours">Couleurs de la page</string>
+    <!-- « Normales » s'accorde avec « couleurs » -->
+    <string name="page_colours_normal">Normales</string>
+    <string name="page_colours_sepia">Sépia</string>
+    <string name="page_colours_night">Nuit</string>
+    <string name="night_inverts_pictures">Le mode nuit inverse la page, images comprises.</string>
+    <string name="open_in_reading_mode">Ouvrir les documents en mode lecture</string>
 </resources>

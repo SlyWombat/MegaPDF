@@ -32,6 +32,28 @@
             <Setter Property="CornerRadius" Value="2" />
             <Setter Property="Margin" Value="2" />
         </Style>
+
+        <!-- The page-indicator pill's ordinary ground and ink (#504). In styles rather
+             than as inline attributes so that reading mode's page colours can be set as
+             local values and then *cleared* again: a ThemeResource in a style setter
+             keeps following the theme afterwards, where a brush put back by hand would
+             still be the light one after Windows switched the app to dark. -->
+        <Style x:Key="PageIndicatorPillStyle" TargetType="Border">
+            <Setter Property="Background" Value="{ThemeResource SolidBackgroundFillColorSecondaryBrush}" />
+            <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+        </Style>
+        <Style x:Key="ReadingBarLabelStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionTextBlockStyle}">
+            <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style x:Key="ReadingBarButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="8,4" />
+            <Setter Property="FontSize" Value="{ThemeResource TypeCaption}" />
+            <Setter Property="Visibility" Value="Collapsed" />
+        </Style>
     </UserControl.Resources>
 
     <Grid x:Name="DocumentAreaRoot">
@@ -202,8 +224,21 @@
                 CloseButtonClick="OnCancelPlacementClicked" />
         </StackPanel>
 
-        <!-- Which page is in view (#144). Floats over the document's corner, clear
-             of the scroll bar and of the notices centred below. -->
+        <!-- Which page is in view (#144) — and, in reading mode, the floating bar the
+             page-indicator pill grows into (#504, plan §4 "Windows").
+
+             One control in two shapes rather than two controls: the pill is already
+             where the bar belongs, already says which page you are on, and already
+             appears and disappears with the document. In reading mode it moves to the
+             bottom centre, takes a Fluent acrylic ground and radius.control 4
+             (docs/design-tokens.md §3), becomes hit-testable, and shows the rest of
+             its buttons. Out of it, everything but the page number is Collapsed —
+             collapsed, not merely invisible, so none of it is in the tab order of the
+             ordinary document view either (DocumentView.ReadingMode.cs).
+
+             The bar is per tab because the pill is: only the active tab's DocumentView
+             is on screen, so the active tab's pill is the window's reading bar, and a
+             tab switch inside the mode hands it over (MainWindow.ReadingMode.cs). -->
         <Border
             x:Name="PageIndicatorPill"
             HorizontalAlignment="Right"
@@ -212,14 +247,70 @@
             Padding="10,3"
             CornerRadius="12"
             IsHitTestVisible="False"
-            Background="{ThemeResource SolidBackgroundFillColorSecondaryBrush}"
-            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-            BorderThickness="1"
+            Style="{StaticResource PageIndicatorPillStyle}"
             Visibility="{x:Bind ViewModel.DocumentVisibility, Mode=OneWay}">
-            <TextBlock
-                Text="{x:Bind ViewModel.PageIndicator, Mode=OneWay}"
-                Style="{StaticResource CaptionTextBlockStyle}"
-                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+            <StackPanel Orientation="Horizontal" Spacing="{ThemeResource SpaceXs}" VerticalAlignment="Center">
+                <!-- Which file, when more than one tab is open (plan §2: with one tab the
+                     window title already says it). -->
+                <TextBlock
+                    x:Name="ReadingFileName"
+                    Visibility="Collapsed"
+                    Margin="4,0,8,0"
+                    MaxWidth="220"
+                    TextTrimming="CharacterEllipsis"
+                    Style="{StaticResource ReadingBarLabelStyle}" />
+                <Button x:Name="ReadingPreviousButton" Click="OnReadingPreviousClicked"
+                        Style="{StaticResource ReadingBarButtonStyle}"
+                        Content="&#xE70E;" FontFamily="{StaticResource SymbolThemeFontFamily}"
+                        AutomationProperties.AutomationId="ReadingPreviousButton" />
+                <!-- Out of reading mode this is the pill's whole content; in it, the
+                     number becomes the button that opens "go to page". -->
+                <TextBlock
+                    x:Name="PageIndicatorText"
+                    Text="{x:Bind ViewModel.PageIndicator, Mode=OneWay}"
+                    Style="{StaticResource ReadingBarLabelStyle}" />
+                <Button x:Name="ReadingPageButton"
+                        Style="{StaticResource ReadingBarButtonStyle}"
+                        Content="{x:Bind ViewModel.PageIndicator, Mode=OneWay}"
+                        AutomationProperties.AutomationId="ReadingPageButton">
+                    <Button.Flyout>
+                        <Flyout x:Name="ReadingPageFlyout" Placement="Top">
+                            <StackPanel Orientation="Horizontal" Spacing="{ThemeResource SpaceS}">
+                                <TextBox x:Name="ReadingPageBox" MinWidth="72" IsSpellCheckEnabled="False"
+                                         KeyDown="OnReadingPageBoxKeyDown"
+                                         AutomationProperties.AutomationId="ReadingPageBox" />
+                                <Button x:Name="ReadingGoButton" Click="OnReadingGoClicked"
+                                        AutomationProperties.AutomationId="ReadingGoButton" />
+                            </StackPanel>
+                        </Flyout>
+                    </Button.Flyout>
+                </Button>
+                <Button x:Name="ReadingNextButton" Click="OnReadingNextClicked"
+                        Style="{StaticResource ReadingBarButtonStyle}"
+                        Content="&#xE70D;" FontFamily="{StaticResource SymbolThemeFontFamily}"
+                        AutomationProperties.AutomationId="ReadingNextButton" />
+                <!-- The zoom presets (#510): the same commands the toolbar's zoom menu
+                     runs, on the bar the toolbar is no longer there to offer them from. -->
+                <Button x:Name="ReadingFitWidthButton" Click="OnReadingFitWidthClicked"
+                        Style="{StaticResource ReadingBarButtonStyle}" Margin="8,0,0,0"
+                        Content="&#xE9A6;" FontFamily="{StaticResource SymbolThemeFontFamily}"
+                        AutomationProperties.AutomationId="ReadingFitWidthButton" />
+                <Button x:Name="ReadingFitPageButton" Click="OnReadingFitPageClicked"
+                        Style="{StaticResource ReadingBarButtonStyle}"
+                        Content="&#xE740;" FontFamily="{StaticResource SymbolThemeFontFamily}"
+                        AutomationProperties.AutomationId="ReadingFitPageButton" />
+                <Button x:Name="ReadingZoomOutButton" Click="OnReadingZoomOutClicked"
+                        Style="{StaticResource ReadingBarButtonStyle}"
+                        Content="&#xE738;" FontFamily="{StaticResource SymbolThemeFontFamily}"
+                        AutomationProperties.AutomationId="ReadingZoomOutButton" />
+                <Button x:Name="ReadingZoomInButton" Click="OnReadingZoomInClicked"
+                        Style="{StaticResource ReadingBarButtonStyle}"
+                        Content="&#xE710;" FontFamily="{StaticResource SymbolThemeFontFamily}"
+                        AutomationProperties.AutomationId="ReadingZoomInButton" />
+                <Button x:Name="ReadingExitButton" Click="OnReadingExitClicked"
+                        Style="{StaticResource ReadingBarButtonStyle}" Padding="10,4" Margin="8,0,0,0"
+                        AutomationProperties.AutomationId="ReadingExitButton" />
+            </StackPanel>
         </Border>
 
         <!-- Ctrl+F find bar: compact Edge-style overlay (issue #26 simple search) -->

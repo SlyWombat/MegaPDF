@@ -11,6 +11,13 @@
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.10.0" />
     <PackageReference Include="xunit" Version="2.8.1" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.1" />
+    <!-- FakeTimeProvider, for the busy-indicator timings (#515). BusyState's show delay
+         and minimum-visible window used to be real wall-clock, so a test could only assert
+         on them by racing the thread pool — and it lost that race on a loaded CI runner,
+         failing pull requests whose diffs could not reach any of that code. Microsoft's own
+         fake rather than a hand-rolled one: getting ITimer's semantics subtly wrong would
+         trade a flaky test for a test that lies. -->
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" Version="8.10.0" />
     <!-- JPEG encoding for the image-compression tests. SkiaSharp, not
          System.Drawing.Common: that one throws PlatformNotSupportedException off
          Windows and was the only reason this suite could not run green on macOS

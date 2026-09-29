@@ -39,6 +39,7 @@ public sealed partial class MainWindow : Window
         WireOverflowTooltip();
         InitializeToolbar();
         InitializeWindowKeyboard();
+        InitializeReadingMode();
         // Every window in the process registers itself, so a redirected activation (#348
         // phase 2) has somewhere to find-or-activate a tab across, not just "the" window
         // phase 1 could assume there was only ever one of.
@@ -136,6 +137,10 @@ public sealed partial class MainWindow : Window
         UpdateTextPickers();
         if (Shell.Active is { } active)
             ShowStyleInPickers(active.LastTextStyle);
+        // Reading mode is the window's, so a tab switched to inside it is already in it
+        // — and the tab that just appeared needs the app's page colours before its first
+        // render, not after a flash of white (#504, #510).
+        ApplyReadingModeToTabs();
     }
 
     private void OnActiveTextStyleContextChanged(object? sender, EventArgs e) => UpdateTextPickers();
@@ -418,6 +423,13 @@ public sealed partial class MainWindow : Window
         MarkStyleChoice.SelectedIndex = (int)Shell.Settings.MarkStyle;
         ThemeChoice.SelectedIndex = Shell.Settings.Theme switch { "Light" => 1, "Dark" => 2, _ => 0 };
         LanguageChoice.SelectedIndex = AppLanguage.ChoiceIndex(Shell.Settings.Language);
+        PageColoursChoice.SelectedIndex = Shell.Settings.PageTint switch
+        {
+            Core.Engine.PageTint.Sepia => 1,
+            Core.Engine.PageTint.Night => 2,
+            _ => 0,
+        };
+        ReadingModeToggle.IsOn = Shell.Settings.OpenInReadingMode;
         ReopenToggle.IsOn = Shell.Settings.ReopenLastFile;
         FlattenToggle.IsOn = Shell.Settings.FlattenOnSave;
         var version = typeof(MainWindow).Assembly.GetName().Version;
@@ -446,6 +458,37 @@ public sealed partial class MainWindow : Window
         Shell.Settings.Language = AppLanguage.TagForChoice(LanguageChoice.SelectedIndex);
         // Resolved at startup, not live: the note says so instead of pretending.
         LanguageRestartNote.Visibility = Visibility.Visible;
+    }
+
+    /// <summary>
+    /// Page colours (#510). Written to the settings.json both desktops share, then
+    /// pushed onto every tab in this window: the engine retints the page, the
+    /// <c>BrandReading*</c> tokens retint the gutter and the floating bar around it.
+    /// Only the pages that are on screen re-render (DocumentViewModel.OnTintChanged).
+    /// </summary>
+    private void OnPageColoursChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_settingsLoading || PageColoursChoice.SelectedIndex < 0)
+            return;
+        Shell.Settings.PageTint = PageColoursChoice.SelectedIndex switch
+        {
+            1 => Core.Engine.PageTint.Sepia,
+            2 => Core.Engine.PageTint.Night,
+            _ => Core.Engine.PageTint.Normal,
+        };
+        ApplyPageColours();
+    }
+
+    /// <summary>
+    /// "Open documents in reading mode" (#510, #168 decision 2). Storage only: it takes
+    /// effect for the next window, which is what "open documents in" means — flipping
+    /// the chrome of the window you are setting it in would be a surprise, not a
+    /// preview.
+    /// </summary>
+    private void OnOpenInReadingModeToggled(object sender, RoutedEventArgs e)
+    {
+        if (!_settingsLoading)
+            Shell.Settings.OpenInReadingMode = ReadingModeToggle.IsOn;
     }
 
     private void OnReopenToggled(object sender, RoutedEventArgs e)
