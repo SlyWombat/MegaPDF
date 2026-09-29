@@ -520,13 +520,17 @@ class PdfPage internal constructor(
 
     /**
      * Renders the full page into [bitmap] (must be ARGB_8888), scaled to the bitmap's
-     * pixel size: white ground, page content, then live form-field values. Size the
-     * bitmap with [PdfEngine.renderSize] first — a raster past the clamp is refused.
+     * pixel size: white ground, page content, then live form-field values, then [tint]
+     * when it is not [PageTint.NORMAL]. Size the bitmap with [PdfEngine.renderSize]
+     * first — a raster past the clamp is refused.
+     *
+     * [tint] is defaulted, so every caller that predates reading mode (#513) renders the
+     * page as drawn and reads exactly as it did.
      */
-    suspend fun render(bitmap: Bitmap): Unit = withContext(engine.dispatcher) {
+    suspend fun render(bitmap: Bitmap, tint: PageTint = PageTint.NORMAL): Unit = withContext(engine.dispatcher) {
         check(!closed) { "page is closed" }
         require(bitmap.config == Bitmap.Config.ARGB_8888) { "bitmap must be ARGB_8888" }
-        check(PdfiumNative.nativeRenderPage(handle, bitmap)) { "render failed" }
+        check(PdfiumNative.nativeRenderPage(handle, bitmap, tint.renderFlag)) { "render failed" }
     }
 
     /** Checkbox and radio widgets on this page. */

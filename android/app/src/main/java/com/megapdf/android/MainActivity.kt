@@ -136,6 +136,13 @@ fun MegaPdfApp(viewModel: ViewerViewModel = viewModel(), screenshotState: String
         ActivityResultContracts.PickVisualMedia()
     ) { uri -> uri?.let { viewModel.importSignature(it) } }
 
+    // Settings (#513): a full-screen overlay over whatever is underneath, reachable from the
+    // viewer's ⋮ menu and from Home — *Open documents in reading mode* has to be settable
+    // before a document is open, not only while one is.
+    var settingsOpen by androidx.compose.runtime.remember {
+        androidx.compose.runtime.mutableStateOf(false)
+    }
+
     // The Redact confirmation is open (#173): marks are on the document and a save — or an
     // export (#409) — has been asked for, so the question comes before anything is written.
     var redactConfirm by androidx.compose.runtime.remember {
@@ -171,13 +178,25 @@ fun MegaPdfApp(viewModel: ViewerViewModel = viewModel(), screenshotState: String
         }
     }
 
-    when (val state = viewModel.uiState) {
+    if (settingsOpen) {
+        SettingsScreen(
+            pageTint = viewModel.pageTint,
+            openInReadingMode = viewModel.openInReadingMode,
+            onPageTintChange = viewModel::choosePageColours,
+            onOpenInReadingModeChange = viewModel::chooseOpenInReadingMode,
+            onClose = { settingsOpen = false },
+        )
+    // Nothing underneath is composed while Settings is up: it is a screen, not a sheet, and
+    // leaving the viewer in the tree behind it would leave its bars and its page in the
+    // accessibility tree too.
+    } else when (val state = viewModel.uiState) {
         is ViewerUiState.Home -> HomeScreen(
             recents = state.recents,
             error = state.error,
             onOpenClick = { openDocument.launch(arrayOf("application/pdf")) },
             onRecentClick = viewModel::openRecent,
             onRemoveRecent = viewModel::removeRecent,
+            onSettingsClick = { settingsOpen = true },
         )
 
         is ViewerUiState.Loading -> LoadingScreen(viewModel.busy.document)
@@ -298,6 +317,12 @@ fun MegaPdfApp(viewModel: ViewerViewModel = viewModel(), screenshotState: String
                 onRemoveRedactionMark = viewModel::removeRedactionMark,
                 onClearRedactionMarks = viewModel::clearRedactionMarks,
                 onCommitRedactionMarkRect = viewModel::commitRedactionMarkRect,
+                // Reading mode (#507, #513).
+                readingMode = viewModel.readingMode,
+                onEnterReadingMode = viewModel::enterReadingMode,
+                onExitReadingMode = viewModel::exitReadingMode,
+                pageTint = viewModel.pageTint,
+                onOpenSettings = { settingsOpen = true },
             )
 
             // The confirmation #173 asks for, before either save path writes anything:

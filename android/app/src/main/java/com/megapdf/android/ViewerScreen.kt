@@ -57,6 +57,7 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -96,6 +97,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
 import androidx.compose.foundation.layout.Column
@@ -270,8 +272,26 @@ fun ViewerScreen(
     /** Discard from the unsaved-changes prompt: shares the last-saved file, not the
      *  pending edits — the open document keeps them, exactly as Cancel would leave it. */
     onShareLastSaved: () -> Unit = onShare,
+    // Reading mode (#507, #513), docs/reading-mode-plan.md §4. A way of looking at the
+    // document: nothing
+    // below changes it, its history or its file, and the unsaved dot stays as it was.
+    /** The chrome-free view is on: the `Scaffold`'s bars are not composed at all. */
+    readingMode: Boolean = false,
+    onEnterReadingMode: () -> Unit = {},
+    onExitReadingMode: () -> Unit = {},
+    /** Page colours (#513): what the engine drew the pages under, and what the chrome follows. */
+    pageTint: com.megapdf.engine.PageTint = com.megapdf.engine.PageTint.NORMAL,
+    onOpenSettings: () -> Unit = {},
 ) {
     var zoom by remember { mutableFloatStateOf(1f) }
+    /**
+     * How far out a pinch may go, which is [MIN_ZOOM] until #513 gave the bar a *fit page*
+     * preset that can sit below it. A `MutableFloatState` rather than a plain `Float`
+     * because the pinch gesture reads it from inside a `pointerInput(Unit)` lambda that is
+     * built once and never rebuilt; a captured value would be the one from first
+     * composition, before the viewport had been measured at all.
+     */
+    val zoomFloor = remember { mutableFloatStateOf(MIN_ZOOM) }
     // The rubber band a redaction drag is drawing; null the rest of the time (#173).
     var redactBand: RedactBand? by remember { mutableStateOf(null) }
     val listState = rememberLazyListState()
@@ -293,8 +313,89 @@ fun ViewerScreen(
     val requestClose = { if (isDirty) pendingUnsavedAction = UnsavedAction.CLOSE else onClose() }
     val requestShare = { if (isDirty) pendingUnsavedAction = UnsavedAction.SHARE else onShare() }
     // Back stays handled while locked, so the system can't finish the activity under a save.
+    //
+    // One handler, three levels, in this order (#507; plan §7): the find bar, then reading
+    // mode, then what Back has always done — which is ask about unsaved changes on the way
+    // out of the document. Reading mode has to come *before* that last step, or the first
+    // press by someone who only wanted the toolbar back puts a Save/Discard/Cancel dialog on
+    // screen; that is the risk the plan names, and ReadingModeTest exercises this exact
+    // sequence on a dirty document. Reading mode is also ahead of `documentLocked`: leaving
+    // a view is not leaving a document, and a save running has nothing to say about it.
     androidx.activity.compose.BackHandler {
-        if (searchOpen) closeSearch() else if (!documentLocked) requestClose()
+        when {
+            searchOpen -> closeSearch()
+            readingMode -> onExitReadingMode()
+            !documentLocked -> requestClose()
+        }
+    }
+
+    // --- Reading mode's own state (#507) ---
+
+    /** The floating bar is on screen. Not composed at all while false (see the Scaffold). */
+    var barVisible by remember { mutableStateOf(false) }
+    /** Bumped every time something re-shows the bar, to restart the idle countdown. */
+    var barShownTick by remember { androidx.compose.runtime.mutableIntStateOf(0) }
+    var goToPageOpen by remember { mutableStateOf(false) }
+    val touchExploration = rememberTouchExplorationEnabled()
+    val reducedMotion = rememberReducedMotion()
+    val showReadingBar: () -> Unit = { barVisible = true; barShownTick++ }
+
+    val view = androidx.compose.ui.platform.LocalView.current
+    val readingModeOn = stringResource(R.string.reading_mode_on)
+    val readingModeOff = stringResource(R.string.reading_mode_off)
+    // What the screen last said out loud, so a recomposition never re-announces and the
+    // first composition of a document already in reading mode (the *Open documents in
+    // reading mode* setting) says nothing — TalkBack reads the new screen anyway.
+    var announcedReadingMode by remember { mutableStateOf(readingMode) }
+    LaunchedEffect(readingMode) {
+        if (readingMode) showReadingBar() else barVisible = false
+        if (announcedReadingMode != readingMode) {
+            announcedReadingMode = readingMode
+            // announceForAccessibility rather than the bar's live region for the *mode*:
+            // leaving reading mode takes the bar out of the tree, so there is no live region
+            // left to carry "Reading mode off". This is the Android counterpart of the Mac's
+            // RaiseNotificationEvent and iOS's UIAccessibility.post.
+            //
+            // Deprecated since API 34, and used deliberately: the documented replacement is
+            // a live region, which is exactly what cannot be used here — the node that would
+            // hold the announcement is the thing being taken away. The bar does carry a
+            // polite live region for what it says while it is up.
+            @Suppress("DEPRECATION")
+            view.announceForAccessibility(if (readingMode) readingModeOn else readingModeOff)
+        }
+    }
+
+    // The idle fade. Restarted by barShownTick; never armed while touch exploration is on,
+    // so the one piece of chrome reading mode has cannot vanish from under a TalkBack user
+    // (#507). Not a longer timeout — no timeout.
+    LaunchedEffect(barVisible, barShownTick, touchExploration) {
+        if (!barVisible || !readingBarAutoHides(touchExploration)) return@LaunchedEffect
+        kotlinx.coroutines.delay(READING_BAR_IDLE_MS)
+        barVisible = false
+    }
+
+    // Immersive system bars, only in reading mode, restored on the way out and on dispose —
+    // a run killed in reading mode must not leave the next launch without a status bar.
+    //
+    // The find bar is the exception: it is real chrome at the top of the screen and it
+    // brings up the keyboard, so while it is open the system bars come back rather than
+    // leaving the query field tucked under a cutout.
+    val immersive = readingMode && !searchOpen
+    DisposableEffect(immersive, view) {
+        val window = (view.context as? android.app.Activity)?.window
+        val controller = window?.let { androidx.core.view.WindowCompat.getInsetsController(it, view) }
+        if (controller != null) {
+            if (immersive) {
+                controller.systemBarsBehavior =
+                    androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                controller.hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+            } else {
+                controller.show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+            }
+        }
+        onDispose {
+            controller?.show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+        }
     }
 
     var drawDialogOpen by remember { mutableStateOf(false) }
@@ -591,6 +692,13 @@ fun ViewerScreen(
     }
 
     Scaffold(
+        // In reading mode the top and bottom bars are *not composed* — not alpha-0, not
+        // `Visibility.Gone`, not there at all (#507). Reading mode is meant to be the
+        // screen-reader-friendly view of a document, and a bar that is invisible but still
+        // in the tree is exactly the focus trap the plan's accessibility risk names: TalkBack
+        // swipes onto it, reads "Save, dimmed", and the page is nowhere to be found. The find
+        // bar is the one exception the plan allows over the reading view, and it closes back
+        // into it.
         topBar = {
             Column {
                 if (searchOpen) {
@@ -605,7 +713,7 @@ fun ViewerScreen(
                         onClose = closeSearch,
                         screenshotMode = screenshotSheet == "search",
                     )
-                } else {
+                } else if (!readingMode) {
                     TopAppBar(
                         title = {
                             Text(
@@ -685,6 +793,18 @@ fun ViewerScreen(
                                     )
                                 }
                                 HorizontalDivider()
+                                // Reading mode (#507): the More menu is where a phone puts a
+                                // command that has no room on the bars, and this is beside
+                                // Share and Export as Markdown because that is where the
+                                // document's own whole-file commands already live. No
+                                // keyboard shortcut and no toolbar button — the two desktops'
+                                // idiom — and no check mark, because the only way to be in
+                                // the mode is to be looking at it, and Back is how you leave.
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.reading_mode)) },
+                                    onClick = { menuOpen = false; onEnterReadingMode() },
+                                )
+                                HorizontalDivider()
                                 // #328/#329: Redact is not an everyday tool — it removes
                                 // content for good — and its icon means nothing to someone who
                                 // has not been told what it is. In the menu it says its own
@@ -725,6 +845,12 @@ fun ViewerScreen(
                                     )
                                 }
                                 HorizontalDivider()
+                                // Where Page colours and *Open documents in reading mode*
+                                // are set (#513) — app-level, so it is reachable from Home too.
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.settings)) },
+                                    onClick = { menuOpen = false; onOpenSettings() },
+                                )
                                 DropdownMenuItem(
                                     text = { Text(stringResource(R.string.about_megapdf)) },
                                     onClick = { menuOpen = false; aboutOpen = true },
@@ -736,15 +862,21 @@ fun ViewerScreen(
                 // #457: a calm, persistent explanation, directly under the bar like the busy
                 // strip below it — not a dialog, not a snackbar. Stays up for as long as the
                 // document is open, in both languages, regardless of what else is happening.
-                if (isDynamicXfa) DynamicXfaBanner()
+                // Not in reading mode: it carries a Get Reader button, and a button is chrome
+                // a TalkBack swipe would find in the chrome-free view. Nothing is lost — the
+                // banner is back the moment reading mode is, and filling is off in it anyway.
+                if (isDynamicXfa && !readingMode) DynamicXfaBanner()
                 // #145: document-level work (opening, saving, searching) directly under the bar.
+                // Kept in reading mode: it is a polite live region with no focusable control,
+                // and a save started before the mode was entered still has to be able to say so.
                 if (busy != null) BusyStrip(busy.document)
             }
         },
         // #144: the everyday tools, one row at the bottom where a thumb reaches them
         // (Material 3 bottom app bar). Creating things on the left, history on the right.
         bottomBar = {
-            BottomAppBar(
+            // Not composed in reading mode — see the topBar note above.
+            if (!readingMode) BottomAppBar(
                 actions = {
                     // A restricted document disables what its owner did not allow (#131),
                     // and a save or a slow change disables every editing tool (#145).
@@ -789,7 +921,9 @@ fun ViewerScreen(
             Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .background(Brand.Backdrop)
+                // The wall the pages sit on follows the page colours (#513): a mid-grey
+                // gutter around a night-mode page is brighter than the page itself.
+                .background(Brand.backdrop(pageTint))
                 // Pinch zoom (#336). Only multi-touch is consumed, so single-finger
                 // vertical scrolling still belongs to the LazyColumn — and that is
                 // only true on the Initial pass. This box is the LazyColumn's
@@ -828,7 +962,12 @@ fun ViewerScreen(
                                 val requestedZoom = event.calculateZoom()
                                 if (requestedZoom != 1f) {
                                     val previousZoom = zoom
-                                    val newZoom = (previousZoom * requestedZoom).coerceIn(MIN_ZOOM, MAX_ZOOM)
+                                    // The floor is fit width, or fit page when that shows
+                                    // more of the page (#513) — otherwise the fit-page
+                                    // preset would put the page somewhere the very next
+                                    // pinch snapped straight back out of.
+                                    val newZoom = (previousZoom * requestedZoom)
+                                        .coerceIn(zoomFloor.floatValue, MAX_ZOOM)
                                     // What actually lands, not what the fingers asked for: at
                                     // MIN_ZOOM/MAX_ZOOM the coerce above absorbs some or all of
                                     // requestedZoom, and correcting the scroll by requestedZoom
@@ -895,7 +1034,34 @@ fun ViewerScreen(
         ) {
             val density = LocalDensity.current
             val containerWidthPx = with(density) { maxWidth.toPx() }
+            val containerHeightPx = with(density) { maxHeight.toPx() }
             val pageWidthDp = maxWidth * zoom
+
+            // The page across the middle of the viewport, undebounced: what the reading
+            // bar's counter shows, what its previous/next step from, and whose shape the
+            // fit-page zoom is computed for.
+            val currentPage by remember {
+                androidx.compose.runtime.derivedStateOf {
+                    val info = listState.layoutInfo
+                    val middle = (info.viewportStartOffset + info.viewportEndOffset) / 2
+                    info.visibleItemsInfo
+                        .firstOrNull { it.offset <= middle && it.offset + it.size > middle }?.index
+                        ?: info.visibleItemsInfo.firstOrNull()?.index ?: 0
+                }
+            }
+            // Fit page for *that* page: with pages of different shapes in one document the
+            // floor follows whichever one is under the fingers, and nothing is re-clamped by
+            // scrolling alone — only a pinch or a preset reads it.
+            val fitPage = pageSizes.getOrNull(currentPage)?.let {
+                fitPageZoom(containerWidthPx, containerHeightPx, it.widthPoints, it.heightPoints)
+            } ?: 1f
+            androidx.compose.runtime.SideEffect { zoomFloor.floatValue = readingZoomFloor(fitPage) }
+
+            val scope = androidx.compose.runtime.rememberCoroutineScope()
+            val goToPage = { index: Int ->
+                scope.launch { listState.scrollToItem(index.coerceIn(0, (pageSizes.size - 1).coerceAtLeast(0))) }
+                Unit
+            }
 
             // Re-render the visible ±2 window whenever scroll position or zoom
             // settles; debounce keeps pinch gestures from spamming the engine.
@@ -995,7 +1161,10 @@ fun ViewerScreen(
                     val pageModifier = Modifier
                         .width(pageWidthDp)
                         .aspectRatio((size.widthPoints / size.heightPoints).toFloat())
-                        .background(Color.White)
+                        // The page's own ground, which under a tint is what the engine
+                        // drew rather than white — otherwise every page not yet
+                        // rendered flashes a white rectangle on a night-mode screen.
+                        .background(Brand.pageGround(pageTint))
                         // While Redact is armed a drag marks an area instead of scrolling
                         // (#173). The gesture is only installed when the tool is on, so
                         // the list keeps its scrolling the rest of the time.
@@ -1057,9 +1226,22 @@ fun ViewerScreen(
                                 },
                             )
                         }
-                        .pointerInput(index) {
+                        // readingMode is a key, not just a capture: this block is built once
+                        // per key set, and a plain capture would hold whatever the mode was
+                        // when the page was first laid out.
+                        .pointerInput(index, readingMode) {
                             detectTapGestures(
                                 onTap = { offset ->
+                                    // In reading mode the page's own dispatch returns here
+                                    // and goes no further (#507): suppressed, not rerouted,
+                                    // so nothing armed can be fired by a tap on the page —
+                                    // and armed tools have been disarmed on the way in
+                                    // besides. What the tap does instead is the one thing
+                                    // reading mode has a tap for: show or hide the bar.
+                                    if (readingMode) {
+                                        if (barVisible) barVisible = false else showReadingBar()
+                                        return@detectTapGestures
+                                    }
                                     onPageTap(
                                         index,
                                         offset.x / this.size.width,
@@ -1086,7 +1268,11 @@ fun ViewerScreen(
                                 // While Redact is armed a drag across the page marks a new
                                 // area, so the existing marks step out of the way rather
                                 // than fight that gesture for the touch.
+                                // Editing is off in reading mode (#507), so a mark is
+                                // something to look at there and not something to select:
+                                // no chrome, and no node for a TalkBack swipe to land on.
                                 selectable = !redactMode
+                                    && !readingMode
                                     && capabilities.canEditContent
                                     && !toolsDisabled,
                                 onSelect = { onSelectRedactionMark(index, it) },
@@ -1150,6 +1336,51 @@ fun ViewerScreen(
                         }
                     }
                 }
+            }
+
+            // Reading mode's floating bar (#507, #513), over the page, bottom centre. A
+            // sibling of the LazyColumn rather than anything the Scaffold knows about: the
+            // page host is untouched by this mode, and the bar is drawn on top of it.
+            if (readingMode) {
+                ReadingBarHost(
+                    visible = barVisible,
+                    reducedMotion = reducedMotion,
+                    modifier = Modifier.align(Alignment.BottomCenter),
+                ) {
+                    ReadingBar(
+                        pageLabel = stringResource(
+                            R.string.page_counter, currentPage + 1, pageSizes.size,
+                        ),
+                        canPrevious = currentPage > 0,
+                        canNext = currentPage < pageSizes.size - 1,
+                        tint = pageTint,
+                        onPrevious = { showReadingBar(); goToPage(currentPage - 1) },
+                        onNext = { showReadingBar(); goToPage(currentPage + 1) },
+                        onGoToPage = { showReadingBar(); goToPageOpen = true },
+                        // Fit width is zoom 1 by construction on Android: the page is laid
+                        // out at the container's width, so 1 fills it edge to edge.
+                        onFitWidth = { showReadingBar(); zoom = 1f },
+                        onFitPage = { showReadingBar(); zoom = fitPage },
+                        onZoomOut = {
+                            showReadingBar()
+                            zoom = (zoom / 1.25f).coerceIn(zoomFloor.floatValue, MAX_ZOOM)
+                        },
+                        onZoomIn = {
+                            showReadingBar()
+                            zoom = (zoom * 1.25f).coerceIn(zoomFloor.floatValue, MAX_ZOOM)
+                        },
+                        onFind = { showReadingBar(); searchOpen = true },
+                        onExit = onExitReadingMode,
+                    )
+                }
+            }
+
+            if (goToPageOpen) {
+                GoToPageDialog(
+                    pageCount = pageSizes.size,
+                    onGo = { goToPageOpen = false; showReadingBar(); goToPage(it) },
+                    onDismiss = { goToPageOpen = false },
+                )
             }
         }
     }

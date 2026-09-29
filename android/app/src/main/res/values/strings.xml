@@ -296,7 +296,7 @@
          line mark put the chip over that paragraph's own words. -->
     <string name="screenshot_redacted_word">sections 1 through 4</string>
 
-    <!-- Reading mode (#507, #513), SDD §3.10 F9. "Reading mode" is decision 1 on #168 and
+    <!-- Reading mode (#507, #513). "Reading mode" is decision 1 on #168 and
          is in docs/localisation-glossary.md; every platform uses the same words. -->
     <string name="reading_mode">Reading mode</string>
     <!-- Announced to a screen reader on entering and leaving the mode -->
