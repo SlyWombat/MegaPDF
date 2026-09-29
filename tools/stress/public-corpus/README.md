@@ -287,18 +287,39 @@ missing was the feedback. A rebuild whose pinned count for a category exceeds th
 quota now prints one line on stderr:
 
     note: tagged keeps 300 pinned row(s), over QUOTAS['tagged'] = 100 -- #455 never evicts a
-    pinned row, so lowering a quota changes nothing on its own; shrinking a category means
-    retiring rows the deliberate, visible way, with --allow-removed <path> once each is gone
-    from this rebuild's pool
+    pinned row on a quota edit alone, so lowering a quota changes nothing by itself;
+    shrinking a category means retiring rows the deliberate, visible way, with
+    --allow-removed <path> (#508: this retires PATH even while its source still carries it)
 
 It is a note, not a refusal: the rebuild proceeds and keeps all the pinned rows. Raising a
 quota needs no note (the extra room is filled from new candidates only, and no existing pick
 moves), and a quota left alone, a quota met exactly, an unlimited category (`form`, `large`,
 quota `None`) and a first build with nothing pinned yet all print nothing new. Shrinking a
 category for real is the `--allow-removed` route above — deliberate and visible, one named
-path at a time — and note what that means today: `--allow-removed` only takes effect on a row
-that has actually left the rebuild's pool, so a quota edit plus that flag will not by itself
-retire a row the sources still carry.
+path at a time.
+
+**`--allow-removed` also retires a row the sources still carry (#508).** It used to take
+effect only on a row that had already left the rebuild's pool — naming a still-carried path
+did nothing at all, not even the "not actually missing" note, because that note lived inside
+the same `if` block as the refusal it is paired with, and that block only ever ran when
+something had, in fact, gone missing. So there was no supported way to shrink a category on
+purpose: lowering a quota is a no-op (#500 above), `--allow-removed` was inert while the
+source still carried the file, and `manifest.tsv`'s own first line says never to edit it by
+hand. Now naming a path to `--allow-removed` evicts it from the selection regardless of
+whether its source still carries it, and the room that frees is handed to `spread()` like any
+other vacancy — so a category at quota can genuinely shrink, or swap one specific row for
+another the pool already had room to add. This is the cheapest of the options #508 weighed:
+naming a path explicitly on the command line is already as deliberate and visible as #455
+asks a removal to be, so the row's own manifest diff line is the record of the decision. A
+rebuild reports what it retired this way:
+
+    note: --allow-removed retired 1 row(s) still carried by their source (#508):
+      verapdf/ISO 32000-1/veraPDF test suite 6-8-3-3-t01-fail-a.pdf  (tagged)
+
+A path named to `--allow-removed` is not remembered between runs — it is a per-invocation
+acknowledgement, the same as the "row already left the pool" case above, not a permanent
+blacklist. Leave it off a later rebuild and a retired document is just an ordinary pool
+candidate again, eligible to be `spread()`-selected back in if there is room.
 
 ## UN parallel-language documents — investigated, not added (#471)
 

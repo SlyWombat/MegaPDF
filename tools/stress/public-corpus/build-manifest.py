@@ -1032,7 +1032,7 @@ def spread(items, limit):
     return [items[int(i * step)] for i in range(limit)]
 
 
-def pin_selection(pool_by_path, existing_by_path, quota):
+def pin_selection(pool_by_path, existing_by_path, quota, retire=frozenset()):
     """#455: select this category's rows so that adding documents never reshuffles which
     already-selected ones are kept.
 
@@ -1046,30 +1046,44 @@ def pin_selection(pool_by_path, existing_by_path, quota):
 
     A quota LOWERED below what is already pinned therefore keeps every pinned row and
     shrinks nothing: there is no unfilled room to hand to spread(), and eviction is the one
-    thing this function will not do. #500: that is deliberate, but it is not visible, so
-    main() prints a note naming the category, its pinned count and its quota whenever it
-    happens -- silence there used to read as "the QUOTAS edit took effect".
+    thing this function will not do on its own. #500: that is deliberate, but it is not
+    visible, so main() prints a note naming the category, its pinned count and its quota
+    whenever it happens -- silence there used to read as "the QUOTAS edit took effect".
 
-    Returns `(keep, dropped)`: `keep` is the set of paths selected (a subset of
-    pool_by_path's keys, filled as above even when some previous picks were dropped, so a
-    caller that decides to proceed anyway -- because every drop was acknowledged -- gets a
-    fully-formed selection rather than a partial one). `dropped` is the sorted list of
-    paths that were previously selected here but are missing from `pool_by_path` now (the
-    source stopped carrying them, or classify() now files them elsewhere) -- never silently
-    dropped: it is the caller's job to refuse unless each one is acknowledged, per #455.
+    `retire` (#508) is the one deliberate exception: paths named there are pulled out of
+    both `pool_by_path` and `existing_by_path` before anything else runs, so a row still
+    carried by its source can be evicted on purpose -- naming it explicitly on the command
+    line is exactly as deliberate and visible as #455 asks a removal to be, and the room it
+    frees is handed to spread() like any other vacancy. A path named in `retire` that is not
+    actually in the pool costs nothing here; the caller reports it.
+
+    Returns `(keep, dropped, retired)`: `keep` is the set of paths selected (a subset of
+    pool_by_path's keys, filled as above even when some previous picks were dropped or
+    retired, so a caller that decides to proceed anyway -- because every drop was
+    acknowledged -- gets a fully-formed selection rather than a partial one). `dropped` is
+    the sorted list of paths that were previously selected here but are missing from
+    `pool_by_path` now (the source stopped carrying them, or classify() now files them
+    elsewhere) -- never silently dropped: it is the caller's job to refuse unless each one
+    is acknowledged, per #455. `retired` is the sorted list of paths in `retire` that were
+    actually still in the pool (or still selected) and so were genuinely evicted, as
+    opposed to a name that named nothing.
     """
+    retire = set(retire)
     existing_paths = set(existing_by_path)
     pool_paths = set(pool_by_path)
+    retired = sorted((existing_paths | pool_paths) & retire)
+    existing_paths -= retire
+    pool_paths -= retire
     dropped = sorted(existing_paths - pool_paths)
     pinned = existing_paths & pool_paths
 
     if quota is None:
-        return pool_paths, dropped  # form: take every one found, same as ever.
+        return pool_paths, dropped, retired  # form: take every one found, same as ever.
 
     room = max(quota - len(pinned), 0)
     candidates = sorted(pool_paths - pinned)
     added = spread(candidates, room)
-    return pinned | set(added), dropped
+    return pinned | set(added), dropped, retired
 
 
 # --------------------------------------------------------------------------------------
@@ -1612,7 +1626,9 @@ def main():
                          "already selected in --out, is expected to drop out of this "
                          "rebuild -- repeatable. Without this, a rebuild that would lose "
                          "any previously-selected row refuses outright rather than doing "
-                         "it silently.")
+                         "it silently. #508: also retires PATH deliberately even when its "
+                         "source still carries it -- naming it here is what makes that "
+                         "removal visible.")
     args = ap.parse_args()
 
     if args.add_source:
@@ -1719,17 +1735,23 @@ def main():
             continue
         existing_by_category[r["category"]][r["path"]] = r
 
+    allow_removed = set(args.allow_removed)
+
     selected = []
     all_dropped = {}  # path -> category, across every category that lost a pinned row
+    all_retired = {}  # path -> category, #508: named to --allow-removed while still in the pool
     for category in CATEGORIES:
         pool_by_path = {r["path"]: r for r in by_category[category]}
         existing_by_path = existing_by_category[category]
         quota = QUOTAS[category]
-        keep, dropped = pin_selection(pool_by_path, existing_by_path, quota)
+        keep, dropped, retired = pin_selection(pool_by_path, existing_by_path, quota,
+                                               retire=allow_removed)
         for path in dropped:
             all_dropped[path] = category
+        for path in retired:
+            all_retired[path] = category
         selected.extend(pool_by_path[p] for p in keep)
-        pinned = len(set(existing_by_path) & set(pool_by_path))
+        pinned = len((set(existing_by_path) & set(pool_by_path)) - allow_removed)
         print(f"  {category:10s} {len(keep):5d} of {len(pool_by_path):5d} found "
               f"({pinned} pinned from the existing manifest, {len(keep) - pinned} new)",
               file=sys.stderr)
@@ -1743,15 +1765,24 @@ def main():
         # (and every first build, where nothing is pinned yet) prints nothing new.
         if quota is not None and pinned > quota:
             print(f"  note: {category} keeps {pinned} pinned row(s), over "
-                  f"QUOTAS[{category!r}] = {quota} -- #455 never evicts a pinned row, so "
-                  f"lowering a quota changes nothing on its own; shrinking a category "
-                  f"means retiring rows the deliberate, visible way, with "
-                  f"--allow-removed <path> once each is gone from this rebuild's pool",
+                  f"QUOTAS[{category!r}] = {quota} -- #455 never evicts a pinned row on a "
+                  f"quota edit alone, so lowering a quota changes nothing by itself; "
+                  f"shrinking a category means retiring rows the deliberate, visible way, "
+                  f"with --allow-removed <path> (#508: this retires PATH even while its "
+                  f"source still carries it)",
                   file=sys.stderr)
 
+    if all_retired:
+        # #508: --allow-removed named these while their source still carried them -- the
+        # cheapest of the options that issue weighed, on the grounds that naming a path
+        # explicitly on the command line is already as deliberate and visible as #455
+        # asks a removal to be. Reported, not silent, same as every other removal here.
+        lines = "\n".join(f"  {path}  ({cat})" for path, cat in sorted(all_retired.items()))
+        print(f"  note: --allow-removed retired {len(all_retired)} row(s) still carried by "
+              f"their source (#508):\n{lines}", file=sys.stderr)
+
     if all_dropped:
-        allowed = set(args.allow_removed)
-        unacknowledged = {p: c for p, c in all_dropped.items() if p not in allowed}
+        unacknowledged = {p: c for p, c in all_dropped.items() if p not in allow_removed}
         if unacknowledged:
             lines = "\n".join(f"  {path}  (was {cat})"
                               for path, cat in sorted(unacknowledged.items()))
@@ -1761,10 +1792,11 @@ def main():
                 f"changed, or classify() now files them elsewhere. #455: a removal must be\n"
                 f"deliberate and visible, never silent. If this is expected, re-run with\n"
                 f"--allow-removed <path> for each (repeatable):\n{lines}")
-        unused = allowed - set(all_dropped)
-        if unused:
-            print(f"  note: --allow-removed named {len(unused)} path(s) that were not "
-                  f"actually missing: {sorted(unused)}", file=sys.stderr)
+
+    unused = allow_removed - set(all_dropped) - set(all_retired)
+    if unused:
+        print(f"  note: --allow-removed named {len(unused)} path(s) that were not "
+              f"actually missing or in the pool: {sorted(unused)}", file=sys.stderr)
 
     # A plain rebuild never touches the network for any opt-in source (that is what
     # --add-source is for, and what keeps this path reproducible from a sandbox that cannot
