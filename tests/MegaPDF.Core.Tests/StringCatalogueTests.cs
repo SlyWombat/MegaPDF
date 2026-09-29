@@ -44,6 +44,9 @@ public class StringCatalogueTests
         ["LanguageFrenchFrance.Text"] = "same",
         ["OK"] = "OK is OK",
         ["redact_ok"] = "OK is OK on Android too (#173)",
+        // #507: the reading bar's page counter is "%1$d / %2$d" — two numbers and a
+        // slash, with no word in it to translate. French writes a page count the same way.
+        ["page_counter"] = "digits and a slash, identical in both (#507)",
         // #173: the summary counts. "image" and "annotation" are the same word in both,
         // and a count in front of one does not change that.
         ["RedactedImages"] = "\"{0} images\" is the same in both (#173)",
