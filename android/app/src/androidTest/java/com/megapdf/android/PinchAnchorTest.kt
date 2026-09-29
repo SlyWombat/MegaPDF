@@ -43,6 +43,19 @@ class PinchAnchorTest {
         return node.positionInRoot + Offset(node.size.width * xFrac, node.size.height * yFrac)
     }
 
+    /** Polls the page's width itself, rather than [ComposeTestRule.waitUntil], purely so a
+     *  timeout's message says what the width actually reached instead of just "didn't". */
+    private fun waitForWidthAbove(threshold: Int, label: String, timeoutMs: Long = SETTLE_MS): Int {
+        val deadline = System.currentTimeMillis() + timeoutMs
+        var last = rule.page().fetchSemanticsNode().size.width
+        while (System.currentTimeMillis() < deadline) {
+            last = rule.page().fetchSemanticsNode().size.width
+            if (last > threshold) return last
+            Thread.sleep(100)
+        }
+        throw AssertionError("$label: width never exceeded $threshold; last seen was $last")
+    }
+
     @Test
     fun pinchKeepsTheCentroidPointFixed() {
         val file = Fixtures.demo("zoom-anchor-527.pdf")
@@ -61,8 +74,7 @@ class PinchAnchorTest {
                 durationMillis = 300,
             )
         }
-        rule.waitUntil(SETTLE_MS) { rule.page().fetchSemanticsNode().size.width > fittedWidth * 3 / 2 }
-        val zoomedWidth = rule.page().fetchSemanticsNode().size.width
+        val zoomedWidth = waitForWidthAbove(fittedWidth * 3 / 2, "pre-zoom pinch")
 
         val xFrac = 0.68f
         val yFrac = 0.30f
@@ -85,9 +97,7 @@ class PinchAnchorTest {
             )
         }
 
-        rule.waitUntil(SETTLE_MS) {
-            rule.page().fetchSemanticsNode().size.width > zoomedWidth * 5 / 4
-        }
+        waitForWidthAbove(zoomedWidth * 5 / 4, "measured pinch")
 
         val after = anchorOnScreen(xFrac, yFrac)
         val driftX = abs(after.x - before.x)
