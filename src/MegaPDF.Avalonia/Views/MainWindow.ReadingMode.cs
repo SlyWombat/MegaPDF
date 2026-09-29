@@ -76,7 +76,7 @@ public partial class MainWindow
     /// "all five are hidden and out of the tab order" holds unconditionally. Used by
     /// the self-test.
     /// </summary>
-    internal IReadOnlyList<Control> ReadingChromeForTest => [.. ChromeHosts, FindBarHost];
+    internal IReadOnlyList<Control> ReadingChromeForTest => [.. ChromeHosts, FindBarHost, PageStripHost];
 
     /// <summary>Whether this window is in reading mode. A window state; see the class doc.</summary>
     internal bool IsReadingMode { get; private set; }
@@ -211,6 +211,11 @@ public partial class MainWindow
         foreach (var host in ChromeHosts)
             host.IsVisible = false;
 
+        // The Pages sidebar is chrome too (#174): the mode is the page and nothing else.
+        // Switched through its own method, which knows the mode is on and so puts nothing
+        // back until the mode is off.
+        ApplyPageStripVisibility();
+
         ApplyReadingModeToTabs();
         ShowReadingPill();
 
@@ -245,6 +250,8 @@ public partial class MainWindow
         HideReadingPill();
         foreach (var host in ChromeHosts)
             host.IsVisible = true;
+        // Back only if the tab had it open before the mode (#174).
+        ApplyPageStripVisibility();
 
         ApplyReadingModeToTabs();
 

@@ -59,11 +59,53 @@ public sealed partial class PageViewModel : ObservableObject, IDisposable
         PointHeight = pointHeight;
     }
 
-    public int Index { get; }
+    /// <summary>
+    /// Where this page stands in the document. Not readonly since #174: delete, reorder,
+    /// insert and combine renumber pages, and the core's own contract 10 says the app
+    /// renumbers its own index-keyed state after each one. Rebuilding the whole collection
+    /// instead would cost an engine call per page — a thousand of them on #147's big file,
+    /// to move one page — so the page objects survive and their indices follow them.
+    /// </summary>
+    public int Index { get; private set; }
 
     /// <summary>Page size in PDF points — the intrinsic size, before zoom.</summary>
-    public double PointWidth { get; }
-    public double PointHeight { get; }
+    public double PointWidth { get; private set; }
+    public double PointHeight { get; private set; }
+
+    /// <summary>Its new index after a page operation (#174). Nothing else about the page changes.</summary>
+    internal void Renumber(int index)
+    {
+        if (Index == index)
+            return;
+        Index = index;
+        OnPropertyChanged(nameof(Index));
+        OnPropertyChanged(nameof(PageNumberLabel));
+        OnPropertyChanged(nameof(ThumbnailAccessibleName));
+    }
+
+    /// <summary>
+    /// The page's size in points after a rotation (#174): the core reports the *rotated* size,
+    /// so a quarter turn swaps width and height and the layout, the raster and the thumbnail
+    /// are all wrong until they are told. The raster is dropped rather than scaled — the pixels
+    /// are of the other way up.
+    /// </summary>
+    internal void Resize(double pointWidth, double pointHeight)
+    {
+        if (Math.Abs(PointWidth - pointWidth) < 0.01 && Math.Abs(PointHeight - pointHeight) < 0.01)
+            return;
+        PointWidth = pointWidth;
+        PointHeight = pointHeight;
+        ReleaseRetained();
+        // Every rectangle the core reports for this page is in the rotated crop space now
+        // (#439), so the interaction map has to be read again rather than turned by hand.
+        Regions = [];
+        OnPropertyChanged(nameof(PointWidth));
+        OnPropertyChanged(nameof(PointHeight));
+        OnPropertyChanged(nameof(LayoutWidth));
+        OnPropertyChanged(nameof(LayoutHeight));
+        OnPropertyChanged(nameof(ThumbnailWidth));
+        OnPropertyChanged(nameof(ThumbnailHeight));
+    }
 
     /// <summary>
     /// Layout size in device-independent pixels. Bound by the item template so a page
@@ -211,6 +253,82 @@ public sealed partial class PageViewModel : ObservableObject, IDisposable
             RedactionMarks.Add(new RedactionMarkView(mark.MarkId, mark.Bounds.X * scale, mark.Bounds.Y * scale,
                 mark.Bounds.Width * scale, mark.Bounds.Height * scale, mark.MarkId == _selectedMark));
         }
+    }
+
+    // --- The thumbnail, for the Pages sidebar (#174) --------------------------
+    //
+    // Its own small raster, not a scaled copy of the page's: the page raster only exists
+    // while the view has realised the page, and is up to 128 MB when it does. A thumbnail
+    // is ~40 KB, is drawn once per page and survives scrolling the document, which is what
+    // makes a strip of them affordable on #147's thousand-page file. Lazily, and only for
+    // the thumbnails the strip has actually realised — the strip virtualizes like the page
+    // list does, so opening a long document costs no thumbnail at all until it is opened.
+
+    /// <summary>The thumbnail's width in device-independent pixels; its height follows the page.</summary>
+    public const double ThumbnailBoxWidth = 104;
+
+    /// <summary>Laid out before the raster exists, so the strip's extent is right from the start.</summary>
+    public double ThumbnailWidth => PointWidth >= PointHeight
+        ? ThumbnailBoxWidth
+        : ThumbnailBoxWidth * PointWidth / PointHeight;
+
+    public double ThumbnailHeight => PointWidth >= PointHeight
+        ? ThumbnailBoxWidth * PointHeight / PointWidth
+        : ThumbnailBoxWidth;
+
+    [ObservableProperty]
+    private WriteableBitmap? _thumbnail;
+
+    private bool _thumbnailPending;
+
+    /// <summary>The page number under the thumbnail: the number alone, as both desktops show it.</summary>
+    public string PageNumberLabel => (Index + 1).ToString(System.Globalization.CultureInfo.CurrentCulture);
+
+    /// <summary>
+    /// What a screen reader reads for the row. "3" alone is what a sighted person needs under a
+    /// picture of the page and is useless without it, so the row says "Page 3".
+    /// </summary>
+    public string ThumbnailAccessibleName => Strings.PageThumbnailName(Index + 1);
+
+    /// <summary>
+    /// Draws the thumbnail if it is missing. Called when the strip realises the row; cheap to
+    /// call again, which is what lets the same call sit on a rotation and on a realisation.
+    /// </summary>
+    internal void EnsureThumbnail()
+    {
+        if (_disposed || _thumbnailPending || Thumbnail is not null)
+            return;
+        _thumbnailPending = true;
+        var document = _document;
+        var index = Index;
+        var (pixelWidth, pixelHeight) = RenderLimits.Fit(
+            ThumbnailWidth * PageBitmap.PointsToPixels, ThumbnailHeight * PageBitmap.PointsToPixels);
+        Task.Run(() =>
+        {
+            if (_disposed)
+                return (RenderedPage?)null;
+            using var page = document.GetPage(index);
+            // Untinted, always: the strip is a map of the document, not a second view of it.
+            return page.Render(Math.Max(1, pixelWidth), Math.Max(1, pixelHeight));
+        }).ContinueWith(task => Dispatcher.UIThread.Post(() =>
+        {
+            _thumbnailPending = false;
+            if (_disposed || task.IsFaulted || task.Result is not { } rendered)
+                return;
+            var previous = Thumbnail;
+            Thumbnail = PageBitmap.FromRenderedPage(rendered);
+            previous?.Dispose();
+        }), TaskScheduler.Default);
+    }
+
+    /// <summary>Throws away the thumbnail so the next realisation draws it again (a rotation, an edit).</summary>
+    internal void InvalidateThumbnail()
+    {
+        var previous = Thumbnail;
+        Thumbnail = null;
+        previous?.Dispose();
+        OnPropertyChanged(nameof(PageNumberLabel));
+        OnPropertyChanged(nameof(ThumbnailAccessibleName));
     }
 
     [ObservableProperty]
@@ -483,9 +601,12 @@ public sealed partial class PageViewModel : ObservableObject, IDisposable
         Image = null;
         var capped = _cappedImage;
         _cappedImage = null;
+        var thumbnail = Thumbnail;
+        Thumbnail = null;
         image?.Dispose();
         if (!ReferenceEquals(capped, image))
             capped?.Dispose();
+        thumbnail?.Dispose();
     }
 
     /// <summary>

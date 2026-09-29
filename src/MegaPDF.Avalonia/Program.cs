@@ -2281,8 +2281,512 @@ internal static class Program
             }
         }
 
+        // --- page tools (#174) ---
+        //
+        // Rotate, delete, reorder, insert, combine and extract, driven through the real view
+        // model. Three things here are assertions rather than assumptions, because each is a
+        // rule a later change can break while the window still looks right:
+        //
+        //   1. Undo of a delete puts back the *page*, not a blank one — checked by hit-testing
+        //      the restored page's drawn checkbox, which only the original page has.
+        //   2. The app's own index-keyed state follows the renumbering (contract 10 says this
+        //      is the app's job): the page list, the page sizes, the search hits, the strip's
+        //      selection and the page indicator.
+        //   3. The engine's two deliberate refusals reach the person as sentences that say
+        //      what happened, not as "the change failed".
+        Console.WriteLine("page tools (#174):");
+        try
+        {
+            CheckPageTools(dir, saveDir, state, Check);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"::error::page tools: {ex.GetType().Name}: {ex.Message}");
+            failures++;
+        }
+
         Console.WriteLine(failures == 0 ? "self-test: PASS" : $"::error::self-test: {failures} check(s) failed");
         return failures == 0 ? 0 : 1;
+    }
+
+
+    /// <summary>
+    /// Page tools (#174), through the view model: the Pages sidebar's state, every operation,
+    /// every undo, the renumbering the app owes contract 10, the two refusals it has to admit
+    /// to, and the recovery journal's replay of all of it.
+    ///
+    /// fixture.pdf is the starting point throughout — two pages, the first carrying the drawn
+    /// checkbox square the very first check in this file relies on, which is what makes "the
+    /// page that came back is the page that went" an assertion and not a page count.
+    /// </summary>
+    private static void CheckPageTools(string dir, string saveDir, string state, Action<string, bool> check)
+    {
+        var fixture = Path.Combine(dir, "fixture.pdf");
+        var drawnCentre = new PdfPoint(78, 186);
+
+        // --- the sidebar, and rotation ---
+        using (var vm = new DocumentViewModel(state))
+        {
+            vm.Open(fixture);
+            check("  the document opened with two pages", vm.Pages.Count == 2);
+            check("  the Pages sidebar starts closed", !vm.IsPageStripOpen);
+            vm.TogglePageStripCommand.Execute(null);
+            check("  Pages opens it", vm.IsPageStripOpen);
+            check("  every page has a row numbered from one",
+                  vm.Pages.Select(p => p.PageNumberLabel).SequenceEqual(["1", "2"]));
+            check("  and a row says which page it is out loud",
+                  vm.Pages[1].ThumbnailAccessibleName == Strings.PageThumbnailName(2));
+
+            var portrait = (vm.Pages[0].PointWidth, vm.Pages[0].PointHeight);
+            check("  the first page arrives unrotated", vm.PageRotation(0) == 0);
+
+            vm.SelectedPageIndices = [0];
+            check("  selecting one thumbnail says which page", vm.SelectedPageSummary == Strings.PageSelected(1));
+            vm.RotatePagesRightCommand.Execute(null);
+            check("  Rotate Right turns it a quarter turn clockwise", vm.PageRotation(0) == 1);
+            check("  the page's width and height swap with it",
+                  Math.Abs(vm.Pages[0].PointWidth - portrait.PointHeight) < 0.5
+                  && Math.Abs(vm.Pages[0].PointHeight - portrait.PointWidth) < 0.5);
+            check("  it makes the document unsaved", vm.IsDirty);
+            check("  and it is one undo step", vm.CanUndo);
+            check($"  said in words ({vm.Status})", vm.Status == Strings.PageTurnedRight);
+
+            vm.UndoCommand.Execute(null);
+            check("  undo turns it back", vm.PageRotation(0) == 0);
+            check("  and the page is its own size again",
+                  Math.Abs(vm.Pages[0].PointWidth - portrait.PointWidth) < 0.5);
+            vm.RedoCommand.Execute(null);
+            check("  redo turns it again", vm.PageRotation(0) == 1);
+
+            vm.UndoCommand.Execute(null);
+            vm.SelectedPageIndices = [];
+            vm.RotatePagesLeftCommand.Execute(null);
+            check("  Rotate Left from square is three quarter turns", vm.PageRotation(0) == 3);
+            vm.UndoCommand.Execute(null);
+
+            // A selection of pages, turned as one step.
+            vm.SelectedPageIndices = [0, 1];
+            check("  selecting both says how many", vm.SelectedPageSummary == Strings.PagesSelected(2));
+            vm.RotatePagesRightCommand.Execute(null);
+            check("  a selection turns together", vm.PageRotation(0) == 1 && vm.PageRotation(1) == 1);
+            vm.UndoCommand.Execute(null);
+            check("  and comes back together, in one step",
+                  vm.PageRotation(0) == 0 && vm.PageRotation(1) == 0 && !vm.CanUndo);
+        }
+
+        // --- rotation survives a save and a reopen ---
+        var rotated = Path.Combine(saveDir, $"megapdf-selftest-rotate-{Guid.NewGuid():N}.pdf");
+        try
+        {
+            using (var vm = new DocumentViewModel(state))
+            {
+                vm.Open(fixture);
+                vm.SelectedPageIndices = [1];
+                vm.RotatePagesRightCommand.Execute(null);
+                using var file = File.Create(rotated);
+                vm.SaveTo(file);
+            }
+            using var engine = new PdfiumEngine();
+            using var reopened = engine.Open(rotated);
+            check("  a rotation is in the saved file", reopened.GetPageRotation(1) == 1);
+            check("  and only on the page that was turned", reopened.GetPageRotation(0) == 0);
+        }
+        finally
+        {
+            if (File.Exists(rotated)) File.Delete(rotated);
+        }
+
+        // --- delete, and the undo that puts the page itself back ---
+        using (var vm = new DocumentViewModel(state))
+        {
+            vm.Open(fixture);
+            check("  the drawn square is on the first page",
+                  vm.HitTest(0, drawnCentre).Kind == PageHitKind.DrawnCheckbox);
+
+            vm.SelectedPageIndices = [0];
+            vm.DeletePagesCommand.Execute(null);
+            check("  deleting a page leaves the other one", vm.Pages.Count == 1);
+            check("  the page list is renumbered from zero", vm.Pages[0].Index == 0);
+            check("  the page indicator follows", vm.PageIndicator == Strings.PageOf(1, 1));
+            check("  nothing is selected in the strip any more", !vm.HasPageSelection);
+            check($"  and it says Undo puts it back ({vm.Status})", vm.Status == Strings.PageDeleted);
+
+            vm.UndoCommand.Execute(null);
+            check("  undo puts the page back", vm.Pages.Count == 2);
+            // The whole point of megapdf_page_restore: what comes back is the page that went,
+            // not a blank sheet of the same size.
+            check("  and it is the page that went, not a blank one",
+                  vm.HitTest(0, drawnCentre).Kind == PageHitKind.DrawnCheckbox);
+            vm.RedoCommand.Execute(null);
+            check("  redo takes it off again", vm.Pages.Count == 1);
+
+            // A PDF must have a page, and the engine says so rather than the button being
+            // greyed out with no explanation.
+            vm.SelectedPageIndices = [0];
+            check("  Delete Page is off for the last page", !vm.DeletePagesCommand.CanExecute(null));
+            using var onePageEngine = new PdfiumEngine();
+            using var onePage = onePageEngine.Open(Path.Combine(dir, "forms.pdf"));
+            var last = new MegaPDF.Core.Editing.DeletePagesOperation(onePage, [0]);
+            try
+            {
+                last.Apply();
+                check("  deleting the last page of a document is refused", false);
+            }
+            catch (PageToolException ex)
+            {
+                check("  deleting the last page of a document is refused",
+                      ex.Reason == PageToolFailure.LastPage);
+                check("  with the rule said out loud, and the way round it",
+                      DocumentViewModel.DescribePageToolFailure(ex) == Strings.CannotDeleteLastPage);
+            }
+        }
+
+        // --- reorder ---
+        using (var vm = new DocumentViewModel(state))
+        {
+            vm.Open(fixture);
+            // The first page is marked by turning it, so "the page moved" is an assertion about
+            // that page and not about a page count.
+            vm.SelectedPageIndices = [0];
+            vm.RotatePagesRightCommand.Execute(null);
+            vm.MovePageDownCommand.Execute(null);
+            check("  Move Page Down moves the page, rotation and all",
+                  vm.PageRotation(1) == 1 && vm.PageRotation(0) == 0);
+            check("  the strip's selection follows the page, not the index",
+                  vm.SelectedPageIndices is [1]);
+            check($"  said in words ({vm.Status})", vm.Status == Strings.PageMoved(1, 2));
+            vm.UndoCommand.Execute(null);
+            check("  undo moves it back", vm.PageRotation(0) == 1 && vm.SelectedPageIndices is [0]);
+            check("  Move Page Up is off for the first page", !vm.MovePageUpCommand.CanExecute(null));
+            vm.SelectedPageIndices = [1];
+            check("  and Move Page Down is off for the last", !vm.MovePageDownCommand.CanExecute(null));
+        }
+
+        // --- a blank page ---
+        using (var vm = new DocumentViewModel(state))
+        {
+            vm.Open(fixture);
+            var size = (vm.Pages[0].PointWidth, vm.Pages[0].PointHeight);
+            vm.SelectedPageIndices = [0];
+            vm.InsertBlankPageCommand.Execute(null);
+            check("  a blank page goes in after the page you are on", vm.Pages.Count == 3);
+            check("  it is the size of the page it follows",
+                  Math.Abs(vm.Pages[1].PointWidth - size.PointWidth) < 0.5
+                  && Math.Abs(vm.Pages[1].PointHeight - size.PointHeight) < 0.5);
+            check("  and it is blank: the square is still on page 1 only",
+                  vm.HitTest(0, drawnCentre).Kind == PageHitKind.DrawnCheckbox
+                  && vm.HitTest(1, drawnCentre).Kind == PageHitKind.None);
+            check($"  said in words ({vm.Status})", vm.Status == Strings.BlankPageInserted(2));
+            vm.UndoCommand.Execute(null);
+            check("  undo takes it out again", vm.Pages.Count == 2);
+        }
+
+        // --- combine: pages from another file ---
+        using (var vm = new DocumentViewModel(state))
+        {
+            vm.Open(fixture);
+            var ok = vm.ImportPagesAsync(Path.Combine(dir, "forms.pdf")).GetAwaiter().GetResult();
+            check("  pages from another file are inserted", ok && vm.Pages.Count == 3);
+            check("  it is one undo step", vm.CanUndo);
+            vm.UndoCommand.Execute(null);
+            check("  undo takes exactly the imported pages off", vm.Pages.Count == 2);
+            check("  and leaves this document's own pages alone",
+                  vm.HitTest(0, drawnCentre).Kind == PageHitKind.DrawnCheckbox);
+        }
+
+        // A form document combined with itself: the field names clash, which is the case the
+        // engine renames rather than letting two fields merge into one.
+        using (var vm = new DocumentViewModel(state))
+        {
+            var forms = Path.Combine(dir, "forms.pdf");
+            var source = FirstFieldOf(forms);
+            check($"  the source has a field to bring ({source?.Name})", source is not null);
+            vm.Open(forms);
+            check("  a form document combined with itself doubles its pages",
+                  vm.ImportPagesAsync(forms).GetAwaiter().GetResult() && vm.Pages.Count == 2);
+            // At the field's own measured bounds, not at a remembered point.
+            var centre = source is { } f
+                ? new PdfPoint(f.Bounds.X + (f.Bounds.Width / 2), f.Bounds.Y + (f.Bounds.Height / 2))
+                : default;
+            check("  the imported page came with its form field",
+                  vm.HitTest(1, centre).Field is not null);
+            check($"  renamed so the two never merge into one field ({vm.HitTest(1, centre).Field?.Name})",
+                  vm.HitTest(1, centre).Field?.Name == $"{source?.Name}_2");
+            check("  while this document's own field keeps its name",
+                  vm.HitTest(0, centre).Field?.Name == source?.Name);
+            vm.UndoCommand.Execute(null);
+            check("  and undo leaves one page with one field",
+                  vm.Pages.Count == 1 && vm.HitTest(0, centre).Field?.Name == source?.Name);
+        }
+
+        // --- the refusal the engine makes on purpose (MEGAPDF_ERR_FIELDS) ---
+        //
+        // A page whose form fields hang off a /Parent field cannot be copied by a PDFium
+        // without patch 0033: the copy would name an object that is not the widget's parent,
+        // and the form would quietly lose its field names. About 0.8% of a real corpus. Which
+        // of the two behaviours a build has is fixed at compile time and cannot be asked for,
+        // so both branches are asserted and the log says which one this build took. What is
+        // checked unconditionally is the thing the interface owes: when it is refused, the
+        // document is untouched and the person is told what happened and why.
+        var hierarchy = Path.Combine(saveDir, $"megapdf-selftest-parentfields-{Guid.NewGuid():N}.pdf");
+        var clashing = Path.Combine(saveDir, $"megapdf-selftest-person-{Guid.NewGuid():N}.pdf");
+        try
+        {
+            File.WriteAllBytes(hierarchy, ParentFieldsPdf());
+            File.WriteAllBytes(clashing, FlatPersonFieldPdf());
+            using (var vm = new DocumentViewModel(state))
+            {
+                vm.Open(fixture);
+                var imported = vm.ImportPagesAsync(hierarchy).GetAwaiter().GetResult();
+                // With no name to clash with, a patched PDFium (0033) carries the hierarchy and
+                // an unpatched one refuses the page whole. Which of the two this build is is
+                // fixed at compile time and cannot be asked for, so both are accepted here and
+                // the log says which — the refusal itself is asserted below, where it is certain.
+                check($"  a hierarchy with no clash {(imported ? "imports" : "is refused")} on this build's PDFium",
+                      imported ? vm.Pages.Count == 3 : vm.Pages.Count == 2 && !vm.IsDirty && !vm.CanUndo);
+            }
+            using (var vm = new DocumentViewModel(state))
+            {
+                // Certain on either build: a widget whose name lives on its /Parent has no /T of
+                // its own to rename, so a hierarchy whose top-level name is already taken here
+                // is refused whole and nothing is changed.
+                vm.Open(clashing);
+                var imported = vm.ImportPagesAsync(hierarchy).GetAwaiter().GetResult();
+                check("  a form field the copy cannot carry refuses the whole import",
+                      !imported);
+                check("  and leaves the document exactly as it was",
+                      vm.Pages.Count == 1 && !vm.IsDirty && !vm.CanUndo);
+                // Truncated for the log line, never indexed blindly: a check whose *message*
+                // throws reports as an exception instead of as the failure it is.
+                check($"  saying what happened and what still works ({Shorten(vm.Status)})",
+                      vm.Status == Strings.PagesRefusedFormFields);
+            }
+            // Deterministic whatever this build's PDFium does: the refusal a person would read.
+            check("  the field-hierarchy refusal has its own wording",
+                  DocumentViewModel.DescribePageToolFailure(
+                      new PageToolException(PageToolFailure.FieldHierarchy, "x"))
+                  == Strings.PagesRefusedFormFields);
+            check("  and it is not the generic change-failed line",
+                  Strings.PagesRefusedFormFields != Strings.ChangeFailed);
+            check("  a restricted document's page tools say the owner password would unlock them",
+                  DocumentViewModel.DescribePageToolFailure(
+                      new PageToolException(PageToolFailure.Restricted, "x")) == Strings.PageToolsRestricted);
+        }
+        finally
+        {
+            if (File.Exists(hierarchy)) File.Delete(hierarchy);
+            if (File.Exists(clashing)) File.Delete(clashing);
+        }
+
+        // --- extract: some pages out to a new file ---
+        var extracted = Path.Combine(saveDir, $"megapdf-selftest-extract-{Guid.NewGuid():N}.pdf");
+        try
+        {
+            using (var vm = new DocumentViewModel(state))
+            {
+                vm.Open(fixture);
+                vm.SelectedPageIndices = [1];
+                var ok = vm.ExtractPagesToPathAsync(extracted).GetAwaiter().GetResult();
+                check("  the selected page is written to a new file", ok && File.Exists(extracted));
+                check("  the document itself is untouched", vm.Pages.Count == 2 && !vm.IsDirty);
+                check("  and there is nothing to undo, because nothing was changed", !vm.CanUndo);
+                check($"  said in words ({vm.Status})",
+                      vm.Status == Strings.PageSavedAs(Path.GetFileName(extracted)));
+            }
+            using var engine = new PdfiumEngine();
+            using var copy = engine.Open(extracted);
+            check("  the new file holds exactly the pages that were selected", copy.PageCount == 1);
+        }
+        finally
+        {
+            if (File.Exists(extracted)) File.Delete(extracted);
+        }
+
+        check("  a run of pages is suggested as a range",
+              DocumentViewModel.SuggestExtractedFileName("Form.pdf", [1, 2])
+              == $"Form ({Strings.ExtractedPageRangeName(2, 3)}).pdf");
+        check("  one page is suggested by its number",
+              DocumentViewModel.SuggestExtractedFileName("Form.pdf", [4])
+              == $"Form ({Strings.ExtractedOnePageName(5)}).pdf");
+        check("  and a scattered selection by how many there are",
+              DocumentViewModel.SuggestExtractedFileName("Form.pdf", [0, 2])
+              == $"Form ({Strings.ExtractedPageCountName(2)}).pdf");
+
+        // --- the app's own index-keyed state follows the renumbering (contract 10) ---
+        using (var vm = new DocumentViewModel(state))
+        {
+            vm.Open(Path.Combine(dir, "demo.pdf"));
+            vm.ImportPagesAsync(fixture, insertAt: 0).GetAwaiter().GetResult();
+            check("  a combine can insert before the first page", vm.Pages.Count == 3);
+            // A search hit on the demo page, which is now page 3.
+            vm.Search("Agreement");
+            var found = vm.MatchCount;
+            check($"  there is something to find on the last page ({found} hit(s))",
+                  found > 0);
+            vm.SelectedPageIndices = [0];
+            vm.DeletePagesCommand.Execute(null);
+            check("  deleting a page before the hits keeps them", vm.MatchCount == found);
+            check("  the page indicator counts the pages that are left",
+                  vm.PageIndicator == Strings.PageOf(Math.Min(vm.CurrentPage, 2), 2));
+        }
+
+        // --- the recovery journal replays every page operation (contract 10) ---
+        //
+        // Front to back, each entry carrying the page index the document had when it was made,
+        // which is why no entry needs a renumbering term. The insert entry is the one that
+        // catches a replayer written the obvious way: its index may be the page count itself,
+        // which is not a page to load.
+        using (var engine = new PdfiumEngine())
+        using (var replayed = engine.Open(fixture))
+        {
+            var entries = new MegaPDF.Core.Recovery.JournalEntry[]
+            {
+                new MegaPDF.Core.Recovery.PagesRotateEntry(0, [0], 1),
+                new MegaPDF.Core.Recovery.PageInsertBlankEntry(2, 300, 400),   // appends: index == page count
+                new MegaPDF.Core.Recovery.PageMoveEntry(2, 0),
+                new MegaPDF.Core.Recovery.PagesDeleteEntry(0, [0]),
+            };
+            var applied = MegaPDF.Core.Recovery.JournalReplayer.Replay(replayed, entries, fixture);
+            check($"  every page-operation entry replays ({applied} of {entries.Length})",
+                  applied == entries.Length);
+            check("  and lands the document where it was left", replayed.PageCount == 2);
+            check("  with the rotation the first entry made", replayed.GetPageRotation(0) == 1);
+
+            // The undo of a delete: a journal cannot carry a page, so contract 10 replays it by
+            // importing that page back out of the file on disk.
+            var restore = new MegaPDF.Core.Recovery.JournalEntry[]
+            {
+                new MegaPDF.Core.Recovery.PagesDeleteEntry(0, [0]),
+                new MegaPDF.Core.Recovery.PagesRestoreEntry(0, [0]),
+            };
+            using var fresh = engine.Open(fixture);
+            check("  a delete and its undo both replay",
+                  MegaPDF.Core.Recovery.JournalReplayer.Replay(fresh, restore, fixture) == 2);
+            check("  leaving the page count it started with", fresh.PageCount == 2);
+            // Without the file there is nothing to import the page back out of, and a restore
+            // entry is skipped rather than failing the whole recovery.
+            using var noFile = engine.Open(fixture);
+            check("  with no file to read the page back out of, the restore is skipped, not fatal",
+                  MegaPDF.Core.Recovery.JournalReplayer.Replay(noFile, restore, null) == 1);
+        }
+
+        // --- every operation is undoable, all the way back ---
+        using (var vm = new DocumentViewModel(state))
+        {
+            vm.Open(fixture);
+            vm.SelectedPageIndices = [0];
+            vm.RotatePagesRightCommand.Execute(null);
+            vm.InsertBlankPageCommand.Execute(null);
+            vm.SelectedPageIndices = [2];
+            vm.MovePageUpCommand.Execute(null);
+            vm.ImportPagesAsync(Path.Combine(dir, "forms.pdf")).GetAwaiter().GetResult();
+            vm.SelectedPageIndices = [0];
+            vm.DeletePagesCommand.Execute(null);
+            check("  five page operations in a row", vm.Pages.Count == 3);
+            var steps = 0;
+            while (vm.CanUndo && steps < 10)
+            {
+                vm.UndoCommand.Execute(null);
+                steps++;
+            }
+            check($"  each is one undo step ({steps})", steps == 5);
+            check("  and undoing them all is the document it opened",
+                  vm.Pages.Count == 2 && vm.PageRotation(0) == 0
+                  && vm.HitTest(0, drawnCentre).Kind == PageHitKind.DrawnCheckbox);
+        }
+    }
+
+    /// <summary>A status line cut down to a log line's worth, whatever its length.</summary>
+    private static string Shorten(string text) =>
+        text.Length <= 44 ? text : text[..44] + "\u2026";
+
+    /// <summary>The first form field of a document's first page, with its bounds — for a hit test.</summary>
+    private static PdfFormField? FirstFieldOf(string path)
+    {
+        using var engine = new PdfiumEngine();
+        using var document = engine.Open(path);
+        using var page = document.GetPage(0);
+        return page.GetFormFields().FirstOrDefault();
+    }
+
+    /// <summary>
+    /// A one-page form with a single flat widget named "person" — the name
+    /// <see cref="ParentFieldsPdf"/>'s parent field carries. Importing that document into this
+    /// one is the clash a rename cannot reach, because a hierarchical widget has no name of its
+    /// own to rename, and is therefore refused whole with MEGAPDF_ERR_FIELDS on any PDFium.
+    /// </summary>
+    private static byte[] FlatPersonFieldPdf()
+    {
+        var pdf = new System.Text.StringBuilder("%PDF-1.4\n");
+        var offsets = new List<int>();
+        void Add(string body)
+        {
+            offsets.Add(pdf.Length);
+            pdf.Append(CultureInfo.InvariantCulture, $"{offsets.Count} 0 obj\n{body}\nendobj\n");
+        }
+
+        Add("<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [5 0 R] /DA (/Helv 0 Tf 0 g) "
+            + "/DR << /Font << /Helv 4 0 R >> >> >> >>");
+        Add("<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+        Add("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> "
+            + "/Annots [5 0 R] >>");
+        Add("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>");
+        Add("<< /Type /Annot /Subtype /Widget /FT /Tx /T (person) /V (Grace) /DA (/Helv 12 Tf 0 g) "
+            + "/Rect [100 600 300 620] /F 4 /P 3 0 R >>");
+
+        var xref = pdf.Length;
+        pdf.Append(CultureInfo.InvariantCulture, $"xref\n0 {offsets.Count + 1}\n0000000000 65535 f \n");
+        foreach (var offset in offsets)
+            pdf.Append(CultureInfo.InvariantCulture, $"{offset:D10} 00000 n \n");
+        pdf.Append(CultureInfo.InvariantCulture,
+            $"trailer\n<< /Size {offsets.Count + 1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n");
+        return System.Text.Encoding.ASCII.GetBytes(pdf.ToString());
+    }
+
+    /// <summary>
+    /// core/tests/core_tests.cpp's <c>parent_fields_pdf()</c>, and iOS's
+    /// PagesFieldHierarchyTests' copy of it: a one-page form whose two text widgets ("first",
+    /// "last") are kids of a parent field "person", so the top-level name lives on the parent
+    /// dictionary and not on the widgets. That is the shape a PDFium page copy could not carry
+    /// before patch 0033, and the one <c>MEGAPDF_ERR_FIELDS</c> exists for. Built here rather
+    /// than generated into the fixtures directory, so this check needs no change to CI.
+    /// </summary>
+    private static byte[] ParentFieldsPdf()
+    {
+        var pdf = new System.Text.StringBuilder("%PDF-1.4\n");
+        var offsets = new List<int>();
+        void Add(string body)
+        {
+            offsets.Add(pdf.Length);
+            pdf.Append(CultureInfo.InvariantCulture, $"{offsets.Count} 0 obj\n{body}\nendobj\n");
+        }
+        static string Stream(string dict, string body) =>
+            $"<< {dict} /Length {body.Length} >>\nstream\n{body}\nendstream";
+
+        Add("<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [6 0 R] /DA (/Helv 0 Tf 0 g) "
+            + "/DR << /Font << /Helv 4 0 R >> >> >> >>");
+        Add("<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+        Add("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> "
+            + "/Contents 5 0 R /Annots [7 0 R 8 0 R] >>");
+        Add("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>");
+        Add(Stream("", "BT /F1 14 Tf 72 720 Td (Two fields under one parent) Tj ET"));
+        Add("<< /FT /Tx /T (person) /Kids [7 0 R 8 0 R] >>");
+        Add("<< /Type /Annot /Subtype /Widget /Parent 6 0 R /T (first) /V (Ada) /DA (/Helv 12 Tf 0 g) "
+            + "/Rect [100 600 300 620] /F 4 /P 3 0 R /AP << /N 9 0 R >> >>");
+        Add("<< /Type /Annot /Subtype /Widget /Parent 6 0 R /T (last) /V (Lovelace) /DA (/Helv 12 Tf 0 g) "
+            + "/Rect [100 560 300 580] /F 4 /P 3 0 R /AP << /N 10 0 R >> >>");
+        Add(Stream("/Type /XObject /Subtype /Form /BBox [0 0 200 20] /Resources << /Font << /Helv 4 0 R >> >>",
+                   "0.13 G 1 w 0.5 0.5 199 19 re S BT /Helv 12 Tf 0 g 2 5 Td (Ada) Tj ET"));
+        Add(Stream("/Type /XObject /Subtype /Form /BBox [0 0 200 20] /Resources << /Font << /Helv 4 0 R >> >>",
+                   "0.13 G 1 w 0.5 0.5 199 19 re S BT /Helv 12 Tf 0 g 2 5 Td (Lovelace) Tj ET"));
+
+        var xref = pdf.Length;
+        pdf.Append(CultureInfo.InvariantCulture, $"xref\n0 {offsets.Count + 1}\n0000000000 65535 f \n");
+        foreach (var offset in offsets)
+            pdf.Append(CultureInfo.InvariantCulture, $"{offset:D10} 00000 n \n");
+        pdf.Append(CultureInfo.InvariantCulture,
+            $"trailer\n<< /Size {offsets.Count + 1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n");
+        return System.Text.Encoding.ASCII.GetBytes(pdf.ToString());
     }
 
     /// <summary>
@@ -3564,14 +4068,21 @@ internal static class Program
 
                 vm.SetZoomCommand.Execute(1.5);
                 vm.CurrentPage = 1;
+                // The Pages sidebar is chrome too (#174), so it is turned on here: "the chrome
+                // is all there" before and "every host is hidden" after both then include it,
+                // which is what makes the strip's leaving the tab order an assertion.
+                vm.TogglePageStripCommand.Execute(null);
                 Pump();
                 var zoom = vm.Zoom;
                 var offset = window.PageScroller.Offset;
                 var page = vm.CurrentPage;
 
                 check("before: the chrome is all there",
-                      window.ReadingChromeForTest.Count == 5
+                      // Six since #174: the Pages sidebar is chrome too, and it was turned on
+                      // above so that its hiding below is an assertion rather than a tautology.
+                      window.ReadingChromeForTest.Count == 6
                       && window.ToolbarHost.IsVisible && window.StatusBarHost.IsVisible
+                      && window.PageStripHost.IsVisible
                       && !window.IsReadingMode);
 
                 window.ToggleReadingMode();

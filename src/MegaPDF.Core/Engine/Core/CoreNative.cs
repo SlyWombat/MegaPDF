@@ -139,6 +139,14 @@ internal static class CoreNative
     [DllImport(Dll)]
     public static extern void megapdf_close_page(IntPtr page);
 
+    /// <summary>
+    /// The page's index in its document *as it is numbered now* (contract 10): an open handle's
+    /// index follows its page through a delete, a move or an import, and a handle whose page was
+    /// deleted answers -1 from then on and still renders. -1 also for a NULL handle.
+    /// </summary>
+    [DllImport(Dll)]
+    public static extern int megapdf_page_index(IntPtr page);
+
     [DllImport(Dll)]
     public static extern double megapdf_page_width(IntPtr page);
 
@@ -868,4 +876,103 @@ internal static class CoreNative
     [DllImport(Dll)]
     public static extern int megapdf_write_text(IntPtr document, int firstPage, int pageCount, int format,
         ref WriteOptions options, WriteDelegate write, IntPtr context, IntPtr cancel);
+
+    // Contract 10: page tools (#174) ------------------------------------------
+    //
+    // Rotate, delete, restore, move, insert a blank page, import pages from another file
+    // (combine) and extract pages to a new file (split). Every index is 0-based, as
+    // megapdf_load_page's is; every call that changes the document needs
+    // MEGAPDF_PERMIT_ASSEMBLE or MEGAPDF_PERMIT_MODIFY, and the extract needs
+    // MEGAPDF_PERMIT_COPY (MEGAPDF_ERR_RESTRICTED otherwise, ADR-004).
+    //
+    // Rotation is /Rotate and nothing else: no content is rewritten, so the #118 layout
+    // guard is not in this path at all and none of these calls can answer
+    // MEGAPDF_ERR_LAYOUT. What they can answer that no other contract does is
+    // MEGAPDF_ERR_FIELDS (below).
+
+    /// <summary>
+    /// MEGAPDF_ERR_FIELDS: the pages carry form fields in a /Parent hierarchy this build's
+    /// PDFium cannot carry across a page copy, so the whole import or extract was refused
+    /// and nothing was changed.
+    ///
+    /// Chosen over the alternative, which is a saved file whose widgets name an object that
+    /// is not their parent — a form that still looks right and has quietly lost its field
+    /// names. About 0.8% of a real corpus. Whether a build needs the whole-page refusal or
+    /// only the narrower name-clash one is fixed at compile time (MEGAPDF_PDFIUM_PATCHES,
+    /// PDFium patch 0033 / #452) and cannot be asked for at runtime, so a binding surfaces
+    /// the refusal rather than predicting it.
+    /// </summary>
+    public const int ErrFields = -11;
+
+    /// <summary>MEGAPDF_ERR_RESTRICTED: the document's security does not allow it (#131).</summary>
+    public const int ErrRestricted = -6;
+
+    /// <summary>MEGAPDF_ERR_REDACT: a redaction failed part-way, so the document may not be written (#173).</summary>
+    public const int ErrRedact = -10;
+
+    /// <summary>MEGAPDF_ERR_FILE: a file could not be created, read or written (#147).</summary>
+    public const int ErrFile = -9;
+
+    /// <summary>The page's /Rotate in quarter turns clockwise, 0–3; MEGAPDF_ERR_ARGUMENT (-1) for a bad index.</summary>
+    [DllImport(Dll)]
+    public static extern int megapdf_page_rotation(IntPtr document, int page);
+
+    /// <summary>
+    /// Rotates the page by <paramref name="quarterTurns"/> quarter turns clockwise (negative
+    /// anticlockwise, any magnitude, taken modulo 4). Its /Rotate changes and nothing else
+    /// does: every open handle on the page sees the new size and renders rotated, and every
+    /// rectangle the core reports for it is in that rotated crop space (#439).
+    /// </summary>
+    [DllImport(Dll)]
+    public static extern int megapdf_page_rotate(IntPtr document, int page, int quarterTurns);
+
+    /// <summary>
+    /// Deletes the page. With <paramref name="outRemoved"/> non-null the page is kept alive for
+    /// megapdf_page_restore; the page's form fields leave the AcroForm with it (PDFium patch
+    /// 0028), so a save does not carry a field whose only widget was on a deleted page.
+    /// MEGAPDF_ERR_ARGUMENT for a bad index or a document with one page.
+    /// </summary>
+    [DllImport(Dll)]
+    public static extern int megapdf_page_delete(IntPtr document, int page, out IntPtr outRemoved);
+
+    /// <summary>Puts a deleted page back at <paramref name="at"/> (0 … page count) and consumes the handle.</summary>
+    [DllImport(Dll)]
+    public static extern int megapdf_page_restore(IntPtr document, IntPtr removed, int at);
+
+    /// <summary>Frees a removed page without restoring it. IntPtr.Zero is fine.</summary>
+    [DllImport(Dll)]
+    public static extern void megapdf_discard_removed_page(IntPtr removed);
+
+    /// <summary>Moves the page at <paramref name="from"/> so it stands at <paramref name="to"/> afterwards.</summary>
+    [DllImport(Dll)]
+    public static extern int megapdf_page_move(IntPtr document, int from, int to);
+
+    /// <summary>Inserts an empty page of <paramref name="width"/> × <paramref name="height"/> points at <paramref name="at"/>.</summary>
+    [DllImport(Dll)]
+    public static extern int megapdf_page_insert_blank(IntPtr document, int at, double width, double height);
+
+    /// <summary>
+    /// Combine: inserts the listed pages of the file at <paramref name="otherPath"/> before
+    /// <paramref name="insertAt"/>, in the order given (null with count 0 means all of them).
+    /// The other file is read on demand and only the pages imported are copied, resources
+    /// included. A clashing top-level field name is renamed ("name" → "name_2") so two fields
+    /// never merge; a clash a rename cannot reach — a widget whose name lives on its /Parent —
+    /// refuses the whole import with <see cref="ErrFields"/> and changes nothing.
+    /// </summary>
+    [DllImport(Dll)]
+    public static extern int megapdf_pages_import(IntPtr document,
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string otherPath,
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string? password,
+        int[]? pages, nuint count, int insertAt, out int outImported);
+
+    /// <summary>
+    /// Split: writes the listed pages (null with count 0 means every page) as a new PDF at
+    /// <paramref name="outPath"/>, with the same staged-then-verified save discipline every
+    /// platform's save uses (SDD §3.4) — so a crash or a full disk leaves either the old file
+    /// or the new one, never a torn one. The document itself is unchanged and nothing is
+    /// journalled. <paramref name="cancel"/> may be IntPtr.Zero.
+    /// </summary>
+    [DllImport(Dll)]
+    public static extern int megapdf_pages_extract(IntPtr document, int[]? pages, nuint count,
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string outPath, IntPtr cancel);
 }

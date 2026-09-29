@@ -170,6 +170,89 @@ public interface IPdfDocument : IDisposable
     /// as bold/italic/monospace. Same one-way-export caveat as <see cref="WriteText"/>.
     /// </summary>
     int WriteMarkdown(Stream target, int firstPage = 0, int? pageCount = null, DocumentWriteOptions? options = null);
+
+    // --- Page tools (#174, core contract 10) ---------------------------------
+    //
+    // Every one of these throws <see cref="PageToolException"/> with a typed
+    // <see cref="PageToolFailure"/> rather than returning a status code, so the two desktops
+    // map a refusal to words once each and never match on a message. None of them can fail
+    // the #118 layout guard: a page operation rewrites no content stream — a rotation is
+    // /Rotate and nothing else — so there is no layout verdict in this path to surface.
+
+    /// <summary>The page's rotation in quarter turns clockwise, 0–3 (its <c>/Rotate</c> ÷ 90).</summary>
+    int GetPageRotation(int pageIndex);
+
+    /// <summary>
+    /// Turns the page by <paramref name="quarterTurns"/> quarter turns clockwise (negative
+    /// anticlockwise). Sets <c>/Rotate</c> and rewrites no content, so nothing on the page is
+    /// re-drawn and nothing can be lost. Everything the app has placed follows the rotation
+    /// without any work here: since #439 the core reports and reads every rectangle in the
+    /// rotated crop space the render draws, so a field, a signature, a whiteout, a mark and a
+    /// search hit are all where they look to be.
+    /// </summary>
+    void RotatePage(int pageIndex, int quarterTurns);
+
+    /// <summary>
+    /// Takes the page off the document and hands back the handle that puts it back
+    /// (<see cref="RestorePage"/>) — which is why a delete is undoable at all. The page's form
+    /// fields leave the AcroForm with it, so a save cannot carry a field whose only widget was
+    /// on a deleted page, and a full save writes only what the trailer still reaches, so the
+    /// file gets smaller.
+    ///
+    /// <see cref="PageToolFailure.LastPage"/> when the document has one page: a PDF must have one.
+    /// </summary>
+    RemovedPage DeletePage(int pageIndex);
+
+    /// <summary>
+    /// Puts a deleted page back at <paramref name="at"/> (0 … page count, the count appends) and
+    /// consumes the handle. The page comes back as it was, its fields with their names and values
+    /// — but, as for <see cref="ImportPages"/>, they are not re-registered in the document's
+    /// AcroForm: PDFium, and so every MegaPDF platform, still lists, fills, draws and saves them
+    /// from the widgets.
+    /// </summary>
+    void RestorePage(RemovedPage removed, int at);
+
+    /// <summary>Lets go of a removed page without putting it back (an undo step dropped for good).</summary>
+    void DiscardRemovedPage(RemovedPage removed);
+
+    /// <summary>
+    /// Moves the page at <paramref name="from"/> so it stands at <paramref name="to"/> afterwards.
+    /// The page dictionary is untouched, so its fields, annotations and everything else move with it.
+    /// </summary>
+    void MovePage(int from, int to);
+
+    /// <summary>Inserts an empty page of the given size in points at <paramref name="at"/> (0 … page count).</summary>
+    void InsertBlankPage(int at, double widthPoints, double heightPoints);
+
+    /// <summary>
+    /// Combine: inserts pages of the file at <paramref name="otherPath"/> before
+    /// <paramref name="insertAt"/>, in the order <paramref name="pages"/> lists them (null or
+    /// empty means every page of it). Returns how many pages arrived.
+    ///
+    /// Only the pages imported are copied, with the fonts, images and forms they draw; a
+    /// resource two of them share is copied once. An imported field whose top-level name is
+    /// already taken here is renamed ("name" → "name_2") so the two never merge into one field.
+    ///
+    /// <see cref="PageToolFailure.FieldHierarchy"/> is the refusal to surface rather than hide
+    /// (#452): a widget whose name lives on a <c>/Parent</c> field cannot be renamed, and on a
+    /// build whose PDFium cannot carry the hierarchy at all such a page is refused whole. Nothing
+    /// is changed either way. About 0.8% of a real corpus, and deliberate: the alternative is a
+    /// file whose widgets point at an object that is not their parent.
+    /// </summary>
+    int ImportPages(string otherPath, string? password, IReadOnlyList<int>? pages, int insertAt);
+
+    /// <summary>
+    /// Split: writes the listed pages (null or empty means every page) as a new PDF at
+    /// <paramref name="outPath"/>, through the staged-then-verified write every save uses
+    /// (SDD §3.4) — so a crash or a full disk leaves either the old file or the new one, never a
+    /// torn one. The document is unchanged, which is why this is not an edit operation and is
+    /// never journalled.
+    ///
+    /// The copy carries no security and no outline, and needs the copy permission. It can refuse
+    /// with <see cref="PageToolFailure.FieldHierarchy"/> for the reason
+    /// <see cref="ImportPages"/> gives.
+    /// </summary>
+    void ExtractPages(IReadOnlyList<int>? pages, string outPath, CancellationToken cancellationToken = default);
 }
 
 /// <summary>How pages are separated in a <see cref="IPdfDocument.WriteText"/>/<c>WriteMarkdown</c> export.

@@ -109,6 +109,7 @@ public partial class MainWindow : Window
         WireFind();
         WireReadingMode();
         WireZoom();
+        WirePages();
 
         // Only realised pages rasterise. ContainerPrepared/ContainerClearing are the
         // virtualization hooks — this is where "render what you can see" happens, and
@@ -309,6 +310,9 @@ public partial class MainWindow : Window
         }
 
         ApplyToolbarLayout();
+        // The Pages sidebar is the tab's, not the window's (#174): a tab that had it open
+        // still has it on the way back, and one that did not does not get it.
+        ApplyPageStripVisibility();
         // The incoming tab is told about the window's reading mode, and the pill's file
         // name follows it (#505). Reading mode is the window's, so switching tab inside
         // it changes what is on the pill, never whether the chrome is there.
@@ -416,6 +420,12 @@ public partial class MainWindow : Window
             OnSelectionChanged();
         if (args.PropertyName is nameof(DocumentViewModel.PageFocus) or nameof(DocumentViewModel.Zoom))
             OnPageFocusChanged();
+        // The Pages sidebar, and the selection in it after a page operation renumbered the
+        // pages under it (#174).
+        if (args.PropertyName is nameof(DocumentViewModel.IsPageStripOpen))
+            ApplyPageStripVisibility();
+        if (args.PropertyName is nameof(DocumentViewModel.SelectedPageIndices))
+            SyncPageStripSelection();
         // The pickers join and leave the row with their context (#144).
         if (args.PropertyName is nameof(DocumentViewModel.IsTextStyleContext))
             ApplyToolbarLayout();
@@ -2197,7 +2207,24 @@ public partial class MainWindow : Window
         // F11 only means something inside reading mode; the command checks, rather than
         // the binding being added and removed as the mode changes.
         KeyBindings.Add(new KeyBinding { Gesture = FullScreenGesture, Command = new RelayCommand(ToggleFullScreen) });
+        // Page tools (#174), for exactly the same reason: F9 for the sidebar, Ctrl+Left /
+        // Ctrl+Right to rotate and Alt+Up / Alt+Down to reorder are the Linux desktop's own
+        // conventions, and the menu bar that would otherwise carry them is not hosted on X11.
+        KeyBindings.Add(new KeyBinding { Gesture = PagesGesture, Command = new RelayCommand(TogglePageStrip) });
+        KeyBindings.Add(new KeyBinding { Gesture = RotateLeftGesture, Command = new RelayCommand(() => Run(Active?.RotatePagesLeftCommand)) });
+        KeyBindings.Add(new KeyBinding { Gesture = RotateRightGesture, Command = new RelayCommand(() => Run(Active?.RotatePagesRightCommand)) });
+        KeyBindings.Add(new KeyBinding { Gesture = MovePageUpGesture, Command = new RelayCommand(() => Run(Active?.MovePageUpCommand)) });
+        KeyBindings.Add(new KeyBinding { Gesture = MovePageDownGesture, Command = new RelayCommand(() => Run(Active?.MovePageDownCommand)) });
+
+        static void Run(System.Windows.Input.ICommand? command)
+        {
+            if (command?.CanExecute(null) == true)
+                command.Execute(null);
+        }
     }
+
+    /// <summary>The Pages sidebar, from the keyboard or the menu (#174).</summary>
+    internal void TogglePageStrip() => Active?.TogglePageStripCommand.Execute(null);
 
     /// <summary>⌘W (Mac) / Ctrl+W (Linux): closes the active tab, or the window itself when it is the last tab
     /// (Safari/Preview/GNOME convention, #348 plan §1).</summary>

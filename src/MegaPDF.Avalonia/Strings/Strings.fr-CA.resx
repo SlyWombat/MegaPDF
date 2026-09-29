@@ -1337,4 +1337,153 @@
     <value>Ouvrir les documents en mode lecture</value>
     <comment>FR-REVIEW #511 — new with reading preferences, not yet read by the reviewer. Options, off by default (#511)</comment>
   </data>
+  <!-- Page tools (#174): the Pages sidebar, and rotate/delete/reorder/insert/combine/extract -->
+  <data name="ToolbarPages" xml:space="preserve">
+    <value>Pages</value>
+    <comment>Toolbar button and the Pages sidebar's name (#174). #174 — new French, for francophone review</comment>
+  </data>
+  <data name="PagesSidebarName" xml:space="preserve">
+    <value>Vignettes des pages</value>
+    <comment>Accessible name of the Pages sidebar's list (#174). #174 — new French, for francophone review</comment>
+  </data>
+  <data name="PageThumbnailsMenuItem" xml:space="preserve">
+    <value>Vignettes</value>
+    <comment>View menu: shows the Pages sidebar. Preview's own item name (#174). #174 — new French, for francophone review</comment>
+  </data>
+  <data name="RotatePageLeft" xml:space="preserve">
+    <value>Faire pivoter vers la gauche</value>
+    <comment>Tools menu and the thumbnail's context menu (#174). #174 — new French, for francophone review</comment>
+  </data>
+  <data name="RotatePageRight" xml:space="preserve">
+    <value>Faire pivoter vers la droite</value>
+    <comment>Tools menu and the thumbnail's context menu (#174). #174 — new French, for francophone review</comment>
+  </data>
+  <data name="DeletePageItem" xml:space="preserve">
+    <value>Supprimer la page</value>
+    <comment>Edit menu and the thumbnail's context menu (#174). #174 — new French, for francophone review</comment>
+  </data>
+  <data name="MovePageUpItem" xml:space="preserve">
+    <value>Déplacer la page vers le haut</value>
+    <comment>Keyboard reordering, the way out of drag-and-drop (#174). #174 — new French, for francophone review</comment>
+  </data>
+  <data name="MovePageDownItem" xml:space="preserve">
+    <value>Déplacer la page vers le bas</value>
+    <comment>Keyboard reordering (#174). #174 — new French, for francophone review</comment>
+  </data>
+  <data name="InsertBlankPageItem" xml:space="preserve">
+    <value>Insérer une page blanche</value>
+    <comment>Edit menu (#174). #174 — new French, for francophone review</comment>
+  </data>
+  <data name="InsertPagesFromFileItem" xml:space="preserve">
+    <value>Insérer des pages d’un fichier…</value>
+    <comment>Edit menu: the combine feature (#174). #174 — new French, for francophone review</comment>
+  </data>
+  <data name="ExtractPagesItem" xml:space="preserve">
+    <value>Enregistrer les pages sélectionnées sous…</value>
+    <comment>File menu: the split feature (#174). #174 — new French, for francophone review</comment>
+  </data>
+  <data name="ChoosePagesToInsert" xml:space="preserve">
+    <value>Choisir un PDF à insérer</value>
+    <comment>File picker title for combine (#174). #174 — new French, for francophone review</comment>
+  </data>
+  <data name="SaveSelectedPagesTitle" xml:space="preserve">
+    <value>Enregistrer les pages sélectionnées</value>
+    <comment>File picker title for extract (#174). #174 — new French, for francophone review</comment>
+  </data>
+  <data name="PageSelected" xml:space="preserve">
+    <value>Page {0} sélectionnée</value>
+    <comment>Status line, one thumbnail selected (#174). #174 — new French, for francophone review</comment>
+  </data>
+  <data name="PagesSelected" xml:space="preserve">
+    <value>{0} pages sélectionnées</value>
+    <comment>Status line, several thumbnails selected (#174). #174 — new French, for francophone review</comment>
+  </data>
+  <data name="PageTurnedLeft" xml:space="preserve">
+    <value>Page pivotée vers la gauche.</value>
+    <comment>Announced after a rotation (#174). #174 — new French, for francophone review</comment>
+  </data>
+  <data name="PagesTurnedLeft" xml:space="preserve">
+    <value>{0} pages pivotées vers la gauche.</value>
+    <comment>Announced after a rotation (#174). #174 — new French, for francophone review</comment>
+  </data>
+  <data name="PageTurnedRight" xml:space="preserve">
+    <value>Page pivotée vers la droite.</value>
+    <comment>Announced after a rotation (#174). #174 — new French, for francophone review</comment>
+  </data>
+  <data name="PagesTurnedRight" xml:space="preserve">
+    <value>{0} pages pivotées vers la droite.</value>
+    <comment>Announced after a rotation (#174). #174 — new French, for francophone review</comment>
+  </data>
+  <data name="PageDeleted" xml:space="preserve">
+    <value>Page supprimée. Annuler la remet en place.</value>
+    <comment>Deleting is one undo step that restores the page itself (#174). #174 — new French, for francophone review</comment>
+  </data>
+  <data name="PagesDeleted" xml:space="preserve">
+    <value>{0} pages supprimées. Annuler les remet en place.</value>
+    <comment>As PageDeleted, for a selection (#174). #174 — new French, for francophone review</comment>
+  </data>
+  <data name="PageMoved" xml:space="preserve">
+    <value>Page {0} déplacée à la position {1}.</value>
+    <comment>Announced after a reorder (#174). #174 — new French, for francophone review</comment>
+  </data>
+  <data name="BlankPageInserted" xml:space="preserve">
+    <value>Page blanche ajoutée comme page {0}.</value>
+    <comment>Announced after an insert (#174). #174 — new French, for francophone review</comment>
+  </data>
+  <data name="PagesInsertedFromFile" xml:space="preserve">
+    <value>Pages de {0} ajoutées.</value>
+    <comment>Announced after a combine (#174). #174 — new French, for francophone review</comment>
+  </data>
+  <data name="PageSavedAs" xml:space="preserve">
+    <value>Page enregistrée sous {0}.</value>
+    <comment>Announced after an extract (#174). #174 — new French, for francophone review</comment>
+  </data>
+  <data name="PagesSavedAs" xml:space="preserve">
+    <value>{0} pages enregistrées sous {1}.</value>
+    <comment>Announced after an extract (#174). #174 — new French, for francophone review</comment>
+  </data>
+  <data name="ExtractedOnePageName" xml:space="preserve">
+    <value>page {0}</value>
+    <comment>Suggested file name fragment for an extract (#174). #174 — new French, for francophone review</comment>
+  </data>
+  <data name="ExtractedPageRangeName" xml:space="preserve">
+    <value>pages {0}-{1}</value>
+    <comment>Suggested file name fragment for an extract (#174). #174 — new French, for francophone review</comment>
+  </data>
+  <data name="ExtractedPageCountName" xml:space="preserve">
+    <value>{0} pages</value>
+    <comment>Suggested file name fragment for an extract (#174). #174 — new French, for francophone review</comment>
+  </data>
+  <data name="PagesRefusedFormFields" xml:space="preserve">
+    <value>Ces pages n’ont pas pu être copiées : leurs champs de formulaire appartiennent à un groupe que cette application ne peut pas transporter, et la copie perdrait leurs noms. Rien n’a changé — vous pouvez toujours imprimer le document ou en enregistrer une copie complète.</value>
+    <comment>MEGAPDF_ERR_FIELDS (#174, #452): the engine refuses about 0.8% of real documents rather than write a form that has quietly lost its field names. Said as what happened and what still works. #174 — new French, for francophone review</comment>
+  </data>
+  <data name="CannotDeleteLastPage" xml:space="preserve">
+    <value>Un PDF doit contenir au moins une page ; celle-ci ne peut donc pas être supprimée. Pour ne garder que certaines pages, utilisez plutôt Enregistrer les pages sélectionnées sous.</value>
+    <comment>The engine refuses the last page (#174); said as the rule it is, with the way round it. #174 — new French, for francophone review</comment>
+  </data>
+  <data name="PageToolsRestricted" xml:space="preserve">
+    <value>Ce document ne permet pas de modifier ses pages. Son mot de passe de propriétaire le déverrouillerait.</value>
+    <comment>MEGAPDF_ERR_RESTRICTED for a page operation (#174, ADR-004). #174 — new French, for francophone review</comment>
+  </data>
+  <data name="OtherFileNeedsPassword" xml:space="preserve">
+    <value>Ce PDF exige un mot de passe, ou il n’autorise pas la copie.</value>
+    <comment>The file being combined in could not be opened (#174). #174 — new French, for francophone review</comment>
+  </data>
+  <data name="PagesFileProblem" xml:space="preserve">
+    <value>Ce fichier n’a pas pu être lu ou écrit.</value>
+    <comment>MEGAPDF_ERR_FILE for an import or an extract (#174). #174 — new French, for francophone review</comment>
+  </data>
+  <data name="PageNoLongerThere" xml:space="preserve">
+    <value>Cette page n’existe plus.</value>
+    <comment>A page operation on an index that has since gone (#174). #174 — new French, for francophone review</comment>
+  </data>
+  <data name="PagesCancelled" xml:space="preserve">
+    <value>Annulé.</value>
+    <comment>An extract that was stopped before it finished (#174). #174 — new French, for francophone review</comment>
+  </data>
+  <data name="PageThumbnailName" xml:space="preserve">
+    <value>Page {0}</value>
+    <comment>Accessible name of a row in the Pages sidebar (#174). #174 - new French, for francophone review</comment>
+  </data>
 </root>

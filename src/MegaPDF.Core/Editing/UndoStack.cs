@@ -21,6 +21,14 @@ public sealed class UndoStack(int capacity = UndoStack.DefaultCapacity)
     /// <summary>Raised whenever CanUndo/CanRedo may have changed.</summary>
     public event EventHandler? Changed;
 
+    /// <summary>
+    /// Every operation the stack still holds, done and undone. For the operations that own a
+    /// native handle the core keeps alive for them — a detached object, or since #174 a deleted
+    /// page — so an app clearing its history can hand those back rather than leave them held
+    /// until the document closes.
+    /// </summary>
+    public IEnumerable<IEditOperation> All => _done.Concat(_undone);
+
     /// <summary>Applies the operation and records it. Clears the redo history.</summary>
     public void Do(IEditOperation operation)
     {

@@ -80,7 +80,8 @@ public sealed class DocumentCapabilitiesTests : IDisposable
     [Fact]
     public void Unprotected_AllowsEverything_AndIsNotRestricted()
     {
-        var everything = new DocumentCapabilities(true, true, true, true, true, true, true, false);
+        var everything = new DocumentCapabilities(true, true, true, true, true, true, true, false,
+            CanAssemblePages: true, CanExtractPages: true);
         Assert.Equal(everything, DocumentCapabilities.Unprotected);
         Assert.Equal(everything, DocumentCapabilities.From(PdfSecurity.Unprotected));
     }
@@ -90,7 +91,8 @@ public sealed class DocumentCapabilitiesTests : IDisposable
     {
         using var doc = _engine.Open(Fixture("owner-only.pdf"));
         var caps = DocumentCapabilities.From(doc.Security);
-        Assert.Equal(new DocumentCapabilities(false, false, false, false, false, false, false, IsRestricted: true), caps);
+        Assert.Equal(new DocumentCapabilities(false, false, false, false, false, false, false, IsRestricted: true,
+            CanAssemblePages: false, CanExtractPages: false), caps);
     }
 
     [Fact]
@@ -142,7 +144,8 @@ public sealed class DocumentCapabilitiesTests : IDisposable
     [Fact]
     public void TextBoxRegion_NeedsCanAddText_AndNothingElse()
     {
-        var onlyTextBoxes = new DocumentCapabilities(false, false, false, CanAddText: true, false, false, false, true);
+        var onlyTextBoxes = new DocumentCapabilities(false, false, false, CanAddText: true, false, false, false, true,
+            CanAssemblePages: false, CanExtractPages: false);
         Assert.True(onlyTextBoxes.Allows(PageHitKind.TextBox));
         Assert.False(onlyTextBoxes.Allows(PageHitKind.TextRun));
         Assert.False(onlyTextBoxes.Allows(PageHitKind.Whiteout));
@@ -200,7 +203,8 @@ public sealed class DocumentCapabilitiesTests : IDisposable
             new RemoveTextBoxOperation(null!, 0, 3, run),
         ];
 
-        var onlyTextBoxes = new DocumentCapabilities(false, false, false, CanAddText: true, false, false, false, true);
+        var onlyTextBoxes = new DocumentCapabilities(false, false, false, CanAddText: true, false, false, false, true,
+            CanAssemblePages: false, CanExtractPages: false);
         var allButTextBoxes = DocumentCapabilities.Unprotected with { CanAddText = false };
         foreach (var operation in textBoxOperations)
         {

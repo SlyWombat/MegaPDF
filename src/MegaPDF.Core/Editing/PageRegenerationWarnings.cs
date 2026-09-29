@@ -241,6 +241,34 @@ public sealed class PageRegenerationWarnings
         }
     }
 
+    /// <summary>
+    /// Follows a page operation (#174): the settled pages are renumbered and a settled page that
+    /// has been deleted is forgotten. Called by the app after every page operation, with the
+    /// operation's own <see cref="IPageStructureOperation.Shifts"/> — this set is keyed by page
+    /// index, so without it a delete would silently move one page's "already warned about" onto
+    /// another page and skip a warning that was owed.
+    ///
+    /// A check running for a page that moved is cancelled rather than followed: its answer is
+    /// about a page index that no longer means what it did, and the page is checked again when it
+    /// next comes up.
+    /// </summary>
+    public void Renumber(IReadOnlyList<PageShift> shifts)
+    {
+        ArgumentNullException.ThrowIfNull(shifts);
+        if (shifts.Count == 0 || !shifts.Any(s => s.Renumbers))
+            return;
+        lock (_gate)
+        {
+            var moved = _settled.Select(page => PageShift.Map(shifts, page)).OfType<int>().ToList();
+            _settled.Clear();
+            foreach (var page in moved)
+                _settled.Add(page);
+            _running?.Cancel.Cancel();
+            _running = null;
+            _awaitedPage = null;
+        }
+    }
+
     /// <summary>Forgets every page and cancels the running check: call when another document is opened.</summary>
     public void Reset()
     {

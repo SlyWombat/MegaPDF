@@ -52,6 +52,9 @@ public partial class MainWindow
         [RedoButton],
         [ZoomOutButton, ZoomMenuButton, ZoomInButton],
         [FontBox, SizeBox],
+        // #174: Pages leaves early. It is a view control with a shortcut and a menu item, so
+        // losing it from the row costs less than losing a tool that edits the document.
+        [PagesButton],
         [WhiteoutButton],
         [UndoButton],
         [AddTextButton],

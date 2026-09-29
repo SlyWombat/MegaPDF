@@ -34,7 +34,52 @@ namespace MegaPDF.Core.Recovery;
 [JsonDerivedType(typeof(MoveWhiteoutEntry), "moveWhiteout")]
 [JsonDerivedType(typeof(TextBoxesAddEntry), "textBoxesAdd")]
 [JsonDerivedType(typeof(TextBoxesDeleteEntry), "textBoxesDelete")]
+[JsonDerivedType(typeof(PagesRotateEntry), "pagesRotate")]
+[JsonDerivedType(typeof(PagesDeleteEntry), "pagesDelete")]
+[JsonDerivedType(typeof(PagesRestoreEntry), "pagesRestore")]
+[JsonDerivedType(typeof(PageMoveEntry), "pageMove")]
+[JsonDerivedType(typeof(PageInsertBlankEntry), "pageInsertBlank")]
+[JsonDerivedType(typeof(PagesImportEntry), "pagesImport")]
 public abstract record JournalEntry(int PageIndex);
+
+// --- Page tools (#174, core contract 10) -------------------------------------
+//
+// Contract 10's own rule for the journal, and the reason none of these entries carries a
+// renumbering term: the journal logs the effective stream, each entry with the page index the
+// document had *when it was made*, so a replay in order lands on the right pages with no index
+// rewriting at all — an entry recorded after a delete already carries the post-delete index.
+//
+// A page operation entry is a document-level entry: its PageIndex names where it acted, which
+// for an insert may be the page count itself (the append). JournalReplayer therefore handles
+// these before it loads a page, because "one past the last page" is not a page to load.
+
+/// <summary>Pages turned by <paramref name="QuarterTurns"/> quarter turns clockwise (negative anticlockwise).</summary>
+public sealed record PagesRotateEntry(int PageIndex, int[] Pages, int QuarterTurns) : JournalEntry(PageIndex);
+
+/// <summary>Pages deleted. Ascending; replay deletes highest first, as the operation did.</summary>
+public sealed record PagesDeleteEntry(int PageIndex, int[] Pages) : JournalEntry(PageIndex);
+
+/// <summary>
+/// The undo of a delete. A journal cannot carry a page, so contract 10 states this entry's
+/// replay as "import page N of the file on disk at index N" — best effort in the sense
+/// <see cref="TextRestoreEntry"/> is: what comes back is the page as the file has it, so edits
+/// made to it before it was deleted are replayed by their own entries only if they precede the
+/// delete. Skipped, not failed, when the document has no file to import from.
+/// </summary>
+public sealed record PagesRestoreEntry(int PageIndex, int[] Pages) : JournalEntry(PageIndex);
+
+/// <summary>The page at <paramref name="From"/> now stands at <paramref name="To"/>.</summary>
+public sealed record PageMoveEntry(int From, int To) : JournalEntry(From);
+
+/// <summary>An empty page of this size in points, inserted at <see cref="JournalEntry.PageIndex"/>.</summary>
+public sealed record PageInsertBlankEntry(int PageIndex, double WidthPoints, double HeightPoints) : JournalEntry(PageIndex);
+
+/// <summary>
+/// Pages of another file inserted here (combine). <paramref name="Pages"/> empty means all of
+/// them, as <c>megapdf_pages_import</c> reads it. No password: a journal never carries one
+/// (ADR-004 §7), so an import whose source needed one cannot be replayed and is skipped.
+/// </summary>
+public sealed record PagesImportEntry(int PageIndex, string SourcePath, int[] Pages) : JournalEntry(PageIndex);
 
 public sealed record TextEditEntry(int PageIndex, int ObjectIndex, string NewText) : JournalEntry(PageIndex);
 

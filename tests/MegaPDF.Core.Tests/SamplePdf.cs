@@ -186,6 +186,30 @@ internal static class SamplePdf
     }
 
     /// <summary>
+    /// Two pages that can be told apart (#174): the first carries the 18 pt stroked square
+    /// <see cref="BuildWithDrawnSquares"/> draws, the second carries only text. That is what
+    /// makes "the page that came back is the page that went" an assertion about the page rather
+    /// than about a page count — a restored blank of the same size would have no square on it.
+    /// </summary>
+    public static byte[] BuildTwoPagesFirstWithSquare()
+    {
+        var first =
+            "BT /F1 12 Tf 130 504 Td (I agree to the terms) Tj ET\n" +
+            "1 w 100 500 18 18 re S\n";
+        var second = "BT /F1 36 Tf 72 700 Td (The second page) Tj ET\n";
+        return Assemble(
+        [
+            "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n",
+            "2 0 obj\n<< /Type /Pages /Kids [3 0 R 6 0 R] /Count 2 >>\nendobj\n",
+            "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>\nendobj\n",
+            $"4 0 obj\n<< /Length {first.Length} >>\nstream\n{first}endstream\nendobj\n",
+            "5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n",
+            "6 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 7 0 R /Resources << /Font << /F1 5 0 R >> >> >>\nendobj\n",
+            $"7 0 obj\n<< /Length {second.Length} >>\nstream\n{second}endstream\nendobj\n",
+        ]);
+    }
+
+    /// <summary>
     /// A page whose text is drawn in a SUBSET font — a BaseFont carrying the
     /// six-letter prefix real producers emit when they embed only the glyphs a
     /// document uses.

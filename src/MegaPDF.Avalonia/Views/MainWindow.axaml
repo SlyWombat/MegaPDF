@@ -121,6 +121,22 @@
         </Button>
         <Rectangle Width="1" Margin="4,8" Fill="{DynamicResource SystemControlForegroundBaseLowBrush}" />
 
+        <!-- Pages (#174): shows the thumbnail sidebar. Next to the file commands and
+             before the tools, which is where both of these desktops keep a sidebar
+             toggle (Preview's toolbar, GNOME's and KDE's header bars) — it is a way of
+             looking at the document, not a tool that changes it. -->
+        <ToggleButton Name="PagesButton"
+                      IsChecked="{Binding Active.IsPageStripOpen, Mode=OneWay, FallbackValue=False}"
+                      Command="{Binding Active.TogglePageStripCommand}">
+          <StackPanel Orientation="Vertical" Spacing="2" HorizontalAlignment="Center">
+            <Path Data="{StaticResource IconPages}" Width="18" Height="18"
+                  Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.6"
+                  StrokeLineCap="Round" StrokeJoin="Round" Stretch="Uniform" />
+            <TextBlock Classes="label" Text="{x:Static loc:Strings.ToolbarPages}" FontSize="{DynamicResource TypeCaption}" HorizontalAlignment="Center" />
+          </StackPanel>
+        </ToggleButton>
+        <Rectangle Width="1" Margin="4,8" Fill="{DynamicResource SystemControlForegroundBaseLowBrush}" />
+
         <!-- Sign: pick a stored signature, or draw a new one. Choosing one arms
              placement, and the next click on the page puts it there. -->
         <Button Name="SignButton" IsEnabled="{Binding Active.CanSign, FallbackValue=False}">
@@ -521,6 +537,54 @@
         <TextBlock Name="StatusLabel" Text="{Binding Status}" VerticalAlignment="Center"
                    TextTrimming="CharacterEllipsis" />
       </DockPanel>
+    </Border>
+
+    <!-- Pages sidebar (#174). Docked beside the document, not in place of it: this is
+         Preview's View ▸ Thumbnails and Evince's/Okular's side pane, which is what a Mac
+         or a Linux user means by "show me the pages". Acrobat's Organize Pages — a
+         separate grid you enter, do one thing in and leave — is the pattern this is
+         deliberately not: turning page 3 here turns page 3 in front of you.
+
+         IsVisible="False" and switched from code (MainWindow.Pages.cs), never opacity,
+         for the reason reading mode gives: hidden chrome has to leave the tab order and
+         the accessible tree. Docked *after* StatusBarHost so the status line still runs
+         the full width of the window, as it does in both of those apps. -->
+    <Border Name="PageStripHost" DockPanel.Dock="Left" IsVisible="False"
+            Width="140" BorderThickness="0,0,1,0"
+            BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
+            Background="{DynamicResource SystemControlBackgroundBaseLowBrush}">
+      <ListBox Name="PageThumbnails"
+               ItemsSource="{Binding Active.Pages}"
+               SelectionMode="Multiple"
+               AutomationProperties.Name="{x:Static loc:Strings.PagesSidebarName}"
+               Background="Transparent" BorderThickness="0" Padding="6,8"
+               ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+        <ListBox.ItemsPanel>
+          <ItemsPanelTemplate>
+            <!-- Virtualizing, like the page list: a thumbnail is only drawn for a row the
+                 strip has realised, so opening #147's thousand-page file costs none. -->
+            <VirtualizingStackPanel Orientation="Vertical" />
+          </ItemsPanelTemplate>
+        </ListBox.ItemsPanel>
+        <ListBox.ItemTemplate>
+          <DataTemplate DataType="vm:PageViewModel">
+            <StackPanel Spacing="2" Margin="0,3"
+                        AutomationProperties.Name="{Binding ThumbnailAccessibleName}">
+              <!-- White whatever the theme: it is paper, the same reasoning the signature
+                   cards carry. Sized from the page's own points so a landscape page reads
+                   as landscape before its raster has arrived. -->
+              <Border Background="White" CornerRadius="2"
+                      Width="{Binding ThumbnailWidth}" Height="{Binding ThumbnailHeight}"
+                      HorizontalAlignment="Center"
+                      BorderBrush="{DynamicResource BrandRule}" BorderThickness="1">
+                <Image Source="{Binding Thumbnail}" Stretch="Fill" />
+              </Border>
+              <TextBlock Text="{Binding PageNumberLabel}" HorizontalAlignment="Center"
+                         FontSize="{DynamicResource TypeCaption}" Opacity="0.75" />
+            </StackPanel>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
     </Border>
 
     <!-- Empty state (SDD §2.2): a window with no tabs open should offer the two

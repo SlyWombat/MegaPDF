@@ -136,6 +136,47 @@ public partial class MainWindow
             ? new KeyGesture(Key.F, KeyModifiers.Meta | KeyModifiers.Control)
             : new KeyGesture(Key.F11);
 
+    /// <summary>
+    /// The Pages sidebar (#174): ⌥⌘2 on macOS, F9 on Linux.
+    ///
+    /// Two different keys, for the reason <see cref="ReadingModeGesture"/> gives. ⌥⌘2 is
+    /// Preview's own View ▸ Thumbnails, which is the key a Mac user's hand already knows for
+    /// this exact panel. Linux has no ⌥⌘n convention at all and does have a universal one for
+    /// a document viewer's side pane: F9, in Evince/Papers and in Okular alike.
+    /// </summary>
+    private static KeyGesture PagesGesture =>
+        OperatingSystem.IsMacOS()
+            ? new KeyGesture(Key.D2, KeyModifiers.Meta | KeyModifiers.Alt)
+            : new KeyGesture(Key.F9);
+
+    /// <summary>
+    /// Rotate left and right (#174): ⌘L / ⌘R on macOS — Preview's own pair, and the reason
+    /// Rotate is under Tools here as it is there — and Ctrl+Left / Ctrl+Right on Linux, which
+    /// is what Evince and Okular both bind. Not one gesture with the modifier swapped: ⌘←
+    /// means "start of line" on a Mac and Ctrl+L is the location bar on Linux.
+    /// </summary>
+    private static KeyGesture RotateLeftGesture =>
+        OperatingSystem.IsMacOS() ? Shortcut(Key.L) : new KeyGesture(Key.Left, KeyModifiers.Control);
+
+    private static KeyGesture RotateRightGesture =>
+        OperatingSystem.IsMacOS() ? Shortcut(Key.R) : new KeyGesture(Key.Right, KeyModifiers.Control);
+
+    /// <summary>
+    /// Reordering from the keyboard (#174): Alt/Option with an arrow, the "move this row"
+    /// modifier on both desktops, and the same on both because both agree about it.
+    ///
+    /// The issue asked for cut and paste. This is Move Up / Move Down instead, and the reason
+    /// is what a cut page *is*: a page held on a clipboard is a deleted page you can lose by
+    /// copying anything else, and a paste between two documents is an import with a different
+    /// name — which "Insert Pages from File…" already does, whole file at a time and without
+    /// the document having to be open twice. One step that always has an inverse, and whose
+    /// announcement says where the page landed, is what a screen-reader user can actually
+    /// follow; two-stage cut and paste is not.
+    /// </summary>
+    private static KeyGesture MovePageUpGesture => new(Key.Up, KeyModifiers.Alt);
+
+    private static KeyGesture MovePageDownGesture => new(Key.Down, KeyModifiers.Alt);
+
     /// <summary>⌃Tab: the next tab, wrapping (#348).</summary>
     private static KeyGesture NextTabGesture => new(Key.Tab, KeyModifiers.Control);
 
@@ -172,6 +213,11 @@ public partial class MainWindow
             () => Active?.SaveCommand.CanExecute(null) == true, () => Active?.SaveCommand.Execute(null)));
         file.Items.Add(Command("SaveAs", Strings.SaveAs, SaveAsGesture,
             () => Active?.IsDocumentOpen == true, () => _ = SaveAsAsync()));
+        // Split (#174), beside Save As because it is a save of part of the document —
+        // Preview keeps its own "Export Selected PDF Pages…" in File for the same reason.
+        file.Items.Add(Command("ExtractPages", Strings.ExtractPagesItem, null,
+            () => ActiveMainWindow().Active?.CanExtractPages == true,
+            () => _ = ActiveMainWindow().GuardedAsync(ActiveMainWindow().ExtractSelectedPagesAsync)));
         file.Items.Add(new NativeMenuItemSeparator());
         file.Items.Add(Command("Password", Strings.SecurityToolbar, null,
             () => Active?.IsDocumentOpen == true, () => _ = ChangeSecurityAsync()));
@@ -200,6 +246,20 @@ public partial class MainWindow
         edit.Items.Add(new NativeMenuItemSeparator());
         edit.Items.Add(Command("Find", Strings.FindInDocument, FindGesture,
             () => Active?.IsDocumentOpen == true, OpenFind));
+        // Insert and Delete (#174): Preview's Edit menu holds Insert ▸ Blank Page / Page from
+        // File… and Delete, so this is where a Mac user looks for them. No gesture on Delete
+        // Page: a bare ⌫ bound on the window would take the key out of every text field, so
+        // it works inside the Pages sidebar and nowhere else (MainWindow.Pages.cs).
+        edit.Items.Add(new NativeMenuItemSeparator());
+        edit.Items.Add(Command("InsertBlankPage", Strings.InsertBlankPageItem, null,
+            () => Active?.InsertBlankPageCommand.CanExecute(null) == true,
+            () => Active?.InsertBlankPageCommand.Execute(null)));
+        edit.Items.Add(Command("InsertPagesFromFile", Strings.InsertPagesFromFileItem, null,
+            () => ActiveMainWindow().Active?.CanAssemblePages == true,
+            () => _ = ActiveMainWindow().GuardedAsync(ActiveMainWindow().InsertPagesFromFileAsync)));
+        edit.Items.Add(Command("DeletePage", Strings.DeletePageItem, null,
+            () => Active?.DeletePagesCommand.CanExecute(null) == true,
+            () => Active?.DeletePagesCommand.Execute(null)));
 
         var tools = new NativeMenu();
         tools.Items.Add(Command("SignButton", Strings.Sign, null, () => Active?.CanSign == true, ShowSignFlyout));
@@ -220,6 +280,23 @@ public partial class MainWindow
         tools.Items.Add(Command("ClearMarksButton", Strings.ToolbarClearMarks, null,
             () => Active?.HasRedactionMarks == true,
             () => Active?.ClearRedactionMarksCommand.Execute(null)));
+        // Rotate and reorder (#174). Preview keeps Rotate Left/Right in Tools with ⌘L/⌘R,
+        // so this menu and those keys are where a Mac user already reaches for them; Linux
+        // answers Ctrl+Left/Ctrl+Right, bound on the window (BindLinuxWindowShortcuts),
+        // because MainWindow.axaml hosts no menu bar on X11.
+        tools.Items.Add(new NativeMenuItemSeparator());
+        tools.Items.Add(Command("RotatePageLeft", Strings.RotatePageLeft, RotateLeftGesture,
+            () => Active?.RotatePagesLeftCommand.CanExecute(null) == true,
+            () => Active?.RotatePagesLeftCommand.Execute(null)));
+        tools.Items.Add(Command("RotatePageRight", Strings.RotatePageRight, RotateRightGesture,
+            () => Active?.RotatePagesRightCommand.CanExecute(null) == true,
+            () => Active?.RotatePagesRightCommand.Execute(null)));
+        tools.Items.Add(Command("MovePageUp", Strings.MovePageUpItem, MovePageUpGesture,
+            () => Active?.MovePageUpCommand.CanExecute(null) == true,
+            () => Active?.MovePageUpCommand.Execute(null)));
+        tools.Items.Add(Command("MovePageDown", Strings.MovePageDownItem, MovePageDownGesture,
+            () => Active?.MovePageDownCommand.CanExecute(null) == true,
+            () => Active?.MovePageDownCommand.Execute(null)));
         tools.Items.Add(new NativeMenuItemSeparator());
         tools.Items.Add(Submenu("FontBox", Strings.TextFontName, TextPickerEnabled,
             Active?.TextFontChoices.Cast<object>().ToList() ?? [],
@@ -253,6 +330,17 @@ public partial class MainWindow
             choice => Active?.SetZoomCommand.Execute((double)choice));
         _menuBarItems["ZoomPresets"] = presets;
         view.Items.Add(presets);
+
+        // The Pages sidebar (#174). In View, above reading mode: both are "how the document
+        // is shown", and View ▸ Thumbnails is the item's name in Preview. Registered under
+        // the toolbar button's own name, which is what MissingFromMenuBar checks against.
+        view.Items.Add(new NativeMenuItemSeparator());
+        var thumbnails = Toggle("PagesButton", Strings.PageThumbnailsMenuItem,
+            () => ActiveMainWindow().Active?.IsDocumentOpen == true,
+            () => ActiveMainWindow().IsPageStripOpen,
+            () => ActiveMainWindow().Active?.TogglePageStripCommand.Execute(null));
+        thumbnails.Gesture = PagesGesture;
+        view.Items.Add(thumbnails);
 
         // Reading mode and full screen (#505). In View, under the zoom entries: they are
         // both "how the document is shown", and View is where a Mac user looks for them.

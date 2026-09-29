@@ -7,12 +7,27 @@ namespace MegaPDF.Core.Recovery;
 public static class JournalReplayer
 {
     /// <summary>Applies entries front-to-back. Returns how many were applied; entries that no
-    /// longer resolve (e.g. a renamed field) are skipped rather than failing the whole restore.</summary>
-    public static int Replay(IPdfDocument document, IEnumerable<JournalEntry> entries)
+    /// longer resolve (e.g. a renamed field) are skipped rather than failing the whole restore.
+    ///
+    /// <paramref name="documentPath"/> is the file the document was opened from, which the undo
+    /// of a page delete needs: contract 10 replays it by importing that page back out of the file
+    /// on disk, because a journal cannot carry a page (#174). Without it such an entry is skipped.
+    /// </summary>
+    public static int Replay(IPdfDocument document, IEnumerable<JournalEntry> entries, string? documentPath = null)
     {
         var applied = 0;
         foreach (var entry in entries)
         {
+            // Page operations first, before any page is loaded: these act on the document and
+            // their index may be the page count itself (an insert that appends), which is not a
+            // page to load (#174).
+            if (ReplayPageOperation(document, entry, documentPath) is { } handled)
+            {
+                if (handled)
+                    applied++;
+                continue;
+            }
+
             using var page = document.GetPage(entry.PageIndex);
             switch (entry)
             {
@@ -254,6 +269,67 @@ public static class JournalReplayer
             }
         }
         return applied;
+    }
+
+    /// <summary>
+    /// The page operations (#174, contract 10). Null when <paramref name="entry"/> is not one of
+    /// them; true when it was applied; false when it was skipped — a page operation the document
+    /// can no longer take (the file it needs is gone, a source that needs a password, a page that
+    /// is not there any more) is skipped like any other entry that no longer resolves, rather than
+    /// failing a whole restore.
+    /// </summary>
+    private static bool? ReplayPageOperation(IPdfDocument document, JournalEntry entry, string? documentPath)
+    {
+        try
+        {
+            switch (entry)
+            {
+                case PagesRotateEntry rotate:
+                    foreach (var page in rotate.Pages)
+                        document.RotatePage(page, rotate.QuarterTurns);
+                    return true;
+
+                case PagesDeleteEntry delete:
+                    // Highest first, so the next index has not moved — the order the operation
+                    // itself deleted in. The removed pages are discarded: a replay rebuilds the
+                    // state at crash time and has no undo stack to hold them for.
+                    foreach (var page in delete.Pages.OrderDescending())
+                        document.DiscardRemovedPage(document.DeletePage(page));
+                    return true;
+
+                case PagesRestoreEntry restore:
+                    if (documentPath is null || !File.Exists(documentPath))
+                        return false;
+                    // Ascending, each page back at the index it came from, out of the file on
+                    // disk. Best effort, as the entry's own doc comment says.
+                    foreach (var page in restore.Pages.Order())
+                        document.ImportPages(documentPath, null, [page], page);
+                    return true;
+
+                case PageMoveEntry move:
+                    document.MovePage(move.From, move.To);
+                    return true;
+
+                case PageInsertBlankEntry blank:
+                    document.InsertBlankPage(blank.PageIndex, blank.WidthPoints, blank.HeightPoints);
+                    return true;
+
+                case PagesImportEntry import:
+                    if (!File.Exists(import.SourcePath))
+                        return false;
+                    document.ImportPages(import.SourcePath, null, import.Pages, import.PageIndex);
+                    return true;
+
+                default:
+                    return null;
+            }
+        }
+        catch (PageToolException)
+        {
+            // Restricted, out of range, a refused field hierarchy, an unreadable source: this one
+            // entry cannot be replayed, and the rest of the restore still can.
+            return false;
+        }
     }
 
     /// <summary>A run known only by its object index, which is all replay records.</summary>
