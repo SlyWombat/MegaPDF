@@ -41,6 +41,14 @@ jobs:
           DEVICE=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print(next(dev['name'] for devs in d.values() for dev in devs if dev['name'].startswith('iPhone')))")
           echo "SIM_DEVICE=$DEVICE" >> "$GITHUB_ENV"
           echo "using simulator: $DEVICE"
+          # #465: the zoom test runs on one of each width class. A compact-width
+          # iPhone has a bottom toolbar exactly where a synthesised pinch puts its
+          # lower finger; a regular-width iPad has its tools along the top instead.
+          # That difference made the same test pass on one and measure a no-op on
+          # the other for a fortnight, so both are run.
+          IPAD=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print(next(dev['name'] for devs in d.values() for dev in devs if dev['name'].startswith('iPad')))")
+          echo "IPAD_DEVICE=$IPAD" >> "$GITHUB_ENV"
+          echo "using iPad simulator: $IPAD"
 
       - name: Build and test (simulator, unsigned)
         run: |
@@ -118,12 +126,32 @@ jobs:
             -only-testing:MegaPDFUITests/RedactionUITests/testSaveIsReachableWithAMarkAndAsksBeforeRemoving \
             CODE_SIGNING_ALLOWED=NO
 
+      # The regular-width half of the zoom check (#465). No second build: an iOS
+      # Simulator build-for-testing is keyed to the platform, not to the device, so
+      # the products above run against an iPad destination unchanged.
+      - name: Run the zoom test on an iPad too
+        run: |
+          xcodebuild test-without-building \
+            -project MegaPDF.xcodeproj \
+            -scheme MegaPDFDemo \
+            -destination "platform=iOS Simulator,name=$IPAD_DEVICE" \
+            -resultBundlePath "$RUNNER_TEMP/ui-tests-ipad.xcresult" \
+            -only-testing:MegaPDFUITests/ViewerZoomUITests \
+            CODE_SIGNING_ALLOWED=NO
+
       - name: Upload the UI test result bundle
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: ui-tests-xcresult
           path: ${{ runner.temp }}/ui-tests.xcresult
+
+      - name: Upload the iPad UI test result bundle
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-tests-ipad-xcresult
+          path: ${{ runner.temp }}/ui-tests-ipad.xcresult
 
   # ADR-001 evidence: PDFKit vs the MegaPDF_Id interop contract (macOS PDFKit
   # is the same framework family as iOS). Read the SPIKE: lines in the log.
