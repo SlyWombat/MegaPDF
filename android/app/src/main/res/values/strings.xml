@@ -295,4 +295,42 @@
          hangs from the marked line's right end over the line below, and a first-
          line mark put the chip over that paragraph's own words. -->
     <string name="screenshot_redacted_word">sections 1 through 4</string>
+
+    <!-- Reading mode (#507, #513). "Reading mode" is decision 1 on #168 and
+         is in docs/localisation-glossary.md; every platform uses the same words. -->
+    <string name="reading_mode">Reading mode</string>
+    <!-- Announced to a screen reader on entering and leaving the mode -->
+    <string name="reading_mode_on">Reading mode on</string>
+    <string name="reading_mode_off">Reading mode off</string>
+    <!-- The accessible name of the floating bar itself -->
+    <string name="reading_controls">Reading controls</string>
+    <!-- The bar's last button; icon-only, so this is what TalkBack reads -->
+    <string name="exit_reading_mode">Exit reading mode</string>
+    <!-- The bar's page steppers; distinct from the find bar's, which are about matches -->
+    <string name="previous_page">Previous page</string>
+    <string name="next_page">Next page</string>
+    <!-- The bar's page counter: current page, page count -->
+    <string name="page_counter">%1$d / %2$d</string>
+    <!-- What tapping that counter opens -->
+    <string name="go_to_page">Go to page</string>
+    <!-- The field label in that dialog; %1$d is the page count -->
+    <string name="page_of">of %1$d</string>
+    <!-- The bar's zoom presets, icon-only -->
+    <string name="fit_width">Fit width</string>
+    <string name="fit_page">Fit page</string>
+    <string name="zoom_in">Zoom in</string>
+    <string name="zoom_out">Zoom out</string>
+
+    <!-- Settings (#513) -->
+    <string name="settings">Settings</string>
+    <string name="settings_reading">Reading</string>
+    <!-- British spelling on purpose, as on the desktops -->
+    <string name="page_colours">Page colours</string>
+    <string name="page_colours_normal">Normal</string>
+    <string name="page_colours_sepia">Sepia</string>
+    <string name="page_colours_night">Night</string>
+    <!-- Decision 3 on #168, said here because it is a decision and not a defect: the tint is
+         a post-pass over the rendered page, so photographs invert with everything else -->
+    <string name="night_inverts_pictures">Night inverts the page, pictures included.</string>
+    <string name="open_in_reading_mode">Open documents in reading mode</string>
 </resources>

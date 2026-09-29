@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -54,6 +55,8 @@ fun HomeScreen(
     onOpenClick: () -> Unit,
     onRecentClick: (RecentEntry) -> Unit,
     onRemoveRecent: (RecentEntry) -> Unit = {},
+    /** Settings (#513) — reachable before a document is open, not only from the viewer. */
+    onSettingsClick: () -> Unit = {},
 ) {
     var aboutOpen by remember { mutableStateOf(false) }
     var noticesOpen by remember { mutableStateOf(false) }
@@ -72,15 +75,21 @@ fun HomeScreen(
             onRecentClick = onRecentClick,
             onRecentLongPress = { sheetFor = it },
         )
-        IconButton(
-            onClick = { aboutOpen = true },
-            modifier = Modifier.align(Alignment.TopEnd).padding(8.dp),
-        ) {
-            Icon(
-                Icons.Outlined.Info,
-                contentDescription = stringResource(R.string.about_megapdf),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+        Row(modifier = Modifier.align(Alignment.TopEnd).padding(8.dp)) {
+            IconButton(onClick = onSettingsClick) {
+                Icon(
+                    ToolbarIcons.Settings,
+                    contentDescription = stringResource(R.string.settings),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            IconButton(onClick = { aboutOpen = true }) {
+                Icon(
+                    Icons.Outlined.Info,
+                    contentDescription = stringResource(R.string.about_megapdf),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 

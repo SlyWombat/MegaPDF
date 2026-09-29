@@ -145,6 +145,85 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
     private var documentReadsUri: Uri? = null
     private val recentsStore =
         RecentFilesStore(File(application.filesDir, "recent.json"))
+
+    // --- Reading mode (#507, #513), docs/reading-mode-plan.md §2 and §4 ---
+    //
+    // A way of *looking at* the document, not a change to it: nothing here touches the
+    // document, the undo history or the file, and the unsaved dot stays exactly as it was.
+    // The mode itself is session state (#168 decision 2 — no per-document memory); the two
+    // preferences under it are app-level and live in DataStore.
+
+    private val readingPreferences = ReadingPreferences(application)
+
+    /**
+     * The chrome-free view is on. Not persisted: [openInReadingMode] is the only thing that
+     * decides whether a *newly opened* document starts in it, and nothing remembers what any
+     * particular document was last looked at in.
+     */
+    var readingMode: Boolean by mutableStateOf(false)
+        private set
+
+    /** Page colours (#513). Drives the render, and the gutter and bar the screen draws. */
+    var pageTint: com.megapdf.engine.PageTint by mutableStateOf(com.megapdf.engine.PageTint.NORMAL)
+        private set
+
+    /** *Open documents in reading mode* (#513). Off by default. */
+    var openInReadingMode: Boolean by mutableStateOf(false)
+        private set
+
+    /**
+     * Both preferences are observed rather than read once: the Settings screen writes them
+     * while a document is open, and the page behind it retints without a reopen. Called from
+     * the `init` block at the foot of the class, after every property it touches exists.
+     */
+    private fun observeReadingPreferences() {
+        viewModelScope.launch {
+            readingPreferences.pageTint.collect { tint ->
+                if (tint == pageTint) return@collect
+                pageTint = tint
+                // Only the window on screen is redrawn (#513): every other page's bitmap has
+                // already been dropped by updateRenderWindow, and the ones still held are
+                // re-rendered because the render cache key carries the tint.
+                lastWindow?.let { updateRenderWindow(it.firstVisible, it.lastVisible, it.targetWidthPx) }
+            }
+        }
+        viewModelScope.launch {
+            readingPreferences.openInReadingMode.collect { openInReadingMode = it }
+        }
+    }
+
+    /**
+     * Enters the chrome-free view. Armed tools disarm here and do not re-arm on the way out
+     * (#507): editing is off inside reading mode, and a tool left armed would be a mode the
+     * user cannot see. Selections go too — their chrome is chrome, and a screen reader must
+     * not find a ✕ or a ✎ floating on a page in the reader-friendly view.
+     */
+    fun enterReadingMode() {
+        if (readingMode) return
+        redactMode = false
+        pendingSignature = null
+        isPlacingText = false
+        selectedStamp = null
+        selectedTextBox = null
+        selectedRedactionMark = null
+        readingMode = true
+    }
+
+    /** Leaves it. Nothing re-arms: what was armed on the way in stays off (#507). */
+    fun exitReadingMode() {
+        readingMode = false
+    }
+
+    // Named for what the Settings rows say rather than for the properties they move, which
+    // also keeps them clear of the setters `var pageTint` and `var openInReadingMode` already
+    // generate on the JVM.
+    fun choosePageColours(tint: com.megapdf.engine.PageTint) {
+        viewModelScope.launch { readingPreferences.setPageTint(tint) }
+    }
+
+    fun chooseOpenInReadingMode(on: Boolean) {
+        viewModelScope.launch { readingPreferences.setOpenInReadingMode(on) }
+    }
     private val signatureDir = File(application.filesDir, "signatures")
     private val signatureStore = SignatureLibraryStore(signatureDir)
 
@@ -391,7 +470,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         redactionMarks = emptyMap()
         selectedRedactionMark = null
         redactionSummary = describeRedaction(report.counts)
-        renderedWidths.clear()
+        renderedPages.clear()
         pageBitmaps.clear()
         lastWindow?.let { (first, last, width) -> updateRenderWindow(first, last, width) }
         return true
@@ -820,7 +899,13 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
     val pageBitmaps = mutableStateMapOf<Int, Bitmap>()
 
     private var renderJob: Job? = null
-    private val renderedWidths = HashMap<Int, Int>()
+    /**
+     * What each held bitmap was drawn at: its pixel width, and — since #513 — the page
+     * colours it was drawn under. Both belong in the key. Keyed on width alone, a change of
+     * tint left every already-rendered page showing the old colours until something else
+     * dirtied it, because the width had not moved.
+     */
+    private val renderedPages = HashMap<Int, RenderedPage>()
     private var lastWindow: RenderWindow? = null
 
     /** Unsaved changes, and D3 of #145: a save marks saved only if nothing changed while it ran. */
@@ -1165,6 +1250,11 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
             )
         )
         uiState = ViewerUiState.Viewing(name, opened.pageSizes, opened.flags.isDynamicXfa)
+        // *Open documents in reading mode* (#513), applied here rather than remembered per
+        // document (#168 decision 2): one app-level answer, asked of every document alike.
+        // closeCurrent() above has already put the mode back to off, so this is the only
+        // thing that can turn it on for a document arriving now.
+        if (openInReadingMode) enterReadingMode()
         previousWindow?.clampedTo(opened.pageSizes.size)?.let {
             updateRenderWindow(it.firstVisible, it.lastVisible, it.targetWidthPx)
         }
@@ -1204,11 +1294,15 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         for (index in pageBitmaps.keys.toList()) {
             if (index !in window) {
                 pageBitmaps.remove(index)
-                renderedWidths.remove(index)
+                renderedPages.remove(index)
             }
         }
 
         renderJob?.cancel()
+        // Read once for the whole pass, so a tint changed mid-pass cannot leave one page
+        // drawn under the old colours and the next under the new: the preference collector
+        // restarts this window when it moves.
+        val tint = pageTint
         renderJob = viewModelScope.launch {
             for (index in window) {
                 val size = state.pageSizes[index]
@@ -1219,18 +1313,19 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                 val idealHeight = idealWidth * size.heightPoints / size.widthPoints
                 val memoryScale = minOf(1.0, MAX_BITMAP_DIM / maxOf(idealWidth, idealHeight))
                 val (width, height) = PdfEngine.renderSize(idealWidth * memoryScale, idealHeight * memoryScale)
-                if (renderedWidths[index] == width) continue
+                val key = RenderedPage(width, tint)
+                if (renderedPages[index] == key) continue
 
                 try {
                     val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
                     val page = doc.openPage(index)
                     try {
-                        page.render(bitmap)
+                        page.render(bitmap, tint)
                     } finally {
                         page.close()
                     }
                     pageBitmaps[index] = bitmap
-                    renderedWidths[index] = width
+                    renderedPages[index] = key
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
@@ -1949,7 +2044,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
 
     private fun markEditedAndRerender(pageIndex: Int) {
         dirty.markEdited()
-        renderedWidths.remove(pageIndex)
+        renderedPages.remove(pageIndex)
         lastWindow?.let { updateRenderWindow(it.firstVisible, it.lastVisible, it.targetWidthPx) }
     }
 
@@ -2394,8 +2489,12 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
     private fun closeCurrent() {
         renderJob?.cancel()
         closeSearch()
+        // Reading mode belongs to the document being looked at, not to the app (#507): the
+        // next one starts from the *Open documents in reading mode* setting, whatever this
+        // one was being read in.
+        readingMode = false
         pageBitmaps.clear()
-        renderedWidths.clear()
+        renderedPages.clear()
         lastWindow = null
         currentUri = null
         documentReadsUri = null
@@ -2550,6 +2649,12 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         if (doc != null) {
             PdfEngine.closeDetached(doc)
         }
+    }
+
+    // Last in the class body on purpose: it reaches lastWindow and updateRenderWindow, and
+    // an init block only sees what has been declared above it.
+    init {
+        observeReadingPreferences()
     }
 
     private companion object {

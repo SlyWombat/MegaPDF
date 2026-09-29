@@ -5,6 +5,7 @@ coreKtx = "1.15.0"
 activityCompose = "1.9.3"
 composeBom = "2024.12.01"
 lifecycle = "2.8.7"
+datastore = "1.1.1"
 coroutines = "1.9.0"
 serializationJson = "1.7.3"
 junit = "4.13.2"
@@ -21,6 +22,9 @@ androidx-compose-material3 = { group = "androidx.compose.material3", name = "mat
 androidx-compose-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview" }
 androidx-compose-material-icons-core = { group = "androidx.compose.material", name = "material-icons-core" }
 androidx-lifecycle-viewmodel-compose = { group = "androidx.lifecycle", name = "lifecycle-viewmodel-compose", version.ref = "lifecycle" }
+# Reading preferences (#513): three scalars a Settings screen binds to, which is what
+# DataStore<Preferences> is for — not a fifth JSON file beside recents and signatures.
+androidx-datastore-preferences = { group = "androidx.datastore", name = "datastore-preferences", version.ref = "datastore" }
 kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "serializationJson" }
 kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "coroutines" }

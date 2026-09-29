@@ -36,7 +36,8 @@ internal object PdfiumNative {
     external fun nativeClosePage(handle: Long)
     external fun nativePageWidth(handle: Long): Double
     external fun nativePageHeight(handle: Long): Double
-    external fun nativeRenderPage(handle: Long, bitmap: Bitmap): Boolean
+    /** [tintFlags] is [PageTint.renderFlag] — 0, MEGAPDF_RENDER_SEPIA or MEGAPDF_RENDER_NIGHT (#513). */
+    external fun nativeRenderPage(handle: Long, bitmap: Bitmap, tintFlags: Int): Boolean
     external fun nativeRenderSize(idealWidth: Double, idealHeight: Double): IntArray
     external fun nativeSave(handle: Long, out: OutputStream): Boolean
 

@@ -57,6 +57,45 @@ internal object ToolbarIcons {
         "M2.5,4v3h5v12h3V7h5V4H2.5zM21.5,9h-9v3h3v7h3v-7h3V9z",
     )
 
+    // Reading mode's floating bar (#507, #513). `material-icons-core` has none of these
+    // either, and the bar is icon-only for the reason the toolbar is: a phone's row has no
+    // room for four words. Each carries its name as a content description, so TalkBack reads
+    // a label rather than guessing at a glyph (#237).
+
+    /** Two side rails with a double-headed arrow between them: the page across the screen. */
+    val FitWidth: ImageVector = icon(
+        "FitWidth",
+        "M3,4h1.6v16H3zM19.4,4H21v16h-1.6zM8.9,8.5L5.4,12l3.5,3.5v-2.6h6.2v2.6L18.6,12l-3.5,-3.5v2.6H8.9z",
+    )
+
+    /** The same, turned: two rails top and bottom, the whole page between them. */
+    val FitPage: ImageVector = icon(
+        "FitPage",
+        "M4,3h16v1.6H4zM4,19.4h16V21H4zM15.5,8.9L12,5.4L8.5,8.9h2.6v6.2H8.5L12,18.6l3.5,-3.5h-2.6V8.9z",
+    )
+
+    /** Material "add". */
+    val ZoomIn: ImageVector = icon("ZoomIn", "M19,13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z")
+
+    /** Material "remove". */
+    val ZoomOut: ImageVector = icon("ZoomOut", "M19,13H5v-2h14v2z")
+
+    /** Material "settings": the cog, for the Home screen's entry to Settings (#513). */
+    val Settings: ImageVector = icon(
+        "Settings",
+        "M19.14,12.94c0.04,-0.3 0.06,-0.61 0.06,-0.94c0,-0.32 -0.02,-0.64 -0.07,-0.94l2.03,-1.58" +
+            "c0.18,-0.14 0.23,-0.41 0.12,-0.61l-1.92,-3.32c-0.12,-0.22 -0.37,-0.29 -0.59,-0.22" +
+            "l-2.39,0.96c-0.5,-0.38 -1.03,-0.7 -1.62,-0.94L14.4,2.81c-0.04,-0.24 -0.24,-0.41 -0.48,-0.41" +
+            "h-3.84c-0.24,0 -0.43,0.17 -0.47,0.41L9.25,5.35C8.66,5.59 8.12,5.92 7.63,6.29L5.24,5.33" +
+            "c-0.22,-0.08 -0.47,0 -0.59,0.22L2.74,8.87C2.62,9.08 2.66,9.34 2.86,9.48l2.03,1.58" +
+            "C4.84,11.36 4.8,11.69 4.8,12s0.02,0.64 0.07,0.94l-2.03,1.58c-0.18,0.14 -0.23,0.41 -0.12,0.61" +
+            "l1.92,3.32c0.12,0.22 0.37,0.29 0.59,0.22l2.39,-0.96c0.5,0.38 1.03,0.7 1.62,0.94l0.36,2.54" +
+            "c0.05,0.24 0.24,0.41 0.48,0.41h3.84c0.24,0 0.44,-0.17 0.47,-0.41l0.36,-2.54" +
+            "c0.59,-0.24 1.13,-0.56 1.62,-0.94l2.39,0.96c0.22,0.08 0.47,0 0.59,-0.22l1.92,-3.32" +
+            "c0.12,-0.22 0.07,-0.47 -0.12,-0.61L19.14,12.94zM12,15.6c-1.98,0 -3.6,-1.62 -3.6,-3.6" +
+            "s1.62,-3.6 3.6,-3.6s3.6,1.62 3.6,3.6S13.98,15.6 12,15.6z",
+    )
+
     private fun icon(name: String, path: String): ImageVector =
         ImageVector.Builder(
             name = "MegaPdf.$name",

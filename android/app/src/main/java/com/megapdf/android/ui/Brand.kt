@@ -5,6 +5,7 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import com.megapdf.engine.PageTint
 
 /**
  * The MegaPDF design tokens, Android leg. `docs/design-tokens.md` is the spec;
@@ -63,12 +64,74 @@ object Brand {
     /** The wall the page sits on. Neutral shade, not a brand hue. */
     val Backdrop = Color(0xFF404040)
 
+    // --- Reading mode page colours (#513) ---
+    //
+    // The *page* is tinted by the core (contract 7, #509), which is why those two values are
+    // quoted from `core/megapdf_core.h` rather than chosen here: the gutter and the floating
+    // bar have to sit beside pixels the engine produced, so the ground colours must agree.
+    // Everything below them is chrome, and chrome is per platform (design-tokens §5) — a
+    // wall and a tonal surface that belong with the paper the page is drawn on.
+
+    /** The core's sepia paper white — what a white page becomes under MEGAPDF_RENDER_SEPIA. */
+    val PageGroundSepia = Color(0xFFF4ECD8)
+
+    /** The core's night ground — what a white page becomes under MEGAPDF_RENDER_NIGHT. */
+    val PageGroundNight = Color(0xFF1A1A1A)
+
+    /** The wall under sepia paper: the same value stepped well down, so the page edge shows. */
+    val BackdropSepia = Color(0xFF7A6D55)
+
+    /** The wall at night: darker than the page, for the same reason. */
+    val BackdropNight = Color(0xFF0C0C0C)
+
+    /** The reading bar's tonal surface, and the ink on it, under each choice. */
+    val ReadingBarSepia = Color(0xFFE6DAC0)
+    val ReadingBarOnSepia = Color(0xFF3A3121)
+    val ReadingBarNight = Color(0xFF2B2B2B)
+    val ReadingBarOnNight = Color(0xFFE8E8E8)
+
     /**
      * The signature pad. Near-white by contract: the drawing is rasterised off
      * this surface and background-removed at luminance > 235 (SDD §6.2), so a
      * dark pad would survive the cleanup as a black rectangle.
      */
     val SignaturePad = Color(0xFFF6F6F6)
+
+    /** The wall behind the pages under [tint] (#513). */
+    @Composable
+    fun backdrop(tint: PageTint): Color = when (tint) {
+        PageTint.NORMAL -> Backdrop
+        PageTint.SEPIA -> BackdropSepia
+        PageTint.NIGHT -> BackdropNight
+    }
+
+    /**
+     * What a page box is filled with before — and behind — its bitmap. White is the page's
+     * own ground; under a tint the engine has already made that ground sepia or near-black,
+     * so a white fill would flash on every page that has not rendered yet.
+     */
+    @Composable
+    fun pageGround(tint: PageTint): Color = when (tint) {
+        PageTint.NORMAL -> Color.White
+        PageTint.SEPIA -> PageGroundSepia
+        PageTint.NIGHT -> PageGroundNight
+    }
+
+    /** The reading bar's own surface under [tint] — Material's tonal container when untinted. */
+    @Composable
+    fun readingBarSurface(tint: PageTint): Color = when (tint) {
+        PageTint.NORMAL -> MaterialTheme.colorScheme.surfaceContainerHigh
+        PageTint.SEPIA -> ReadingBarSepia
+        PageTint.NIGHT -> ReadingBarNight
+    }
+
+    /** The ink on that surface. */
+    @Composable
+    fun readingBarContent(tint: PageTint): Color = when (tint) {
+        PageTint.NORMAL -> MaterialTheme.colorScheme.onSurface
+        PageTint.SEPIA -> ReadingBarOnSepia
+        PageTint.NIGHT -> ReadingBarOnNight
+    }
 }
 
 /**
