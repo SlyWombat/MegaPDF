@@ -3177,10 +3177,10 @@ internal static class Program
     /// Not provable headless: a real trackpad's pinch. Avalonia.Native's bridge
     /// from NSMagnificationGestureRecognizer to PointerTouchPadGestureMagnifyEvent
     /// (see MainWindow.Zoom.cs's remark on WireZoom) only exists in the macOS
-    /// native backend, which nothing here runs. The pinch check below raises that
-    /// same routed event directly instead, which proves the handler's own
-    /// arithmetic and nothing about whether the OS and Avalonia.Native still hand
-    /// it the event shape this assumes — that needs a real Mac.
+    /// native backend, which nothing here runs. The pinch check below proves only
+    /// the shared arithmetic (see its own remark on why it stops there rather
+    /// than raising the event) — the gesture reaching MainWindow.Zoom.cs's
+    /// handler at all, on real hardware, needs a real Mac.
     /// </summary>
     private static void CheckZoomAnchor(string dir, string state, Action<string, bool> check)
     {
@@ -3277,43 +3277,29 @@ internal static class Program
         check("a plain wheel notch (no Ctrl) scrolls instead of zooming",
               vm.Zoom == plainBeforeZoom && window.PageScroller.Offset != plainBeforeOffset);
 
-        // --- Trackpad pinch: the arithmetic, and the handler that reads it ---
+        // --- Trackpad pinch: the arithmetic only ---
+        //
+        // A first version of this check also raised a hand-built
+        // PointerTouchPadGestureMagnifyEvent (a real Pointer object constructed
+        // here, not one anything's input pipeline actually owns) straight at
+        // PageScroller with RaiseEvent, to drive OnPageScrollerMagnify end to end.
+        // It passed every assertion, on Linux and on both macOS bundle builds —
+        // and then the very next check (CheckTabs, which does nothing this check
+        // touches) segfaulted the process on both osx-arm64 and osx-x64, every
+        // time, never on Linux. A fabricated Pointer bypasses whatever real
+        // pointer/capture bookkeeping Avalonia's Skia/native layers keep, and
+        // this is the likely reason. Reverted to just the arithmetic:
+        // OnPageScrollerMagnify is two lines (read Delta.X as a factor, call
+        // ApplyAnchoredZoom with the pointer position), and ApplyAnchoredZoom
+        // itself is already driven end to end, safely, by the Ctrl+wheel check
+        // above through HeadlessWindowExtensions.MouseWheel — a real pointer the
+        // headless platform owns rather than one this test invents.
         var pureReanchor = Views.ZoomAnchor.Reanchor(new Vector(100, 200), 1.0, 0.5, new Point(50, 50));
         check($"ZoomAnchor.Reanchor at 0.5x from (100,200) around (50,50) is (25,75) (got {pureReanchor})",
               Math.Abs(pureReanchor.X - 25) < 0.0001 && Math.Abs(pureReanchor.Y - 75) < 0.0001);
         var pureReanchorAtClamp = Views.ZoomAnchor.Reanchor(new Vector(100, 200), 4.0, 4.0, new Point(50, 50));
         check($"ZoomAnchor.Reanchor with no ratio change (a clamp) leaves the offset alone (got {pureReanchorAtClamp})",
               pureReanchorAtClamp == new Vector(100, 200));
-
-        vm.SetZoomCommand.Execute(2.0);
-        Pump();
-        window.PageScroller.Offset = new Vector(40, 300);
-        Pump();
-
-        var pinchAnchor = new Point(70, 90);
-        var pinchAnchorInWindow = window.PageScroller.TranslatePoint(pinchAnchor, window)
-                                  ?? throw new InvalidOperationException("PageScroller is not in the window");
-        var pinchBeforeOffset = window.PageScroller.Offset;
-        var pinchBeforeZoom = vm.Zoom;
-        var contentUnderPinchBefore = new Point(pinchBeforeOffset.X + pinchAnchor.X, pinchBeforeOffset.Y + pinchAnchor.Y);
-
-        // The same routed event MouseDevice.GestureMagnify raises from a real
-        // trackpad gesture (Delta.X = NSEvent.magnification, an incremental
-        // fraction — 0.1 here is "10% bigger since the last callback").
-        var pointer = new Pointer(Pointer.GetNextFreeId(), PointerType.Mouse, isPrimary: true);
-        window.PageScroller.RaiseEvent(new PointerDeltaEventArgs(
-            Gestures.PointerTouchPadGestureMagnifyEvent, window.PageScroller, pointer, window,
-            pinchAnchorInWindow, 0, new PointerPointProperties(), KeyModifiers.None, new Vector(0.1, 0.1)));
-        Pump();
-
-        check($"a trackpad-magnify event zooms ({pinchBeforeZoom:F2}x -> {vm.Zoom:F2}x) — the handler's own "
-              + "arithmetic only; nothing headless proves Avalonia.Native still hands it this event on a real Mac",
-              vm.Zoom > pinchBeforeZoom);
-        var pinchRatio = vm.Zoom / pinchBeforeZoom;
-        var expectedUnderPinch = new Point(contentUnderPinchBefore.X * pinchRatio, contentUnderPinchBefore.Y * pinchRatio);
-        var actualUnderPinch = new Point(window.PageScroller.Offset.X + pinchAnchor.X, window.PageScroller.Offset.Y + pinchAnchor.Y);
-        check($"  anchored on the gesture's point, not the corner (expected {expectedUnderPinch}, got {actualUnderPinch})",
-              Math.Abs(actualUnderPinch.X - expectedUnderPinch.X) < Epsilon && Math.Abs(actualUnderPinch.Y - expectedUnderPinch.Y) < Epsilon);
 
         window.Close();
         Pump();
