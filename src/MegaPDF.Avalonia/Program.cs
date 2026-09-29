@@ -904,6 +904,92 @@ internal static class Program
             if (File.Exists(editedPath)) File.Delete(editedPath);
         }
 
+        // --- Text box ergonomics: font size and multi-line (#4) ---
+        //
+        // Shift+Enter in the inline editor arrives here as one string with an embedded
+        // newline (MainWindow.ShowInlineEditor's tunnel key handler does the catching;
+        // AddTextBox is where the string becomes objects), so driving it through the
+        // view model directly is a faithful test of the split without a live window.
+        Console.WriteLine("text box ergonomics (#4):");
+        var notePath = Path.Combine(saveDir, $"megapdf-selftest-note-{Guid.NewGuid():N}.pdf");
+        try
+        {
+            using var vm = new DocumentViewModel(state);
+            vm.Open(Path.Combine(dir, "fixture.pdf"));
+
+            // A two-line note, placed at Large (the toolbar's own point value — the
+            // inline editor's S/M/L chips write the same TextSize the toolbar does).
+            vm.TextFont = StandardTextBoxFonts.Sans;
+            vm.TextSize = 18;
+            vm.AddTextBox(0, new PdfPoint(120, 500), "First line\nSecond line");
+
+            var first = vm.BoxesOn(0).FirstOrDefault(b => b.Text == "First line");
+            var second = vm.BoxesOn(0).FirstOrDefault(b => b.Text == "Second line");
+            Check("a two-line note becomes two objects, not one squeezed into one line",
+                  first is not null && second is not null);
+            Check("both are written at the chosen size",
+                  first is not null && Math.Abs(first.FontSize - 18) < 0.01
+                  && second is not null && Math.Abs(second.FontSize - 18) < 0.01);
+            Check("the second line stands below the first",
+                  first is not null && second is not null && second.Bounds.Y > first.Bounds.Y);
+            Check("as two distinct objects",
+                  first is not null && second is not null && first.ObjectIndex != second.ObjectIndex);
+
+            // Each line stays individually editable afterwards — the acceptance test's
+            // own words. Selecting one selects only it; editing it leaves the other alone.
+            if (first is not null)
+            {
+                vm.HandlePageClick(0, new PdfPoint(first.Bounds.X + 5, first.Bounds.Y + 5));
+                Check("the first line alone is selected",
+                      vm.Selection is { Kind: DocumentViewModel.SelectionKind.TextBox, Run: { } run1 }
+                      && run1.Text == "First line");
+            }
+            if (second is not null)
+            {
+                vm.HandlePageClick(0, new PdfPoint(second.Bounds.X + 5, second.Bounds.Y + 5));
+                Check("the second line alone is selected",
+                      vm.Selection is { Kind: DocumentViewModel.SelectionKind.TextBox, Run: { } run2 }
+                      && run2.Text == "Second line");
+
+                vm.RestyleTextBox(0, second, "Second line, edited", StandardTextBoxFonts.Sans, 18);
+                Check("editing one line leaves the other untouched",
+                      vm.BoxesOn(0).Any(b => b.Text == "First line")
+                      && vm.BoxesOn(0).Any(b => b.Text == "Second line, edited"));
+
+                vm.UndoCommand.Execute(null);
+                Check("undoing that edit brings back just that line",
+                      vm.BoxesOn(0).Any(b => b.Text == "Second line")
+                      && !vm.BoxesOn(0).Any(b => b.Text == "Second line, edited"));
+            }
+
+            // Undo removes the whole note, both lines at once, as the one step that made them.
+            vm.UndoCommand.Execute(null);
+            Check("undo removes the whole note in one step",
+                  !vm.BoxesOn(0).Any(b => b.Text is "First line" or "Second line") && !vm.CanUndo);
+
+            // A plain one-line note is unaffected: still the older, simpler path.
+            vm.AddTextBox(0, new PdfPoint(120, 300), "One line only");
+            Check("a plain one-line note is still a single object",
+                  vm.BoxesOn(0).Count(b => b.Text == "One line only") == 1);
+
+            using (var file = File.Create(notePath))
+                vm.SaveTo(file);
+            using (var engine = new PdfiumEngine())
+            using (var reopened = engine.Open(notePath))
+            using (var page = reopened.GetPage(0))
+                Check("the one-line note still round-trips through save and reopen",
+                      page.GetTextBoxes().Any(b => b.Text == "One line only"));
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"::error::text box ergonomics: {ex.GetType().Name}: {ex.Message}");
+            failures++;
+        }
+        finally
+        {
+            if (File.Exists(notePath)) File.Delete(notePath);
+        }
+
         // --- Redaction (SDD §3.8 — F7, #173) ---
         //
         // The whole flow, in the view model the window binds to: arm the tool, mark, check
@@ -1067,6 +1153,7 @@ internal static class Program
         // --- Selection, move, resize, restyle, delete, flatten, mark style ---
         Console.WriteLine("adjusting what has been placed:");
         var adjustedPath = Path.Combine(saveDir, $"megapdf-selftest-adj-{Guid.NewGuid():N}.pdf");
+        var coverAdjustedPath = Path.Combine(saveDir, $"megapdf-selftest-cover-{Guid.NewGuid():N}.pdf");
         try
         {
             using var vm = new DocumentViewModel(state);
@@ -1095,6 +1182,50 @@ internal static class Program
 
             vm.UndoCommand.Execute(null);
             Check("undo puts it back", vm.HitTest(0, at).Kind == PageHitKind.StampAnnotation);
+
+            // Cover: select it, move/resize it exactly like a signature, then remove it
+            // (#3 — the chrome used to be remove-only; a mis-drawn cover meant taking it
+            // off and drawing it again from scratch).
+            var coverAt = new PdfPoint(490, 110);
+            vm.AddWhiteout(0, new PdfRect(450, 100, 80, 20));
+            vm.HandlePageClick(0, coverAt);
+            Check("clicking a cover selects it rather than deleting it",
+                  vm.Selection is { Kind: DocumentViewModel.SelectionKind.Whiteout });
+            Check("and now offers move and resize, not just removal",
+                  vm.Selection is { CanMove: true, CanResize: true });
+
+            var coverMoved = new PdfRect(450, 250, 140, 50);
+            vm.CommitSelectionBounds(coverMoved);
+            Check("moving and resizing a cover is committed",
+                  vm.Selection is { Kind: DocumentViewModel.SelectionKind.Whiteout } cs
+                  && Math.Abs(cs.Bounds.X - 450) < 0.5 && Math.Abs(cs.Bounds.Y - 250) < 0.5
+                  && Math.Abs(cs.Bounds.Width - 140) < 0.5 && Math.Abs(cs.Bounds.Height - 50) < 0.5);
+
+            using (var file = File.Create(coverAdjustedPath))
+                vm.SaveTo(file);
+            using (var coverEngine = new PdfiumEngine())
+            using (var coverReopened = coverEngine.Open(coverAdjustedPath))
+            using (var coverPage = coverReopened.GetPage(0))
+            {
+                var whiteouts = coverPage.GetWhiteouts();
+                Check("the moved cover is on the page at its new bounds",
+                      whiteouts.Any(wo => Math.Abs(wo.Bounds.X - 450) < 1 && Math.Abs(wo.Bounds.Y - 250) < 1
+                                        && Math.Abs(wo.Bounds.Width - 140) < 1 && Math.Abs(wo.Bounds.Height - 50) < 1));
+                Check("and not still at the bounds it started from",
+                      !whiteouts.Any(wo => Math.Abs(wo.Bounds.X - 450) < 1 && Math.Abs(wo.Bounds.Y - 100) < 1
+                                         && Math.Abs(wo.Bounds.Width - 80) < 1));
+            }
+
+            vm.UndoCommand.Execute(null);
+            Check("undo puts the cover back where it started",
+                  vm.HitTest(0, coverAt).Kind == PageHitKind.Whiteout);
+
+            vm.HandlePageClick(0, coverAt);
+            Check("re-selecting the cover after undo still offers move and resize",
+                  vm.Selection is { Kind: DocumentViewModel.SelectionKind.Whiteout, CanMove: true, CanResize: true });
+            vm.DeleteSelection();
+            Check("and the ✕/Delete path still removes a cover",
+                  vm.HitTest(0, coverAt).Kind == PageHitKind.None);
 
             // Text box: select, restyle, delete.
             vm.TextFont = StandardTextBoxFonts.Sans;
@@ -1138,6 +1269,7 @@ internal static class Program
         finally
         {
             if (File.Exists(adjustedPath)) File.Delete(adjustedPath);
+            if (File.Exists(coverAdjustedPath)) File.Delete(coverAdjustedPath);
         }
 
         try

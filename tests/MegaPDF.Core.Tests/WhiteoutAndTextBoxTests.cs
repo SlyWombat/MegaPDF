@@ -403,6 +403,253 @@ public class WhiteoutAndTextBoxTests : IDisposable
             Assert.Single(page.GetWhiteouts());
     }
 
+    /// <summary>
+    /// #3: a whiteout selects, drags and resizes like a signature. There is no native
+    /// "move in place" for it — it is page content, not an annotation — so a move
+    /// detaches the old rectangle and appends a fresh one, which is why the object
+    /// index is expected to change and callers read <see cref="MoveWhiteoutOperation.CurrentObjectIndex"/>
+    /// rather than the index they passed in. A note is placed after the cover, the way
+    /// one would be in practice, both to prove the index really does move — detaching
+    /// out of the middle of the object list and appending at the end lands somewhere
+    /// new — and to show the move leaves what came after it undisturbed.
+    /// </summary>
+    [Fact]
+    public void MoveWhiteoutOperation_MovesAndResizes_AndUndoes()
+    {
+        using var doc = _engine.Open(WritePdf());
+        var stack = new UndoStack();
+        stack.Do(new AddWhiteoutOperation(doc, 0, ImageArea));
+
+        int index;
+        using (var page = doc.GetPage(0))
+            index = Assert.Single(page.GetWhiteouts()).ObjectIndex;
+
+        stack.Do(new AddTextBoxOperation(doc, 0, "Note after the cover", 12, new PdfPoint(105, 400)));
+
+        var moved = new PdfRect(ImageArea.X + 40, ImageArea.Y + 25, ImageArea.Width + 20, ImageArea.Height + 10);
+        var move = new MoveWhiteoutOperation(doc, 0, index, ImageArea, moved);
+        stack.Do(move);
+
+        using (var page = doc.GetPage(0))
+        {
+            var whiteout = Assert.Single(page.GetWhiteouts());
+            Assert.Equal(moved.X, whiteout.Bounds.X, 1);
+            Assert.Equal(moved.Y, whiteout.Bounds.Y, 1);
+            Assert.Equal(moved.Width, whiteout.Bounds.Width, 1);
+            Assert.Equal(moved.Height, whiteout.Bounds.Height, 1);
+            // The move is a fresh object, not the one this test started with — the
+            // whole reason CurrentObjectIndex exists for a caller to re-read.
+            Assert.NotEqual(index, whiteout.ObjectIndex);
+            Assert.Equal(whiteout.ObjectIndex, move.CurrentObjectIndex);
+            Assert.Contains(page.GetTextBoxes(), b => b.Text == "Note after the cover");
+        }
+
+        stack.Undo();
+        using (var page = doc.GetPage(0))
+        {
+            var whiteout = Assert.Single(page.GetWhiteouts());
+            Assert.Equal(ImageArea.X, whiteout.Bounds.X, 1);
+            Assert.Equal(ImageArea.Width, whiteout.Bounds.Width, 1);
+            Assert.Contains(page.GetTextBoxes(), b => b.Text == "Note after the cover");
+        }
+
+        stack.Redo();
+        using (var page = doc.GetPage(0))
+        {
+            var whiteout = Assert.Single(page.GetWhiteouts());
+            Assert.Equal(moved.X, whiteout.Bounds.X, 1);
+        }
+    }
+
+    [Fact]
+    public void MoveWhiteout_PersistsAcrossSave()
+    {
+        var savedPath = Path.Combine(_dir, "moved-whiteout.pdf");
+        PdfRect moved;
+        using (var doc = _engine.Open(WritePdf()))
+        {
+            int index;
+            using (var page = doc.GetPage(0))
+                index = page.AppendWhiteout(ImageArea);
+
+            moved = new PdfRect(ImageArea.X + 60, ImageArea.Y + 30, ImageArea.Width, ImageArea.Height);
+            new MoveWhiteoutOperation(doc, 0, index, ImageArea, moved).Apply();
+
+            using var stream = File.Create(savedPath);
+            doc.Save(stream);
+        }
+
+        using var reopened = _engine.Open(savedPath);
+        using var reopenedPage = reopened.GetPage(0);
+        var reopenedWhiteout = Assert.Single(reopenedPage.GetWhiteouts());
+        Assert.Equal(moved.X, reopenedWhiteout.Bounds.X, 1);
+        Assert.Equal(moved.Y, reopenedWhiteout.Bounds.Y, 1);
+    }
+
+    [Fact]
+    public void Journal_WhiteoutMove_Replay()
+    {
+        var docPath = WritePdf();
+        List<JournalEntry> entries;
+        PdfRect moved;
+        using (var doc = _engine.Open(docPath))
+        {
+            var add = new AddWhiteoutOperation(doc, 0, ImageArea);
+            add.Apply();
+
+            int index;
+            using (var page = doc.GetPage(0))
+                index = Assert.Single(page.GetWhiteouts()).ObjectIndex;
+
+            moved = new PdfRect(ImageArea.X + 30, ImageArea.Y + 20, ImageArea.Width, ImageArea.Height);
+            var move = new MoveWhiteoutOperation(doc, 0, index, ImageArea, moved);
+            move.Apply();
+
+            entries =
+            [
+                add.ToJournalEntry(inverse: false),
+                move.ToJournalEntry(inverse: false),
+            ];
+        }
+
+        using var fresh = _engine.Open(docPath);
+        Assert.Equal(2, JournalReplayer.Replay(fresh, entries));
+        using var freshPage = fresh.GetPage(0);
+        var replayed = Assert.Single(freshPage.GetWhiteouts());
+        Assert.Equal(moved.X, replayed.Bounds.X, 1);
+        Assert.Equal(moved.Y, replayed.Bounds.Y, 1);
+    }
+
+    /// <summary>
+    /// #4: a Shift+Enter note of more than one line is that many text-box objects, one
+    /// per line, added and undone together as one step — there is no multi-line text
+    /// object in the format this app writes.
+    /// </summary>
+    [Fact]
+    public void AddTextBoxesOperation_OneObjectPerLine_AndUndoesAsOneStep()
+    {
+        using var doc = _engine.Open(WritePdf());
+        var stack = new UndoStack();
+
+        stack.Do(new AddTextBoxesOperation(doc, 0, ["First line", "Second line"], 18,
+            new PdfPoint(105, 260)));
+
+        using (var page = doc.GetPage(0))
+        {
+            var boxes = page.GetTextBoxes();
+            Assert.Equal(2, boxes.Count);
+            var first = Assert.Single(boxes, b => b.Text == "First line");
+            var second = Assert.Single(boxes, b => b.Text == "Second line");
+            Assert.Equal(18, first.FontSize, 1);
+            Assert.Equal(18, second.FontSize, 1);
+            // Top to bottom, in page (top-left) space: the second line is further down.
+            Assert.True(second.Bounds.Y > first.Bounds.Y);
+            // Each is its own object — individually editable afterwards (the acceptance
+            // test's own words), not one object with an embedded newline.
+            Assert.NotEqual(first.ObjectIndex, second.ObjectIndex);
+        }
+
+        // Each line is individually editable afterwards (the acceptance test's own
+        // words): restyling one through the normal path leaves the other untouched.
+        PdfTextRun secondBefore;
+        using (var page = doc.GetPage(0))
+            secondBefore = Assert.Single(page.GetTextBoxes(), b => b.Text == "Second line");
+        stack.Do(new RestyleTextBoxOperation(doc, 0, secondBefore.ObjectIndex, secondBefore,
+            "Second line, edited", StandardTextBoxFonts.Sans, 18));
+        using (var page = doc.GetPage(0))
+        {
+            Assert.Contains(page.GetTextBoxes(), b => b.Text == "First line");
+            Assert.Contains(page.GetTextBoxes(), b => b.Text == "Second line, edited");
+        }
+
+        // Undoing that edit leaves the two original lines in place.
+        stack.Undo();
+        using (var page = doc.GetPage(0))
+        {
+            Assert.Contains(page.GetTextBoxes(), b => b.Text == "First line");
+            Assert.Contains(page.GetTextBoxes(), b => b.Text == "Second line");
+        }
+
+        // One more undo removes the whole note, both lines at once, not one line at a
+        // time — it is the one gesture that made both of them.
+        stack.Undo();
+        using (var page = doc.GetPage(0))
+            Assert.Empty(page.GetTextBoxes());
+
+        stack.Redo();
+        using (var page = doc.GetPage(0))
+        {
+            var boxes = page.GetTextBoxes();
+            Assert.Equal(2, boxes.Count);
+            Assert.Contains(boxes, b => b.Text == "First line");
+            Assert.Contains(boxes, b => b.Text == "Second line");
+        }
+    }
+
+    [Fact]
+    public void AddTextBoxesOperation_PersistsAcrossSave()
+    {
+        var savedPath = Path.Combine(_dir, "note.pdf");
+        using (var doc = _engine.Open(WritePdf()))
+        {
+            new AddTextBoxesOperation(doc, 0, ["Line one", "Line two", "Line three"], 12,
+                new PdfPoint(105, 260)).Apply();
+
+            using var stream = File.Create(savedPath);
+            doc.Save(stream);
+        }
+
+        using var reopened = _engine.Open(savedPath);
+        using var reopenedPage = reopened.GetPage(0);
+        var boxes = reopenedPage.GetTextBoxes();
+        Assert.Equal(3, boxes.Count);
+        Assert.Contains(boxes, b => b.Text == "Line one");
+        Assert.Contains(boxes, b => b.Text == "Line two");
+        Assert.Contains(boxes, b => b.Text == "Line three");
+    }
+
+    [Fact]
+    public void Journal_TextBoxesAddAndDelete_Replay()
+    {
+        var docPath = WritePdf();
+        List<JournalEntry> entries;
+        using (var doc = _engine.Open(docPath))
+        {
+            var add = new AddTextBoxesOperation(doc, 0, ["First line", "Second line"], 14,
+                new PdfPoint(150, 300));
+            add.Apply();
+            entries = [add.ToJournalEntry(inverse: false)];
+        }
+
+        using (var fresh = _engine.Open(docPath))
+        {
+            Assert.Equal(1, JournalReplayer.Replay(fresh, entries));
+            using var freshPage = fresh.GetPage(0);
+            var boxes = freshPage.GetTextBoxes();
+            Assert.Equal(2, boxes.Count);
+            Assert.Contains(boxes, b => b.Text == "First line");
+            Assert.Contains(boxes, b => b.Text == "Second line");
+        }
+
+        // The undo direction: replaying the add's inverse must remove both lines.
+        using (var doc = _engine.Open(docPath))
+        {
+            var add = new AddTextBoxesOperation(doc, 0, ["First line", "Second line"], 14,
+                new PdfPoint(150, 300));
+            add.Apply();
+            var deleteEntries = new List<JournalEntry>
+            {
+                add.ToJournalEntry(inverse: false),
+                add.ToJournalEntry(inverse: true),
+            };
+
+            using var fresh = _engine.Open(docPath);
+            Assert.Equal(2, JournalReplayer.Replay(fresh, deleteEntries));
+            using var freshPage = fresh.GetPage(0);
+            Assert.Empty(freshPage.GetTextBoxes());
+        }
+    }
+
     [Fact]
     public void TextBoxOperation_UndoRedo_AndSave()
     {

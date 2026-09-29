@@ -31,6 +31,9 @@ namespace MegaPDF.Core.Recovery;
 [JsonDerivedType(typeof(TextBoxAddEntry), "textBoxAdd")]
 [JsonDerivedType(typeof(TextBoxRestyleEntry), "textBoxRestyle")]
 [JsonDerivedType(typeof(MoveTextBoxEntry), "moveTextBox")]
+[JsonDerivedType(typeof(MoveWhiteoutEntry), "moveWhiteout")]
+[JsonDerivedType(typeof(TextBoxesAddEntry), "textBoxesAdd")]
+[JsonDerivedType(typeof(TextBoxesDeleteEntry), "textBoxesDelete")]
 public abstract record JournalEntry(int PageIndex);
 
 public sealed record TextEditEntry(int PageIndex, int ObjectIndex, string NewText) : JournalEntry(PageIndex);
@@ -94,6 +97,16 @@ public sealed record WhiteoutAddEntry(int PageIndex, double X, double Y, double 
 /// <summary>Removal is resolved by bounds at replay time (content indexes shift).</summary>
 public sealed record WhiteoutRemoveEntry(int PageIndex, double X, double Y, double Width, double Height) : JournalEntry(PageIndex);
 
+/// <summary>
+/// Whiteout move/resize (#3): resolved by the from-bounds at replay time (content
+/// indexes shift), the same convention <see cref="MoveTextBoxEntry"/> uses — and for
+/// the same reason: a move detaches the old rectangle and appends a fresh one
+/// (MoveWhiteoutOperation, in Editing), so there is no stable index to record.
+/// </summary>
+public sealed record MoveWhiteoutEntry(
+    int PageIndex, double FromX, double FromY, double FromWidth, double FromHeight,
+    double ToX, double ToY, double ToWidth, double ToHeight) : JournalEntry(PageIndex);
+
 public sealed record FormTextEntry(int PageIndex, string FieldName, string NewValue) : JournalEntry(PageIndex);
 
 public sealed record CheckToggleEntry(int PageIndex, string FieldName) : JournalEntry(PageIndex);
@@ -110,6 +123,22 @@ public sealed record MoveStampEntry(int PageIndex, string StampId, double X, dou
 /// boxes are all Helvetica, which is the default.
 /// </summary>
 public sealed record TextBoxAddEntry(int PageIndex, string Text, double FontSize, double X, double Y, string FontName = StandardTextBoxFonts.Default) : JournalEntry(PageIndex);
+
+/// <summary>
+/// A Shift+Enter note of more than one line (#4): replayed the same way as
+/// <see cref="TextBoxAddEntry"/>, one AppendTextBox per line, top to bottom at the
+/// face's own line height (<c>AddTextBoxesOperation.LineHeightFactor</c>).
+/// </summary>
+public sealed record TextBoxesAddEntry(int PageIndex, string[] Lines, double FontSize, double X, double Y,
+                                       string FontName = StandardTextBoxFonts.Default) : JournalEntry(PageIndex);
+
+/// <summary>
+/// Undo of a multi-line note: every line's object index, recorded together because they
+/// were made together — an undo replay detaches them all as the one step that placed
+/// them (raw indexes, the same convention <see cref="TextDeleteEntry"/> uses, are valid
+/// here because replay reconstructs them by re-running every earlier entry in order).
+/// </summary>
+public sealed record TextBoxesDeleteEntry(int PageIndex, int[] ObjectIndexes) : JournalEntry(PageIndex);
 
 /// <summary>
 /// Text-box restyle (#43): replayed by detaching whatever sits at the index and

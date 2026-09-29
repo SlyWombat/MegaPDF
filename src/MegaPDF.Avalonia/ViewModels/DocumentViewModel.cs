@@ -652,6 +652,15 @@ public sealed partial class DocumentViewModel : ObservableObject, IDisposable
         return page.GetTextBoxes();
     }
 
+    /// <summary>MegaPDF whiteouts on a page (object index + bounds) — what move/resize address (#3).</summary>
+    internal IReadOnlyList<(int ObjectIndex, PdfRect Bounds)> WhiteoutsOn(int pageIndex)
+    {
+        if (_document is null)
+            return [];
+        using var page = _document.GetPage(pageIndex);
+        return page.GetWhiteouts();
+    }
+
     /// <summary>Visual lines of body text on a page — what F1 edits (SDD §3.1).</summary>
     internal IReadOnlyList<PdfTextLine> LinesOn(int pageIndex)
     {
@@ -729,8 +738,12 @@ public sealed partial class DocumentViewModel : ObservableObject, IDisposable
                 break;
 
             case PageHitKind.Whiteout:
-                // Remove-only chrome: a cover is redrawn rather than nudged, which is
-                // simpler and is how the Windows app behaves.
+                // Selects for move, resize and delete, exactly like a signature (#3).
+                // There is no native "move a whiteout in place" — it is page content,
+                // not an annotation — so a move is Add and Remove's own two primitives
+                // recombined (MoveWhiteoutOperation): the object index this selection
+                // carries is only good until the first move, which is why a move
+                // re-anchors it afterwards (see ReanchorWhiteout).
                 Select(new PageSelection(pageIndex, SelectionKind.Whiteout, hit.Bounds!.Value,
                                          ObjectIndex: hit.ObjectIndex!.Value));
                 break;
@@ -1400,12 +1413,14 @@ public sealed partial class DocumentViewModel : ObservableObject, IDisposable
         /// <summary>
         /// A signature has a rectangle worth resizing, and so does a redaction mark (#329):
         /// the mark is an area, and the person is deciding what it covers, so it wants the
-        /// same corner handles rather than the drag the core happened to grow.
+        /// same corner handles rather than the drag the core happened to grow. A cover is
+        /// exactly that kind of area too (#3) — added text is the one placed thing that
+        /// is not, because its size is a font size rather than a rectangle.
         /// </summary>
-        public bool CanResize => Kind is SelectionKind.Signature or SelectionKind.RedactionMark;
+        public bool CanResize => Kind is SelectionKind.Signature or SelectionKind.RedactionMark or SelectionKind.Whiteout;
 
-        /// <summary>A cover is redrawn rather than nudged, and a mark moves like a signature.</summary>
-        public bool CanMove => Kind is SelectionKind.Signature or SelectionKind.TextBox or SelectionKind.RedactionMark;
+        /// <summary>Everything placed on the page moves like a signature; only its resize offer differs.</summary>
+        public bool CanMove => Kind is SelectionKind.Signature or SelectionKind.TextBox or SelectionKind.RedactionMark or SelectionKind.Whiteout;
     }
 
     [ObservableProperty]
@@ -1568,6 +1583,13 @@ public sealed partial class DocumentViewModel : ObservableObject, IDisposable
             case SelectionKind.RedactionMark:
                 MoveRedactionMark(sel.PageIndex, sel.MarkId, sel.Bounds, newBounds);
                 break;
+            case SelectionKind.Whiteout:
+                // Unlike the other three kinds, a whiteout's object index does NOT survive
+                // a move (#3 — MoveWhiteoutOperation detaches and re-appends), so this one
+                // re-anchors the selection itself once the real index is known, rather
+                // than through the optimistic assignment below.
+                MoveWhiteout(sel.PageIndex, sel.ObjectIndex, sel.Bounds, newBounds);
+                break;
             case SelectionKind.TextBox:
                 // Cancel on the #139 warning leaves the box where it was: so does the selection.
                 MoveTextBox(sel.PageIndex, sel.Run!, newBounds, cancelled: () =>
@@ -1581,7 +1603,9 @@ public sealed partial class DocumentViewModel : ObservableObject, IDisposable
         }
 
         // Re-anchor the chrome; the id and object index survive a move, so the
-        // selection is still valid afterwards.
+        // selection is still valid afterwards. A whiteout's ObjectIndex is stale here
+        // (it always changes on a move) — MoveWhiteout's own applied callback corrects
+        // it right after, once the operation has actually run.
         Selection = sel with { Bounds = newBounds };
     }
 
@@ -1712,6 +1736,19 @@ public sealed partial class DocumentViewModel : ObservableObject, IDisposable
         }
     }
     public IReadOnlyList<double> TextSizes { get; } = [8, 9, 10, 11, 12, 14, 16, 18, 24];
+
+    /// <summary>
+    /// The persona-simple S/M/L choice the inline editor offers alongside the toolbar's
+    /// full point-size list (#4) — someone adding a quick note should not have to think
+    /// in points. All three are already on <see cref="TextSizes"/>, so choosing one here
+    /// and opening the toolbar's picker afterwards shows the same value selected in both.
+    /// </summary>
+    public const double TextSizeSmall = 9;
+
+    /// <summary>The size added text already defaults to.</summary>
+    public const double TextSizeMedium = 12;
+
+    public const double TextSizeLarge = 18;
 
     [RelayCommand(CanExecute = nameof(CanAddText))]
     private void ToggleAddText() => SetMode(Mode == PageMode.AddText ? PageMode.Select : PageMode.AddText);
@@ -1973,14 +2010,51 @@ public sealed partial class DocumentViewModel : ObservableObject, IDisposable
               Strings.RedactMarkMoved);
     }
 
+    /// <summary>
+    /// Moves or resizes a whiteout (#3), drag or corner handle, exactly like a signature.
+    /// Unlike a signature's id or a mark's id, a whiteout's object index does not survive
+    /// the move — there is no native "move in place" for page content, so this detaches
+    /// the old rectangle and appends a fresh one (MoveWhiteoutOperation) — which is why the
+    /// selection is re-anchored on the real index once the move has actually landed,
+    /// rather than assumed to still be valid.
+    /// </summary>
+    public void MoveWhiteout(int pageIndex, int objectIndex, PdfRect oldBounds, PdfRect newBounds)
+    {
+        if (_document is null || newBounds == oldBounds)
+            return;
+
+        var op = new MoveWhiteoutOperation(_document, pageIndex, objectIndex, oldBounds, newBounds);
+        Apply(op, Strings.CoverMoved, applied: () => ReanchorWhiteout(pageIndex, op));
+    }
+
+    /// <summary>After a whiteout move, points the selection at the object the move actually
+    /// produced — see <see cref="MoveWhiteout"/> for why this is needed at all.</summary>
+    private void ReanchorWhiteout(int pageIndex, MoveWhiteoutOperation op)
+    {
+        if (Selection is { Kind: SelectionKind.Whiteout } current && current.PageIndex == pageIndex)
+            Selection = current with { ObjectIndex = op.CurrentObjectIndex };
+    }
+
     /// <summary>Adds a text box with the current face and size (SDD §3.1).</summary>
+    ///
+    /// <remarks>
+    /// A Shift+Enter note (#4) arrives here as one string with embedded newlines — the
+    /// view is where the key is caught, this is where it is turned into objects. More
+    /// than one line becomes that many text boxes, one per line, because there is no
+    /// multi-line text object in the format this app writes; a single line takes the
+    /// older, simpler operation unchanged. Either way it is one undo step.
+    /// </remarks>
     public void AddTextBox(int pageIndex, PdfPoint topLeft, string text)
     {
         if (_document is null || string.IsNullOrWhiteSpace(text))
             return;
 
-        Apply(new AddTextBoxOperation(_document, pageIndex, text, TextSize, topLeft, TextFont),
-              Strings.TextAdded);
+        var lines = text.Replace("\r\n", "\n").Split('\n');
+        IPageEditOperation op = lines.Length > 1
+            ? new AddTextBoxesOperation(_document, pageIndex, lines, TextSize, topLeft, TextFont)
+            : new AddTextBoxOperation(_document, pageIndex, text, TextSize, topLeft, TextFont);
+
+        Apply(op, Strings.TextAdded);
         SetMode(PageMode.Select);
     }
 
