@@ -109,16 +109,24 @@ sha256 is unchanged; fill a line, tick a box, place a signature, Save, reopen an
 result back **outside MegaPDF** (`pdftotext`, `qpdf --check`); **About** says the version;
 switch to **fr-CA** and read the chrome; close dirty and get the prompt, per tab.
 
-On Windows two parts of this *are* automated, and have to be run by hand because CI cannot
+On Windows three parts of this *are* automated, and have to be run by hand because CI cannot
 (#462): from a built tree on GPD-DAVE,
 `MegaPDF.exe --screenshot <out.png> --screenshot-state reading <fixture.pdf>` drives
 reading mode in a real window — Ctrl+H's command, the Escape ladder, the tab order,
 the floating bar's screen-reader rule, the page colours and the shared settings
 (#504/#510). `MegaPDF.exe --screenshot <out.png> --screenshot-state zoom-anchor --window
 900x700 <fixture.pdf>` drives a menu/keyboard zoom, a clamped zoom and a Ctrl+wheel notch
-and asserts the point each one was anchored on has not moved (#528). Both print a
-PASS/FAIL line per check and **the exit code is the test**. Run them before the package
-checks below; `reading` puts the settings it writes back as it found them.
+and asserts the point each one was anchored on has not moved (#528).
+`MegaPDF.exe --screenshot <out.png> --screenshot-state close-tabs <fixture.pdf>` drives
+closing a tab, replacing a tab's document, and the window closing with tabs still open,
+and asserts each document was actually disposed — not just that its tab left the strip
+(#543). All three print a PASS/FAIL line per check and **the exit code is the test**. Run
+them before the package checks below; `reading` puts the settings it writes back as it
+found them. `reading`'s own multi-tab check opens a second tab on a fixture named
+`demo.pdf` beside the one passed on the command line — passing `demo.pdf` itself as
+`<fixture.pdf>` makes that check activate the already-open tab instead of opening a
+second one and fails for that reason, not a real regression; use `fixture.pdf` (or any
+other name) for the primary argument.
 
 | Platform | Where | Build under test | Version read-back |
 |---|---|---|---|
