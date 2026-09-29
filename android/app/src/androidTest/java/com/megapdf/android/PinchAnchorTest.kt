@@ -80,17 +80,21 @@ class PinchAnchorTest {
         val yFrac = 0.30f
         val before = anchorOnScreen(xFrac, yFrac)
 
-        // The pinch is centred at that same point, computed from this touch scope's own
-        // width/height (the same node, read the same way `center` is) rather than a value
-        // captured outside it. The two fingers move symmetrically apart around it, the shape
-        // a real two-finger zoom makes. The ratio this particular gesture asks for (≈1.8x)
-        // keeps the total zoom (2x already, before it starts) comfortably under MAX_ZOOM's
-        // 4x — the clamp case belongs to PinchAnchorMathTest, not this test.
+        // The pinch is centred at that same point, in the same full-node coordinate space
+        // [anchorOnScreen] measures in (`fetchSemanticsNode().size`) rather than this touch
+        // scope's own `width`/`height` — the page is several screens tall once zoomed in, and
+        // `width`/`height` here are the visible, on-screen extent, not the full node's, so
+        // building the anchor from them was targeting a different point than the one being
+        // measured. The two fingers move symmetrically apart around it, the shape a real
+        // two-finger zoom makes. The ratio this particular gesture asks for (≈1.8x) keeps the
+        // total zoom (2x already, before it starts) comfortably under MAX_ZOOM's 4x — the
+        // clamp case belongs to PinchAnchorMathTest, not this test.
+        val anchorNode = rule.page().fetchSemanticsNode()
+        val anchorLocal = Offset(anchorNode.size.width * xFrac, anchorNode.size.height * yFrac)
         rule.page().performTouchInput {
-            val anchor = Offset(width * xFrac, height * yFrac)
             pinch(
-                start0 = anchor - Offset(150f, 100f), end0 = anchor - Offset(275f, 175f),
-                start1 = anchor + Offset(150f, 100f), end1 = anchor + Offset(275f, 175f),
+                start0 = anchorLocal - Offset(150f, 100f), end0 = anchorLocal - Offset(275f, 175f),
+                start1 = anchorLocal + Offset(150f, 100f), end1 = anchorLocal + Offset(275f, 175f),
                 durationMillis = 400,
             )
         }
