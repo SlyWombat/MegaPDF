@@ -3285,20 +3285,25 @@ internal static class Program
                 window.EnterReadingMode();
                 Pump();
                 vm.HandlePageClick(0, tick);
-                Pump();
+                // Long enough that a change on its way would have arrived: with a window
+                // attached the view model runs its work off the UI thread (#145), so
+                // "nothing happened" has to be given the same chance to be wrong as
+                // "something happened" is given below.
+                PumpFor(TimeSpan.FromMilliseconds(500));
                 check("a click on the page in reading mode does nothing at all",
                       !vm.IsDirty && !vm.CanUndo);
 
                 window.ExitReadingMode();
                 Pump();
                 vm.HandlePageClick(0, tick);
-                Pump();
+                PumpUntil(() => vm.IsDirty && !vm.Busy.IsBusy, TimeSpan.FromSeconds(20));
                 check("  and the same click works again once the mode is off",
                       vm.IsDirty && vm.CanUndo);
                 // Undo is live throughout — it acts on the document, not on the page,
                 // and the plan keeps it live inside the mode for that reason.
                 vm.UndoCommand.Execute(null);
-                Pump();
+                PumpUntil(() => !vm.Busy.IsBusy && vm.HitTest(0, tick).Kind == PageHitKind.DrawnCheckbox,
+                          TimeSpan.FromSeconds(20));
                 check("  undo was never disabled by the mode, and takes the mark off again",
                       vm.HitTest(0, tick).Kind == PageHitKind.DrawnCheckbox);
 
