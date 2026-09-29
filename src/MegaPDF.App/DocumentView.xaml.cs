@@ -5,6 +5,7 @@ using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
+using Windows.Foundation;
 using Windows.System;
 
 namespace MegaPDF.App;
@@ -67,6 +68,16 @@ public sealed partial class DocumentView : UserControl
 
     private bool _wired;
 
+    /// <summary>
+    /// The zoom the last correction (or this view's own construction) ran from (#528)
+    /// — the "before" value <see cref="OnDocumentViewLoaded"/>'s <c>ZoomPercent</c>
+    /// branch reads to correct from, since <see cref="System.ComponentModel.PropertyChangedEventArgs"/>
+    /// carries no old value of its own. Set once, here — unlike the Avalonia leg's
+    /// equivalent field, this view is never rebound to a different <see cref="DocumentViewModel"/>
+    /// (see this class's own remark), so there is no tab-switch case that needs it reset.
+    /// </summary>
+    private double _lastKnownZoomFactor;
+
     public DocumentView()
     {
         InitializeComponent();
@@ -83,6 +94,7 @@ public sealed partial class DocumentView : UserControl
         _wired = true;
 
         ViewModel.View = this;
+        _lastKnownZoomFactor = ViewModel.ZoomFactor;
         ViewModel.ScrollRestoreRequested += offset =>
             DispatcherQueue.TryEnqueue(() => PagesScroll.ChangeView(null, offset, null, disableAnimation: true));
         ViewModel.SearchScrollRequested += target =>
@@ -102,6 +114,25 @@ public sealed partial class DocumentView : UserControl
                 CloseFindBar();
             if (ev.PropertyName is nameof(DocumentViewModel.IsTextBoxMode))
                 TextStyleContextChanged?.Invoke(this, EventArgs.Empty);
+            // Zoom from the toolbar, the zoom menu, a keyboard accelerator, a Fit command
+            // or the reading-mode floating bar's own buttons (#541) has no pointer or
+            // gesture to anchor on (#528), so it anchors on the viewport's centre —
+            // corrected here, the one place every ZoomPercent change is already observed,
+            // rather than at each of the several call sites (a toolbar button's Command
+            // binding runs straight from XAML with nothing in code-behind to hook).
+            // Ctrl+wheel (OnPagesPointerWheel) already anchored the offset on the pointer
+            // itself before this fires, and the remembered-zoom restore on a freshly
+            // (re)opened document isn't a zoom the user aimed anywhere — ViewModel.SuppressZoomAnchor
+            // is how both of those tell this branch to leave the offset alone.
+            if (ev.PropertyName is nameof(DocumentViewModel.ZoomPercent))
+            {
+                // Snapshotted before UpdateLayout() below, not read from ViewModel.ZoomFactor
+                // at the point of use — see ReanchorAtViewportCentre's own remark on why.
+                var oldZoomFactor = _lastKnownZoomFactor;
+                if (!ViewModel.SuppressZoomAnchor)
+                    ReanchorAtViewportCentre(oldZoomFactor);
+                _lastKnownZoomFactor = ViewModel.ZoomFactor;
+            }
         };
 
         InitializePageKeyboard();
@@ -1173,16 +1204,102 @@ public sealed partial class DocumentView : UserControl
 
     private async void OnPagesPointerWheel(object sender, PointerRoutedEventArgs e)
     {
-        // Ctrl+wheel zooms — the idiom every tester tries first.
+        // Ctrl+wheel zooms — the idiom every tester tries first, anchored on wherever
+        // the pointer was for that notch, not on the layout's top-left corner (#528).
         var ctrl = (e.KeyModifiers & Windows.System.VirtualKeyModifiers.Control) != 0;
         if (!ctrl)
             return;
         e.Handled = true;
-        var delta = e.GetCurrentPoint(PagesScroll).Properties.MouseWheelDelta;
-        if (delta > 0 && ViewModel.ZoomInCommand.CanExecute(null))
-            await ViewModel.ZoomInCommand.ExecuteAsync(null);
-        else if (delta < 0 && ViewModel.ZoomOutCommand.CanExecute(null))
-            await ViewModel.ZoomOutCommand.ExecuteAsync(null);
+        var point = e.GetCurrentPoint(PagesScroll);
+        await ApplyWheelZoomAsync(point.Position, point.Properties.MouseWheelDelta);
+    }
+
+    /// <summary>
+    /// One Ctrl+wheel notch (#528), anchored on <paramref name="anchorViewport"/> — the
+    /// pointer's position over <c>PagesScroll</c> at the time of the notch. Split out of
+    /// <see cref="OnPagesPointerWheel"/>, which does nothing but read that position and
+    /// the wheel's sign off a real <see cref="PointerRoutedEventArgs"/>, so the
+    /// zoom-anchor self-test (<c>--screenshot-state zoom-anchor</c>, see Screenshot.cs)
+    /// can drive the actual zoom-and-correct logic with a synthetic anchor point and a
+    /// bare delta: WinUI hands out no public constructor for
+    /// <see cref="PointerRoutedEventArgs"/>, so a real one cannot be built here or from
+    /// a test, the same reason <c>--screenshot-state reading</c> drives reading mode's
+    /// own methods directly rather than replaying Ctrl+H or Escape.
+    /// </summary>
+    internal async Task ApplyWheelZoomAsync(Point anchorViewport, int wheelDelta)
+    {
+        if (wheelDelta > 0 && ViewModel.ZoomInCommand.CanExecute(null))
+            await ApplyAnchoredZoomAsync(anchorViewport, () => ViewModel.ZoomInCommand.ExecuteAsync(null));
+        else if (wheelDelta < 0 && ViewModel.ZoomOutCommand.CanExecute(null))
+            await ApplyAnchoredZoomAsync(anchorViewport, () => ViewModel.ZoomOutCommand.ExecuteAsync(null));
+    }
+
+    /// <summary>
+    /// Runs <paramref name="applyZoom"/> and then moves <c>PagesScroll</c>'s offset so
+    /// the content under <paramref name="anchorViewport"/> is still there afterwards
+    /// (#528) — the correction Ctrl+wheel owns for itself rather than leaving to the
+    /// generic viewport-centre branch in <c>OnDocumentViewLoaded</c>'s
+    /// <c>ViewModel.PropertyChanged</c> handler, which <see cref="DocumentViewModel.SuppressZoomAnchor"/>
+    /// is set here to skip for the change <paramref name="applyZoom"/> is about to make
+    /// — without it, a wheel notch would be corrected twice: once precisely, on the
+    /// pointer, and once more on the centre, which would drag the page the second
+    /// correction undid the first.
+    /// </summary>
+    private async Task ApplyAnchoredZoomAsync(Point anchorViewport, Func<Task> applyZoom)
+    {
+        var oldZoomFactor = ViewModel.ZoomFactor;
+        var oldOffset = new Point(PagesScroll.HorizontalOffset, PagesScroll.VerticalOffset);
+
+        ViewModel.SuppressZoomAnchor = true;
+        try
+        {
+            await applyZoom();
+        }
+        finally
+        {
+            ViewModel.SuppressZoomAnchor = false;
+        }
+
+        ReanchorOffset(oldOffset, oldZoomFactor, anchorViewport);
+        _lastKnownZoomFactor = ViewModel.ZoomFactor;
+    }
+
+    /// <summary>
+    /// Corrects <c>PagesScroll</c>'s offset for a <see cref="DocumentViewModel.ZoomPercent"/>
+    /// change that already happened, anchored on the viewport's own centre (#528) — the
+    /// only sensible anchor for the toolbar, the zoom menu, a keyboard accelerator, a Fit
+    /// command or the reading-mode bar's zoom buttons, none of which carry a position.
+    /// </summary>
+    private void ReanchorAtViewportCentre(double oldZoomFactor)
+    {
+        var oldOffset = new Point(PagesScroll.HorizontalOffset, PagesScroll.VerticalOffset);
+        var centre = new Point(PagesScroll.ViewportWidth / 2, PagesScroll.ViewportHeight / 2);
+        ReanchorOffset(oldOffset, oldZoomFactor, centre);
+    }
+
+    /// <summary>
+    /// The shared tail of <see cref="ApplyAnchoredZoomAsync"/> and
+    /// <see cref="ReanchorAtViewportCentre"/> (#528): force the pending layout pass so
+    /// the new extent is there to read and clamp against, then move the offset to what
+    /// <see cref="MegaPDF.App.ZoomAnchor.Reanchor"/> computes from it.
+    ///
+    /// <paramref name="oldOffset"/> and <paramref name="oldZoomFactor"/> come in as
+    /// parameters, already read by the caller, rather than being read from
+    /// <c>PagesScroll</c>/<see cref="DocumentViewModel.ZoomFactor"/> in here, after
+    /// <c>UpdateLayout()</c> — forcing a layout pass is exactly the call the Avalonia
+    /// leg's own #528 fix found re-entering its viewport update and silently turning
+    /// every centre-anchored correction into a no-op, because the "old" value it meant
+    /// to read had already been overwritten with the new one by the time it read it.
+    /// Nothing here re-enters this class the same way (<see cref="OnPagesScrollViewChanged"/>
+    /// does not touch <c>_lastKnownZoomFactor</c>), but taking both values in as
+    /// snapshots rather than fields read late keeps that true by construction instead
+    /// of by this method happening not to trip over it.
+    /// </summary>
+    private void ReanchorOffset(Point oldOffset, double oldZoomFactor, Point anchorViewport)
+    {
+        PagesScroll.UpdateLayout();
+        var corrected = ZoomAnchor.Reanchor(oldOffset, oldZoomFactor, ViewModel.ZoomFactor, anchorViewport);
+        PagesScroll.ChangeView(corrected.X, corrected.Y, null, disableAnimation: true);
     }
 
     // --- Scroll-tracking page indicator ---
