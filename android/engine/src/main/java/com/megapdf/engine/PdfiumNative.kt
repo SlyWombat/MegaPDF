@@ -158,6 +158,29 @@ internal object PdfiumNative {
         handle: Long, firstPage: Int, pageCount: Int, format: Int, options: IntArray?, out: OutputStream,
     ): Int
 
+    // Contract 10: page tools (#174). Rotate, delete, restore, move, insert a blank page,
+    // combine pages in from another file, extract pages to a new one. Page indices are 0-based
+    // like [nativeOpenPage]'s, and every call answers the core's own status — [STATUS_FIELDS],
+    // [STATUS_RESTRICTED] and the rest — because what the app owes the user is *which* refusal
+    // this was, not that something failed.
+    external fun nativePageIndex(handle: Long): Int
+    external fun nativePageRotation(handle: Long, page: Int): Int
+    external fun nativePageRotate(handle: Long, page: Int, quarterTurns: Int): Int
+    /** [status, removedPage]; the second is 0 without [keep], and 0 whenever the delete failed. */
+    external fun nativePageDelete(handle: Long, page: Int, keep: Boolean): LongArray?
+    external fun nativePageRestore(handle: Long, removed: Long, at: Int): Int
+    external fun nativeDiscardRemovedPage(removed: Long)
+    external fun nativePageMove(handle: Long, from: Int, to: Int): Int
+    external fun nativePageInsertBlank(handle: Long, at: Int, width: Double, height: Double): Int
+    /** [status, imported]; [pages] null means every page of the other file. */
+    external fun nativePagesImport(
+        handle: Long, pathUtf8: ByteArray, unlockUtf8: ByteArray?, pages: IntArray?, insertAt: Int,
+    ): IntArray?
+    /** [pages] null means every page; [cancel] is a flag handle from [nativeCancelNew], or 0. */
+    external fun nativePagesExtract(
+        handle: Long, pages: IntArray?, outPathUtf8: ByteArray, cancel: Long,
+    ): Int
+
     // megapdf_write_options.format (megapdf_core.h, #386).
     const val WRITE_FORMAT_TEXT = 0
     const val WRITE_FORMAT_MARKDOWN = 1
@@ -184,6 +207,27 @@ internal object PdfiumNative {
     // megapdf_status codes (megapdf_core.h) the page check returns (#145).
     const val STATUS_CANCELLED = -7
     const val STATUS_NOT_JUDGED = -8
+
+    // The rest of megapdf_status, for the page tools (#174), which are the first calls on this
+    // boundary whose refusals the app has to tell apart from one another.
+    const val STATUS_OK = 0
+    /** MEGAPDF_ERR_ARGUMENT: a bad index — or the last page of a document, which may not go. */
+    const val STATUS_ARGUMENT = -1
+    const val STATUS_PDFIUM = -2
+    const val STATUS_MEMORY = -3
+    /** MEGAPDF_ERR_RESTRICTED: this document's security does not allow it; its owner password would. */
+    const val STATUS_RESTRICTED = -6
+    /** MEGAPDF_ERR_FILE: a file could not be created, read or written. */
+    const val STATUS_FILE = -9
+
+    /**
+     * MEGAPDF_ERR_FIELDS (#174, #452): the pages carry form fields in a /Parent hierarchy the
+     * copy cannot carry across — a widget whose name, type or value lives on a parent field
+     * dictionary, as LiveCycle and most authoring tools write them. About 0.8% of a real
+     * corpus. The refusal is deliberate and whole: nothing is changed, because the alternative
+     * is a document whose fields silently lost their names.
+     */
+    const val STATUS_FIELDS = -11
 
     // FPDF_GetLastError codes (fpdfview.h).
     const val ERR_PASSWORD = 4

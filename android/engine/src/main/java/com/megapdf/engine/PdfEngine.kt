@@ -151,6 +151,19 @@ class PdfEngine {
             teardownScope.launch { document.close() }
         }
 
+        /**
+         * Frees a deleted page the core was holding for an undo that will never be made (#174):
+         * the undo history dropped its oldest entry, or cleared its redo branch. Detached for
+         * the same reason [closeDetached] is — the callers are not coroutines and must not wait
+         * — and on the engine thread because freeing one closes a PDFium document.
+         */
+        internal fun discardRemovedPage(owner: PdfDocument, removed: Long) {
+            teardownScope.launch {
+                // Its document may have closed meanwhile, which freed it (#549's rule).
+                if (!owner.isClosed) PdfiumNative.nativeDiscardRemovedPage(removed)
+            }
+        }
+
         @Synchronized
         fun ensureInitialized() {
             if (!initialized) {
@@ -528,6 +541,12 @@ class PdfPage internal constructor(
     val heightPoints: Double,
 ) {
     private var closed = false
+
+    /** The native handle, for contract 10's `megapdf_page_index` (`PageTools.kt`, #174). */
+    internal fun nativePageHandle(): Long {
+        check(!closed) { "page is closed" }
+        return handle
+    }
 
     /**
      * Renders the full page into [bitmap] (must be ARGB_8888), scaled to the bitmap's

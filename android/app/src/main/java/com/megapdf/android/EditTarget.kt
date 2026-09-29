@@ -3,6 +3,14 @@ package com.megapdf.android
 import com.megapdf.engine.PdfDocument
 import com.megapdf.engine.PdfPage
 import com.megapdf.engine.PdfRect
+import com.megapdf.engine.RemovedPage
+import com.megapdf.engine.deletePage
+import com.megapdf.engine.deletePageWithoutUndo
+import com.megapdf.engine.importPages
+import com.megapdf.engine.insertBlankPage
+import com.megapdf.engine.movePage
+import com.megapdf.engine.restorePage
+import com.megapdf.engine.rotatePage
 
 /**
  * What a [PdfEditOperation] edits: the open document, as the history needs it.
@@ -33,6 +41,46 @@ interface EditTarget {
 
     /** Removes every mark on every page. */
     suspend fun clearRedactionMarks()
+
+    // ---- Page tools (contract 10, #174) ----------------------------------------------
+    //
+    // Here for the same reason the mark calls are: a page operation's undo is bookkeeping the
+    // core does not do for it — which page a restore goes back at, in which order a selection of
+    // deletes is taken back — and a JVM fake standing in for the engine is the only way to drive
+    // a whole sequence of them without an emulator. The delete hands back a [RestorablePage]
+    // rather than the engine's own handle so that fake can exist at all.
+
+    /** Turns the page by [quarterTurns] quarter turns clockwise; negative is anticlockwise. */
+    suspend fun rotatePage(pageIndex: Int, quarterTurns: Int)
+
+    /** Deletes the page, keeping it for an undo. */
+    suspend fun deletePage(pageIndex: Int): RestorablePage
+
+    /** Deletes the page for good — the undo of an insert, which has nothing to put back. */
+    suspend fun deletePageWithoutUndo(pageIndex: Int)
+
+    /** Puts a deleted page back at [at]; the handle is spent afterwards. */
+    suspend fun restorePage(page: RestorablePage, at: Int)
+
+    /** Moves the page at [from] so that it stands at [to] afterwards. */
+    suspend fun movePage(from: Int, to: Int)
+
+    suspend fun insertBlankPage(at: Int, widthPoints: Double, heightPoints: Double)
+
+    /** Combines the pages of the PDF at [path] in before [insertAt]; answers how many arrived. */
+    suspend fun importPages(path: String, insertAt: Int): Int
+}
+
+/**
+ * A deleted page the engine is holding so an undo can put it back (#174).
+ *
+ * An interface, not the engine's `RemovedPage`: what the history holds must be something a JVM
+ * test can hand it (see [EditTarget]). [discard] is called when the operation holding it leaves
+ * the undo history for good, so a long session of deletes does not keep every deleted page alive
+ * for as long as the document is open.
+ */
+interface RestorablePage {
+    fun discard()
 }
 
 /** The open document as an [EditTarget]. */
@@ -57,6 +105,32 @@ class PdfDocumentTarget(private val doc: PdfDocument) : EditTarget {
         onPage(pageIndex) { page -> markIds.forEach { page.removeRedactionMark(it) } }
 
     override suspend fun clearRedactionMarks() = doc.clearRedactionMarks()
+
+    // ---- Page tools (contract 10, #174) ----------------------------------------------
+
+    override suspend fun rotatePage(pageIndex: Int, quarterTurns: Int) =
+        doc.rotatePage(pageIndex, quarterTurns)
+
+    override suspend fun deletePage(pageIndex: Int): RestorablePage =
+        HeldPage(doc.deletePage(pageIndex))
+
+    override suspend fun deletePageWithoutUndo(pageIndex: Int) = doc.deletePageWithoutUndo(pageIndex)
+
+    override suspend fun restorePage(page: RestorablePage, at: Int) =
+        doc.restorePage((page as HeldPage).removed, at)
+
+    override suspend fun movePage(from: Int, to: Int) = doc.movePage(from, to)
+
+    override suspend fun insertBlankPage(at: Int, widthPoints: Double, heightPoints: Double) =
+        doc.insertBlankPage(at, widthPoints, heightPoints)
+
+    override suspend fun importPages(path: String, insertAt: Int): Int =
+        doc.importPages(path = path, insertAt = insertAt)
+
+    /** The engine's own held page, as the history's [RestorablePage]. */
+    private class HeldPage(val removed: RemovedPage) : RestorablePage {
+        override fun discard() = removed.discard()
+    }
 }
 
 /** The open document, ready for the history. */

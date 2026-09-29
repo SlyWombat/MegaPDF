@@ -282,6 +282,8 @@ fun ViewerScreen(
     /** Page colours (#513): what the engine drew the pages under, and what the chrome follows. */
     pageTint: com.megapdf.engine.PageTint = com.megapdf.engine.PageTint.NORMAL,
     onOpenSettings: () -> Unit = {},
+    /** Page tools (#174): opens the Pages grid over the document. */
+    onOpenPages: () -> Unit = {},
 ) {
     var zoom by remember { mutableFloatStateOf(1f) }
     /**
@@ -803,6 +805,16 @@ fun ViewerScreen(
                                 DropdownMenuItem(
                                     text = { Text(stringResource(R.string.reading_mode)) },
                                     onClick = { menuOpen = false; onEnterReadingMode() },
+                                )
+                                // Page tools (#174): its own destination, beside Reading mode
+                                // because it is the same kind of thing — a way of working on the
+                                // document as a whole rather than on the page in front of you.
+                                // The row is never disabled: the grid opens on a restricted
+                                // document too, and says there what it will not let you change,
+                                // rather than a greyed-out row that explains nothing.
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.pages)) },
+                                    onClick = { menuOpen = false; onOpenPages() },
                                 )
                                 HorizontalDivider()
                                 // #328/#329: Redact is not an everyday tool — it removes
@@ -1444,7 +1456,7 @@ private fun DynamicXfaBanner() {
  * region so TalkBack reads it without taking focus.
  */
 @Composable
-private fun BusyStrip(indicator: BusyIndicator) {
+internal fun BusyStrip(indicator: BusyIndicator) {
     val label = indicator.label
     if (!indicator.isVisible || label == null) return
     Column(
@@ -1509,7 +1521,7 @@ private fun PageBusySpinner(spot: BusySpot, label: BusyLabel?, pageSize: PageSiz
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ToolbarAction(
+internal fun ToolbarAction(
     icon: ImageVector,
     label: String,
     onClick: () -> Unit,

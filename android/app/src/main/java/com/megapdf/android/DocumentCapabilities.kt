@@ -18,6 +18,19 @@ data class DocumentCapabilities(
     val canFillForms: Boolean,
     /** Adding, correcting, moving and removing text boxes: modify or fill forms. */
     val canAddText: Boolean,
+    /**
+     * Rotating, deleting, reordering, inserting and combining pages (#174): the assemble
+     * permission, or modify, which contract 10 accepts either of — ISO 32000-2 Table 22 names bit
+     * 11 "assemble the document (insert, rotate or delete pages …)" and bit 4 covers it as well.
+     * Until #174 nothing on any platform consulted `Assemble` at all.
+     */
+    val canAssemblePages: Boolean,
+    /**
+     * Saving a selection of pages as a new file (#174): the copy permission, which is what
+     * `megapdf_pages_extract` asks for — the new file is a copy of part of this document, so a
+     * document that may not be copied from may not be split either.
+     */
+    val canExtractPages: Boolean,
     /** Setting, changing or removing the password: full access only (decision 3). */
     val canChangeSecurity: Boolean,
     val isEncrypted: Boolean,
@@ -57,6 +70,10 @@ data class DocumentCapabilities(
         is TextBoxOperation, is EditTextBoxOperation, is MoveTextBoxOperation -> canAddText
         is StampOperation, is MoveStampOperation, is MarkOperation -> canSign
         is FieldToggleOperation -> canFillForms
+        // The page tools (#174). Extract is not here: it changes nothing and is not an operation.
+        is RotatePagesOperation, is DeletePagesOperation, is MovePageOperation,
+        is InsertBlankPageOperation, is ImportPagesOperation,
+        -> canAssemblePages
         else -> canChangeSecurity
     }
 
@@ -89,6 +106,9 @@ data class DocumentCapabilities(
                 canSign = fillIn,
                 canFillForms = fillIn,
                 canAddText = modify || fillIn,
+                // Either bit, the same pair contract 10's own preflight accepts (#174).
+                canAssemblePages = may(PdfPermissions.ASSEMBLE) || modify,
+                canExtractPages = may(PdfPermissions.COPY),
                 canChangeSecurity = security.hasFullAccess,
                 isEncrypted = security.isEncrypted,
                 isRestricted = security.isEncrypted && !security.hasFullAccess,

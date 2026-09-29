@@ -22,6 +22,7 @@ import com.megapdf.engine.PdfLoadException
 import com.megapdf.engine.PdfPasswordException
 import com.megapdf.engine.PdfPermissions
 import com.megapdf.engine.PdfSecurity
+import com.megapdf.engine.extractPages
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -530,6 +531,499 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
             else -> context.getString(R.string.redact_refused_other)
         }
         return context.getString(R.string.redact_refused_body, (refusal.pageIndex + 1).toString()) + " " + why
+    }
+
+    // --- Page tools (contract 10, #174) ---
+    //
+    // Rotate, delete, reorder, combine and extract. The engine does all of it; what lives here is
+    // the Pages grid's state, the renumbering of everything this side keeps by page index
+    // ([PageShift]), and turning the engine's refusals into sentences.
+    //
+    // Two engine limits reach the person rather than being hidden, and both are deliberate:
+    //
+    //  * **Fields in a hierarchy.** Import and extract refuse a page whose form fields sit in a
+    //    /Parent hierarchy the page copy cannot carry — about 0.8% of a real corpus — and the
+    //    refusal is whole: nothing is changed, because the alternative is a document whose fields
+    //    have quietly lost their names and values. [pageToolRefusal] says so in the user's words.
+    //  * **What PDFium's writer declines.** The other well-known limit — the layout guard that
+    //    declines roughly half the corpus for an edit that would rewrite a page's content (#118,
+    //    #128) — is not reachable from any of these calls, and that is worth stating rather than
+    //    leaving to be discovered: rotating sets /Rotate, and delete, move, insert and import move
+    //    whole page objects. None of them rewrites a content stream, so contract 10 has no
+    //    MEGAPDF_ERR_LAYOUT among its statuses. The warning that guards the edits which *do*
+    //    regenerate a page ([confirmPageRewrite]) therefore stays where it is, and the page tools
+    //    neither ask it nor need to.
+
+    /**
+     * The Pages screen is up. Belongs to the open document, not to the app: closing the document
+     * closes it, and nothing remembers it for the next one.
+     */
+    var isPagesOpen: Boolean by mutableStateOf(false)
+        private set
+
+    /**
+     * Which pages the grid has selected. Page indices, so this is one of the things a page
+     * operation renumbers — a page that is deleted leaves the selection, and a page that moves
+     * stays selected where it went.
+     */
+    var selectedPages: Set<Int> by mutableStateOf(emptySet())
+        private set
+
+    /** Thumbnails for the grid, by page index: the visible window only, as the viewer's are (#147). */
+    val pageThumbnails = mutableStateMapOf<Int, Bitmap>()
+    private val renderedThumbnails = HashMap<Int, RenderedPage>()
+    private var thumbnailJob: Job? = null
+    private var lastThumbnailWindow: RenderWindow? = null
+
+    /**
+     * A page tool refused. Nothing was changed, and the screen says what happened and why — the
+     * same stance the redaction refusal takes (#173): a refusal is information, not a failure.
+     */
+    var pageToolRefusal: com.megapdf.engine.PageToolRefusal? by mutableStateOf(null)
+
+    fun openPages() {
+        if (document == null) return
+        // Editing tools armed in the viewer have nothing to do with pages, and a tool left armed
+        // behind this screen would fire on the way back (the reading-mode rule, #507).
+        redactMode = false
+        pendingSignature = null
+        isPlacingText = false
+        selectedStamp = null
+        selectedTextBox = null
+        selectedRedactionMark = null
+        isPagesOpen = true
+    }
+
+    /** Back out of the grid. The selection and the thumbnails go with it. */
+    fun closePages() {
+        isPagesOpen = false
+        selectedPages = emptySet()
+        dropThumbnails()
+    }
+
+    fun togglePageSelection(pageIndex: Int) {
+        selectedPages =
+            if (pageIndex in selectedPages) selectedPages - pageIndex else selectedPages + pageIndex
+    }
+
+    fun selectAllPages() {
+        selectedPages = ((uiState as? ViewerUiState.Viewing)?.pageSizes?.indices ?: IntRange.EMPTY).toSet()
+    }
+
+    fun clearPageSelection() {
+        selectedPages = emptySet()
+    }
+
+    /**
+     * True when this document's security allows pages to be rearranged; otherwise it says so and
+     * answers false.
+     *
+     * The grid already disables what a restricted document does not allow, so this is the backstop
+     * — and it is a backstop that *speaks*, unlike [showRestricted], whose notice is drawn by the
+     * viewer and would be invisible behind the Pages screen.
+     */
+    private fun assembleAllowed(): Boolean {
+        if (capabilities.canAssemblePages) return true
+        pageToolRefusal = com.megapdf.engine.PageToolRefusal.RESTRICTED
+        return false
+    }
+
+    /** Turns every selected page a quarter turn: clockwise for 1, anticlockwise for -1. */
+    fun rotateSelectedPages(quarterTurns: Int) {
+        val doc = document ?: return
+        val pages = selectedPages.sorted()
+        if (pages.isEmpty() || !assembleAllowed()) return
+        launchPageEdit {
+            performPageEdit(RotatePagesOperation(pages, quarterTurns), doc)
+            statusMessage =
+                if (pages.size == 1) str(R.string.page_turned) else str(R.string.pages_turned, pages.size)
+        }
+    }
+
+    /** Deletes the selection as one undoable step; refuses to empty the document. */
+    fun deleteSelectedPages() {
+        val doc = document ?: return
+        val state = uiState as? ViewerUiState.Viewing ?: return
+        val pages = selectedPages.sorted()
+        // A PDF must keep a page. The button is disabled for this, so reaching it means the
+        // selection changed underneath; either way nothing is asked of the engine.
+        if (pages.isEmpty() || pages.size >= state.pageSizes.size || !assembleAllowed()) return
+        launchPageEdit {
+            selectedPages = emptySet()
+            performPageEdit(DeletePagesOperation(pages), doc)
+            statusMessage =
+                if (pages.size == 1) str(R.string.page_deleted) else str(R.string.pages_deleted, pages.size)
+        }
+    }
+
+    /** Moves one page so that it stands at [to] afterwards — a drag, or *Move to…*. */
+    fun movePage(from: Int, to: Int) {
+        val doc = document ?: return
+        val count = (uiState as? ViewerUiState.Viewing)?.pageSizes?.size ?: return
+        if (from == to || from !in 0 until count || to !in 0 until count || !assembleAllowed()) return
+        launchPageEdit {
+            performPageEdit(MovePageOperation(from, to), doc)
+            statusMessage = str(R.string.page_moved, to + 1)
+        }
+    }
+
+    /**
+     * A blank page after the selection, or at the end when nothing is selected — the size of the
+     * page it follows, so it matches a document of mixed page sizes rather than imposing Letter.
+     */
+    fun insertBlankPage() {
+        val doc = document ?: return
+        val state = uiState as? ViewerUiState.Viewing ?: return
+        if (!assembleAllowed()) return
+        val after = selectedPages.maxOrNull() ?: (state.pageSizes.size - 1)
+        val at = (after + 1).coerceIn(0, state.pageSizes.size)
+        val model = state.pageSizes.getOrNull(after) ?: DEFAULT_PAGE_SIZE
+        launchPageEdit {
+            performPageEdit(
+                InsertBlankPageOperation(at, model.widthPoints, model.heightPoints), doc,
+            )
+            statusMessage = str(R.string.page_inserted, at + 1)
+        }
+    }
+
+    /**
+     * Combine (#174): the pages of the picked PDF, after the selection or at the end.
+     *
+     * The core reads the other file by path and keeps it open for as long as this document is —
+     * imported pages are read from it on demand (#147) — so the picked document is copied into the
+     * cache and opened from there. The copy's *name* goes straight away, as an open does: the file
+     * itself lives on in the engine's own handle, so nothing is left behind in the cache and
+     * nothing has to be cleaned up when the document closes.
+     */
+    fun importPagesFrom(uri: Uri) {
+        val doc = document ?: return
+        val state = uiState as? ViewerUiState.Viewing ?: return
+        if (!assembleAllowed()) return
+        val at = (selectedPages.maxOrNull()?.plus(1) ?: state.pageSizes.size)
+            .coerceIn(0, state.pageSizes.size)
+        val app = getApplication<Application>()
+        launchPageEdit {
+            val copy = File(app.cacheDir, "import-${System.nanoTime()}.pdf")
+            try {
+                withContext(Dispatchers.IO) {
+                    app.contentResolver.openInputStream(uri)?.use { input ->
+                        copy.outputStream().use { input.copyTo(it, COPY_BUFFER_BYTES) }
+                    } ?: throw IllegalStateException("provider returned no stream")
+                }
+                val operation = ImportPagesOperation(copy.path, at)
+                performPageEdit(operation, doc)
+                statusMessage = if (operation.imported == 1) str(R.string.page_added)
+                else str(R.string.pages_added, operation.imported)
+            } finally {
+                withContext(NonCancellable + Dispatchers.IO) { copy.delete() }
+            }
+        }
+    }
+
+    /**
+     * Split (#174): the selected pages as a new PDF at [uri].
+     *
+     * The document is not touched and nothing is recorded — an extract is a copy, not an edit — so
+     * this writes like a Save a copy rather than going through the history: the core writes the
+     * whole file to a temporary name of its own, reopens it and checks its page count, and only
+     * then is it streamed to the destination the picker gave (SAF has no atomic rename, #18).
+     */
+    fun extractSelectedPagesTo(uri: Uri) {
+        val doc = document ?: return
+        val pages = selectedPages.sorted()
+        if (pages.isEmpty() || busy.locksDocument) return
+        if (!capabilities.canExtractPages) {
+            // What an extract needs is the copy bit, which the menu row is already gated on; this
+            // is what says so if it is reached anyway.
+            pageToolRefusal = com.megapdf.engine.PageToolRefusal.RESTRICTED
+            return
+        }
+        val app = getApplication<Application>()
+        // Locks like a save: the pages being copied are read off the document, so an edit going in
+        // underneath would put half of one into the new file.
+        val token = busy.beginDocument(BusyLabel.SAVING, locks = true)
+        viewModelScope.launch {
+            val temp = File(app.cacheDir, "extract-${System.nanoTime()}.pdf")
+            try {
+                doc.extractPages(pages, temp.path)
+                withContext(Dispatchers.IO) {
+                    val pfd = app.contentResolver.openFileDescriptor(uri, "wt")
+                        ?: throw IllegalStateException("provider returned no descriptor")
+                    pfd.use {
+                        java.io.FileOutputStream(it.fileDescriptor).use { out ->
+                            java.io.FileInputStream(temp).use { input -> input.copyTo(out, COPY_BUFFER_BYTES) }
+                            out.fd.sync()
+                        }
+                    }
+                }
+                statusMessage = if (pages.size == 1) str(R.string.page_saved_as)
+                else str(R.string.pages_saved_as, pages.size)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: com.megapdf.engine.PdfPagesException) {
+                pageToolRefusal = e.refusal
+            } catch (_: SecurityException) {
+                statusMessage = str(R.string.save_no_permission)
+            } catch (_: Exception) {
+                statusMessage = str(R.string.pages_save_failed)
+            } finally {
+                withContext(NonCancellable + Dispatchers.IO) { temp.delete() }
+                token.end()
+            }
+        }
+    }
+
+    /** What a refusal means, in the user's words rather than the engine's (#174). */
+    fun describePageToolRefusal(refusal: com.megapdf.engine.PageToolRefusal): String = str(
+        when (refusal) {
+            com.megapdf.engine.PageToolRefusal.RESTRICTED -> R.string.pages_refused_restricted
+            com.megapdf.engine.PageToolRefusal.SOURCE_NEEDS_PASSWORD -> R.string.pages_refused_source_password
+            com.megapdf.engine.PageToolRefusal.SOURCE_RESTRICTED -> R.string.pages_refused_source_restricted
+            com.megapdf.engine.PageToolRefusal.FIELD_HIERARCHY -> R.string.pages_refused_fields
+            com.megapdf.engine.PageToolRefusal.LAST_PAGE -> R.string.pages_refused_last_page
+            com.megapdf.engine.PageToolRefusal.FILE -> R.string.pages_refused_file
+            com.megapdf.engine.PageToolRefusal.REDACTION_POISONED -> R.string.pages_refused_poisoned
+            com.megapdf.engine.PageToolRefusal.ENGINE -> R.string.pages_refused_engine
+        }
+    )
+
+    /**
+     * One page operation, with the busy strip the Pages screen shows and the refusals named.
+     *
+     * A refusal leaves the document exactly as it was, which is contract 10's own promise, so
+     * there is nothing to put back. Anything *else* going wrong is different: a multi-page delete
+     * is several engine calls, and one of them failing part-way would leave the document no longer
+     * the document this side thinks it has — so that path re-reads the pages from the engine
+     * rather than trusting its own bookkeeping.
+     */
+    private fun launchPageEdit(block: suspend () -> Unit) {
+        if (editingBlocked) return
+        editsInFlight++
+        viewModelScope.launch {
+            try {
+                block()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: com.megapdf.engine.PdfPagesException) {
+                pageToolRefusal = e.refusal
+                resyncPagesFromEngine()
+            } catch (_: Exception) {
+                statusMessage = str(R.string.pages_failed)
+                resyncPagesFromEngine()
+            } finally {
+                editsInFlight--
+            }
+        }
+    }
+
+    /** [perform], with document-level busy feedback: the Pages screen draws no page spinners. */
+    private suspend fun performPageEdit(operation: PdfEditOperation, doc: PdfDocument) {
+        val token = busy.beginDocument(BusyLabel.APPLYING)
+        try {
+            perform(operation, doc)
+        } finally {
+            token.end()
+        }
+    }
+
+    /**
+     * Everything this side keeps by page index, renumbered after a page operation (#174).
+     *
+     * The core has already put its own per-page state right — an open page handle follows its
+     * page, and so do that page's marks, verdicts and detached objects — and contract 10 says in
+     * as many words that the app renumbers its own. This is that: the page sizes the list lays
+     * out from, the rendered bitmaps and thumbnails (kept, not thrown away, so a delete does not
+     * cost a re-render of every page that did not move), the grid's selection, and the search
+     * hits. Two things are dropped rather than renumbered on purpose: the marks, because the
+     * core is asked for them again, and the pages already *settled* for the page-rewrite warning
+     * (#139), because a settled index after a move names a different page and being asked once
+     * more is the harmless way to be wrong.
+     */
+    private suspend fun afterPagesRenumbered(shifts: List<PageShift>) {
+        val doc = document ?: return
+        val state = uiState as? ViewerUiState.Viewing ?: return
+        var sizes = state.pageSizes
+        for (shift in shifts) {
+            sizes = sizes.shiftedBy(shift, inserted = insertedPageSizes(doc, shift))
+        }
+        // The engine is the authority on how many pages there are; if this side's arithmetic
+        // disagrees with it, this side is wrong and re-reads rather than lays out a document that
+        // does not exist.
+        val count = doc.pageCount()
+        if (sizes.size != count) sizes = readPageSizes(doc)
+        uiState = state.copy(pageSizes = sizes)
+
+        val movedBitmaps = pageBitmaps.toMap().shiftedBy(shifts)
+        pageBitmaps.clear()
+        pageBitmaps.putAll(movedBitmaps)
+        val movedRenders = renderedPages.toMap().shiftedBy(shifts)
+        renderedPages.clear()
+        renderedPages.putAll(movedRenders)
+        val movedThumbnails = pageThumbnails.toMap().shiftedBy(shifts)
+        pageThumbnails.clear()
+        pageThumbnails.putAll(movedThumbnails)
+        val movedThumbnailKeys = renderedThumbnails.toMap().shiftedBy(shifts)
+        renderedThumbnails.clear()
+        renderedThumbnails.putAll(movedThumbnailKeys)
+
+        selectedPages = selectedPages.shiftedBy(shifts).filter { it < sizes.size }.toSet()
+        searchHits = searchHits.mapNotNull { hit ->
+            shifts.mapIndex(hit.pageIndex).takeIf { it >= 0 }?.let { hit.copy(pageIndex = it) }
+        }
+        currentHitIndex = if (searchHits.isEmpty()) -1 else currentHitIndex.coerceIn(0, searchHits.size - 1)
+        currentPage = currentPage.coerceIn(0, (sizes.size - 1).coerceAtLeast(0))
+        openPageChecks(doc)
+        dirty.markEdited()
+        refreshRedactionMarks()
+        redrawPages(sizes.size)
+    }
+
+    /** The sizes of the pages a shift brought in — only the engine knows them. */
+    private suspend fun insertedPageSizes(doc: PdfDocument, shift: PageShift): List<PageSize> {
+        if (shift !is PageShift.Inserted) return emptyList()
+        return (shift.at until shift.at + shift.count).map { index ->
+            val page = doc.openPage(index)
+            try {
+                PageSize(page.widthPoints, page.heightPoints)
+            } finally {
+                page.close()
+            }
+        }
+    }
+
+    private suspend fun readPageSizes(doc: PdfDocument): List<PageSize> {
+        val count = doc.pageCount()
+        val sizes = ArrayList<PageSize>(count)
+        for (index in 0 until count) {
+            val page = doc.openPage(index)
+            try {
+                sizes += PageSize(page.widthPoints, page.heightPoints)
+            } finally {
+                page.close()
+            }
+        }
+        return sizes
+    }
+
+    /**
+     * A page operation half-applied, or one that failed in a way contract 10 does not promise to
+     * leave the document untouched by: the document is re-read and every picture of it dropped.
+     * Not an optimisation — the alternative is a page list laid out from sizes the document no
+     * longer has.
+     */
+    private suspend fun resyncPagesFromEngine() {
+        val doc = document ?: return
+        val state = uiState as? ViewerUiState.Viewing ?: return
+        val sizes = try {
+            readPageSizes(doc)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            return
+        }
+        if (sizes.size != state.pageSizes.size) dirty.markEdited()
+        uiState = state.copy(pageSizes = sizes)
+        pageBitmaps.clear()
+        renderedPages.clear()
+        dropThumbnails()
+        selectedPages = selectedPages.filter { it < sizes.size }.toSet()
+        currentPage = currentPage.coerceIn(0, (sizes.size - 1).coerceAtLeast(0))
+        openPageChecks(doc)
+        refreshRedactionMarks()
+        redrawPages(sizes.size)
+    }
+
+    /** The pages the viewer and the grid are showing, redrawn for a document that has changed. */
+    private fun redrawPages(pageCount: Int) {
+        lastWindow?.clampedTo(pageCount)?.let {
+            updateRenderWindow(it.firstVisible, it.lastVisible, it.targetWidthPx)
+        }
+        lastThumbnailWindow?.clampedTo(pageCount)?.let {
+            updateThumbnailWindow(it.firstVisible, it.lastVisible, it.targetWidthPx)
+        }
+    }
+
+    /** A rotation: the same pages in the same order, each of them a different shape. */
+    private suspend fun afterPagesTurned(pages: List<Int>) {
+        val doc = document ?: return
+        val state = uiState as? ViewerUiState.Viewing ?: return
+        val sizes = state.pageSizes.toMutableList()
+        for (index in pages) {
+            if (index !in sizes.indices) continue
+            val page = doc.openPage(index)
+            try {
+                // megapdf_page_width/height answer the *rotated* size (contract 10), so a quarter
+                // turn swaps them and the page list lays the page out the new way up.
+                sizes[index] = PageSize(page.widthPoints, page.heightPoints)
+            } finally {
+                page.close()
+            }
+            renderedPages.remove(index)
+            pageBitmaps.remove(index)
+            renderedThumbnails.remove(index)
+            pageThumbnails.remove(index)
+        }
+        uiState = state.copy(pageSizes = sizes)
+        dirty.markEdited()
+        redrawPages(sizes.size)
+    }
+
+    /**
+     * The thumbnails the Pages grid is showing: the visible window ± [THUMBNAIL_MARGIN], and
+     * nothing else held. A thousand-page document must open this screen as quickly as a two-page
+     * one (#147), which means the grid asks for what it can see and the rest is never drawn.
+     */
+    fun updateThumbnailWindow(firstVisible: Int, lastVisible: Int, targetWidthPx: Int) {
+        val state = uiState as? ViewerUiState.Viewing ?: return
+        val doc = document ?: return
+        if (state.pageSizes.isEmpty()) return
+        lastThumbnailWindow = RenderWindow(firstVisible, lastVisible, targetWidthPx)
+        val window = (firstVisible - THUMBNAIL_MARGIN).coerceAtLeast(0)..
+            (lastVisible + THUMBNAIL_MARGIN).coerceAtMost(state.pageSizes.size - 1)
+
+        for (index in pageThumbnails.keys.toList()) {
+            if (index !in window) {
+                pageThumbnails.remove(index)
+                renderedThumbnails.remove(index)
+            }
+        }
+
+        thumbnailJob?.cancel()
+        val tint = pageTint
+        thumbnailJob = viewModelScope.launch {
+            for (index in window) {
+                val size = state.pageSizes.getOrNull(index) ?: continue
+                val idealWidth = targetWidthPx.coerceIn(1, MAX_THUMBNAIL_WIDTH).toDouble()
+                val idealHeight = idealWidth * size.heightPoints / size.widthPoints
+                val (width, height) = PdfEngine.renderSize(idealWidth, idealHeight)
+                val key = RenderedPage(width, tint)
+                if (renderedThumbnails[index] == key) continue
+                try {
+                    val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+                    val page = doc.openPage(index)
+                    try {
+                        page.render(bitmap, tint)
+                    } finally {
+                        page.close()
+                    }
+                    pageThumbnails[index] = bitmap
+                    renderedThumbnails[index] = key
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    // A page that will not draw leaves an empty cell, as it leaves a blank page in
+                    // the viewer (#145), and the rest of the grid still fills in.
+                }
+            }
+        }
+    }
+
+    private fun dropThumbnails() {
+        thumbnailJob?.cancel()
+        thumbnailJob = null
+        pageThumbnails.clear()
+        renderedThumbnails.clear()
+        lastThumbnailWindow = null
     }
 
     /** Undo/redo availability (#34) — mirrored out of the history for the toolbar. */
@@ -1270,7 +1764,18 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         // (#329): read them back from the document just adopted, which for a document that
         // has never been marked means the map and the count both go to nothing.
         viewModelScope.launch { refreshRedactionMarks() }
-        // Each check runs off the engine's thread and stops when its coroutine is cancelled.
+        openPageChecks(doc)
+    }
+
+    /**
+     * Starts (or restarts) the page checks over [doc]. Each check runs off the engine's thread and
+     * stops when its coroutine is cancelled.
+     *
+     * Called again after a page operation (#174): the gate remembers which pages have been settled
+     * by index, and after a delete or a move those indices name different pages. Starting over
+     * means a page may be asked about once more, which is the harmless direction to be wrong in.
+     */
+    private fun openPageChecks(doc: PdfDocument) {
         pageChecks.open { pageIndex ->
             when (val result = doc.checkPageRegeneration(pageIndex)) {
                 is PageCheck.Judged -> result.verdict
@@ -1779,6 +2284,19 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         canRedo = history.canRedo
         selectedStamp = null
         selectedTextBox = null
+        // A page operation is asked which way it just went (#174): a delete's undo inserts where
+        // its apply deleted, so the renumbering depends on the direction, and the operation is the
+        // only thing that knows. A rotation renumbers nothing but changes the shape of the pages it
+        // turned, which the page list has to be told about for the same reason.
+        val shifts = operation.lastPageShifts
+        if (shifts.isNotEmpty()) {
+            afterPagesRenumbered(shifts)
+            return
+        }
+        if (operation is RotatePagesOperation) {
+            afterPagesTurned(operation.pagesChanged)
+            return
+        }
         if (operation.changesDocument) {
             markEditedAndRerender(operation.pageIndex)
         } else {
@@ -2496,6 +3014,12 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         pageBitmaps.clear()
         renderedPages.clear()
         lastWindow = null
+        // The Pages grid belongs to the document being worked on (#174), like reading mode above:
+        // its selection is page indices of *this* document, and its thumbnails are pictures of it.
+        isPagesOpen = false
+        selectedPages = emptySet()
+        pageToolRefusal = null
+        dropThumbnails()
         currentUri = null
         documentReadsUri = null
         dirty.reset()
@@ -2666,6 +3190,12 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
 
         const val RENDER_MARGIN = 2      // desktop MainViewModel's ±2-page window
         const val MAX_BITMAP_DIM = 2048  // bound worst-case bitmap memory
+        /** Thumbnails held either side of the grid's visible range: about one row on a phone (#174). */
+        const val THUMBNAIL_MARGIN = 6
+        /** A thumbnail is never drawn wider than this, whatever the grid asks for. */
+        const val MAX_THUMBNAIL_WIDTH = 320
+        /** US Letter: what a blank page falls back to when the document has no page to copy. */
+        val DEFAULT_PAGE_SIZE = PageSize(612.0, 792.0)
         const val MAX_SIGNATURE_SOURCE_DIM = 1500  // downscale huge photos before cleanup
         const val SEARCH_DEBOUNCE_MS = 250L  // keep typing from spamming the engine
         const val COPY_BUFFER_BYTES = 1 shl 20  // streaming a document between files (#147)

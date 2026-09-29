@@ -80,6 +80,35 @@ internal object ToolbarIcons {
     /** Material "remove". */
     val ZoomOut: ImageVector = icon("ZoomOut", "M19,13H5v-2h14v2z")
 
+    // The page tools' own glyphs (#174). Material Symbols' rotate_left, rotate_right and
+    // delete, built here like the rest: `material-icons-core` carries none of the three.
+
+    /** Material "rotate_left". */
+    val RotateLeft: ImageVector = icon(
+        "RotateLeft",
+        "M7.11,8.53L5.7,7.11C4.8,8.27 4.24,9.61 4.07,11h2.02C6.24,10.12 6.58,9.28 7.11,8.53z" +
+            "M6.09,13H4.07c0.17,1.39 0.72,2.73 1.62,3.89l1.41,-1.42C6.58,14.73 6.23,13.88 6.09,13z" +
+            "M7.1,18.32C8.26,19.22 9.61,19.76 11,19.93v-2.02c-0.87,-0.15 -1.71,-0.49 -2.46,-1.03L7.1,18.32z" +
+            "M13,4.07V1L8.45,5.55L13,10V6.09c2.84,0.48 5,2.94 5,5.91s-2.16,5.43 -5,5.91v2.02" +
+            "c3.95,-0.49 7,-3.85 7,-7.93S16.95,4.56 13,4.07z",
+    )
+
+    /** Material "rotate_right". */
+    val RotateRight: ImageVector = icon(
+        "RotateRight",
+        "M15.55,5.55L11,1v3.07C7.06,4.56 4,7.92 4,12s3.05,7.44 7,7.93v-2.02c-2.84,-0.48 -5,-2.94 " +
+            "-5,-5.91s2.16,-5.43 5,-5.91V10l4.55,-4.45zM19.93,11c-0.17,-1.39 -0.72,-2.73 -1.62,-3.89" +
+            "l-1.42,1.42c0.54,0.75 0.88,1.6 1.02,2.47h2.02zM13,17.9v2.02c1.39,-0.17 2.74,-0.71 3.9,-1.61" +
+            "l-1.44,-1.44c-0.75,0.54 -1.59,0.89 -2.46,1.03zM16.89,15.48l1.42,1.41c0.9,-1.16 1.45,-2.5 " +
+            "1.62,-3.89h-2.02c-0.14,0.87 -0.48,1.72 -1.02,2.48z",
+    )
+
+    /** Material "delete": the wastebasket, for taking pages out. */
+    val DeletePages: ImageVector = icon(
+        "DeletePages",
+        "M6,19c0,1.1 0.9,2 2,2h8c1.1,0 2,-0.9 2,-2V7H6v12zM19,4h-3.5l-1,-1h-5l-1,1H5v2h14V4z",
+    )
+
     /** Material "settings": the cog, for the Home screen's entry to Settings (#513). */
     val Settings: ImageVector = icon(
         "Settings",

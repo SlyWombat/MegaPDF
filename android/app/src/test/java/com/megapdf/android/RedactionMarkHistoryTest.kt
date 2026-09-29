@@ -65,6 +65,18 @@ class RedactionMarkHistoryTest {
 
         override suspend fun clearRedactionMarks() = pages.clear()
 
+        // The page tools (#174) are not what this test drives; `FakePages` in PageHistoryTest is.
+        private fun notHere(): Nothing =
+            throw UnsupportedOperationException("a mark operation never touches the page order")
+
+        override suspend fun rotatePage(pageIndex: Int, quarterTurns: Int) = notHere()
+        override suspend fun deletePage(pageIndex: Int): RestorablePage = notHere()
+        override suspend fun deletePageWithoutUndo(pageIndex: Int) = notHere()
+        override suspend fun restorePage(page: RestorablePage, at: Int) = notHere()
+        override suspend fun movePage(from: Int, to: Int) = notHere()
+        override suspend fun insertBlankPage(at: Int, widthPoints: Double, heightPoints: Double) = notHere()
+        override suspend fun importPages(path: String, insertAt: Int): Int = notHere()
+
         private fun refuse(): Boolean {
             refusedMoves++
             return false
