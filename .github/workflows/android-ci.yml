@@ -70,8 +70,35 @@ jobs:
           # 320 x 640 mdpi frame, which is no phone anyone holds.
           profile: pixel_5
           working-directory: android
-          # --continue so a red engine run still runs (and reports) the app's tests.
-          script: ./gradlew --no-daemon --continue :engine:connectedDebugAndroidTest :app:connectedDebugAndroidTest
+          # #544: a bare "Process crashed" from the instrumentation runner leaves nothing
+          # to read — the run was truncated and everything after it never happened. So the
+          # whole gradle invocation is wrapped rather than left as the action's own
+          # `script:` line: logcat is captured for the run's full duration (started before
+          # the tests and stopped only after, so a crash's last lines land in it), and
+          # whatever tombstone or ANR trace the crash left is pulled off the device
+          # afterwards, win or lose. `set +e` is needed because these steps must run even
+          # when gradle exits non-zero — the default `bash -e` would otherwise skip
+          # straight past the capture.
+          script: |
+            set +e
+            adb logcat -c
+            adb logcat -v threadtime > "$GITHUB_WORKSPACE/instrumented-logcat.txt" &
+            logcat_pid=$!
+            # Rootable on the "default" (non-Google) system image this job uses; needed to
+            # pull /data/tombstones and /data/anr below. Best-effort: a build that refuses
+            # it still runs the tests, just without those two files.
+            adb root >/dev/null 2>&1
+            ./gradlew --no-daemon --continue :engine:connectedDebugAndroidTest :app:connectedDebugAndroidTest
+            status=$?
+            # A beat for the crash's own last lines to reach the log before the capture stops.
+            sleep 3
+            kill "$logcat_pid" 2>/dev/null
+            wait "$logcat_pid" 2>/dev/null
+            mkdir -p "$GITHUB_WORKSPACE/instrumented-diagnostics/tombstones" \
+                     "$GITHUB_WORKSPACE/instrumented-diagnostics/anr"
+            adb pull /data/tombstones "$GITHUB_WORKSPACE/instrumented-diagnostics/tombstones" >/dev/null 2>&1
+            adb pull /data/anr "$GITHUB_WORKSPACE/instrumented-diagnostics/anr" >/dev/null 2>&1
+            exit $status
 
       - name: Upload test reports
         if: failure()
@@ -81,3 +108,16 @@ jobs:
           path: |
             android/engine/build/reports/androidTests/
             android/app/build/reports/androidTests/
+
+      # #544: logcat for the whole run plus whatever tombstone or ANR trace the crash left,
+      # so a truncated run is no longer a dead end — kept on failure only, the same as the
+      # test reports above; a green run has nothing worth keeping.
+      - name: Upload crash diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: instrumented-crash-diagnostics
+          path: |
+            instrumented-logcat.txt
+            instrumented-diagnostics/
+          if-no-files-found: warn
