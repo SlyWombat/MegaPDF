@@ -80,30 +80,19 @@ class PinchAnchorTest {
         val yFrac = 0.30f
         val before = anchorOnScreen(xFrac, yFrac)
 
-        // The pinch is centred at that same point, in the same full-node coordinate space
-        // [anchorOnScreen] measures in (`fetchSemanticsNode().size`) rather than this touch
-        // scope's own `width`/`height` — the page is several screens tall once zoomed in, and
-        // `width`/`height` here are the visible, on-screen extent, not the full node's, so
-        // building the anchor from them was targeting a different point than the one being
-        // measured. The two fingers move symmetrically apart around it, the shape a real
-        // two-finger zoom makes. The ratio this particular gesture asks for (≈1.8x) keeps the
-        // total zoom (2x already, before it starts) comfortably under MAX_ZOOM's 4x — the
-        // clamp case belongs to PinchAnchorMathTest, not this test.
+        // The pinch is centred at that same point. `before` is already that point's position
+        // in root/window coordinates; `performTouchInput`'s own `center`/`width`/`height`,
+        // though, are the node's *visible* extent — once the page is several screens tall,
+        // only a viewport-sized slice of it is on screen at once, and offsets built from the
+        // full node's size (confirmed by a throwaway diagnostic run: node.size was 2160x2795
+        // but the touch scope's width/height were only 1080x1667) landed miles outside that
+        // slice and were silently clamped, collapsing the pinch's spread to nothing. Rebasing
+        // `before` onto the visible rect's own top-left (`boundsInWindow`, also in root
+        // coordinates) converts it into that same local space. The ratio this particular
+        // gesture asks for (≈1.8x) keeps the total zoom (2x already, before it starts)
+        // comfortably under MAX_ZOOM's 4x — the clamp case belongs to PinchAnchorMathTest.
         val anchorNode = rule.page().fetchSemanticsNode()
-        val anchorLocal = Offset(anchorNode.size.width * xFrac, anchorNode.size.height * yFrac)
-        var scopeWidth = -1
-        var scopeHeight = -1
-        var scopeCenter = Offset.Zero
-        rule.page().performTouchInput {
-            scopeWidth = width
-            scopeHeight = height
-            scopeCenter = center
-        }
-        throw AssertionError(
-            "DIAGNOSTIC node.size=${anchorNode.size} node.positionInRoot=${anchorNode.positionInRoot} " +
-                "scope width=$scopeWidth height=$scopeHeight center=$scopeCenter anchorLocal=$anchorLocal",
-        )
-        @Suppress("UNREACHABLE_CODE")
+        val anchorLocal = before - anchorNode.boundsInWindow.topLeft
         rule.page().performTouchInput {
             pinch(
                 start0 = anchorLocal - Offset(150f, 100f), end0 = anchorLocal - Offset(275f, 175f),
