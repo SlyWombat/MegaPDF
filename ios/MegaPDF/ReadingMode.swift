@@ -88,6 +88,17 @@ enum ReadingZoom {
     /// unreadable and the scroll view is mostly gutter.
     static let minimum: CGFloat = 0.25
 
+    /// The one place a zoom is held between its floor and the ceiling.
+    ///
+    /// `floor` is the viewer's own `zoomFloor` — fit width, until *Fit page* lowers it —
+    /// rather than `minimum`, so the preset the person chose is not undone by the next
+    /// pinch. Named rather than written out at each site because #530's scroll correction
+    /// is computed from the ratio the zoom *actually took*: that can only be right if the
+    /// pinch, the buttons and the double tap all answer "what did it take?" identically.
+    static func clamped(_ zoom: CGFloat, floor: CGFloat) -> CGFloat {
+        min(max(zoom, min(floor, maximum)), maximum)
+    }
+
     /// The zoom at which `page` is exactly as tall as `viewport`.
     ///
     /// The page's laid-out height is `viewport.width * zoom * page.height / page.width`, so

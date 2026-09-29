@@ -140,8 +140,11 @@ final class ViewerZoomUITests: XCTestCase {
         // Fingers apart — the gesture the bug was about. The velocity's sign has to
         // agree with the scale: positive for a pinch out (scale > 1), negative for a
         // pinch in (scale < 1), or XCTest throws NSInvalidArgumentException (#405).
-        // A synthesised pinch does not land on the scale it is asked for — this one
-        // arrives at the 4× clamp — so what is asserted is the direction, not a value.
+        // What is asserted is the direction, not a value. Since #530 the gesture is a
+        // UIPinchGestureRecognizer, which reports the scale a synthesised pinch was asked
+        // for fairly closely (2.5 arrives as about 2.53, where MagnificationGesture used
+        // to run all the way into the 4× clamp) — but that is XCTest's arithmetic, not a
+        // promise of the app's, and a test that pinned it down would be measuring XCTest.
         pinchProbe().pinch(withScale: 2.5, velocity: 2.0)
         Thread.sleep(forTimeInterval: 1.5)   // scroll indicators fade
         let zoomed = pixels(of: rect)
@@ -180,5 +183,78 @@ final class ViewerZoomUITests: XCTestCase {
         // viewport, so there is only one place it can be.
         XCTAssertLessThan(difference(atOne, closed), 0.05,
                           "back at 1× the page is not the picture it started as")
+    }
+    /// The point between the fingers stays put (#530).
+    ///
+    /// The test above asks whether a pinch zooms at all. This one asks whether it zooms
+    /// about the right place, which is the whole of #530: before the fix the page grew
+    /// about its own top-left corner, so a word under the fingers slid down and to the
+    /// right by hundreds of points and usually off the screen.
+    ///
+    /// **Measured off the page's own frame, in fractions of it**, which is the same
+    /// arithmetic the issue was reported with. `Page 1`'s accessibility frame is the page
+    /// image's real frame in window points, unclipped, at every zoom — at 4x on an iPhone
+    /// it reads far wider and taller than the screen. So a point on the page can be named
+    /// as a fraction of that frame once, before the pinch, and looked up again afterwards:
+    /// if the zoom anchored where the fingers were, the same fraction is still under them.
+    ///
+    /// The tolerance is 24 points against an error the issue measured at 262: this is not a
+    /// check that has to split hairs to fail. A synthesised pinch's own centre is the
+    /// probe's centre, so that is the point being followed.
+    func testAPinchKeepsThePointBetweenTheFingersPut() {
+        app.launch()
+        _ = page()
+        Thread.sleep(forTimeInterval: 2)
+
+        let probe = pinchProbe()
+        let fingers = CGPoint(x: probe.frame.midX, y: probe.frame.midY)
+        let atOne = page().frame
+        XCTAssertEqual(committedZoom(), 1, accuracy: 0.01, "the document did not open at 1x")
+        print("ZOOM ANCHOR: fingers \(fingers), page at 1x \(atOne)")
+        let fraction = CGPoint(x: (fingers.x - atOne.minX) / atOne.width,
+                              y: (fingers.y - atOne.minY) / atOne.height)
+
+        // Out, which is the direction the issue was reported in.
+        probe.pinch(withScale: 2.5, velocity: 2.0)
+        Thread.sleep(forTimeInterval: 1.5)
+        let zoomedIn = page().frame
+        let zoomedZoom = committedZoom()
+        print("ZOOM ANCHOR: after a pinch out, zoom \(zoomedZoom), page \(zoomedIn)")
+        XCTAssertGreaterThan(zoomedZoom, 1.25,
+                             "a pinch out did not reach the app's zoom at all (#336)")
+        let outNow = CGPoint(x: zoomedIn.minX + fraction.x * zoomedIn.width,
+                            y: zoomedIn.minY + fraction.y * zoomedIn.height)
+        XCTAssertEqual(outNow.y, fingers.y, accuracy: 24,
+                       "a pinch out moved the page under the fingers down the screen by "
+                       + "\(outNow.y - fingers.y) points (#530): zoom \(zoomedZoom), the page "
+                       + "was \(atOne) and is \(zoomedIn)")
+        XCTAssertEqual(outNow.x, fingers.x, accuracy: 24,
+                       "a pinch out moved the page under the fingers across the screen by "
+                       + "\(outNow.x - fingers.x) points (#530): zoom \(zoomedZoom), the page "
+                       + "was \(atOne) and is \(zoomedIn)")
+
+        // And in, from a zoomed and scrolled position — the second half of the issue's
+        // measurements, where the offset was left alone and then clamped.
+        let beforeIn = page().frame
+        let fractionIn = CGPoint(x: (fingers.x - beforeIn.minX) / beforeIn.width,
+                                y: (fingers.y - beforeIn.minY) / beforeIn.height)
+        probe.pinch(withScale: 0.4, velocity: -2.0)
+        Thread.sleep(forTimeInterval: 1.5)
+        let zoomedOut = page().frame
+        let closedZoom = committedZoom()
+        print("ZOOM ANCHOR: after a pinch in, zoom \(closedZoom), page \(zoomedOut)")
+        XCTAssertLessThan(closedZoom, zoomedZoom - 0.25,
+                          "a pinch in did not take any zoom back off: \(zoomedZoom) -> "
+                          + "\(closedZoom)")
+        let inNow = CGPoint(x: zoomedOut.minX + fractionIn.x * zoomedOut.width,
+                           y: zoomedOut.minY + fractionIn.y * zoomedOut.height)
+        XCTAssertEqual(inNow.y, fingers.y, accuracy: 24,
+                       "a pinch in moved the page under the fingers up or down the screen by "
+                       + "\(inNow.y - fingers.y) points (#530): zoom \(closedZoom), the page "
+                       + "was \(beforeIn) and is \(zoomedOut)")
+        XCTAssertEqual(inNow.x, fingers.x, accuracy: 24,
+                       "a pinch in moved the page under the fingers across the screen by "
+                       + "\(inNow.x - fingers.x) points (#530): zoom \(closedZoom), the page "
+                       + "was \(beforeIn) and is \(zoomedOut)")
     }
 }

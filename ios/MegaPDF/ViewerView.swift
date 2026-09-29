@@ -17,6 +17,10 @@ struct ViewerView: View {
 
     @State private var zoom: CGFloat = 1
     @State private var gestureZoom: CGFloat = 1
+    /// Holds the scroll offset's end of every zoom change (#530): a zoom here is a layout
+    /// change, so without a matching move of the offset the page grows about its own
+    /// top-left corner and takes whatever was under the fingers away with it.
+    @StateObject private var zoomAnchor = ZoomAnchorController()
     @State private var visible: Set<Int> = []
     @State private var signaturesOpen = false
     @State private var searchOpen = false
@@ -80,7 +84,7 @@ struct ViewerView: View {
     @State private var zoomFloor: CGFloat = ReadingZoom.fitWidth
 
     private var effectiveZoom: CGFloat {
-        min(max(zoom * gestureZoom, zoomFloor), ReadingZoom.maximum)
+        ReadingZoom.clamped(zoom * gestureZoom, floor: zoomFloor)
     }
 
     /// Identity of the zero-size view pinned to the current search match.
@@ -95,14 +99,17 @@ struct ViewerView: View {
     private var document: some View {
         GeometryReader { geo in
             ScrollViewReader { proxy in
-                // The axes follow the COMMITTED zoom, not the one the fingers are
-                // mid-way through (#336). Derived from `effectiveZoom`, the axis set
-                // changed on every tick of a pinch — and reconfiguring a scroll view's
-                // axes rebuilds it, which ends the very gesture asking for the change.
-                // The content is still laid out at `effectiveZoom`, so the page grows
-                // under the fingers and picks up its horizontal scrolling the moment the
-                // gesture ends.
-                ScrollView(zoom > 1 ? [.vertical, .horizontal] : .vertical) {
+                // Both axes, always, and never derived from the zoom (#336, #530).
+                // Reconfiguring a scroll view's axes rebuilds it, so an axis set that
+                // followed `effectiveZoom` ended the very pinch asking for the change; and
+                // one that followed the COMMITTED zoom still rebuilt it at the moment a
+                // pinch crossed 1x — on a fresh scroll view, at offset zero, which is one
+                // of the ways #530's page snapped back to its own left edge. Held constant
+                // there is nothing to rebuild: at fit width or below the page is no wider
+                // than the viewport, so the horizontal axis has no room to scroll in and
+                // costs nothing, and one `UIScrollView` lives as long as the viewer for
+                // the pinch recogniser and the offset correction to address.
+                ScrollView([.vertical, .horizontal]) {
                     LazyVStack(spacing: 8) {
                         ForEach(pageSizes.indices, id: \.self) { index in
                             pageView(index: index, containerWidth: geo.size.width)
@@ -116,6 +123,27 @@ struct ViewerView: View {
                                 }
                                 .id(index)
                         }
+                    }
+                    // Pinch to zoom, and the scroll correction that anchors every zoom on
+                    // the screen (#530). Overlaid on the stack rather than on the scroll
+                    // view because it is two things at once: a probe whose own position is
+                    // the stack's top-left corner in content coordinates, which is what
+                    // the correction measures, and the only way up the view hierarchy to
+                    // the `UIScrollView` whose offset it has to write. It draws nothing and
+                    // takes no touch; `PinchZoomGesture` has the long version, including
+                    // why this is UIKit and not `MagnificationGesture`.
+                    .overlay(alignment: .topLeading) {
+                        PinchZoomGesture(
+                            controller: zoomAnchor,
+                            zoom: zoom,
+                            zoomFloor: zoomFloor,
+                            onGestureScale: { gestureZoom = $0 },
+                            onCommit: { committed in
+                                zoom = committed
+                                gestureZoom = 1
+                                pushWindow(containerWidth: geo.size.width)
+                            })
+                            .frame(width: 0, height: 0)
                     }
                     // Centred, not top-packed (#48): the grey behind the scroll view
                     // is the document surround every PDF viewer draws so you can see
@@ -133,28 +161,9 @@ struct ViewerView: View {
                 // wrong room.
                 .background(Brand.Reading.gutter(model.pageTint))
                 .overlay(alignment: .topLeading) { zoomProbes(geo: geo) }
-                // Simultaneous, not exclusive (#336): a plain .gesture on a ScrollView
-                // competes with the scroll view's own pan gesture, and the pinch was
-                // losing that race — the magnify never started. Running alongside it lets
-                // the pinch scale while the scroll view keeps its scrolling.
-                //
-                // MagnificationGesture rather than iOS 17's MagnifyGesture: the
-                // deployment target is 16.0, and the old type is only deprecated, not
-                // removed. Switching means raising the floor, which is not this fix.
-                //
-                // It is also why the zoom anchors on the page's own top-left corner rather
-                // than on the point between the fingers (#530): this gesture's value is a
-                // bare scale and carries no location to anchor on, where MagnifyGesture's
-                // carries one. Not changed here — #465 was a test-only finding.
-                .simultaneousGesture(
-                    MagnificationGesture()
-                        .onChanged { gestureZoom = $0 }
-                        .onEnded { value in
-                            zoom = min(max(zoom * value, zoomFloor), ReadingZoom.maximum)
-                            gestureZoom = 1
-                            pushWindow(containerWidth: geo.size.width)
-                        }
-                )
+                // The pinch itself lives in the overlay inside the stack above, not
+                // here: `MagnificationGesture` reports a bare scale and no location at
+                // all, so nothing hung off it could know where to anchor (#530).
                 .safeAreaInset(edge: .top, spacing: 0) { topChrome }
                 // Reading mode's own chrome: the floating bar, the way out by the edge,
                 // and the box the page number opens (#506).
@@ -233,6 +242,12 @@ struct ViewerView: View {
                 goToPageOpen = true
                 showReadingBar()
             },
+            // The two presets are deliberately NOT anchored (#530). Fit width and fit
+            // page are answers to "show me the page", not zooms aimed at a point on it,
+            // and both land on a zoom at which the page fits an axis of the viewport
+            // exactly — so there is nothing the offset could usefully hold still, and
+            // holding the middle would scroll a page that has just been made to fit away
+            // from its own top. The same reasoning as the `FitOnOpen` guard in #534.
             fitWidth: {
                 zoomFloor = ReadingZoom.fitWidth
                 zoom = ReadingZoom.fitWidth
@@ -247,12 +262,21 @@ struct ViewerView: View {
                 zoom = fit
                 afterReadingBarAction(containerWidth: geo.size.width)
             },
+            // A button carries no position, so these two anchor on the middle of what
+            // is on screen — the same choice the menu and keyboard zooms made on Windows
+            // (#546) and in the Avalonia app (#534).
             zoomOut: {
-                zoom = min(max(zoom / 1.25, zoomFloor), ReadingZoom.maximum)
+                let target = ReadingZoom.clamped(zoom / 1.25, floor: zoomFloor)
+                zoomAnchor.anchor(aroundWindowPoint: nil, from: zoom, to: target) {
+                    zoom = target
+                }
                 afterReadingBarAction(containerWidth: geo.size.width)
             },
             zoomIn: {
-                zoom = min(max(zoom * 1.25, zoomFloor), ReadingZoom.maximum)
+                let target = ReadingZoom.clamped(zoom * 1.25, floor: zoomFloor)
+                zoomAnchor.anchor(aroundWindowPoint: nil, from: zoom, to: target) {
+                    zoom = target
+                }
                 afterReadingBarAction(containerWidth: geo.size.width)
             },
             // The find bar is the one piece of chrome the plan lets over the reading view
@@ -1418,9 +1442,16 @@ struct ViewerView: View {
         // Double-tap zoom is checked first; a lone tap (deferred briefly by
         // the exclusivity) dispatches to the model — as on Android.
         .gesture(
-            SpatialTapGesture(count: 2)
-                .onEnded { _ in
-                    zoom = zoom < 1.5 ? 2 : 1
+            // In the global space, which is the window's: a double tap is aimed
+            // somewhere, and #530 is about zooms that ignore where they were aimed. The
+            // single tap below stays local — it wants the point on the page, not on the
+            // screen.
+            SpatialTapGesture(count: 2, coordinateSpace: .global)
+                .onEnded { value in
+                    let target = ReadingZoom.clamped(zoom < 1.5 ? 2 : ReadingZoom.fitWidth,
+                                                     floor: zoomFloor)
+                    zoomAnchor.anchor(aroundWindowPoint: value.location,
+                                      from: zoom, to: target) { zoom = target }
                     pushWindow(containerWidth: containerWidth)
                 }
                 .exclusively(before: SpatialTapGesture()
