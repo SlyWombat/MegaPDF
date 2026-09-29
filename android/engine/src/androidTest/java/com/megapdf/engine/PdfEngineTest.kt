@@ -333,4 +333,38 @@ class PdfEngineTest {
             }
         }
     }
+
+    /**
+     * #549: a page handle closed after its document. megapdf_close() closes and frees every
+     * page still open, so the second close was a use after free -- it read the freed
+     * megapdf_page, walked the freed document's open-page list, and handed an already-closed
+     * FPDF_PAGE to FPDF_ClosePage. Android's allocator traps that, but only once it notices,
+     * which was about eleven documents into a process and never in the test that caused it.
+     *
+     * This is the ordering the app's own teardown produces: ViewerViewModel.onCleared()
+     * cancels the render job and queues the document's close on the engine thread at once,
+     * and the cancelled render's NonCancellable finally-block close is queued behind it.
+     *
+     * Run enough times that the allocator would have to notice.
+     */
+    @Test
+    fun aPageClosedAfterItsDocumentDoesNotCorruptTheHeap() {
+        runBlocking {
+            repeat(30) {
+                val doc = engine.open(fixtureBytes())
+                val page = doc.openPage(0)
+                val bitmap = Bitmap.createBitmap(306, 396, Bitmap.Config.ARGB_8888)
+                page.render(bitmap)
+                doc.close()
+                page.close()   // the handle the document already freed
+            }
+            // Still alive, and the engine still works.
+            val doc = engine.open(fixtureBytes())
+            try {
+                assertEquals(2, doc.pageCount())
+            } finally {
+                doc.close()
+            }
+        }
+    }
 }
