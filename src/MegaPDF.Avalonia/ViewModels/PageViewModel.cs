@@ -30,8 +30,10 @@ public sealed partial class PageViewModel : ObservableObject, IDisposable
     private readonly IPdfDocument _document;
     private double _renderedZoom;
     private double _renderedDpiScale;
+    private PageTint _renderedTint;
     private double _pendingZoom = -1;
     private double _pendingDpiScale = -1;
+    private PageTint _pendingTint;
     private int _renderGeneration;
     private bool _disposed;
 
@@ -69,6 +71,29 @@ public sealed partial class PageViewModel : ObservableObject, IDisposable
     [NotifyPropertyChangedFor(nameof(LayoutWidth))]
     [NotifyPropertyChangedFor(nameof(LayoutHeight))]
     private double _zoom = 1.0;
+
+    /// <summary>
+    /// Reading mode's page colours (#511). The tint is baked into the raster by the
+    /// core, so — unlike a highlight or a redaction mark — changing it really does mean
+    /// a re-render: see <see cref="OnTintChanged"/>, which is also where the retained
+    /// clamped raster is dropped, since it holds the old tint's pixels.
+    /// </summary>
+    [ObservableProperty]
+    private PageTint _tint;
+
+    partial void OnTintChanged(PageTint value)
+    {
+        // The retained raster (#94) is a whole page's pixels in the previous tint;
+        // keeping it would serve sepia pixels to a night page for as long as the page
+        // stays clamped. Dropped here rather than in StartRender, so the next render
+        // is a real one.
+        ReleaseRetained();
+        // Only a realised page re-renders: the rest pick the new tint up when the view
+        // realises them, which is what "switching tint re-renders the visible window
+        // only" means (#511 — and what keyed the cache on tint in the first place).
+        if (Image is not null)
+            Rerender(_renderedDpiScale > 0 ? _renderedDpiScale : 1.0);
+    }
 
     // Highlights are positioned in the same space as the page surface rather than
     // baked into the raster, so a zoom change repositions them without forcing a
@@ -205,9 +230,12 @@ public sealed partial class PageViewModel : ObservableObject, IDisposable
     /// </summary>
     internal void EnsureRendered(double dpiScale)
     {
-        if (Image is not null && _renderedZoom == Zoom && _renderedDpiScale == dpiScale)
+        // The tint joins zoom and DPI scale in both guards (#511): what is on screen is
+        // only "already that" if it was drawn in the tint that is current now, and a
+        // request already in flight only counts if it is for this tint.
+        if (Image is not null && _renderedZoom == Zoom && _renderedDpiScale == dpiScale && _renderedTint == Tint)
             return;
-        if (_pendingZoom == Zoom && _pendingDpiScale == dpiScale)
+        if (_pendingZoom == Zoom && _pendingDpiScale == dpiScale && _pendingTint == Tint)
             return;
         StartRender(dpiScale, invalidate: false);
     }
@@ -303,9 +331,11 @@ public sealed partial class PageViewModel : ObservableObject, IDisposable
             return;
 
         var zoom = Zoom;
+        var tint = Tint;
         var generation = ++_renderGeneration;
         _pendingZoom = zoom;
         _pendingDpiScale = dpiScale;
+        _pendingTint = tint;
 
         if (invalidate)
         {
@@ -316,7 +346,8 @@ public sealed partial class PageViewModel : ObservableObject, IDisposable
         else if (_cappedImage is { } kept)
         {
             // Served from the retained raster at any zoom (#94); the view scales it.
-            Apply(kept, Regions, zoom, dpiScale, generation, wasCapped: true);
+            // Only ever reached in the tint it was drawn in — OnTintChanged drops it.
+            Apply(kept, Regions, zoom, dpiScale, tint, generation, wasCapped: true);
             return;
         }
 
@@ -339,10 +370,10 @@ public sealed partial class PageViewModel : ObservableObject, IDisposable
             using var page = document.GetPage(index);
             if (wantPreview)
             {
-                var small = page.Render(previewWidth, previewHeight);
+                var small = page.Render(previewWidth, previewHeight, tint);
                 Dispatcher.UIThread.Post(() => ApplyPreview(small, dpiScale, generation));
             }
-            var rendered = page.Render(pixelWidth, pixelHeight);
+            var rendered = page.Render(pixelWidth, pixelHeight, tint);
             // Refreshed alongside the raster, because an edit changes both.
             var regions = BuildRegions(page);
             return (rendered, regions);
@@ -359,7 +390,7 @@ public sealed partial class PageViewModel : ObservableObject, IDisposable
                 return;
             }
             var (rendered, regions) = task.Result;
-            Apply(PageBitmap.FromRenderedPage(rendered), regions, zoom, dpiScale, generation, capped);
+            Apply(PageBitmap.FromRenderedPage(rendered), regions, zoom, dpiScale, tint, generation, capped);
         }), TaskScheduler.Default);
     }
 
@@ -375,7 +406,7 @@ public sealed partial class PageViewModel : ObservableObject, IDisposable
 
     /// <summary>UI thread: shows a raster, then chases the zoom if it moved while rendering.</summary>
     private void Apply(WriteableBitmap next, IReadOnlyList<(PdfRect, PageHitKind)> regions,
-                       double zoom, double dpiScale, int generation, bool wasCapped)
+                       double zoom, double dpiScale, PageTint tint, int generation, bool wasCapped)
     {
         if (_disposed || generation != _renderGeneration)
             return;
@@ -386,6 +417,7 @@ public sealed partial class PageViewModel : ObservableObject, IDisposable
         RenderFailed = false;
         _renderedZoom = zoom;
         _renderedDpiScale = dpiScale;
+        _renderedTint = tint;
         _pendingZoom = -1;
         _pendingDpiScale = -1;
         if (wasCapped)
@@ -399,9 +431,9 @@ public sealed partial class PageViewModel : ObservableObject, IDisposable
         if (!ReferenceEquals(previous, next) && !ReferenceEquals(previous, _cappedImage))
             previous?.Dispose();
 
-        // The zoom moved while this was rendering; the page is on screen, so it
-        // follows up itself rather than waiting for a scroll to notice.
-        if (Zoom != zoom)
+        // The zoom — or the tint (#511) — moved while this was rendering; the page is
+        // on screen, so it follows up itself rather than waiting for a scroll to notice.
+        if (Zoom != zoom || Tint != tint)
             EnsureRendered(dpiScale);
     }
 

@@ -615,6 +615,16 @@ internal static class CoreNative
     public const uint RenderBgra = 0;
     public const uint RenderRgba = 1;
 
+    /// <summary>
+    /// Page colours (#509, contract 7): a tint bit ORed onto the byte order above, never a
+    /// new parameter. Sepia multiplies the rendered page toward a warm paper white; Night
+    /// inverts luminance and keeps hue — pictures included, which is the decision recorded
+    /// on #168 and stated in the settings copy, not a defect. The two are alternatives: the
+    /// core refuses both bits at once.
+    /// </summary>
+    public const uint RenderSepia = 2;
+    public const uint RenderNight = 4;
+
     /// <summary>The aspect-preserving clamp of an ideal raster size (16,384 px a side, 32 MP).</summary>
     [DllImport(Dll)]
     public static extern void megapdf_render_size(double idealWidth, double idealHeight, out int width, out int height);

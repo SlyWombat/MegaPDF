@@ -1246,4 +1246,72 @@
     <value>Page de téléchargement</value>
     <comment>FR-REVIEW #158 — new with the Linux APT repository, not yet read by the reviewer. About window, Linux: the link to electricrv.ca/megapdf/linux/, opened in the person's browser (#158)</comment>
   </data>
+  <data name="ReadingMode" xml:space="preserve">
+    <value>Mode lecture</value>
+    <comment>FR-REVIEW #505 — new with reading mode, not yet read by the reviewer. View menu, ⇧⌘R on macOS / Ctrl+H on Linux (#505, #168)</comment>
+  </data>
+  <data name="EnterFullScreen" xml:space="preserve">
+    <value>Activer le mode plein écran</value>
+    <comment>FR-REVIEW #505 — new with reading mode, not yet read by the reviewer. The wording macOS itself uses for this menu item in French (#505)</comment>
+  </data>
+  <data name="ExitFullScreen" xml:space="preserve">
+    <value>Désactiver le mode plein écran</value>
+    <comment>FR-REVIEW #505 — new with reading mode, not yet read by the reviewer. The wording macOS itself uses for this menu item in French (#505)</comment>
+  </data>
+  <data name="ReadingModeOn" xml:space="preserve">
+    <value>Mode lecture activé</value>
+    <comment>FR-REVIEW #505 — new with reading mode, not yet read by the reviewer. Announced to a screen reader on entry (#505)</comment>
+  </data>
+  <data name="ReadingModeOff" xml:space="preserve">
+    <value>Mode lecture désactivé</value>
+    <comment>FR-REVIEW #505 — new with reading mode, not yet read by the reviewer. Announced to a screen reader on exit (#505)</comment>
+  </data>
+  <data name="Exit" xml:space="preserve">
+    <value>Sortir</value>
+    <comment>FR-REVIEW #505 — new with reading mode, not yet read by the reviewer. The reading pill's last button; never "Quitter", which is Quit (#505)</comment>
+  </data>
+  <data name="ExitReadingMode" xml:space="preserve">
+    <value>Sortir du mode lecture</value>
+    <comment>FR-REVIEW #505 — new with reading mode, not yet read by the reviewer. Accessible name and tooltip of the pill's Exit button (#505)</comment>
+  </data>
+  <data name="ReadingControls" xml:space="preserve">
+    <value>Commandes de lecture</value>
+    <comment>FR-REVIEW #505 — new with reading mode, not yet read by the reviewer. Accessible name of the floating pill (#505)</comment>
+  </data>
+  <data name="PreviousPage" xml:space="preserve">
+    <value>Page précédente</value>
+    <comment>FR-REVIEW #505 — new with reading mode, not yet read by the reviewer. Reading pill (#505)</comment>
+  </data>
+  <data name="NextPage" xml:space="preserve">
+    <value>Page suivante</value>
+    <comment>FR-REVIEW #505 — new with reading mode, not yet read by the reviewer. Reading pill (#505)</comment>
+  </data>
+  <data name="GoToPage" xml:space="preserve">
+    <value>Aller à la page</value>
+    <comment>FR-REVIEW #505 — new with reading mode, not yet read by the reviewer. Reading pill: the page number opens a box (#505)</comment>
+  </data>
+  <data name="PageColours" xml:space="preserve">
+    <value>Couleurs de la page</value>
+    <comment>FR-REVIEW #511 — new with reading preferences, not yet read by the reviewer. Options (#511)</comment>
+  </data>
+  <data name="PageColoursNormal" xml:space="preserve">
+    <value>Normales</value>
+    <comment>FR-REVIEW #511 — new with reading preferences, not yet read by the reviewer. Agrees with "couleurs", the label above it (#511)</comment>
+  </data>
+  <data name="PageColoursSepia" xml:space="preserve">
+    <value>Sépia</value>
+    <comment>FR-REVIEW #511 — new with reading preferences, not yet read by the reviewer. Page colours (#511)</comment>
+  </data>
+  <data name="PageColoursNight" xml:space="preserve">
+    <value>Nuit</value>
+    <comment>FR-REVIEW #511 — new with reading preferences, not yet read by the reviewer. Page colours (#511)</comment>
+  </data>
+  <data name="NightInvertsPictures" xml:space="preserve">
+    <value>Le mode nuit inverse la page, images comprises.</value>
+    <comment>FR-REVIEW #511 — new with reading preferences, not yet read by the reviewer. The #168 trade-off, stated in the settings copy (#511)</comment>
+  </data>
+  <data name="OpenInReadingMode" xml:space="preserve">
+    <value>Ouvrir les documents en mode lecture</value>
+    <comment>FR-REVIEW #511 — new with reading preferences, not yet read by the reviewer. Options, off by default (#511)</comment>
+  </data>
 </root>

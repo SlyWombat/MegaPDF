@@ -102,6 +102,29 @@
 
   </ResourceDictionary.ThemeDictionaries>
 
+  <!-- Reading mode's page colours (#511, docs/reading-mode-plan.md §2 tier 2).
+
+       Outside the theme dictionaries on purpose, and for the same reason the
+       redaction mark carries one value in both: these are not theme colours. The
+       page itself is tinted by the engine (MEGAPDF_RENDER_SEPIA / _NIGHT, #509), and
+       the chrome around it — the gutter behind the pages and the floating pill — has
+       to match *that*, not the desktop's light or dark appearance. A sepia page in a
+       dark-themed window is still a sepia page, and a gutter that followed the theme
+       instead would frame it in the wrong colour exactly half the time.
+
+       Sepia's surface is the engine's own paper white (#F4ECD8, core/megapdf_core.cpp
+       kSepiaR/G/B); the gutter is a step down from it so a page edge is still visible.
+       Night's surface is a step up from the engine's #1A1A1A page white and its gutter
+       a step below, for the same reason. Ink is chosen against the surface, not the
+       theme. Nothing is defined for Normal: that is the window wearing its own theme,
+       which is what these two replace. -->
+  <SolidColorBrush x:Key="BrandReadingGutterSepia" Color="#DCD0B4" />
+  <SolidColorBrush x:Key="BrandReadingSurfaceSepia" Color="#F4ECD8" />
+  <SolidColorBrush x:Key="BrandReadingInkSepia" Color="#2B2418" />
+  <SolidColorBrush x:Key="BrandReadingGutterNight" Color="#0E0E0E" />
+  <SolidColorBrush x:Key="BrandReadingSurfaceNight" Color="#262626" />
+  <SolidColorBrush x:Key="BrandReadingInkNight" Color="#E5E5E5" />
+
   <!-- Type. Semantic steps; these are the macOS column of docs/design-tokens.md
        §2. Smaller than the Windows column on purpose — 11pt toolbar labels are
        what a Mac user expects, and matching Windows here would be the wrong kind

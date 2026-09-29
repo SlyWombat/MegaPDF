@@ -65,6 +65,59 @@ public sealed class AppSettings
         set { _model = _model with { Language = value }; Save(); }
     }
 
+    /// <summary>
+    /// Reading mode's page colours (#168 tier 2, #510/#511): "" for the page as the
+    /// document draws it, "Sepia" or "Night". Stored as the string, not the enum, so a
+    /// settings.json written by a later version that grows a fourth value still loads
+    /// here — an unknown value reads back as <see cref="PageTint.Normal"/>.
+    ///
+    /// One field, two UIs: the WinUI ⚙ flyout and the Avalonia Options flyout both
+    /// read and write this same file (SDD §4.4). Coordinate the name here, not per app.
+    /// </summary>
+    public string PageColours
+    {
+        get => _model.PageColours;
+        set { _model = _model with { PageColours = value }; Save(); }
+    }
+
+    /// <summary>
+    /// <see cref="PageColours"/> as the engine's tint. Unknown values are Normal rather
+    /// than an exception: a settings file is user data, and a bad value must not stop
+    /// a document opening.
+    /// </summary>
+    public PageTint PageTint
+    {
+        get => TintOf(PageColours);
+        set => PageColours = NameOf(value);
+    }
+
+    /// <summary>The name <see cref="PageColours"/> stores for a tint, and back again.</summary>
+    public static string NameOf(PageTint tint) => tint switch
+    {
+        PageTint.Sepia => "Sepia",
+        PageTint.Night => "Night",
+        _ => "",
+    };
+
+    /// <inheritdoc cref="NameOf"/>
+    public static PageTint TintOf(string? name) => name switch
+    {
+        "Sepia" => PageTint.Sepia,
+        "Night" => PageTint.Night,
+        _ => PageTint.Normal,
+    };
+
+    /// <summary>
+    /// Whether a document opens straight into reading mode (#168 decision 2, which
+    /// dropped per-document memory in favour of this one app-level switch). Off by
+    /// default: the app opens the way it always has unless someone asks otherwise.
+    /// </summary>
+    public bool OpenInReadingMode
+    {
+        get => _model.OpenInReadingMode;
+        set { _model = _model with { OpenInReadingMode = value }; Save(); }
+    }
+
     private Model Load()
     {
         if (!File.Exists(_path))
@@ -96,5 +149,7 @@ public sealed class AppSettings
         public bool DefaultAppCardShown { get; init; }
         public bool FlattenOnSave { get; init; }
         public string Language { get; init; } = "";
+        public string PageColours { get; init; } = "";
+        public bool OpenInReadingMode { get; init; }
     }
 }

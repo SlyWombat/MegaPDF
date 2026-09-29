@@ -94,6 +94,25 @@
 
     </ResourceDictionary.ThemeDictionaries>
 
+    <!-- Reading mode's page colours (#511, docs/reading-mode-plan.md §2 tier 2).
+
+         Outside the theme dictionaries on purpose, and for the same reason the
+         redaction mark carries one value in both themes: these are not theme colours.
+         The page is tinted by the engine (MEGAPDF_RENDER_SEPIA / _NIGHT, #509) and the
+         chrome around it has to match that, not the desktop's light or dark appearance
+         — a sepia page in a dark-themed window is still a sepia page.
+
+         The same six values as the Avalonia leg (src/MegaPDF.Avalonia/Brand.axaml), so
+         the two desktops frame a tinted page identically; DesignTokenParityTests holds
+         the pair together. Defined here with #511's Mac/Linux work so the Windows tier
+         2 (#510) finds them already named rather than coining a second vocabulary. -->
+    <SolidColorBrush x:Key="BrandReadingGutterSepiaBrush" Color="#DCD0B4" />
+    <SolidColorBrush x:Key="BrandReadingSurfaceSepiaBrush" Color="#F4ECD8" />
+    <SolidColorBrush x:Key="BrandReadingInkSepiaBrush" Color="#2B2418" />
+    <SolidColorBrush x:Key="BrandReadingGutterNightBrush" Color="#0E0E0E" />
+    <SolidColorBrush x:Key="BrandReadingSurfaceNightBrush" Color="#262626" />
+    <SolidColorBrush x:Key="BrandReadingInkNightBrush" Color="#E5E5E5" />
+
     <!-- Type. The Windows column of docs/design-tokens.md §2. Larger than the
          macOS column on purpose: 12pt toolbar labels are what a Windows user
          expects, and matching the Mac app here would be the wrong kind of

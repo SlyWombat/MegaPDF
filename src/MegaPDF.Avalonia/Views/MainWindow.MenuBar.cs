@@ -28,6 +28,13 @@ public partial class MainWindow
     private readonly List<(NativeMenuItem Item, Func<bool> Checked)> _menuBarChecked = [];
 
     /// <summary>
+    /// Items whose title changes with the window's state. One so far: full screen, which
+    /// AppKit writes as "Enter Full Screen" and "Exit Full Screen" on the same item rather
+    /// than as a tick beside one title (#505).
+    /// </summary>
+    private readonly List<(NativeMenuItem Item, Func<string> Header)> _menuBarHeaders = [];
+
+    /// <summary>
     /// Items with a submenu, each with a plain stand-in under the same id that takes its
     /// place in the menu while it is disabled; see RefreshMenuBar.
     /// </summary>
@@ -103,6 +110,31 @@ public partial class MainWindow
     /// <summary>⌘N on macOS. Linux reaches New Window through Ctrl+Shift+N in <see cref="BindLinuxWindowShortcuts"/> instead,
     /// the same reason ⌘Q is Mac-menu-only and Ctrl+Q is a Linux window binding.</summary>
     private static KeyGesture NewWindowGestureMac => Shortcut(Key.N);
+
+    /// <summary>
+    /// Reading mode (#505): ⇧⌘R on macOS, Ctrl+H on Linux.
+    ///
+    /// Two different keys on purpose, not one gesture with the modifier swapped. ⌘H is
+    /// Hide on macOS and cannot be taken; ⇧⌘R is Safari's Reader, which is the right
+    /// association for "the page and nothing else". Linux has no Reader convention and
+    /// no Hide, so it takes Ctrl+H — what the Windows app uses, and what a GNOME or KDE
+    /// user reaches for. The same reasoning as <see cref="RedoGesture"/>: the platforms
+    /// differ in the key, not only in the modifier.
+    /// </summary>
+    private static KeyGesture ReadingModeGesture =>
+        OperatingSystem.IsMacOS()
+            ? Shortcut(Key.R, KeyModifiers.Shift)
+            : new KeyGesture(Key.H, KeyModifiers.Control);
+
+    /// <summary>
+    /// Full screen: ⌃⌘F, the standard macOS item, and F11 everywhere else — which is
+    /// what a Linux desktop means by full screen. Offered only inside reading mode
+    /// (plan §2 tier 1: full screen on its own was Acrobat's confusion).
+    /// </summary>
+    private static KeyGesture FullScreenGesture =>
+        OperatingSystem.IsMacOS()
+            ? new KeyGesture(Key.F, KeyModifiers.Meta | KeyModifiers.Control)
+            : new KeyGesture(Key.F11);
 
     /// <summary>⌃Tab: the next tab, wrapping (#348).</summary>
     private static KeyGesture NextTabGesture => new(Key.Tab, KeyModifiers.Control);
@@ -222,6 +254,24 @@ public partial class MainWindow
         _menuBarItems["ZoomPresets"] = presets;
         view.Items.Add(presets);
 
+        // Reading mode and full screen (#505). In View, under the zoom entries: they are
+        // both "how the document is shown", and View is where a Mac user looks for them.
+        // Both act on whichever document window is in front, like every other item here.
+        view.Items.Add(new NativeMenuItemSeparator());
+        var reading = Toggle("ReadingMode", Strings.ReadingMode,
+            () => ActiveMainWindow().Active?.IsDocumentOpen == true,
+            () => ActiveMainWindow().IsReadingMode,
+            () => ActiveMainWindow().ToggleReadingMode());
+        reading.Gesture = ReadingModeGesture;
+        view.Items.Add(reading);
+        // Enabled only inside reading mode: full screen without it is not offered.
+        var fullScreen = Command("FullScreen", Strings.EnterFullScreen, FullScreenGesture,
+            () => ActiveMainWindow().IsReadingMode,
+            () => ActiveMainWindow().ToggleFullScreen());
+        _menuBarHeaders.Add((fullScreen,
+            () => ActiveMainWindow().IsFullScreen ? Strings.ExitFullScreen : Strings.EnterFullScreen));
+        view.Items.Add(fullScreen);
+
         // Window and Help: the two menus every Mac app has and this one did not (#176).
         // Both act on whichever window is in front, because the menu bar is the
         // application's rather than this window's.
@@ -278,6 +328,8 @@ public partial class MainWindow
             item.IsEnabled = enabled();
         foreach (var (item, isChecked) in _menuBarChecked)
             item.IsChecked = isChecked();
+        foreach (var (item, header) in _menuBarHeaders)
+            item.Header = header();
 
         // On the Mac an item with a submenu is enabled whatever IsEnabled says: Avalonia's
         // native menu item validates YES for any item that has one. So Tools > Text font

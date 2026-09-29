@@ -256,6 +256,18 @@ Conventions (OQLF, Canadian French):
 | This document does not allow changes | Ce document n'autorise aucune modification | #476/#481, the certification (/DocMDP) case's title — stronger wording: a DocMDP permission can forbid modification outright, not merely be invalidated by it. Measured as the common case on real signed documents (33/33 in the #476 corpus), not the edge case |
 | This document was certified not to be modified — its author declared that no changes are allowed at all. Saving here will break that certification as well as the signature. Save a copy instead to leave the signed original untouched. | Ce document a été certifié comme ne pouvant être modifié — son auteur a déclaré qu'aucune modification n'est permise. L'enregistrer ici brisera cette certification en plus de la signature. Enregistrez plutôt une copie pour laisser l'original signé intact. | #476/#481, the certification case's body |
 | Saved. The signature doesn't carry over to a copy. | Enregistré. La signature ne se transfère pas à une copie. | #476/#481, shown once and quietly after Save a copy of a signed document — the signed original is untouched, but the new copy is not itself signed either |
+| Reading mode | Mode lecture | #168 decision 1 / #505 — the name on every platform. Not *Mode de lecture*: the shorter form is what the View menu and the mobile More menus carry, and it matches Acrobat's and Word's French |
+| Enter Full Screen / Exit Full Screen | Activer le mode plein écran / Désactiver le mode plein écran | #505, the View menu item — macOS's own French for this item, so it reads as the system's rather than as ours |
+| Reading mode on / Reading mode off | Mode lecture activé / Mode lecture désactivé | #505, announced to a screen reader on entering and leaving |
+| Exit | Sortir | #505, the reading pill's last button. Never *Quitter*, which is Quit |
+| Exit reading mode | Sortir du mode lecture | #505, the accessible name and tooltip of that button |
+| Reading controls | Commandes de lecture | #505, the accessible name of the floating pill |
+| Previous page / Next page | Page précédente / Page suivante | #505, the reading pill. Distinct from the find bar's *Précédent* / *Suivant*, which are about matches |
+| Go to page | Aller à la page | #505, the reading pill's page number opens a box to type one into |
+| Page colours | Couleurs de la page | #511, the Options row. British spelling in the English, as everywhere else in this app |
+| Normal / Sepia / Night | Normales / Sépia / Nuit | #511, the three page colours. *Normales* agrees with *couleurs*, the label above the list |
+| Night inverts the page, pictures included. | Le mode nuit inverse la page, images comprises. | #511, said in the settings copy because it is a decision (#168 decision 3), not a defect: a photograph reads as a negative at night |
+| Open documents in reading mode | Ouvrir les documents en mode lecture | #511, the Options checkbox; off by default (#168 decision 2) |
 
 ## Français (France)
 

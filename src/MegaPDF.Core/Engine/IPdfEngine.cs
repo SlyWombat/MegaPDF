@@ -240,8 +240,16 @@ public interface IPdfPage : IDisposable
     double Width { get; }
     double Height { get; }
 
-    /// <summary>Renders the page to 32-bit BGRA at the given pixel size.</summary>
-    RenderedPage Render(int pixelWidth, int pixelHeight);
+    /// <summary>
+    /// Renders the page to 32-bit BGRA at the given pixel size, optionally tinted
+    /// (<see cref="PageTint"/>, #509/#168 reading mode tier 2).
+    ///
+    /// The tint is a render-time post-pass in the core and is never written to the
+    /// file: the same page rendered twice with two tints is the same document both
+    /// times. Defaulted so every existing caller — printing, thumbnails, the tests —
+    /// keeps asking for an untinted page without saying so.
+    /// </summary>
+    RenderedPage Render(int pixelWidth, int pixelHeight, PageTint tint = PageTint.Normal);
 
     /// <summary>What is under this point? Drives cursor affordances and click routing (SDD §2.2).</summary>
     PageHit HitTest(PdfPoint point);
@@ -452,6 +460,30 @@ public interface IPdfPage : IDisposable
 
 /// <summary>A rendered page bitmap: 32-bit BGRA, top-down rows.</summary>
 public sealed record RenderedPage(int PixelWidth, int PixelHeight, byte[] Bgra);
+
+/// <summary>
+/// Reading mode's page colours (#168 tier 2), applied by the core at render time as
+/// contract 7's <c>MEGAPDF_RENDER_SEPIA</c> / <c>MEGAPDF_RENDER_NIGHT</c> flags (#509).
+///
+/// A tint changes what a render looks like and nothing else — not the document, not a
+/// save, not what a hit test finds. It is stored per app (<c>AppSettings.PageColours</c>),
+/// shared by the WinUI and Avalonia desktops, and the three names here are exactly the
+/// three values that setting takes.
+/// </summary>
+public enum PageTint
+{
+    /// <summary>The page as the document draws it. <c>AppSettings.PageColours</c> "".</summary>
+    Normal,
+
+    /// <summary>Warm paper: white becomes #F4ECD8, black stays black.</summary>
+    Sepia,
+
+    /// <summary>
+    /// Inverted luminance with the hue kept. Pictures invert too — the decision on #168,
+    /// stated in the settings copy ("Night inverts the page, pictures included").
+    /// </summary>
+    Night,
+}
 
 /// <summary>Pixels of a placed image stamp (BGRA).</summary>
 public sealed record StampImage(byte[] Bgra, int PixelWidth, int PixelHeight);

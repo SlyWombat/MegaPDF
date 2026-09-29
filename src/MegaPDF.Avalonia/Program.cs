@@ -5,6 +5,7 @@ using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Input;
 using Avalonia.LogicalTree;
+using Avalonia.VisualTree;
 using MegaPDF.Avalonia.ViewModels;
 using MegaPDF.Core.Engine;
 using MegaPDF.Core.Imaging;
@@ -2029,6 +2030,27 @@ internal static class Program
             failures++;
         }
 
+        // --- Reading mode (#505 tier 1, #511 tier 2) ---
+        //
+        // Every Windows defect in 2.2 that CI missed was found by hand afterwards, so
+        // this one is checked where it lives: in a real window on the headless
+        // platform, driving the menu items and the keys rather than the flags behind
+        // them. Three things in particular are assertions and not assumptions —
+        // that hidden chrome leaves the *tab order* and not merely the screen, that
+        // Escape steps back exactly one level in the right order, and that the page
+        // colours reach the engine — because each is a rule a later change can break
+        // while everything still looks right.
+        Console.WriteLine("reading mode (#505, #511):");
+        try
+        {
+            CheckReadingMode(dir, Check);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"::error::reading mode: {ex.GetType().Name}: {ex.Message}");
+            failures++;
+        }
+
         // --- a launch with a file, after a crash (#145, #153) ---
         //
         // The order these two happen in is the whole bug, and it is not visible to any
@@ -3073,6 +3095,525 @@ internal static class Program
         check("closing the last tab closes the window", !window.IsVisible);
 
         static void Pump() => MenuProbe.Pump();
+    }
+
+    /// <summary>
+    /// Reading mode, end to end (#505 tier 1, #511 tier 2), in a real window on the
+    /// headless platform.
+    ///
+    /// Why a window and not the view model: every rule worth breaking here is the
+    /// window's. Whether the toolbar is *out of the tab order* rather than merely
+    /// invisible, whether Escape steps back one level and which one, whether the pill
+    /// stops fading when a screen reader is on — a view-model check can see none of
+    /// those, and each of them is how a screen-reader user would meet the feature.
+    ///
+    /// The engine half (#509's tint flags) is checked against real pixels rather than
+    /// against the flag being passed: "the caller ORs a bit" is not evidence that a
+    /// sepia page is sepia.
+    /// </summary>
+    private static void CheckReadingMode(string dir, Action<string, bool> check)
+    {
+        EnsureHeadlessPlatform();
+
+        var fixture = Path.Combine(dir, "fixture.pdf");
+        // The drawn checkbox the first check in this file clicks: the one click that is
+        // known to change the document, so "editing is off" is provable rather than
+        // asserted against a click that would have done nothing anyway.
+        var tick = new PdfPoint(78, 186);
+
+        // Its own state directory: this check writes the two new settings, and a later
+        // check inheriting OpenInReadingMode=true would open its window into reading
+        // mode and fail for reasons that have nothing to do with it.
+        var readingState = Path.Combine(Path.GetTempPath(), $"megapdf-selftest-reading-{Guid.NewGuid():N}");
+
+        static void Pump() => MenuProbe.Pump();
+
+        try
+        {
+            // ---- 1. Entering and leaving -----------------------------------------
+            {
+                var (shell, vm, window) = OpenReadingWindow(readingState, fixture);
+
+                vm.SetZoomCommand.Execute(1.5);
+                vm.CurrentPage = 1;
+                Pump();
+                var zoom = vm.Zoom;
+                var offset = window.PageScroller.Offset;
+                var page = vm.CurrentPage;
+
+                check("before: the chrome is all there",
+                      window.ReadingChromeForTest.Count == 5
+                      && window.ToolbarHost.IsVisible && window.StatusBarHost.IsVisible
+                      && !window.IsReadingMode);
+
+                window.ToggleReadingMode();
+                Pump();
+
+                check($"⇧⌘R/Ctrl+H turns reading mode on ({window.DescribeReadingMode()})", window.IsReadingMode);
+                foreach (var host in window.ReadingChromeForTest)
+                {
+                    check($"  {host.Name} is hidden", !host.IsVisible);
+                    // The rule the whole feature rests on: gone, not dimmed. An
+                    // opacity-0 or transparent-overlay "hide" would pass the line
+                    // above and trap a screen reader in an invisible toolbar.
+                    check($"  {host.Name} is hidden by IsVisible, not by opacity",
+                          Math.Abs(host.Opacity - 1.0) < 0.001 && !host.IsEffectivelyVisible);
+                }
+                check("  the page host is untouched", window.PageScroller.IsVisible);
+                check("  the floating pill is up", window.ReadingPill.IsVisible);
+                check($"  and the change is announced (\"{window.ReadingAnnouncementText}\")",
+                      window.ReadingAnnouncementText == Strings.ReadingModeOn);
+
+                // The invariant from the plan's §1: same page, same zoom, same offset.
+                check($"  same zoom ({vm.Zoom:0.##}), same page ({vm.CurrentPage}), same scroll offset",
+                      Math.Abs(vm.Zoom - zoom) < 0.001 && vm.CurrentPage == page
+                      && window.PageScroller.Offset == offset);
+
+                window.ToggleReadingMode();
+                Pump();
+                check("⇧⌘R/Ctrl+H again turns it off", !window.IsReadingMode);
+                check("  every host is back",
+                      window.ToolbarHost.IsVisible && window.TabStripHost.IsVisible
+                      && window.BusyStripHost.IsVisible && window.StatusBarHost.IsVisible);
+                check("  the pill is gone with it", !window.ReadingPill.IsVisible);
+                check($"  and that is announced too (\"{window.ReadingAnnouncementText}\")",
+                      window.ReadingAnnouncementText == Strings.ReadingModeOff);
+                check("  still the same zoom, page and offset",
+                      Math.Abs(vm.Zoom - zoom) < 0.001 && vm.CurrentPage == page
+                      && window.PageScroller.Offset == offset);
+
+                CloseReadingWindow(shell, window);
+            }
+
+            // ---- 2. The tab order, and focus ------------------------------------
+            {
+                var (shell, _, window) = OpenReadingWindow(readingState, fixture);
+
+                var before = FocusableControls(window);
+                check($"before: the toolbar is in the tab order ({before.Count} focusable controls)",
+                      before.Contains(window.OpenButton));
+
+                // Focus on the toolbar, so the entry path that has to move it is the
+                // one being taken.
+                window.OpenButton.Focus();
+                Pump();
+                window.EnterReadingMode();
+                Pump();
+
+                var inside = FocusableControls(window);
+                var trapped = inside
+                    .Where(c => window.ReadingChromeForTest.Any(host => host.IsVisualAncestorOf(c)))
+                    .Select(c => c.Name ?? c.GetType().Name)
+                    .ToList();
+                check($"no hidden chrome is left in the tab order ({inside.Count} focusable controls)",
+                      trapped.Count == 0);
+                if (trapped.Count > 0)
+                    Console.Error.WriteLine($"::error::still focusable: {string.Join(", ", trapped)}");
+                check("  Open is not one of them", !inside.Contains(window.OpenButton));
+                check("  and the pill's Exit is, so the way out is reachable from the keyboard",
+                      inside.Contains(window.ReadingExitButton));
+
+                var focused = window.FocusManager?.GetFocusedElement() as Control;
+                check($"focus followed the chrome it was on into the pill ({focused?.Name})",
+                      focused is not null && window.ReadingPill.IsVisualAncestorOf(focused));
+
+                window.ExitReadingMode();
+                Pump();
+                focused = window.FocusManager?.GetFocusedElement() as Control;
+                check($"leaving puts focus back on the toolbar ({focused?.Name})",
+                      ReferenceEquals(focused, window.OpenButton));
+
+                CloseReadingWindow(shell, window);
+            }
+
+            // ---- 3. Escape steps back exactly one level --------------------------
+            //
+            // The plan calls this out as the risk (§7): get the order wrong and a
+            // person who meant "give me the toolbar back" loses a tool state instead.
+            {
+                var (shell, vm, window) = OpenReadingWindow(readingState, fixture);
+
+                window.EnterReadingMode();
+                window.ToggleFullScreen();
+                window.OpenFind();
+                Pump();
+                check("set up: reading mode, full screen and the find bar, all on",
+                      window.IsReadingMode && window.IsFullScreen && vm.IsFindOpen);
+
+                Escape(window);
+                check("Escape 1 closes the find bar, and nothing else",
+                      !vm.IsFindOpen && window.IsFullScreen && window.IsReadingMode);
+
+                Escape(window);
+                check("Escape 2 leaves full screen, and stays in reading mode",
+                      !window.IsFullScreen && window.IsReadingMode);
+
+                Escape(window);
+                check("Escape 3 leaves reading mode",
+                      !window.IsReadingMode && window.ToolbarHost.IsVisible);
+
+                // Whatever Escape did before, it still does: an armed tool is cancelled
+                // by it, which is the state the wrong order would have eaten at step 1.
+                vm.ToggleWhiteoutCommand.Execute(null);
+                Pump();
+                check("and outside reading mode Escape still cancels an armed tool",
+                      vm.IsWhiteoutMode);
+                Escape(window);
+                check("  — Escape 4 disarms it, as it always did", !vm.IsWhiteoutMode);
+
+                // The other half of the same rule: entering disarms, and leaving does
+                // not re-arm.
+                vm.ToggleWhiteoutCommand.Execute(null);
+                Pump();
+                window.EnterReadingMode();
+                Pump();
+                check("entering reading mode disarms an armed tool", !vm.IsWhiteoutMode);
+                window.ExitReadingMode();
+                Pump();
+                check("  and leaving does not put it back", !vm.IsWhiteoutMode);
+
+                CloseReadingWindow(shell, window);
+            }
+
+            // ---- 4. Editing is off -----------------------------------------------
+            {
+                var (shell, vm, window) = OpenReadingWindow(readingState, fixture);
+
+                check("the click about to be made would change the document",
+                      vm.HitTest(0, tick).Kind == PageHitKind.DrawnCheckbox && !vm.IsDirty);
+
+                window.EnterReadingMode();
+                Pump();
+                vm.HandlePageClick(0, tick);
+                // Long enough that a change on its way would have arrived: with a window
+                // attached the view model runs its work off the UI thread (#145), so
+                // "nothing happened" has to be given the same chance to be wrong as
+                // "something happened" is given below.
+                PumpFor(TimeSpan.FromMilliseconds(500));
+                check("a click on the page in reading mode does nothing at all",
+                      !vm.IsDirty && !vm.CanUndo);
+
+                window.ExitReadingMode();
+                Pump();
+                vm.HandlePageClick(0, tick);
+                PumpUntil(() => vm.IsDirty && !vm.Busy.IsBusy, TimeSpan.FromSeconds(20));
+                check("  and the same click works again once the mode is off",
+                      vm.IsDirty && vm.CanUndo);
+                // Undo is live throughout — it acts on the document, not on the page,
+                // and the plan keeps it live inside the mode for that reason.
+                vm.UndoCommand.Execute(null);
+                PumpUntil(() => !vm.Busy.IsBusy && vm.HitTest(0, tick).Kind == PageHitKind.DrawnCheckbox,
+                          TimeSpan.FromSeconds(20));
+                check("  undo was never disabled by the mode, and takes the mark off again",
+                      vm.HitTest(0, tick).Kind == PageHitKind.DrawnCheckbox);
+
+                CloseReadingWindow(shell, window);
+            }
+
+            // ---- 5. The pill, and the screen-reader rule -------------------------
+            {
+                var (shell, _, window) = OpenReadingWindow(readingState, fixture);
+                Platform.ScreenReader.ForgetForTest();
+                try
+                {
+                    // (a) With a reader on, the pill must never fade — "move the mouse
+                    //     to get it back" is not an instruction VoiceOver can follow.
+                    Platform.ScreenReader.OverrideForTest = () => true;
+                    window.EnterReadingMode();
+                    Pump();
+                    check("with a screen reader running, the pill is up", window.ReadingPill.IsVisible);
+                    check("  and no idle countdown was ever started",
+                          !window.ReadingPillIsCountingDown);
+                    // The countdown forced anyway, which is the only way to prove the
+                    // guard is in the tick and not just in whether the timer was
+                    // started: a later change that restarts the timer from somewhere
+                    // else must still not be able to take the pill away.
+                    window.FadeReadingPillNowForTest();
+                    Pump();
+                    check("  and forcing the idle tick still leaves it up — it never fades",
+                          window.ReadingPill.IsVisible);
+
+                    // (b) With no reader and no focus in it, it goes.
+                    Platform.ScreenReader.OverrideForTest = () => false;
+                    window.FocusManager?.ClearFocus();
+                    window.ShowReadingPill();
+                    Pump();
+                    check("with no screen reader, the pill is up and counting down",
+                          window.ReadingPill.IsVisible && window.ReadingPillIsCountingDown);
+                    window.FadeReadingPillNowForTest();
+                    Pump();
+                    check("  and the idle tick fades it", !window.ReadingPill.IsVisible);
+
+                    // (c) Movement over the page brings it back.
+                    window.ShowReadingPill();
+                    Pump();
+                    check("movement brings it back", window.ReadingPill.IsVisible);
+
+                    // (d) Keyboard focus holds it, reader or no reader.
+                    window.ReadingExitButton.Focus();
+                    Pump();
+                    check("keyboard focus in the pill stops the countdown",
+                          !window.ReadingPillIsCountingDown);
+                    window.FadeReadingPillNowForTest();
+                    Pump();
+                    check("  and holds it open through an idle tick",
+                          window.ReadingPill.IsVisible);
+                }
+                finally
+                {
+                    Platform.ScreenReader.OverrideForTest = null;
+                    Platform.ScreenReader.ForgetForTest();
+                }
+
+                CloseReadingWindow(shell, window);
+            }
+
+            // ---- 6. The View menu -------------------------------------------------
+            {
+                var (shell, _, window) = OpenReadingWindow(readingState, fixture);
+
+                var reading = window.MenuBarItem("ReadingMode");
+                var fullScreen = window.MenuBarItem("FullScreen");
+                var wantedReading = OperatingSystem.IsMacOS() ? Key.R : Key.H;
+                check($"View ▸ {reading?.Header} is in the menu bar, on {reading?.Gesture}",
+                      reading is { Gesture: not null } && reading.Gesture.Key == wantedReading);
+                check($"  named with the decided name (\"{Strings.ReadingMode}\")",
+                      reading?.Header == Strings.ReadingMode);
+                check($"View ▸ {fullScreen?.Header} is too, on {fullScreen?.Gesture}",
+                      fullScreen is { Gesture: not null }
+                      && fullScreen.Gesture.Key == (OperatingSystem.IsMacOS() ? Key.F : Key.F11));
+                check("  and full screen is offered only inside reading mode",
+                      fullScreen?.IsEnabled == false);
+
+                window.EnterReadingMode();
+                Pump();
+                check("inside the mode the item is ticked", reading?.IsChecked == true);
+                check("  and full screen is now offered", fullScreen?.IsEnabled == true);
+                window.ToggleFullScreen();
+                Pump();
+                check($"  its title flips to \"{fullScreen?.Header}\"",
+                      fullScreen?.Header == Strings.ExitFullScreen);
+                window.ToggleFullScreen();
+                Pump();
+                check($"  and back to \"{fullScreen?.Header}\"",
+                      fullScreen?.Header == Strings.EnterFullScreen);
+
+                if (OperatingSystem.IsLinux())
+                {
+                    // On Linux the window's own bindings are the only route: no menu
+                    // bar hosts these gestures (the #158 reasoning, applied again).
+                    var bound = window.KeyBindings.Select(b => b.Gesture).Where(g => g is not null).ToList();
+                    check($"Ctrl+H is a window key binding ({window.KeyBindings.Count} bindings in all)",
+                          bound.Any(g => g!.Key == Key.H && g.KeyModifiers == KeyModifiers.Control));
+                    check("  and F11 is too", bound.Any(g => g!.Key == Key.F11));
+                }
+
+                window.ExitReadingMode();
+                CloseReadingWindow(shell, window);
+            }
+
+            // ---- 7. Page colours: the engine (#509 consumed, not just passed) -----
+            {
+                using var engine = new PdfiumEngine();
+                using var document = engine.Open(fixture);
+                using var page = document.GetPage(0);
+
+                var normal = page.Render(200, 260, PageTint.Normal).Bgra;
+                var sepia = page.Render(200, 260, PageTint.Sepia).Bgra;
+                var night = page.Render(200, 260, PageTint.Night).Bgra;
+
+                // A pixel the document leaves white: the page's own paper, which is what
+                // a tint is most visible on and what the core documents exact values for.
+                var white = -1;
+                for (var i = 0; i + 3 < normal.Length; i += 4)
+                {
+                    if (normal[i] == 0xFF && normal[i + 1] == 0xFF && normal[i + 2] == 0xFF)
+                    {
+                        white = i;
+                        break;
+                    }
+                }
+                check("the page has white paper to tint", white >= 0);
+                if (white >= 0)
+                {
+                    check($"sepia turns it into the core's paper white "
+                          + $"(#{sepia[white + 2]:X2}{sepia[white + 1]:X2}{sepia[white]:X2})",
+                          sepia[white] == 0xD8 && sepia[white + 1] == 0xEC && sepia[white + 2] == 0xF4);
+                    check($"night turns it dark "
+                          + $"(#{night[white + 2]:X2}{night[white + 1]:X2}{night[white]:X2})",
+                          night[white] <= 0x40 && night[white + 1] <= 0x40 && night[white + 2] <= 0x40);
+                }
+                check("and Normal is the page as the document draws it",
+                      !normal.SequenceEqual(sepia) && !normal.SequenceEqual(night));
+            }
+
+            // ---- 8. Page colours: the app, the cache and the settings file --------
+            {
+                var (shell, vm, window) = OpenReadingWindow(readingState, fixture);
+
+                check("page colours start at Normal", shell.PageTint == PageTint.Normal
+                      && vm.Tint == PageTint.Normal && vm.Pages[0].Tint == PageTint.Normal);
+
+                // Realise one page and leave the rest alone, which is what a viewport
+                // does — then the tint change can be seen to reach the visible window
+                // and only it.
+                var first = vm.Pages[0];
+                first.EnsureRendered(1.0);
+                PumpUntil(() => first.IsRealised, TimeSpan.FromSeconds(20));
+                check("a page is realised, so there is a raster to invalidate", first.IsRealised);
+                var before = first.Image;
+                var offScreen = vm.Pages.Count > 1 ? vm.Pages[1] : null;
+                check("  and a page further down is not realised", offScreen is null || !offScreen.IsRealised);
+
+                shell.SelectedPageColour = shell.PageColourChoices.Single(c => c.Tint == PageTint.Night);
+                Pump();
+                check("choosing Night reaches every tab and every page",
+                      shell.PageTint == PageTint.Night && vm.Tint == PageTint.Night
+                      && vm.Pages.All(p => p.Tint == PageTint.Night));
+                PumpUntil(() => !ReferenceEquals(first.Image, before), TimeSpan.FromSeconds(20));
+                check("  the render cache is keyed on the tint: the visible page re-rendered",
+                      !ReferenceEquals(first.Image, before));
+                check("  and a page nobody is looking at did not",
+                      offScreen is null || !offScreen.IsRealised);
+
+                // The chrome around the page follows the page (#511): the engine tints
+                // the paper, the Brand tokens tint the gutter and the pill.
+                check("  the gutter and the pill retint to match",
+                      ReferenceEquals(window.PageScroller.Background, Brand.Brush("BrandReadingGutterNight"))
+                      && ReferenceEquals(window.ReadingPill.Background, Brand.Brush("BrandReadingSurfaceNight")));
+
+                shell.PageTint = PageTint.Normal;
+                Pump();
+                check("  and Normal hands the gutter back to the theme instead of pinning a colour",
+                      window.PageScroller.Background is not null
+                      && !ReferenceEquals(window.PageScroller.Background, Brand.Brush("BrandReadingGutterNight")));
+                shell.PageTint = PageTint.Night;
+                Pump();
+
+                shell.OpenInReadingMode = true;
+                Pump();
+
+                // Both settings are in the same settings.json the WinUI app reads (#510).
+                var onDisk = new AppSettings(Path.Combine(readingState, "settings.json"));
+                check($"Page colours persists to the shared settings.json (\"{onDisk.PageColours}\")",
+                      onDisk.PageColours == "Night" && onDisk.PageTint == PageTint.Night);
+                check("Open documents in reading mode persists beside it",
+                      onDisk.OpenInReadingMode);
+
+                CloseReadingWindow(shell, window);
+            }
+
+            // ---- 9. Open documents in reading mode --------------------------------
+            {
+                // The setting was written by the block above; a window opened now has
+                // to honour it, which is the whole of #168's decision 2.
+                var (shell, vm, window) = OpenReadingWindow(readingState, fixture);
+                PumpUntil(() => window.IsReadingMode, TimeSpan.FromSeconds(5));
+                check("with the setting on, a document opens straight into reading mode",
+                      window.IsReadingMode && !window.ToolbarHost.IsVisible);
+                check("  and the page is drawn in the chosen colours from the first render",
+                      vm.Tint == PageTint.Night);
+
+                // Nothing to put back: these settings live in this check's own state
+                // directory, which the finally below deletes.
+                CloseReadingWindow(shell, window);
+            }
+
+            // ---- 10. Tabs (#348): reading mode is the window's, not a document's ----
+            {
+                var (shell, first, window) = OpenReadingWindow(readingState, fixture);
+                var second = shell.CreateDocument();
+                second.Open(Path.Combine(dir, "demo.pdf"));
+                shell.AddTab(second);
+                Pump();
+
+                window.EnterReadingMode();
+                Pump();
+                check("with two tabs open, the pill names the file",
+                      window.ReadingFileName.IsVisible
+                      && window.ReadingFileName.Text == second.DocumentName);
+
+                shell.ActivatePreviousTab();
+                Pump();
+                check("switching tab inside reading mode keeps the mode",
+                      window.IsReadingMode && !window.ToolbarHost.IsVisible
+                      && ReferenceEquals(shell.Active, first));
+                check("  and the pill follows the tab",
+                      window.ReadingFileName.Text == first.DocumentName);
+                check("  and the tab that was already open is in the mode too",
+                      first.IsReadingMode && second.IsReadingMode);
+
+                window.ExitReadingMode();
+                Pump();
+                check("leaving puts the chrome back for both tabs",
+                      window.ToolbarHost.IsVisible && window.TabStripHost.IsVisible
+                      && !first.IsReadingMode && !second.IsReadingMode);
+
+                CloseReadingWindow(shell, window);
+            }
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(readingState))
+                    Directory.Delete(readingState, recursive: true);
+            }
+            catch (IOException)
+            {
+            }
+        }
+
+        // --- helpers ---
+
+        static (ShellViewModel Shell, DocumentViewModel Vm, Views.MainWindow Window) OpenReadingWindow(
+            string state, string fixture)
+        {
+            var shell = new ShellViewModel(state);
+            var vm = shell.CreateDocument();
+            vm.Open(fixture);
+            shell.AddTab(vm);
+            var window = new Views.MainWindow { DataContext = shell, Width = 1280, Height = 800 };
+            window.SkipRecoveryOffer = true;
+            window.Show();
+            MenuProbe.Pump();
+            return (shell, vm, window);
+        }
+
+        static void CloseReadingWindow(ShellViewModel shell, Views.MainWindow window)
+        {
+            // Let any render this check started finish before the document under it is
+            // disposed. A raster is produced on the thread pool from a page handle
+            // opened there (PageViewModel.StartRender), so closing the tab the instant
+            // after asking for one — which only a test does this quickly — pulls the
+            // document out from under PDFium mid-render.
+            PumpUntil(() => shell.Documents.All(d => d.Pages.All(p => !p.IsRenderPending)),
+                      TimeSpan.FromSeconds(20));
+            window.SkipCloseConfirmation();
+            window.Close();
+            MenuProbe.Pump();
+            shell.Dispose();
+        }
+
+        static void Escape(Views.MainWindow window)
+        {
+            HeadlessWindowExtensions.KeyPress(window, Key.Escape, RawInputModifiers.None,
+                                              PhysicalKey.Escape, "");
+            if (window.IsVisible)
+                HeadlessWindowExtensions.KeyRelease(window, Key.Escape, RawInputModifiers.None,
+                                                    PhysicalKey.Escape, "");
+            MenuProbe.Pump();
+        }
+
+        // What Tab can reach: a control that is focusable, enabled, and actually on
+        // screen. Avalonia's own traversal skips anything that is not effectively
+        // visible, so this is the tab order as the keyboard sees it — which is the
+        // distinction between "hidden" and "invisible but still in the way".
+        static List<Control> FocusableControls(Views.MainWindow window) =>
+            window.GetVisualDescendants()
+                  .OfType<Control>()
+                  .Where(c => c.Focusable && c.IsEnabled && c.IsEffectivelyVisible)
+                  .ToList();
     }
 
     /// <summary>

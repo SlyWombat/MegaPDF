@@ -670,6 +670,14 @@ public partial class App : Application
         ("BrandInk", typeof(IBrush)),
         ("BrandRule", typeof(IBrush)),
         ("BrandCardShadow", typeof(BoxShadows)),
+        // Reading mode's page colours (#511). Not theme-scoped — see Brand.axaml —
+        // so resolving them in both variants is the check that they resolve at all.
+        ("BrandReadingGutterSepia", typeof(IBrush)),
+        ("BrandReadingSurfaceSepia", typeof(IBrush)),
+        ("BrandReadingInkSepia", typeof(IBrush)),
+        ("BrandReadingGutterNight", typeof(IBrush)),
+        ("BrandReadingSurfaceNight", typeof(IBrush)),
+        ("BrandReadingInkNight", typeof(IBrush)),
         // Both ends of SyncFluentAccent. The Brand* keys are what Brand.axaml
         // declares; the plain ones are what Fluent actually reads, and they
         // exist only because the sync ran. Checking the source alone would let a

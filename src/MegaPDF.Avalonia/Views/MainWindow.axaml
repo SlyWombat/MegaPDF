@@ -41,6 +41,28 @@
                     Content="{x:Static loc:Strings.FlattenWhenSaving}" />
           <TextBlock Text="{x:Static loc:Strings.FlattenExplanation}"
                      TextWrapping="Wrap" FontSize="{DynamicResource TypeCaption}" Opacity="0.75" />
+
+          <!-- Reading preferences (#511). These two are the *application's*, not this
+               tab's, so they bind straight to the shell (which owns the shared
+               AppSettings) with no Active. prefix — unlike the two rows above, which
+               are per-document. The same two fields the WinUI ⚙ flyout writes into the
+               same settings.json (#510). -->
+          <TextBlock Text="{x:Static loc:Strings.PageColours}" FontWeight="SemiBold" Margin="0,8,0,0" />
+          <ComboBox Name="PageColoursBox" HorizontalAlignment="Stretch"
+                    AutomationProperties.Name="{x:Static loc:Strings.PageColours}"
+                    ItemsSource="{Binding PageColourChoices}" SelectedItem="{Binding SelectedPageColour}">
+            <ComboBox.ItemTemplate>
+              <DataTemplate DataType="vm:PageColourChoice">
+                <TextBlock Text="{Binding Label}" />
+              </DataTemplate>
+            </ComboBox.ItemTemplate>
+          </ComboBox>
+          <!-- Said out loud rather than discovered: night inverts photographs too, and
+               that is the decision on #168, not a defect (plan §7). -->
+          <TextBlock Name="NightInvertsNote" Text="{x:Static loc:Strings.NightInvertsPictures}"
+                     TextWrapping="Wrap" FontSize="{DynamicResource TypeCaption}" Opacity="0.75" />
+          <CheckBox Name="OpenInReadingModeBox" IsChecked="{Binding OpenInReadingMode}"
+                    Content="{x:Static loc:Strings.OpenInReadingMode}" />
         </StackPanel>
       </Flyout>
   </Window.Resources>
@@ -357,7 +379,17 @@
          above and below re-reads Active's state. Hidden with zero or one tab open
          would be the polished version; shown whenever there is at least one tab,
          which is simplest and always correct. -->
-    <TabStrip Name="DocumentTabStrip" DockPanel.Dock="Top"
+    <!-- TabStripHost / BusyStripHost (#505): a wrapper whose only job is to be turned
+         off in reading mode. The two strips inside them are the only pieces of chrome
+         whose own IsVisible is bound ("there is at least one tab", "work is running"),
+         and a binding that fires while the mode is on would put the strip back on
+         screen — a chrome-free view that sprouts a progress strip when a search starts.
+         Gating the wrapper instead leaves each binding saying exactly what it always
+         said, and takes the whole subtree out of the tab order and the accessible tree
+         with one IsVisible=false, which is what the mode requires. The other hosts
+         (ToolbarHost, StatusBarHost) have no binding and are switched directly. -->
+    <Border Name="TabStripHost" DockPanel.Dock="Top">
+    <TabStrip Name="DocumentTabStrip"
               ItemsSource="{Binding Documents}"
               SelectedItem="{Binding Active, Mode=TwoWay}"
               IsVisible="{Binding HasDocuments}"
@@ -379,11 +411,13 @@
         </DataTemplate>
       </TabStrip.ItemTemplate>
     </TabStrip>
+    </Border>
 
     <!-- Document-level work (#145): opening, saving, a password change, shrinking, print
          preparation, restoring and searching. Shown only 0.5 s into the work and kept at least
          0.3 s (BusyState), so quick work never flickers it. -->
-    <Border Name="BusyStrip" DockPanel.Dock="Top" Padding="8,6,8,0" IsVisible="{Binding Active.Busy.ShowsStrip, FallbackValue=False}"
+    <Border Name="BusyStripHost" DockPanel.Dock="Top">
+    <Border Name="BusyStrip" Padding="8,6,8,0" IsVisible="{Binding Active.Busy.ShowsStrip, FallbackValue=False}"
             BorderThickness="0,0,0,1"
             BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
             Background="{DynamicResource BrandAccentSubtle}">
@@ -393,6 +427,7 @@
         <ProgressBar IsIndeterminate="True" Height="3" MinHeight="3" Margin="0,0,0,4"
                      AutomationProperties.Name="{Binding Active.Busy.Label}" />
       </StackPanel>
+    </Border>
     </Border>
 
     <!-- What the next click will do, and how to get out of it. -->
@@ -684,6 +719,80 @@
           </ListBox>
         </Grid>
       </Border>
+
+      <!-- Reading mode's floating pill (#505; docs/design-tokens.md §6 already
+           describes "a floating page/zoom pill" as the Mac's answer to a status bar).
+           radius.control 6, bottom centre, over the page rather than docked beside it:
+           the whole point of the mode is that nothing is docked.
+
+           Last child of this Panel, so it draws over the pages. IsVisible="False"
+           here and set from code (MainWindow.ReadingMode.cs), never opacity: hidden
+           chrome has to leave the tab order and the accessible tree, and this pill is
+           chrome too when the mode is off.
+
+           Contents, left to right: the file name (only with more than one tab open),
+           previous/next page with the page number between them, fit width, fit page,
+           − / +, and the way out. Each button carries its word as its accessible name
+           whether or not it shows one, the contract the toolbar and find bar keep at
+           their own icon-only steps. -->
+      <Border Name="ReadingPill" IsVisible="False"
+              HorizontalAlignment="Center" VerticalAlignment="Bottom"
+              Margin="0,0,0,24" Padding="8,6" CornerRadius="6"
+              Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+              BorderThickness="1" BorderBrush="{DynamicResource BrandRule}"
+              BoxShadow="{DynamicResource BrandCardShadow}"
+              AutomationProperties.Name="{x:Static loc:Strings.ReadingControls}">
+        <StackPanel Name="ReadingPillItems" Orientation="Horizontal"
+                    Spacing="{DynamicResource SpaceXs}" VerticalAlignment="Center">
+          <StackPanel.Styles>
+            <Style Selector="StackPanel#ReadingPillItems > Button">
+              <Setter Property="Padding" Value="8,3" />
+              <Setter Property="MinHeight" Value="28" />
+              <Setter Property="VerticalAlignment" Value="Center" />
+              <Setter Property="Background" Value="Transparent" />
+              <Setter Property="BorderThickness" Value="0" />
+            </Style>
+          </StackPanel.Styles>
+          <TextBlock Name="ReadingFileName" IsVisible="False" VerticalAlignment="Center"
+                     MaxWidth="180" TextTrimming="CharacterEllipsis" Margin="4,0,4,0"
+                     FontSize="{DynamicResource TypeCaption}" Opacity="0.75" />
+          <Button Name="ReadingPreviousButton" Content="‹" />
+          <!-- The page number is a button because tapping it is how you jump: the
+               flyout holds a box to type a page into, and Enter goes there. -->
+          <Button Name="ReadingPageButton" Content="{Binding Active.PageIndicator}">
+            <Button.Flyout>
+              <Flyout Placement="Top">
+                <StackPanel Width="180" Spacing="{DynamicResource SpaceS}">
+                  <TextBlock Text="{x:Static loc:Strings.GoToPage}" FontWeight="SemiBold" />
+                  <TextBox Name="ReadingPageBox"
+                           AutomationProperties.Name="{x:Static loc:Strings.GoToPage}" />
+                </StackPanel>
+              </Flyout>
+            </Button.Flyout>
+          </Button>
+          <Button Name="ReadingNextButton" Content="›" />
+          <Rectangle Width="1" Height="18" Margin="4,0" VerticalAlignment="Center"
+                     Fill="{DynamicResource BrandRule}" />
+          <Button Name="ReadingFitWidthButton" Content="{x:Static loc:Strings.FitWidth}" />
+          <Button Name="ReadingFitPageButton" Content="{x:Static loc:Strings.FitPage}" />
+          <Button Name="ReadingZoomOutButton" Content="−" />
+          <Button Name="ReadingZoomInButton" Content="+" />
+          <Rectangle Width="1" Height="18" Margin="4,0" VerticalAlignment="Center"
+                     Fill="{DynamicResource BrandRule}" />
+          <Button Name="ReadingExitButton" Content="{x:Static loc:Strings.Exit}" />
+        </StackPanel>
+      </Border>
+
+      <!-- Where a mode change is announced (#505). A live region, the Avalonia
+           equivalent of the WinUI RaiseNotificationEvent and the phones'
+           UIAccessibility.post / liveRegion: the text changes, and the screen reader
+           reads it without anything being focused. Invisible and not hit-testable, but
+           deliberately still IsVisible="True" — an IsVisible="False" element is out of
+           the accessible tree, which is exactly what would make it silent. It is a
+           TextBlock, so it is not a tab stop and cannot trap focus. -->
+      <TextBlock Name="ReadingAnnouncement" Text="" Opacity="0" IsHitTestVisible="False"
+                 HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="8"
+                 AutomationProperties.LiveSetting="Polite" />
     </Panel>
 
   </DockPanel>

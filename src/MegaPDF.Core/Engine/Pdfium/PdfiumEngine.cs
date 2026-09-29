@@ -583,18 +583,27 @@ internal sealed class PdfiumPage : IPdfPage
     private CoreNative.Rect ViewToCrop(PdfRect r) =>
         new() { Left = r.X, Bottom = Height - r.Bottom, Right = r.Right, Top = Height - r.Y };
 
-    public RenderedPage Render(int pixelWidth, int pixelHeight)
+    public RenderedPage Render(int pixelWidth, int pixelHeight, PageTint tint = PageTint.Normal)
     {
         ThrowIfDisposed();
         // The shared recipe — white ground, page content with annotations and LCD
-        // text, then live form-field values — and the refusal policy live in the core
-        // (#111); this allocates the pixels and hands them over.
+        // text, then live form-field values, then the page-colour tint — and the
+        // refusal policy live in the core (#111, #509); this allocates the pixels and
+        // hands them over. The tint is a flag bit ORed onto the byte order, never a
+        // second call: one render, tinted in place, so nothing here has to know what
+        // sepia or night look like.
+        var flags = CoreNative.RenderBgra | tint switch
+        {
+            PageTint.Sepia => CoreNative.RenderSepia,
+            PageTint.Night => CoreNative.RenderNight,
+            _ => 0u,
+        };
         var pixels = new byte[checked(pixelWidth * pixelHeight * 4)];
         int status;
         unsafe
         {
             fixed (byte* buffer = pixels)
-                status = CoreNative.megapdf_render(_core, buffer, pixelWidth, pixelHeight, pixelWidth * 4, CoreNative.RenderBgra);
+                status = CoreNative.megapdf_render(_core, buffer, pixelWidth, pixelHeight, pixelWidth * 4, flags);
         }
         if (status == -2)
             throw new OutOfMemoryException($"Could not allocate a {pixelWidth}x{pixelHeight} render bitmap.");
