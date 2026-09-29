@@ -50,6 +50,58 @@ enum Brand {
     /// paper inside the document, and it ends up in the saved PDF.
     static let inkLevel: Double = Double(0x20) / 255.0
 
+    /// Reading mode's page colours (#512, `docs/reading-mode-plan.md` §2 tier 2).
+    ///
+    /// Literal colours, not colorsets, and for the same reason `inkLevel` is a literal:
+    /// these must not follow the system appearance. The page itself is tinted by the
+    /// engine (`MEGAPDF_RENDER_SEPIA` / `_NIGHT`, #509), and the chrome around it — the
+    /// gutter the pages sit on and the floating bar — has to match *that*, not whether
+    /// iOS is in light or dark mode. A sepia page on a dark-mode phone is still a sepia
+    /// page, and a gutter that followed the appearance would frame it in the wrong colour
+    /// exactly half the time.
+    ///
+    /// The values are the Avalonia leg's, to the byte (`src/MegaPDF.Avalonia/Brand.axaml`,
+    /// #505/#511), so the two platforms wear one palette: sepia's surface is the engine's
+    /// own paper white (`#F4ECD8`, `core/megapdf_core.cpp` `kSepia*`) with the gutter a
+    /// step darker so a page edge is still visible; night's surface is a step up from the
+    /// engine's `#1A1A1A` page and its gutter a step below. Normal has no colours of its
+    /// own — that is the app wearing its own `backdrop`, which is what these two replace.
+    enum Reading {
+        static let sepiaGutter = Color(red: 0xDC / 255, green: 0xD0 / 255, blue: 0xB4 / 255)
+        static let sepiaSurface = Color(red: 0xF4 / 255, green: 0xEC / 255, blue: 0xD8 / 255)
+        static let sepiaInk = Color(red: 0x2B / 255, green: 0x24 / 255, blue: 0x18 / 255)
+        static let nightGutter = Color(red: 0x0E / 255, green: 0x0E / 255, blue: 0x0E / 255)
+        static let nightSurface = Color(red: 0x26 / 255, green: 0x26 / 255, blue: 0x26 / 255)
+        static let nightInk = Color(red: 0xE5 / 255, green: 0xE5 / 255, blue: 0xE5 / 255)
+
+        /// The wall the pages sit on.
+        static func gutter(_ tint: PageTint) -> Color {
+            switch tint {
+            case .normal: return Brand.backdrop
+            case .sepia: return sepiaGutter
+            case .night: return nightGutter
+            }
+        }
+
+        /// The floating bar's own ground, or nil where it should stay the system material.
+        static func surface(_ tint: PageTint) -> Color? {
+            switch tint {
+            case .normal: return nil
+            case .sepia: return sepiaSurface
+            case .night: return nightSurface
+            }
+        }
+
+        /// The ink on that ground, chosen against the surface rather than the appearance.
+        static func ink(_ tint: PageTint) -> Color? {
+            switch tint {
+            case .normal: return nil
+            case .sepia: return sepiaInk
+            case .night: return nightInk
+            }
+        }
+    }
+
     /// Type. The semantic steps of `docs/design-tokens.md` §2, mapped to
     /// SwiftUI's own scale so Dynamic Type keeps working. Nothing in the app
     /// sets a fixed point size.

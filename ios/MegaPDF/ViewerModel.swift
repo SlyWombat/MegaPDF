@@ -205,6 +205,65 @@ final class ViewerModel: ObservableObject {
     // the document: the view draws the marks, and applying is a separate, confirmed step
     // taken on save.
 
+    // MARK: - Reading mode (#168 / #506, #512)
+
+    /// The page and nothing else: the navigation bar and the tool bar are gone, taps on
+    /// the page show and hide the floating bar instead of editing, and the page host is
+    /// untouched — same document, same page, same zoom, same scroll offset, no re-render.
+    ///
+    /// A screen state, not a document one, and not persisted per document (#168 decision
+    /// 2): it lasts as long as this document is open, and `ReadingDefaults
+    /// .openInReadingMode` is the only thing that carries a preference across launches.
+    @Published private(set) var readingMode = false
+
+    /// How pages are drawn (#512): as the document has them, or through one of the
+    /// engine's two reading tints. Seeded from the stored preference so the first render
+    /// of the first document is already the colour that was asked for, rather than a
+    /// white page that turns sepia a moment later.
+    @Published private(set) var pageTint: PageTint = ReadingDefaults.pageTint()
+
+    /// Enters or leaves reading mode, and says so to VoiceOver.
+    ///
+    /// **Armed tools disarm on entry and do not come back on the way out** (plan §2).
+    /// Reading mode means clicks on the page stop editing altogether, so a tool left
+    /// armed would be a tool that fires on the first tap after Exit — and the tap that
+    /// entered reading mode is the last thing the user did before forgetting about it.
+    /// Nothing here touches the document, the history or the marks: entering and leaving
+    /// are free, which is why the way out asks nothing.
+    func setReadingMode(_ on: Bool) {
+        guard readingMode != on else { return }
+        readingMode = on
+        if on {
+            redactMode = false
+            isPlacingText = false
+            pendingSignature = nil
+            selectedStamp = nil
+            selectedTextBox = nil
+            deselectRedactionMark()
+            // "Tap the page where the signature should go" and its siblings are
+            // instructions for a tool that has just been put away.
+            statusMessage = nil
+        }
+        announce(on ? String(localized: "Reading mode on")
+                    : String(localized: "Reading mode off"))
+    }
+
+    func toggleReadingMode() { setReadingMode(!readingMode) }
+
+    /// Changes the page colours and re-renders **only what is on screen** (#512).
+    ///
+    /// `pageImages` never holds more than the current window plus its margin — everything
+    /// else has already been evicted by `updateRenderWindow` — and the render keys carry
+    /// the tint, so pushing the window again renders exactly the pages being looked at and
+    /// nothing else. The old images stay up until their replacements land, so switching
+    /// tint recolours the page rather than blanking it.
+    func setPageTint(_ tint: PageTint) {
+        guard pageTint != tint else { return }
+        pageTint = tint
+        guard let window = lastWindow else { return }
+        updateRenderWindow(first: window.first, last: window.last, widthPx: window.widthPx)
+    }
+
     /// The Redact tool is armed: the next drag across a page marks an area.
     @Published private(set) var redactMode = false
 
@@ -421,7 +480,7 @@ final class ViewerModel: ObservableObject {
         }
         // Every page's raster is stale once content has been removed.
         pageImages.removeAll()
-        renderedWidths.removeAll()
+        renderedKeys.removeAll()
         if let window = lastWindow {
             updateRenderWindow(first: window.0, last: window.1, widthPx: window.2)
         }
@@ -514,7 +573,17 @@ final class ViewerModel: ObservableObject {
     private var scopedAccessURL: URL?
     /// The staged copy the Save-a-copy exporter writes from, removed once it has (#147).
     private var exportStagedURL: URL?
-    private var renderedWidths: [Int: Int] = [:]
+    /// What each cached page image was rendered for (#512). The width alone was enough
+    /// while there was one way to draw a page; the tint is part of the request now, so a
+    /// cached image is only reusable when both agree — otherwise switching to Night left
+    /// every already-sharp page in daylight until it happened to be re-rendered for
+    /// another reason.
+    private struct RenderKey: Equatable {
+        let width: Int
+        let tint: PageTint
+    }
+
+    private var renderedKeys: [Int: RenderKey] = [:]
     private var renderTask: Task<Void, Never>?
     private var searchTask: Task<Void, Never>?
     private var lastWindow: (first: Int, last: Int, widthPx: Int)?
@@ -868,6 +937,12 @@ final class ViewerModel: ObservableObject {
             // truth from the moment a document is on screen rather than only after the first
             // mark is made.
             await refreshRedactionMarks()
+            // #512: *Open documents in reading mode*, the one app-level switch that
+            // replaced per-document memory (#168 decision 2). Read here rather than from
+            // a view's `@AppStorage`, because the document is on screen before any view
+            // has had a chance to look at it, and a mode that arrived a frame late would
+            // be a visible flash of chrome.
+            if ReadingDefaults.openInReadingMode() { setReadingMode(true) }
             // A restricted open says so, and where the owner password goes (ADR-004 §3).
             if capabilities.isRestricted { showRestrictedNotice() }
         } catch PdfError.passwordRequired {
@@ -899,7 +974,7 @@ final class ViewerModel: ObservableObject {
 
         for index in pageImages.keys where !window.contains(index) {
             pageImages.removeValue(forKey: index)
-            renderedWidths.removeValue(forKey: index)
+            renderedKeys.removeValue(forKey: index)
         }
 
         renderTask?.cancel()
@@ -914,11 +989,13 @@ final class ViewerModel: ObservableObject {
                 let memoryScale = min(1.0, Double(Self.maxPixelDim) / max(idealWidth, idealHeight))
                 let width = max(1, Int(idealWidth * memoryScale))
                 let height = max(1, Int(idealHeight * memoryScale))
-                if renderedWidths[index] == width { continue }
+                let key = RenderKey(width: width, tint: pageTint)
+                if renderedKeys[index] == key { continue }
                 if let image = try? await PdfEngine.shared.render(
-                    doc, index: index, pixelWidth: width, pixelHeight: height) {
+                    doc, index: index, pixelWidth: width, pixelHeight: height,
+                    tint: key.tint) {
                     pageImages[index] = image
-                    renderedWidths[index] = width
+                    renderedKeys[index] = key
                 }
             }
         }
@@ -966,6 +1043,13 @@ final class ViewerModel: ObservableObject {
     /// top-left origin.
     func onPageTapped(index: Int, xFraction: Double, yFraction: Double) {
         guard case let .viewing(_, pageSizes) = state, let doc = document else { return }
+        // Reading mode **suppresses** this dispatch — it does not reroute it (#506, plan
+        // §2). The tap is swallowed here, so nothing on the page can be selected, armed,
+        // placed or edited while the chrome is away; what the same tap does instead —
+        // show or hide the floating bar — is the view's business and never reaches the
+        // document. Checked first, ahead of the busy guard, because it is a statement
+        // about the mode rather than about what the app happens to be doing.
+        guard !readingMode else { return }
         // Taps are ignored while other work runs (#145): never two changes or two questions at once.
         guard !busy.isBlocked else { return }
         let size = pageSizes[index]
@@ -1514,7 +1598,7 @@ final class ViewerModel: ObservableObject {
     }
 
     func invalidatePage(_ index: Int) {
-        renderedWidths.removeValue(forKey: index)
+        renderedKeys.removeValue(forKey: index)
         if let w = lastWindow { updateRenderWindow(first: w.first, last: w.last, widthPx: w.widthPx) }
     }
 
@@ -2220,7 +2304,7 @@ final class ViewerModel: ObservableObject {
         signatureCopyNoticeShown = false
         clearSearch()
         pageImages = [:]
-        renderedWidths = [:]
+        renderedKeys = [:]
         lastWindow = nil
         sourceURL = nil
         if let scoped = scopedAccessURL {
@@ -2266,6 +2350,11 @@ final class ViewerModel: ObservableObject {
         redactionSummary = nil
         redactionRefusal = nil
         summaryForSave = nil
+        // Reading mode belongs to the document on screen (#506): the next one decides for
+        // itself, from *Open documents in reading mode* and nothing else. Set directly
+        // rather than through `setReadingMode`, which would announce "Reading mode off"
+        // to a document that is already gone.
+        readingMode = false
         if let doc = document {
             document = nil
             Task { await PdfEngine.shared.close(doc) }

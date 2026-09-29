@@ -84,6 +84,7 @@ public class StringCatalogueTests
         // iOS
         ["Document"] = "file name stem",
         ["Page %lld"] = "same",
+        ["Page"] = "\"Page\" is the same word — the field in the reading bar's Go to page box (#506), as macOS's RegionPage already is",
         ["Photos"] = "the Photos app keeps its name",
         ["Signature %lld"] = "same",
         ["Signatures"] = "same word",

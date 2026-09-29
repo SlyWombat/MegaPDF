@@ -1243,6 +1243,40 @@
         }
       }
     },
+    "Exit" : {
+      "comment" : "#506: the floating bar's last button. Never *Quitter*, which is Quit",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sortir"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sortir"
+          }
+        }
+      }
+    },
+    "Exit reading mode" : {
+      "comment" : "#506: that button's accessible name",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sortir du mode lecture"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sortir du mode lecture"
+          }
+        }
+      }
+    },
     "Export as Markdown" : {
       "comment" : "More menu and the redact-confirmation dialog (#386): a one-way, lossy text export of the document, not a Save-a-copy PDF variant.",
       "localizations" : {
@@ -1342,6 +1376,40 @@
         }
       }
     },
+    "Fit page" : {
+      "comment" : "#512: the reading bar's zoom preset",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Page entière"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Page entière"
+          }
+        }
+      }
+    },
+    "Fit width" : {
+      "comment" : "#512: the reading bar's zoom preset",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ajuster à la largeur"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ajuster à la largeur"
+          }
+        }
+      }
+    },
     "Font" : {
       "localizations" : {
         "fr" : {
@@ -1387,6 +1455,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Obtenir Adobe Reader"
+          }
+        }
+      }
+    },
+    "Go" : {
+      "comment" : "#506: the button that goes to the typed page number",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aller"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aller"
+          }
+        }
+      }
+    },
+    "Go to page" : {
+      "comment" : "#506: the box the reading bar's page number opens",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aller à la page"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aller à la page"
           }
         }
       }
@@ -1607,6 +1709,57 @@
         }
       }
     },
+    "Next page" : {
+      "comment" : "#506: the reading bar",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Page suivante"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Page suivante"
+          }
+        }
+      }
+    },
+    "Night" : {
+      "comment" : "#512: a page colour",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nuit"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nuit"
+          }
+        }
+      }
+    },
+    "Night inverts the page, pictures included." : {
+      "comment" : "#512: said in the settings copy because it is a decision (#168 decision 3), not a defect",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le mode nuit inverse la page, images comprises."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le mode nuit inverse la page, images comprises."
+          }
+        }
+      }
+    },
     "No results" : {
       "localizations" : {
         "fr" : {
@@ -1635,6 +1788,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Aucune signature pour l'instant. Dessinez-en une avec votre doigt, ou ajoutez une photo de votre signature sur du papier blanc — l'arrière-plan est retiré automatiquement."
+          }
+        }
+      }
+    },
+    "Normal" : {
+      "comment" : "#512: a page colour. Agrees with *couleurs*, the label above the list",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Normales"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Normales"
           }
         }
       }
@@ -1819,6 +1989,23 @@
         }
       }
     },
+    "Open documents in reading mode" : {
+      "comment" : "#512: the settings toggle; off by default (#168 decision 2)",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ouvrir les documents en mode lecture"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ouvrir les documents en mode lecture"
+          }
+        }
+      }
+    },
     "Open. Fix. Save. Done." : {
       "localizations" : {
         "fr" : {
@@ -1917,6 +2104,23 @@
         }
       }
     },
+    "Page" : {
+      "comment" : "#506: the field in that box, which takes a page number",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Page"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Page"
+          }
+        }
+      }
+    },
     "Page %lld" : {
       "localizations" : {
         "fr" : {
@@ -1929,6 +2133,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Page %lld"
+          }
+        }
+      }
+    },
+    "Page %lld of %lld" : {
+      "comment" : "#506: what VoiceOver hears on the reading bar's page number, which shows as digits",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Page %1$lld sur %2$lld"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Page %1$lld sur %2$lld"
+          }
+        }
+      }
+    },
+    "Page colours" : {
+      "comment" : "#512: the settings row. British spelling in the English, as everywhere else in this app",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couleurs de la page"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couleurs de la page"
           }
         }
       }
@@ -2121,6 +2359,108 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Résultat précédent"
+          }
+        }
+      }
+    },
+    "Previous page" : {
+      "comment" : "#506: the reading bar. Distinct from the find bar's Résultat précédent, which is about matches",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Page précédente"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Page précédente"
+          }
+        }
+      }
+    },
+    "Reading" : {
+      "comment" : "#512: the settings sheet's section of reading preferences",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lecture"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lecture"
+          }
+        }
+      }
+    },
+    "Reading controls" : {
+      "comment" : "#506: the accessible name of the floating bar inside reading mode",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Commandes de lecture"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Commandes de lecture"
+          }
+        }
+      }
+    },
+    "Reading mode" : {
+      "comment" : "#506: the More menu row and the iPad tool strip button that enter reading mode",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mode lecture"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mode lecture"
+          }
+        }
+      }
+    },
+    "Reading mode off" : {
+      "comment" : "#506: announced to VoiceOver on leaving reading mode",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mode lecture désactivé"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mode lecture désactivé"
+          }
+        }
+      }
+    },
+    "Reading mode on" : {
+      "comment" : "#506: announced to VoiceOver on entering reading mode",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mode lecture activé"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mode lecture activé"
           }
         }
       }
@@ -2484,6 +2824,23 @@
         }
       }
     },
+    "Sepia" : {
+      "comment" : "#512: a page colour",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sépia"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sépia"
+          }
+        }
+      }
+    },
     "Set" : {
       "localizations" : {
         "fr" : {
@@ -2512,6 +2869,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Définir un mot de passe"
+          }
+        }
+      }
+    },
+    "Settings" : {
+      "comment" : "#512: the settings sheet's title, and the Home screen's gear",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Paramètres"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Paramètres"
+          }
+        }
+      }
+    },
+    "Settings…" : {
+      "comment" : "#512: the ⋯ menu row that opens it",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Paramètres…"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Paramètres…"
           }
         }
       }
@@ -3484,6 +3875,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Votre nom, en guise de signature"
+          }
+        }
+      }
+    },
+    "Zoom in" : {
+      "comment" : "#512: the reading bar",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zoom avant"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zoom avant"
+          }
+        }
+      }
+    },
+    "Zoom out" : {
+      "comment" : "#512: the reading bar",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zoom arrière"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zoom arrière"
           }
         }
       }
