@@ -91,6 +91,7 @@ struct ViewerView: View {
                            alignment: .center)
                 }
                 .background(Brand.backdrop)
+                .overlay(alignment: .topLeading) { zoomProbes(geo: geo) }
                 // Simultaneous, not exclusive (#336): a plain .gesture on a ScrollView
                 // competes with the scroll view's own pan gesture, and the pinch was
                 // losing that race — the magnify never started. Running alongside it lets
@@ -99,6 +100,11 @@ struct ViewerView: View {
                 // MagnificationGesture rather than iOS 17's MagnifyGesture: the
                 // deployment target is 16.0, and the old type is only deprecated, not
                 // removed. Switching means raising the floor, which is not this fix.
+                //
+                // It is also why the zoom anchors on the page's own top-left corner rather
+                // than on the point between the fingers (#530): this gesture's value is a
+                // bare scale and carries no location to anchor on, where MagnifyGesture's
+                // carries one. Not changed here — #465 was a test-only finding.
                 .simultaneousGesture(
                     MagnificationGesture()
                         .onChanged { gestureZoom = $0 }
@@ -132,6 +138,54 @@ struct ViewerView: View {
                     }
                 }
             }
+        }
+    }
+
+    // MARK: - the zoom probes ViewerZoomUITests pinches at (#465)
+
+    /// Built only under `-uiTestZoomProbes`, which one UI test passes and nothing else does:
+    /// no ordinary launch, and no screenshot or preview capture, has either of these in its
+    /// accessibility tree. Neither one draws a pixel or takes a touch.
+    ///
+    /// Why the app has to offer them (#465). `XCUIElement.pinch(withScale:velocity:)` places
+    /// its two synthetic touches from the element's frame, clipped to the window and inset
+    /// 50pt. Once a first pinch has zoomed the page past the viewport, the page's frame IS
+    /// the window, so the lower touch lands 50pt from the bottom of the screen — inside the
+    /// compact-width bottom toolbar (`ToolbarItemGroup(placement: .bottomBar)`), which takes
+    /// it, as a toolbar should. `MagnificationGesture` then only ever sees one finger, and
+    /// the second pinch measured as a complete no-op on every iPhone while iPad — regular
+    /// width, tools along the top in `regularToolStrip`, nothing 50pt from the bottom —
+    /// passed. That was never a zoom bug: it was two fingers, one of them on the toolbar,
+    /// which no hand does. `viewerPinchProbe` is a frame and nothing else, well inside the
+    /// page; `allowsHitTesting(false)` lets the touches fall through to the gesture below it,
+    /// so the test pinches the page the way a hand does.
+    ///
+    /// `viewerZoomProbe` carries the committed `zoom` in its label. Pixels say whether the
+    /// screen changed; this says what the app itself did, which is the difference between
+    /// "the gesture never arrived" and "it arrived and did nothing".
+    private var zoomProbesRequested: Bool {
+        ProcessInfo.processInfo.arguments.contains("-uiTestZoomProbes")
+    }
+
+    @ViewBuilder
+    private func zoomProbes(geo: GeometryProxy) -> some View {
+        if zoomProbesRequested {
+            ZStack(alignment: .topLeading) {
+                Text("zoom \(String(format: "%.4f", zoom))")
+                    .font(.system(size: 6))
+                    .foregroundColor(.clear)
+                    .accessibilityIdentifier("viewerZoomProbe")
+                Color.clear
+                    .frame(width: max(geo.size.width * 0.7, 40),
+                           height: max(geo.size.height * 0.4, 40))
+                    .contentShape(Rectangle())
+                    .accessibilityElement()
+                    .accessibilityIdentifier("viewerPinchProbe")
+                    .accessibilityLabel("Pinch probe")
+                    .padding(.leading, geo.size.width * 0.15)
+                    .padding(.top, geo.size.height * 0.2)
+            }
+            .allowsHitTesting(false)
         }
     }
 

@@ -107,7 +107,26 @@ double-tap toggling 1× ↔ 2×. There is no zoom %, no Fit width and no Fit pag
 That was the intent, not the fact, until #336: the pinch did nothing, because the
 magnify gesture lost to the scroll view's own pan. Walk it on a device — a pinch
 out and back — rather than reading this table; the rig check is
-`ViewerZoomUITests` in the MegaPDFDemo scheme, which the CI scheme does not run.
+`ViewerZoomUITests` in the MegaPDFDemo scheme, which the CI scheme does not run
+— the UI-test job does, on an iPhone **and** an iPad since #465.
+
+Two things about that test to know before reading a failure of it (#465). It aims
+both pinches at `viewerPinchProbe`, an invisible rectangle `ViewerView` builds only
+under `-uiTestZoomProbes`, and it reads the app's committed zoom off
+`viewerZoomProbe` as well as the pixels. Aimed at the page element instead,
+`XCUIElement.pinch(withScale:velocity:)` synthesises its two touches from that
+element's frame — and once a first pinch has made the page bigger than the viewport
+that frame is the whole window, so the lower finger lands 50pt from the bottom of
+the screen. On a compact width that is inside the bottom toolbar, which takes the
+touch; the magnify gesture never sees a second finger and the pinch measures as a
+complete no-op. On every iPhone, never on an iPad, for a fortnight. **Nothing about
+the app is wrong there and no hand can reproduce it** — if you find yourself
+walking a phone looking for a dead pinch in, this is what you are chasing.
+
+What *is* wrong, and is worth a minute on a real phone: zoom anchors on the page's
+own top-left corner rather than on the point between your fingers, so zooming in on
+the signature block walks it off the screen. The same defect as Android's #527,
+tracked for iOS as #530.
 
 ## 5. Modes and the notice each shows
 

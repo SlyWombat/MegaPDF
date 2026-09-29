@@ -10,10 +10,22 @@ import XCTest
 /// The page is compared as pixels, the way `tools/android-qa/flows.py` does it for the
 /// same flow, and for the same reason: a zoomed page's accessibility bounds are either
 /// clipped to the display or in a coordinate space that no longer matches what is on
-/// screen, so the pixels are the honest witness.
+/// screen, so the pixels are the honest witness. Since #465 the app's own committed zoom
+/// is read alongside them (`viewerZoomProbe`), so a failure can say whether the gesture
+/// reached the app at all instead of only that the screen did not move.
+///
+/// **Where the fingers go matters (#465).** Both pinches are aimed at `viewerPinchProbe`,
+/// an invisible, untouchable rectangle well inside the page that `ViewerView` builds for
+/// this test alone. Aimed at the page element instead, `XCUIElement.pinch` puts its lower
+/// synthetic touch 50pt from the bottom of the screen as soon as the page is bigger than
+/// the viewport — on an iPhone that is inside the bottom toolbar, which takes the touch,
+/// and the magnify gesture never sees a second finger. That is what made the closing pinch
+/// measure as a dead no-op on every iPhone while iPad passed: a test artefact, not a bug
+/// in the app. `ViewerView.zoomProbes` has the long version.
 ///
 /// In the MegaPDFDemo scheme with the other UI tests; ios-ci.yml runs it on the
-/// simulator after the unit tests (#405).
+/// simulator after the unit tests (#405), on an iPhone and an iPad (#465) — the two
+/// layouts differ in exactly the chrome this test turned out to be sensitive to.
 final class ViewerZoomUITests: XCTestCase {
 
     private var app: XCUIApplication!
@@ -24,17 +36,45 @@ final class ViewerZoomUITests: XCTestCase {
         // Explicitly English: this one reads no wording, but the demo document and the
         // launch state should not depend on the machine's language.
         app.launchArguments = ["-screenshot", "viewer",
-                               "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+                               "-AppleLanguages", "(en)", "-AppleLocale", "en_US",
+                               // The two probes above; nothing else passes this (#465).
+                               "-uiTestZoomProbes"]
     }
 
-    /// The first page of the demo agreement, which is what a pinch is aimed at. The
-    /// gesture itself is synthesised at the element's centre; the frame is also what
-    /// the comparison is cropped to.
+    /// The first page of the demo agreement. The pixel comparison is cropped to its frame;
+    /// the gestures are aimed at `pinchProbe()`, not at this.
     private func page(timeout: TimeInterval = 30) -> XCUIElement {
         let page = app.descendants(matching: .any)
             .matching(NSPredicate(format: "label == 'Page 1'")).firstMatch
         XCTAssertTrue(page.waitForExistence(timeout: timeout), "the demo document did not open")
         return page
+    }
+
+    /// The rectangle the pinches are synthesised from (#465). Re-queried for each gesture:
+    /// it is laid out from the viewport, so it does not move, but a stale reference is one
+    /// less thing to wonder about when this fails.
+    private func pinchProbe() -> XCUIElement {
+        let probe = app.otherElements["viewerPinchProbe"]
+        XCTAssertTrue(probe.waitForExistence(timeout: 10),
+                      "the pinch probe is missing — did the -uiTestZoomProbes launch argument "
+                      + "survive, and does ViewerView still build zoomProbes? (#465)")
+        return probe
+    }
+
+    /// The zoom the app has committed, read off `viewerZoomProbe`'s label.
+    private func committedZoom() -> Double {
+        let probe = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier == 'viewerZoomProbe'")).firstMatch
+        guard probe.waitForExistence(timeout: 10) else {
+            XCTFail("the zoom probe is missing (#465)")
+            return .nan
+        }
+        let text = probe.label.replacingOccurrences(of: "zoom ", with: "")
+        guard let value = Double(text) else {
+            XCTFail("the zoom probe read '\(probe.label)', which is not a zoom")
+            return .nan
+        }
+        return value
     }
 
     /// The screen's pixels for `rect` (in points), as RGBA bytes.
@@ -95,24 +135,50 @@ final class ViewerZoomUITests: XCTestCase {
         let rect = firstPage.frame
         let atOne = pixels(of: rect)
         XCTAssertFalse(atOne.isEmpty, "could not read the page's pixels")
+        XCTAssertEqual(committedZoom(), 1, accuracy: 0.01, "the document did not open at 1×")
 
         // Fingers apart — the gesture the bug was about. The velocity's sign has to
         // agree with the scale: positive for a pinch out (scale > 1), negative for a
         // pinch in (scale < 1), or XCTest throws NSInvalidArgumentException (#405).
-        firstPage.pinch(withScale: 2.5, velocity: 2.0)
+        // A synthesised pinch does not land on the scale it is asked for — this one
+        // arrives at the 4× clamp — so what is asserted is the direction, not a value.
+        pinchProbe().pinch(withScale: 2.5, velocity: 2.0)
         Thread.sleep(forTimeInterval: 1.5)   // scroll indicators fade
         let zoomed = pixels(of: rect)
+        let zoomedZoom = committedZoom()
         XCTAssertGreaterThan(difference(atOne, zoomed), 0.05,
-                             "a pinch out did not change the page (#336)")
+                             "a pinch out did not change the page (#336); the app's zoom is "
+                             + "\(zoomedZoom)")
+        XCTAssertGreaterThan(zoomedZoom, 1.25,
+                             "a pinch out did not reach the app's zoom at all (#336)")
 
-        // And closed again. What this asserts is that the zoom came back *off* — not
-        // that the page landed on the exact frame it started on: a pinch in a scroll
-        // view can leave it a few points from where it was, and a test that demanded
-        // the same picture would fail on that rather than on the zoom.
-        firstPage.pinch(withScale: 0.4, velocity: -2.0)
+        // And closed again, twice: a synthesised pinch in takes about 2.5× off at a time,
+        // and from the 4× clamp that is two of them to be back at 1×. Both are measured,
+        // because the first one is the gesture #465 was filed about.
+        pinchProbe().pinch(withScale: 0.4, velocity: -2.0)
+        Thread.sleep(forTimeInterval: 1.5)
+        let halfClosed = pixels(of: rect)
+        let halfClosedZoom = committedZoom()
+        // This is the assertion the old test did not have. It compared `zoomed` against
+        // `closed` and asked them to be CLOSE, which a pinch in that does nothing at all
+        // satisfies perfectly — `closed` is then the same picture, difference 0. Asking
+        // that the page moved is the one thing a no-op can never pass (#436).
+        XCTAssertGreaterThan(difference(zoomed, halfClosed), 0.05,
+                             "a pinch in did not change the page at all — the app's zoom went "
+                             + "from \(zoomedZoom) to \(halfClosedZoom)")
+        XCTAssertLessThan(halfClosedZoom, zoomedZoom - 0.25,
+                          "a pinch in did not take any zoom back off: \(zoomedZoom) → "
+                          + "\(halfClosedZoom)")
+
+        pinchProbe().pinch(withScale: 0.4, velocity: -2.0)
         Thread.sleep(forTimeInterval: 1.5)
         let closed = pixels(of: rect)
-        XCTAssertLessThan(difference(zoomed, closed), 0.05,
-                          "a pinch in left the page at the zoom the other way")
+        XCTAssertEqual(committedZoom(), 1, accuracy: 0.01,
+                       "pinching in twice from the 4× clamp did not come back to 1×")
+        // All the way off means the picture it started as. Safe to demand exactly that
+        // here, unlike mid-gesture: 1× is a clamp, and the page is shorter than the
+        // viewport, so there is only one place it can be.
+        XCTAssertLessThan(difference(atOne, closed), 0.05,
+                          "back at 1× the page is not the picture it started as")
     }
 }
