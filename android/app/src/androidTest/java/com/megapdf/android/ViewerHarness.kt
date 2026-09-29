@@ -90,6 +90,14 @@ object Fixtures {
         return file
     }
 
+    /**
+     * A document the test built itself, under [name] (#174): the page tools need documents of
+     * several pages, of known page sizes, and with form fields in a /Parent hierarchy, none of
+     * which the demo agreement is — see [TestPdfs] for why each is built rather than shipped.
+     */
+    fun written(name: String, bytes: ByteArray): File =
+        File(dir(), name).apply { writeBytes(bytes) }
+
     /** A fresh copy of [asset] from this test APK's own assets — see [DYNAMIC_XFA_ASSET]. */
     fun testAsset(asset: String, name: String = asset): File {
         val file = File(dir(), name)

@@ -92,6 +92,20 @@ private fun redactedName(displayName: String): String {
 private const val REDACTED_SUFFIX = "-redacted"
 
 /**
+ * The name *Save pages as…* offers (#174): "lease.pdf" becomes "lease-pages.pdf", so the copy is
+ * never offered under the name of the document it came out of. Like [redactedName], the suffix is
+ * a file name and carries no accent.
+ */
+private fun extractName(displayName: String): String {
+    val dot = displayName.lastIndexOf('.')
+    val stem = if (dot > 0) displayName.substring(0, dot) else displayName
+    val extension = if (dot > 0) displayName.substring(dot) else ".pdf"
+    return stem + PAGES_SUFFIX + extension
+}
+
+private const val PAGES_SUFFIX = "-pages"
+
+/**
  * What the Redact confirmation (#173) was opened for: marks are on the document and one of
  * the commands that reads it has been asked for, so the marked content is removed first.
  * [SAVE] is either save path (Save, Save a copy); [EXPORT] is Export as Markdown (#409, as on
@@ -135,6 +149,16 @@ fun MegaPdfApp(viewModel: ViewerViewModel = viewModel(), screenshotState: String
     val pickSignatureImage = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia()
     ) { uri -> uri?.let { viewModel.importSignature(it) } }
+    // Page tools (#174). "Add pages from file…" picks a PDF to take pages out of; the insertion
+    // point is where the Pages grid's selection says, read when the picker comes back. "Save pages
+    // as…" is a create-document picker of its own rather than a second face of Save a copy, for
+    // #409's reason: the row is the choice, and the picker's type is what gets written.
+    val pickPagesSource = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri -> uri?.let { viewModel.importPagesFrom(it) } }
+    val createExtract = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/pdf")
+    ) { uri -> uri?.let { viewModel.extractSelectedPagesTo(it) } }
 
     // Settings (#513): a full-screen overlay over whatever is underneath, reachable from the
     // viewer's ⋮ menu and from Home — *Open documents in reading mode* has to be settable
@@ -208,7 +232,35 @@ fun MegaPdfApp(viewModel: ViewerViewModel = viewModel(), screenshotState: String
         )
 
         is ViewerUiState.Viewing -> {
-            ViewerScreen(
+            // The Pages grid (#174) replaces the viewer while it is up rather than sitting over it
+            // — the choice Settings makes, for its reason: a phone has no room for both, and
+            // leaving the viewer composed underneath would leave its bars and its page in the
+            // accessibility tree. Back returns to the document on the page it was left on.
+            if (viewModel.isPagesOpen) PagesScreen(
+                pageSizes = state.pageSizes,
+                thumbnails = viewModel.pageThumbnails,
+                selection = viewModel.selectedPages,
+                canAssemble = viewModel.capabilities.canAssemblePages,
+                canExtract = viewModel.capabilities.canExtractPages,
+                canUndo = viewModel.canUndo,
+                canRedo = viewModel.canRedo,
+                busy = viewModel.busy,
+                toolsDisabled = viewModel.toolsDisabled,
+                pageTint = viewModel.pageTint,
+                onThumbnailWindowChange = viewModel::updateThumbnailWindow,
+                onToggleSelection = viewModel::togglePageSelection,
+                onSelectAll = viewModel::selectAllPages,
+                onClearSelection = viewModel::clearPageSelection,
+                onRotate = viewModel::rotateSelectedPages,
+                onDelete = viewModel::deleteSelectedPages,
+                onMove = viewModel::movePage,
+                onInsertBlank = viewModel::insertBlankPage,
+                onAddFromFile = { pickPagesSource.launch(arrayOf("application/pdf")) },
+                onSaveSelectionAs = { createExtract.launch(extractName(state.displayName)) },
+                onUndo = viewModel::undo,
+                onRedo = viewModel::redo,
+                onClose = viewModel::closePages,
+            ) else ViewerScreen(
                 displayName = state.displayName,
                 pageSizes = state.pageSizes,
                 pageBitmaps = viewModel.pageBitmaps,
@@ -323,7 +375,27 @@ fun MegaPdfApp(viewModel: ViewerViewModel = viewModel(), screenshotState: String
                 onExitReadingMode = viewModel::exitReadingMode,
                 pageTint = viewModel.pageTint,
                 onOpenSettings = { settingsOpen = true },
+                // Page tools (#174).
+                onOpenPages = viewModel::openPages,
             )
+
+            // A page tool refused (#174): what happened, why, and that nothing was changed — the
+            // shape the redaction refusal below already uses, because a refusal is information.
+            // Hosted here rather than in either screen so it is shown over whichever is up.
+            viewModel.pageToolRefusal?.let { refusal ->
+                androidx.compose.material3.AlertDialog(
+                    onDismissRequest = { viewModel.pageToolRefusal = null },
+                    title = { androidx.compose.material3.Text(stringResource(R.string.pages_refused_title)) },
+                    text = {
+                        androidx.compose.material3.Text(viewModel.describePageToolRefusal(refusal))
+                    },
+                    confirmButton = {
+                        androidx.compose.material3.TextButton(
+                            onClick = { viewModel.pageToolRefusal = null },
+                        ) { androidx.compose.material3.Text(stringResource(R.string.redact_ok)) }
+                    },
+                )
+            }
 
             // The confirmation #173 asks for, before either save path writes anything:
             // what redaction does, that it cannot be undone once saved, and Save a copy as

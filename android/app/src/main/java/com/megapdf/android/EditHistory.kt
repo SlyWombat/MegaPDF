@@ -34,8 +34,38 @@ interface PdfEditOperation {
      */
     val changesDocument: Boolean get() = true
 
+    /**
+     * The pages whose look this changed, for the re-render. Usually just [pageIndex]; a page
+     * operation can touch several at once — rotating a selection is one undo step (#174).
+     */
+    val pagesChanged: List<Int> get() = listOf(pageIndex)
+
+    /**
+     * How the last apply or revert renumbered the document's pages (#174), in the order it
+     * happened, or empty for an edit that leaves the page order alone — which is every edit but
+     * the page tools. The app's own index-keyed state follows these ([PageShift]); the core's
+     * follows by itself.
+     *
+     * Read after apply or revert, like [BodyTextEditOperation.lastOutcome] and
+     * [RedactionMarkEdit.lastRenames]: a delete's undo inserts where its apply deleted, so which
+     * renumbering happened depends on which way the operation just went.
+     */
+    val lastPageShifts: List<PageShift> get() = emptyList()
+
     suspend fun apply(doc: EditTarget)
     suspend fun revert(doc: EditTarget)
+
+    /**
+     * This operation has left the history for good and will never be applied or reverted again:
+     * the stack dropped its oldest entry, a new edit cleared the redo branch, or the document is
+     * closing. Anything the *engine* is holding on its behalf can go — for a page delete, that is
+     * the deleted page itself (#174).
+     *
+     * Not a general dispose: an operation is free to keep its own memory as long as it likes.
+     * This exists because a page copy is large and the core holds it until the document closes,
+     * so a hundred deletes in one session would otherwise hold a hundred pages nothing can reach.
+     */
+    fun discard() {}
 }
 
 /** Bounded undo/redo stack. Single-session, so there is no recovery journal. */
@@ -64,7 +94,11 @@ class EditHistory(private val capacity: Int = 200) {
      */
     fun record(operation: PdfEditOperation) {
         done.addLast(operation)
-        if (done.size > capacity) done.removeFirst()
+        // Both of these drop operations that can never be applied or reverted again, so both let
+        // go of whatever the engine was holding for them (#174): the oldest edit falling off a
+        // full stack, and the redo branch this new edit has just replaced.
+        if (done.size > capacity) done.removeFirst().discard()
+        undone.forEach { it.discard() }
         undone.clear()
     }
 
@@ -96,7 +130,19 @@ class EditHistory(private val capacity: Int = 200) {
         return operation
     }
 
+    /**
+     * Forgets everything, letting go of whatever the engine held for each operation (#174).
+     *
+     * The caller must still own an open document when it calls this: a deleted page the core is
+     * holding belongs to that document and is freed with it, so discarding one *after* the
+     * document closed would be the second free — the exact shape of #549. Both callers are in
+     * order today ([ViewerViewModel.closeCurrent] clears before it closes; applying a redaction
+     * clears while the document is very much open), and the engine checks it besides
+     * (`RemovedPage.discard` does nothing once its document is closed).
+     */
     fun clear() {
+        done.forEach { it.discard() }
+        undone.forEach { it.discard() }
         done.clear()
         undone.clear()
     }

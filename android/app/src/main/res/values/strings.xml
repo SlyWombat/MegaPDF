@@ -333,4 +333,57 @@
          a post-pass over the rendered page, so photographs invert with everything else -->
     <string name="night_inverts_pictures">Night inverts the page, pictures included.</string>
     <string name="open_in_reading_mode">Open documents in reading mode</string>
+    <!-- Page tools (#174): the Pages grid and everything done to pages there.
+         "Pages" is the glossary word on every platform. -->
+    <string name="pages">Pages</string>
+    <!-- The grid's title while nothing is selected -->
+    <string name="pages_count">%1$d pages</string>
+    <string name="pages_count_one">1 page</string>
+    <!-- …and while something is -->
+    <string name="pages_selected">%1$d selected</string>
+    <!-- The back arrow out of the grid; icon-only, so this is what TalkBack reads -->
+    <string name="pages_done">Back to the document</string>
+    <string name="pages_clear_selection">Clear selection</string>
+    <string name="pages_select_all">Select all</string>
+    <!-- The grid's three icon actions; icon-only, so these are their accessible names -->
+    <string name="rotate_left">Rotate left</string>
+    <string name="rotate_right">Rotate right</string>
+    <string name="pages_delete">Delete pages</string>
+    <!-- Reordering: a drag for a finger, these two for a screen reader, Move to… for both -->
+    <string name="pages_move_earlier">Move earlier</string>
+    <string name="pages_move_later">Move later</string>
+    <string name="pages_move_to">Move to…</string>
+    <string name="pages_move">Move</string>
+    <!-- The Move to… dialog; %1$d is the page being moved -->
+    <string name="pages_move_to_body">Page %1$d goes to the position you type.</string>
+    <!-- How reordering is discovered: the hint on the grid's bottom bar -->
+    <string name="pages_hint">Hold a page to move it</string>
+    <string name="pages_insert_blank">Insert blank page</string>
+    <string name="pages_add_from_file">Add pages from file…</string>
+    <string name="pages_save_selection">Save pages as…</string>
+    <!-- Said after each page operation; every one of them can be undone -->
+    <string name="page_turned">Page turned.</string>
+    <string name="pages_turned">%1$d pages turned.</string>
+    <string name="page_deleted">Page deleted.</string>
+    <string name="pages_deleted">%1$d pages deleted.</string>
+    <string name="page_moved">Page moved to %1$d.</string>
+    <string name="page_inserted">Blank page added as page %1$d.</string>
+    <string name="page_added">1 page added.</string>
+    <string name="pages_added">%1$d pages added.</string>
+    <string name="page_saved_as">1 page saved.</string>
+    <string name="pages_saved_as">%1$d pages saved.</string>
+    <string name="pages_failed">That page change couldn\'t be made.</string>
+    <string name="pages_save_failed">Those pages couldn\'t be saved.</string>
+    <!-- A page tool refused (#174). Nothing was changed, and the title says so first. -->
+    <string name="pages_refused_title">Nothing was changed</string>
+    <string name="pages_refused_restricted">This document doesn\'t allow its pages to be rotated, deleted, moved or added to. Its owner password would.</string>
+    <string name="pages_refused_source_password">That file needs a password, so MegaPDF can\'t take pages out of it.</string>
+    <string name="pages_refused_source_restricted">That file doesn\'t allow anything to be copied out of it, so its pages can\'t be added here.</string>
+    <!-- The field-hierarchy refusal (#174, #452): about 0.8% of real documents, and deliberate —
+         the alternative is a document whose form fields have quietly lost their names. -->
+    <string name="pages_refused_fields">Those pages carry a form field whose name belongs to a group of fields, and this document already has a field of that name. MegaPDF can\'t rename it without breaking the form, so it added nothing rather than damage it.</string>
+    <string name="pages_refused_last_page">A PDF has to keep at least one page.</string>
+    <string name="pages_refused_file">The file couldn\'t be read or written.</string>
+    <string name="pages_refused_poisoned">A redaction on this document didn\'t finish, so it can only be closed now. Close it and open it again — nothing was written.</string>
+    <string name="pages_refused_engine">MegaPDF couldn\'t make that page change safely, so it left the document as it was.</string>
 </resources>

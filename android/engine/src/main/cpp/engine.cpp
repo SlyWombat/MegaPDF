@@ -1188,3 +1188,141 @@ Java_com_megapdf_engine_PdfiumNative_nativeWriteText(JNIEnv* env, jobject, jlong
 }
 
 }  // extern "C"
+
+// --- Contract 10: page tools (#174) ---
+//
+// Rotate, delete, restore, move, insert a blank page, combine pages in from another file and
+// extract pages to a new one. Marshalling only, as everywhere on this boundary: the core owns
+// the whole policy — which permission bit each call needs, what a delete does to the page's
+// form fields, and the refusal when a page's fields sit in a /Parent hierarchy the copy cannot
+// carry (MEGAPDF_ERR_FIELDS).
+//
+// Every call returns the core's own status, negative for a refusal, so the Kotlin side can tell
+// "this document does not allow it" from "PDFium refused" from "those pages carry fields that
+// cannot come across" and say which in the user's words. Page indices are 0-based, as
+// nativeOpenPage's already is.
+
+extern "C" {
+
+// megapdf_page_index(): where this open handle's page stands NOW — it follows its page across a
+// move, an insert and an import, and answers -1 once the page is deleted (contract 10). The one
+// call here that takes a page handle rather than a document.
+JNIEXPORT jint JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativePageIndex(JNIEnv*, jobject, jlong handle) {
+    return megapdf_page_index(reinterpret_cast<Page*>(handle)->core);
+}
+
+JNIEXPORT jint JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativePageRotation(JNIEnv*, jobject, jlong handle, jint page) {
+    return megapdf_page_rotation(reinterpret_cast<Document*>(handle)->core, static_cast<int>(page));
+}
+
+JNIEXPORT jint JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativePageRotate(JNIEnv*, jobject, jlong handle, jint page,
+                                                      jint quarterTurns) {
+    return megapdf_page_rotate(reinterpret_cast<Document*>(handle)->core, static_cast<int>(page),
+                               static_cast<int>(quarterTurns));
+}
+
+// [status, removedPage]: with `keep` the deleted page is held by the core for an undo
+// (megapdf_page_restore consumes it, megapdf_discard_removed_page frees it, and closing the
+// document frees any still held), and the second slot carries that handle — 0 without `keep`,
+// and 0 whenever the delete itself failed.
+JNIEXPORT jlongArray JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativePageDelete(JNIEnv* env, jobject, jlong handle, jint page,
+                                                      jboolean keep) {
+    megapdf_removed_page* removed = nullptr;
+    const int status = megapdf_page_delete(reinterpret_cast<Document*>(handle)->core, static_cast<int>(page),
+                                           keep == JNI_TRUE ? &removed : nullptr);
+    const jlong pair[2] = {static_cast<jlong>(status), reinterpret_cast<jlong>(removed)};
+    jlongArray out = env->NewLongArray(2);
+    if (out == nullptr) {
+        // Out of Java heap with the page already deleted: nothing can reach the handle any
+        // more, so it is freed here rather than left held until the document closes.
+        megapdf_discard_removed_page(removed);
+        return nullptr;
+    }
+    env->SetLongArrayRegion(out, 0, 2, pair);
+    return out;
+}
+
+JNIEXPORT jint JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativePageRestore(JNIEnv*, jobject, jlong handle, jlong removed,
+                                                       jint at) {
+    return megapdf_page_restore(reinterpret_cast<Document*>(handle)->core,
+                                reinterpret_cast<megapdf_removed_page*>(removed), static_cast<int>(at));
+}
+
+JNIEXPORT void JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativeDiscardRemovedPage(JNIEnv*, jobject, jlong removed) {
+    megapdf_discard_removed_page(reinterpret_cast<megapdf_removed_page*>(removed));
+}
+
+JNIEXPORT jint JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativePageMove(JNIEnv*, jobject, jlong handle, jint from, jint to) {
+    return megapdf_page_move(reinterpret_cast<Document*>(handle)->core, static_cast<int>(from),
+                             static_cast<int>(to));
+}
+
+JNIEXPORT jint JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativePageInsertBlank(JNIEnv*, jobject, jlong handle, jint at,
+                                                           jdouble width, jdouble height) {
+    return megapdf_page_insert_blank(reinterpret_cast<Document*>(handle)->core, static_cast<int>(at),
+                                     width, height);
+}
+
+// Combine (#174): [status, imported]. `pages` null means every page of the other file; the path
+// and the unlock secret cross as NUL-terminated UTF-8 bytes, for the reason nativeOpenFile's do
+// (JNI's modified UTF-8 is not the UTF-8 a security handler hashes, and a file name can carry
+// anything). The other document stays open inside this one until it closes, so the file it was
+// read from must stay readable for that long — on Android the app keeps its cached copy open
+// through the core's own handle, which is why the copy's *name* may go at once.
+JNIEXPORT jintArray JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativePagesImport(JNIEnv* env, jobject, jlong handle,
+                                                       jbyteArray pathUtf8, jbyteArray unlockUtf8,
+                                                       jintArray pages, jint insertAt) {
+    jbyte* path = env->GetByteArrayElements(pathUtf8, nullptr);
+    jbyte* unlock = unlockUtf8 != nullptr ? env->GetByteArrayElements(unlockUtf8, nullptr) : nullptr;
+    std::vector<int> chosen;
+    const jsize count = pages != nullptr ? env->GetArrayLength(pages) : 0;
+    if (count > 0) {
+        chosen.resize(static_cast<size_t>(count));
+        env->GetIntArrayRegion(pages, 0, count, reinterpret_cast<jint*>(chosen.data()));
+    }
+    int imported = 0;
+    const int status = megapdf_pages_import(
+        reinterpret_cast<Document*>(handle)->core, reinterpret_cast<const char*>(path),
+        reinterpret_cast<const char*>(unlock), chosen.empty() ? nullptr : chosen.data(), chosen.size(),
+        static_cast<int>(insertAt), &imported);
+    if (unlock != nullptr) env->ReleaseByteArrayElements(unlockUtf8, unlock, JNI_ABORT);
+    env->ReleaseByteArrayElements(pathUtf8, path, JNI_ABORT);
+    const jint pair[2] = {static_cast<jint>(status), static_cast<jint>(imported)};
+    jintArray out = env->NewIntArray(2);
+    if (out != nullptr) env->SetIntArrayRegion(out, 0, 2, pair);
+    return out;
+}
+
+// Split (#174): the listed pages as a new PDF at `outPathUtf8`, written with the save
+// discipline every platform's save uses — whole file to a sibling temporary name, reopened and
+// its page count checked, and only then given the destination's name. `pages` null means every
+// page. `cancel` is a megapdf_cancel handle or 0: the core's own flag, so a caller that grows a
+// Cancel button later needs nothing new on this side.
+JNIEXPORT jint JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativePagesExtract(JNIEnv* env, jobject, jlong handle,
+                                                        jintArray pages, jbyteArray outPathUtf8,
+                                                        jlong cancel) {
+    std::vector<int> chosen;
+    const jsize count = pages != nullptr ? env->GetArrayLength(pages) : 0;
+    if (count > 0) {
+        chosen.resize(static_cast<size_t>(count));
+        env->GetIntArrayRegion(pages, 0, count, reinterpret_cast<jint*>(chosen.data()));
+    }
+    jbyte* path = env->GetByteArrayElements(outPathUtf8, nullptr);
+    const int status = megapdf_pages_extract(
+        reinterpret_cast<Document*>(handle)->core, chosen.empty() ? nullptr : chosen.data(), chosen.size(),
+        reinterpret_cast<const char*>(path), reinterpret_cast<const megapdf_cancel*>(cancel));
+    env->ReleaseByteArrayElements(outPathUtf8, path, JNI_ABORT);
+    return static_cast<jint>(status);
+}
+
+}  // extern "C"
