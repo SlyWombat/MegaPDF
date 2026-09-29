@@ -65,9 +65,13 @@ class PageToolsTest {
     private fun heights(): List<Int> =
         (rule.viewModel.uiState as ViewerUiState.Viewing).pageSizes.map { it.heightPoints.toInt() }
 
+    /** The grid's title while nothing is selected — which is how many pages there are. */
+    private fun pageCountTitle(pageCount: Int): String =
+        if (pageCount == 1) str(R.string.pages_count_one) else str(R.string.pages_count, pageCount)
+
     private fun openPages(pageCount: Int) {
         rule.menu(str(R.string.pages))
-        rule.waitForText(str(R.string.pages_count, pageCount))
+        rule.waitForText(pageCountTitle(pageCount))
     }
 
     /** Taps a page in the grid, selecting or deselecting it. Page numbers are 1-based, as shown. */
@@ -139,7 +143,7 @@ class PageToolsTest {
         // The two selected pages went, and the two that were between and after them are what is
         // left — in order.
         waitForWidths(listOf(610, 630))
-        rule.waitForText(str(R.string.pages_count, 2))
+        rule.waitForText(pageCountTitle(2))
 
         rule.undoButton().performClick()
         // One press, all four back, in the order they were in: the pages themselves, kept by the
