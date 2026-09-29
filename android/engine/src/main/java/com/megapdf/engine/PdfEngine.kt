@@ -165,7 +165,16 @@ class PdfDocument internal constructor(
     private val engine: PdfEngine,
     private val handle: Long,
 ) {
+    @Volatile
     private var closed = false
+
+    /**
+     * Whether megapdf_close() has run for this document, for the page handles it handed out
+     * (#549). The desktop engine's `PdfiumDocument.IsClosed`, and it is here for the reason
+     * that one exists: megapdf_close() frees every page still open, so a page handle that
+     * outlives its document must not be closed again.
+     */
+    internal val isClosed: Boolean get() = closed
 
     /** The native handle, for opening a saved copy like this document (#132). */
     internal fun nativeHandle(): Long {
@@ -184,6 +193,7 @@ class PdfDocument internal constructor(
         check(page != 0L) { "failed to load page $index" }
         PdfPage(
             engine,
+            this@PdfDocument,
             page,
             widthPoints = PdfiumNative.nativePageWidth(page),
             heightPoints = PdfiumNative.nativePageHeight(page),
@@ -512,6 +522,7 @@ private val pageCheckExecutor: java.util.concurrent.ExecutorService =
 
 class PdfPage internal constructor(
     private val engine: PdfEngine,
+    private val owner: PdfDocument,
     private val handle: Long,
     val widthPoints: Double,
     val heightPoints: Double,
@@ -937,7 +948,21 @@ class PdfPage internal constructor(
     suspend fun close(): Unit = withContext(engine.dispatcher + NonCancellable) {
         if (!closed) {
             closed = true
-            PdfiumNative.nativeClosePage(handle)
+            // A page whose document closed first went with it (#549): megapdf_close() closes
+            // and frees every page still open, so closing the handle again is a use after
+            // free -- it reads the freed megapdf_page, walks the freed document's open-page
+            // list, and hands an already-closed FPDF_PAGE to FPDF_ClosePage. The trap that
+            // followed landed in FPDF_ClosePage, many opens after the damage was done.
+            //
+            // That ordering is the ordinary teardown, not a race lost rarely. ViewerViewModel
+            // .onCleared() cancels the render job and then PdfEngine.closeDetached() queues
+            // the document's close on the engine's one thread straight away, while the
+            // cancelled render resumes on the main thread and only then queues this close
+            // behind it. This is the desktop's `PdfiumPage.Dispose` guard (#145), which the
+            // Android binding never had; the desktop's other half -- the document waiting for
+            // every handle it handed out (#536) -- cannot be copied here, because this engine
+            // runs on a single thread and the close would wait on a task queued behind it.
+            if (!owner.isClosed) PdfiumNative.nativeClosePage(handle)
         }
     }
 }
