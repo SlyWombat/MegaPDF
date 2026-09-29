@@ -155,7 +155,7 @@ public sealed record RecentDocument(string Name, string Path, string Location, b
 /// </param>
 /// <param name="recentFiles">Shared for the same reason as <paramref name="settings"/> — one <see cref="RecentFiles"/> list, not one per document.</param>
 /// <param name="signatureLibrary">Shared for the same reason — a signature added in one tab must appear in every other tab's flyout.</param>
-public partial class DocumentViewModel(Window window, AppSettings settings, RecentFiles recentFiles, SignatureLibrary signatureLibrary) : ObservableObject
+public partial class DocumentViewModel(Window window, AppSettings settings, RecentFiles recentFiles, SignatureLibrary signatureLibrary) : ObservableObject, IDisposable
 {
     private static readonly IPdfEngine Engine = new PdfiumEngine();
 
@@ -613,8 +613,7 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
         }
 
         var rememberedView = recentFiles.FindEntry(path);
-        _document?.Dispose();
-        _cappedRenders.Clear();
+        DisposeDocument(); // the document this tab held until now (#543) — same path Dispose() uses
         _document = doc;
 
         // Permissions first, so nothing bound to the new path sees the old document's (#131).
@@ -713,6 +712,43 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
 
         OpenSettled?.Invoke(this, EventArgs.Empty); // #427: force a resync once the burst above is over
     }
+
+    /// <summary>
+    /// Releases this tab's engine document, if it holds one (#543): the PDFium document,
+    /// its form environment, every page still loaded, and the core's file source with the
+    /// document's bytes. <see cref="PdfiumDocument.Dispose"/> (#542) waits for any render
+    /// still holding one of this document's page handles before it frees anything, so this
+    /// is safe to call while a background render for this tab is in flight — that wait
+    /// lives in the shared engine layer, not here.
+    ///
+    /// The one place both a replacement document (<see cref="AdoptDocumentAsync"/>) and a
+    /// tab going away for good (<see cref="Dispose"/>) let go of the document that was
+    /// here — one mechanism, not the second one #543 found growing beside it.
+    /// </summary>
+    private void DisposeDocument()
+    {
+        _document?.Dispose();
+        _document = null;
+        _cappedRenders.Clear();
+    }
+
+    /// <summary>
+    /// This tab is gone for good (#543): closed (<see cref="ShellViewModel.RemoveDocument"/>),
+    /// or its window closed with it still open (<see cref="MainWindow"/>'s <c>Closed</c>
+    /// handler, which covers both the multi-tab window-close path and the last-tab-closes-
+    /// the-window path — neither goes through <c>RemoveDocument</c>). Idempotent, so it is
+    /// safe to call from more than one of those paths on the same tab.
+    /// </summary>
+    public void Dispose()
+    {
+        if (_disposed)
+            return;
+        _disposed = true;
+        DisposeDocument();
+        Pages.Clear();
+    }
+
+    private bool _disposed;
 
     // --- Fit zoom presets ---
 

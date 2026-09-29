@@ -36,6 +36,7 @@ public sealed partial class MainWindow : Window
         AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "megapdf.ico"));
         ApplyTheme();
         AppWindow.Closing += OnAppWindowClosing;
+        Closed += OnWindowClosed;
         WireOverflowTooltip();
         InitializeToolbar();
         InitializeWindowKeyboard();
@@ -354,6 +355,31 @@ public sealed partial class MainWindow : Window
         }
         args.Cancel = true;
         _ = ConfirmCloseAsync();
+    }
+
+    private void OnWindowClosed(object sender, WindowEventArgs args) => DisposeAllDocumentsForTest();
+
+    /// <summary>
+    /// The window is actually gone (#543): dispose every tab's document still in <see
+    /// cref="Shell"/>. Closing a tab one at a time already disposes it, in <see
+    /// cref="ShellViewModel.RemoveDocument"/> — this is what catches the two paths that
+    /// never call it: the last tab, which <see cref="CloseTabAsync"/> closes the window
+    /// for instead of removing, and every other tab still open when the window itself is
+    /// closed (the × on the title bar, Alt+F4, or the shell quitting) with several of
+    /// them in it. <see cref="DocumentViewModel.Dispose"/> is idempotent, so a tab closed
+    /// individually just before the window followed is disposed exactly once.
+    ///
+    /// Public to this assembly, and named for the test, so <c>Screenshot</c>'s
+    /// self-test can exercise this exact body (<see cref="OnWindowClosed"/> is the only
+    /// caller in the product) without really closing the OS window, which would end the
+    /// process before the check's result could be reported — the same reason the reading-
+    /// mode self-test drives <c>StepBackFromReadingMode</c> rather than a real Escape key.
+    /// That WinUI raises <c>Closed</c> at the right time is reasoned from here, not driven.
+    /// </summary>
+    internal void DisposeAllDocumentsForTest()
+    {
+        foreach (var doc in Shell.Documents)
+            doc.Dispose();
     }
 
     private bool _confirmingClose;

@@ -163,6 +163,12 @@ internal static class Screenshot
             case "zoom-anchor":
                 return await CheckZoomAnchorAsync(window);
 
+            // #543: closing a tab, replacing a tab's document, and the window closing with
+            // tabs still in it must all dispose the document each one held. Needs a
+            // document; the exit code is the test.
+            case "close-tabs":
+                return await CheckCloseDisposesDocumentsAsync(window);
+
             default:
                 Console.Error.WriteLine($"unknown --screenshot-state '{state}'");
                 return false;
@@ -645,6 +651,131 @@ internal static class Screenshot
               pureReanchorAtClamp.X == 100 && pureReanchorAtClamp.Y == 200);
 
         static string Describe(Point p) => $"({p.X:F1}, {p.Y:F1})";
+    }
+
+    /// <summary>
+    /// #543: closing a tab, replacing a tab's document with another, and the window
+    /// closing with tabs still open must all dispose the document each one held — the
+    /// PDFium document, its form environment, every page still loaded, and the core's
+    /// file source, none of which anything else reclaims.
+    ///
+    /// Proven by asking a captured <see cref="MegaPDF.Core.Engine.IPdfDocument"/> for a
+    /// page afterward: <c>PdfiumDocument</c>'s own guard throws <see
+    /// cref="ObjectDisposedException"/> once <c>megapdf_close</c> has actually run (#542)
+    /// — a stronger signal than "the tab left the strip", which the pre-fix code already
+    /// got right on its own and would make a check that only looked at
+    /// <see cref="ShellViewModel.Documents"/> pass for the wrong reason.
+    ///
+    /// The window-close path is exercised through <see
+    /// cref="MainWindow.DisposeAllDocumentsForTest"/> — the exact body <see
+    /// cref="MainWindow"/>'s own <c>Closed</c> handler runs — rather than by really
+    /// closing the window, which would end this process before this check's result
+    /// could be reported; the same reason <see cref="CheckReadingModeAsync"/> drives
+    /// <c>StepBackFromReadingMode</c> instead of a real Escape key. That WinUI raises
+    /// <c>Closed</c> when the window goes is reasoned from here, not driven.
+    ///
+    /// Needs a document (the fixture --screenshot already opened); the exit code is the
+    /// test. Leaves the fixture's own tab as it found it — the extra tabs this check
+    /// opens (on copies of the fixture under another name, since opening the same path
+    /// twice activates the existing tab rather than opening a second one) are all closed
+    /// or disposed before it returns.
+    /// </summary>
+    private static async Task<bool> CheckCloseDisposesDocumentsAsync(MainWindow window)
+    {
+        if (window.Shell.Active is not { IsDocumentOpen: true } tabA || tabA.DocumentPath is not { } fixturePath)
+        {
+            Console.Error.WriteLine("--screenshot-state close-tabs needs a document.");
+            return false;
+        }
+
+        var ok = true;
+        void Check(string what, bool passed)
+        {
+            Console.Error.WriteLine($"{(passed ? "PASS" : "FAIL")}: {what}");
+            ok &= passed;
+        }
+
+        static bool ThrowsDisposed(MegaPDF.Core.Engine.IPdfDocument doc)
+        {
+            try
+            {
+                doc.GetPage(0);
+                return false; // still alive — the bug this check exists to catch
+            }
+            catch (ObjectDisposedException)
+            {
+                return true;
+            }
+        }
+
+        var tempDir = Path.Combine(Path.GetTempPath(), "megapdf-selftest-close-tabs");
+        Directory.CreateDirectory(tempDir);
+        var copyB = Path.Combine(tempDir, "b.pdf");
+        var copyC = Path.Combine(tempDir, "c.pdf");
+        var copyD = Path.Combine(tempDir, "d.pdf");
+        File.Copy(fixturePath, copyB, overwrite: true);
+        File.Copy(fixturePath, copyC, overwrite: true);
+        File.Copy(fixturePath, copyD, overwrite: true);
+
+        try
+        {
+            // --- Closing a tab disposes its document (ShellViewModel.RemoveDocument) ---
+            var tabB = await window.Shell.OpenInTabAsync(copyB);
+            var docB = tabB.CurrentDocument;
+            Check("opening a second tab gives it its own document",
+                  docB is not null && !ReferenceEquals(docB, tabA.CurrentDocument));
+            if (docB is not null)
+            {
+                await window.CloseTabAsync(tabB);
+                Check("closing that tab removes it from the shell", !window.Shell.Documents.Contains(tabB));
+                Check("  and disposes the document it held (GetPage now throws ObjectDisposedException)",
+                      ThrowsDisposed(docB));
+            }
+
+            // --- Replacing a tab's document disposes the one it replaced (AdoptDocumentAsync) ---
+            var tabC = await window.Shell.OpenInTabAsync(copyC);
+            var docC = tabC.CurrentDocument;
+            Check("a third tab also gets its own document", docC is not null && !ReferenceEquals(docC, tabA.CurrentDocument));
+            if (docC is not null)
+            {
+                await tabC.OpenDocumentAsync(copyD); // a different file into the same tab: a replacement, not a close
+                Check("opening a new file into that same tab disposes the document it replaced",
+                      ThrowsDisposed(docC));
+                await window.CloseTabAsync(tabC); // leave the window as this check found it
+            }
+
+            // --- The window closing (with tabs still open) disposes every one of them,
+            // the active tab included — tabF, opened last, is Shell.Active for as long
+            // as nothing else changes it, which nothing here does. This is also what
+            // stands in for the last tab closing the window (#543's other uncovered
+            // path): CloseTabAsync's last-tab branch never calls RemoveDocument either,
+            // so the mechanism it needs is exactly this one, not a second one. tabA (the
+            // fixture tab this check must leave alone) is a third, background tab
+            // throughout this block and is never Active, so it is never touched. ---
+            var tabE = await window.Shell.OpenInTabAsync(copyB);
+            var tabF = await window.Shell.OpenInTabAsync(copyC);
+            var docE = tabE.CurrentDocument;
+            var docF = tabF.CurrentDocument;
+            Check("two more tabs — one of them (the last opened) active, one a background tab — each get their own document",
+                  docE is not null && docF is not null && !ReferenceEquals(docE, docF) && window.Shell.Active == tabF);
+            if (docE is not null && docF is not null)
+            {
+                window.DisposeAllDocumentsForTest();
+                Check("the window-close path disposes every remaining tab's document, active and background alike",
+                      ThrowsDisposed(docE) && ThrowsDisposed(docF));
+                // Both documents are gone; leave the tabs out of the strip too, so a
+                // screenshot taken after this check does not try to render them — and
+                // so Active falls back to tabA, the one tab this check must leave alone.
+                window.Shell.RemoveDocument(tabE);
+                window.Shell.RemoveDocument(tabF);
+            }
+        }
+        finally
+        {
+            try { Directory.Delete(tempDir, recursive: true); } catch { /* best-effort scratch cleanup */ }
+        }
+
+        return ok;
     }
 
     /// <summary>

@@ -111,7 +111,15 @@ public sealed partial class ShellViewModel : ObservableObject
         return doc;
     }
 
-    /// <summary>Removes a tab from this window without asking about unsaved changes — the caller decides that first.</summary>
+    /// <summary>
+    /// Removes a tab from this window without asking about unsaved changes — the caller
+    /// decides that first — and disposes its document (#543): the PDFium document, its
+    /// form environment, every page still loaded, and the core's file source, none of
+    /// which anything else reclaims. Removed from <see cref="Documents"/>, and <see
+    /// cref="Active"/> re-pointed, before the dispose — the same order the Avalonia leg's
+    /// <c>ShellViewModel.CloseTab</c> uses — so nothing still bound to this tab sees a
+    /// disposed document.
+    /// </summary>
     public void RemoveDocument(DocumentViewModel doc)
     {
         var index = Documents.IndexOf(doc);
@@ -120,6 +128,7 @@ public sealed partial class ShellViewModel : ObservableObject
         Documents.RemoveAt(index);
         if (Active == doc)
             Active = Documents.Count == 0 ? null : Documents[Math.Min(index, Documents.Count - 1)];
+        doc.Dispose();
     }
 
     // --- Recents / first-run card (#348 phase 1): one list per process, shown on the
