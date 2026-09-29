@@ -553,11 +553,135 @@ jobs:
           path: ${{ runner.temp }}/store/*.msix
           if-no-files-found: error
 
+  # #462: a self-test for src/MegaPDF.App, the counterpart to the Avalonia app's
+  # `--self-test`. Every one of #401, #402, #404 and #427 was found by a person
+  # clicking, after CI was already green — #543's dispose-on-close bug and #144's
+  # tab-never-realised-under-a-collapsed-strip bug are the two this harness has
+  # already caught the same way the Avalonia one caught #412, just by hand
+  # (docs/RELEASING.md §2.3) rather than in CI, because CI hosting a real WinUI
+  # window was an open question. It no longer is, and the answer below was
+  # checked twice against a real windows-latest runner rather than assumed
+  # (issue #462).
+  #
+  # NON-BLOCKING as of 2026-09-29 (`continue-on-error: true`): a spike (issue
+  # #462) ran these same four checks against `windows-latest` twice and got a
+  # real composited window and every check passing both times — but twice is
+  # reproducible, not a guarantee across every datacenter GitHub's fleet might
+  # schedule this on. #515 and #544 are this project's own recent, paid-for
+  # lesson that a check red-lighting unrelated work costs more than the check
+  # is worth while it is still finding its feet. This job reports — it uploads
+  # its screenshots and logs either way — without failing a pull request.
+  # **Make it blocking once it has held green through a few weeks of ordinary
+  # pushes with no fleet-driven false red** (#462 tracks this).
+  windows-ui-selftest:
+    name: Windows UI self-test
+    runs-on: windows-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Build the shared engine core (megapdf_core.dll)
+        run: pwsh tools/build-core.ps1
+
+      - name: Build the app (unpackaged, win-x64)
+        run: dotnet build src/MegaPDF.App/MegaPDF.App.csproj -c Release -r win-x64 --self-contained false
+
+      - name: Generate fixtures
+        run: python tools/gen_test_fixtures.py "$env:RUNNER_TEMP/fixtures"
+
+      - name: Run every --screenshot-state check
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $exe = (Get-ChildItem -Recurse src/MegaPDF.App/bin -Filter MegaPDF.exe |
+                  Where-Object FullName -like '*win-x64*' | Select-Object -First 1).FullName
+          if (-not $exe) { throw "MegaPDF.exe not found" }
+
+          # fixture.pdf, not demo.pdf: the `reading` check's own multi-tab step
+          # opens a second tab on a fixture literally named demo.pdf beside
+          # whatever primary document is passed on the command line
+          # (docs/RELEASING.md §2.3 says so). Passing demo.pdf itself here would
+          # make that step activate the already-open tab instead of opening a
+          # second one and fail for that reason — not a real defect, just the
+          # wrong fixture name for this state.
+          $fixture = "$env:RUNNER_TEMP/fixtures/fixture.pdf"
+          $failed = @()
+
+          function Run-Check($state, $timeoutSec) {
+            $outFile = "$env:RUNNER_TEMP/$state.out.txt"
+            $errFile = "$env:RUNNER_TEMP/$state.err.txt"
+            $png = "$env:RUNNER_TEMP/$state.png"
+            $argList = @('--screenshot', $png, '--screenshot-state', $state, $fixture)
+            Write-Output "::group::$state"
+            # Start-Process -PassThru + $p.WaitForExit(timeoutMs), not
+            # Start-Process -Wait: -Wait has no timeout, so a hang here -- the
+            # exact failure mode #84/#86 found before this runner had a working
+            # compositor -- would stall this whole job rather than fail one
+            # check and let the rest still report.
+            $p = Start-Process -FilePath $exe -ArgumentList $argList -PassThru `
+                 -RedirectStandardOutput $outFile -RedirectStandardError $errFile
+            $finished = $p.WaitForExit($timeoutSec * 1000)
+            if (-not $finished) {
+              Write-Output "TIMED OUT after ${timeoutSec}s -- killing pid $($p.Id)"
+              Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+              $script:failed += $state
+            } elseif ($p.ExitCode -ne 0) {
+              Write-Output "FAILED, exit code $($p.ExitCode)"
+              $script:failed += $state
+            } else {
+              Write-Output "passed, exit code 0"
+            }
+            if (Test-Path $outFile) { Get-Content $outFile }
+            if (Test-Path $errFile) { Get-Content $errFile }
+            Write-Output "::endgroup::"
+          }
+
+          # Every state the harness has (#541 reading, #546 zoom-anchor, #543
+          # close-tabs), not a subset -- each has already caught a real defect
+          # by hand and is worth exactly as much here. `more` (the toolbar
+          # overflow flyout) is included too: its own popup content will not
+          # be in the captured PNG -- RenderTargetBitmap renders the XAML tree,
+          # not the popup layer (#144) -- but nothing this check asserts
+          # depends on that, and it is not particular to running in CI, so it
+          # is left alone rather than chased here.
+          Run-Check "reading" 60
+          Run-Check "zoom-anchor" 60
+          Run-Check "close-tabs" 60
+          Run-Check "more" 45
+
+          if ($failed.Count -gt 0) {
+            Write-Output "FAILED: $($failed -join ', ')"
+            exit 1
+          }
+
+      - name: Upload screenshots and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-ui-selftest
+          path: |
+            ${{ runner.temp }}/*.png
+            ${{ runner.temp }}/*.out.txt
+            ${{ runner.temp }}/*.err.txt
+          if-no-files-found: warn
+
   # #288: the one ARM64 Windows machine we have. Everything here runs natively on ARM64:
   # the engine core and its tests, the .NET engine tests, and the app itself, which
   # opens, renders, searches, edits, redacts and saves from the same executable and
-  # beside the same DLLs the ARM64 package ships (--engine-check; the app's screenshot
-  # mode can't run on a runner, #84).
+  # beside the same DLLs the ARM64 package ships. `--engine-check`, not the screenshot
+  # modes windows-ui-selftest (above) now runs on windows-latest: this job's point is
+  # ARM64 fidelity, not the UI, and a second, differently-architected copy of the same
+  # checks would not tell us anything the x64 job does not already.
   windows-arm64:
     name: Windows ARM64
     runs-on: windows-11-arm
