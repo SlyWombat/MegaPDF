@@ -24,6 +24,12 @@ namespace MegaPDF.Avalonia.ViewModels;
 /// the whole of it. A render request carries a generation number; whichever
 /// request is newest when a raster arrives is the one that gets shown, and a
 /// raster for a zoom that has since changed triggers the next render itself.
+///
+/// The generation number decides which raster is *shown*; it decides nothing about
+/// the document underneath. That lifetime is the engine's rule (#536): a page handle
+/// is a use of its document, and a document cannot close while one is outstanding —
+/// so the handle this render opens on the pool thread outlives nothing, and closing
+/// the tab in the middle of a render waits rather than freeing the page under it.
 /// </summary>
 public sealed partial class PageViewModel : ObservableObject, IDisposable
 {
@@ -367,6 +373,13 @@ public sealed partial class PageViewModel : ObservableObject, IDisposable
 
         Task.Run(() =>
         {
+            // A cheap way out for a raster nobody will look at: closing the tab disposes
+            // every page before the document, so a request still queued here when that
+            // happens costs nothing rather than opening a page handle the close then has
+            // to wait for (#536). Only an economy — the document itself is what makes the
+            // close safe, and GetPage below refuses once it has begun closing.
+            if (_disposed)
+                return ((RenderedPage?)null, (IReadOnlyList<(PdfRect, PageHitKind)>)[]);
             using var page = document.GetPage(index);
             if (wantPreview)
             {
@@ -375,8 +388,8 @@ public sealed partial class PageViewModel : ObservableObject, IDisposable
             }
             var rendered = page.Render(pixelWidth, pixelHeight, tint);
             // Refreshed alongside the raster, because an edit changes both.
-            var regions = BuildRegions(page);
-            return (rendered, regions);
+            var regions = (IReadOnlyList<(PdfRect, PageHitKind)>)BuildRegions(page);
+            return ((RenderedPage?)rendered, regions);
         }).ContinueWith(task => Dispatcher.UIThread.Post(() =>
         {
             if (_disposed || generation != _renderGeneration)
@@ -390,6 +403,8 @@ public sealed partial class PageViewModel : ObservableObject, IDisposable
                 return;
             }
             var (rendered, regions) = task.Result;
+            if (rendered is null)
+                return; // the page was disposed before this request reached the engine
             Apply(PageBitmap.FromRenderedPage(rendered), regions, zoom, dpiScale, tint, generation, capped);
         }), TaskScheduler.Default);
     }

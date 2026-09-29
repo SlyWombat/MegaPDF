@@ -1895,6 +1895,24 @@ internal static class Program
             failures++;
         }
 
+        // --- Closing while a render is outstanding (#536) ---
+        //
+        // Right after zoom anchoring, because that is the check that first made this
+        // reproducible — five zoom steps in a row, each queuing a raster, then a
+        // close — and the one whose PumpUntil wait used to hide it. The rule is the
+        // engine's: a document cannot close while any page handle it handed out is
+        // still in use.
+        Console.WriteLine("closing while a render is outstanding (#536):");
+        try
+        {
+            CheckCloseDuringRender(dir, state, Check);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"::error::close during render: {ex.GetType().Name}: {ex.Message}");
+            failures++;
+        }
+
         // --- Tabs, in one window (#348 phase 1) ---
         //
         // Every check above (bar this file) drives a single document through a single
@@ -3301,19 +3319,126 @@ internal static class Program
         check($"ZoomAnchor.Reanchor with no ratio change (a clamp) leaves the offset alone (got {pureReanchorAtClamp})",
               pureReanchorAtClamp == new Vector(100, 200));
 
-        // Every zoom step above queued a re-render on a thread pool thread
-        // (CheckToolbarMenus' own remark: "spinning the queue alone never
-        // reaches it"). CloseReadingWindow below waits the same way for the
-        // same reason before closing: a window closed — and vm disposed via
-        // the enclosing `using` — while PDFium is still mid-render on this
-        // document is exactly the kind of race a headless run's own timing can
-        // hide on one platform and not another, and this check changes Zoom
-        // more times in a row than any check before it did.
-        PumpUntil(() => vm.IsIdle && vm.Pages.All(p => !p.IsRenderPending), TimeSpan.FromSeconds(20));
+        // Closed with whatever this check's zoom steps left in flight, deliberately.
+        // There was a PumpUntil here waiting for every render to settle first, added
+        // when this check segfaulted on macOS three times out of three while passing
+        // on Linux. That was this check compensating for #536 — a document that could
+        // close while PDFium was still drawing through one of its pages — and leaving
+        // it in would mean these five zoom steps could never catch that again. The
+        // rule now lives where it belongs, in the engine: PdfiumDocument.Dispose waits
+        // for every page handle it handed out. CheckCloseDuringRender proves it.
         window.Close();
         Pump();
 
         static void Pump() => MenuProbe.Pump();
+    }
+
+    /// <summary>
+    /// Closing while a render is outstanding (#536): the render lifetime rule.
+    ///
+    /// A raster is produced on a thread pool thread from a page handle opened there
+    /// (<see cref="ViewModels.PageViewModel"/>'s StartRender, and the Windows app's
+    /// RenderPage). Nothing used to make a close wait for it, so megapdf_close could
+    /// free that page handle — and the document under it — while PDFium was still
+    /// drawing through it. The failure was a segfault, not an exception: the whole
+    /// window went, and every other tab with it.
+    ///
+    /// Two checks, because the defect and the way a person reaches it are different
+    /// things:
+    ///
+    /// * The rule itself, at the engine layer, with the ordering forced rather than
+    ///   raced: a background thread takes a page handle, says so, and only then
+    ///   renders. Unfixed, Dispose runs straight through to megapdf_close in the gap
+    ///   and the render reads a freed page — a segfault here, reliably, on every
+    ///   platform, not only where the timing happens to be unkind.
+    /// * The shape a user meets: zoom a few times, which asks every realised page to
+    ///   re-render, then close the tab with those renders still in flight. This is
+    ///   the check the two PumpUntil waits in CheckZoomAnchor and CheckReadingMode
+    ///   used to paper over; they have been taken out, so this check and those two
+    ///   are all exposed to it again.
+    /// </summary>
+    private static void CheckCloseDuringRender(string dir, string state, Action<string, bool> check)
+    {
+        // --- 1: the rule, with the ordering forced ---
+        {
+            using var engine = new PdfiumEngine();
+            var document = engine.Open(Path.Combine(dir, "fixture.pdf"));
+            using var holdsPage = new ManualResetEventSlim(false);
+            var rendered = 0;
+            Exception? renderError = null;
+
+            var render = Task.Run(() =>
+            {
+                try
+                {
+                    using var page = document.GetPage(0);
+                    holdsPage.Set();
+                    // The Dispose below is already on its way. Unfixed, it runs to
+                    // completion inside this sleep: megapdf_close frees the page this
+                    // thread is holding, and the Render on the next line reads it
+                    // after free. A sleep rather than a race, so the red is the same
+                    // red every time and on every platform.
+                    Thread.Sleep(250);
+                    // Big enough to be real work (about 12 megapixels, inside the #93
+                    // clamp), so the raster is also genuinely in progress for a while.
+                    page.Render((int)(page.Width * 5), (int)(page.Height * 5));
+                    Volatile.Write(ref rendered, 1);
+                }
+                catch (Exception ex)
+                {
+                    renderError = ex;
+                }
+            });
+
+            holdsPage.Wait(TimeSpan.FromSeconds(20));
+            var waited = System.Diagnostics.Stopwatch.StartNew();
+            document.Dispose();
+            waited.Stop();
+            var finishedFirst = Volatile.Read(ref rendered) == 1;
+            render.GetAwaiter().GetResult();
+
+            check($"closing a document waits for a render holding one of its page handles "
+                  + $"(waited {waited.ElapsedMilliseconds} ms)", finishedFirst);
+            check($"and the render itself came back cleanly ({renderError?.GetType().Name ?? "no error"})",
+                  renderError is null);
+        }
+
+        // --- 2: the shape a person reaches it by — zoom, then close ---
+        EnsureHeadlessPlatform();
+
+        using (var shell = new ShellViewModel(state))
+        {
+            var vm = shell.CreateDocument();
+            vm.Open(Path.Combine(dir, "fixture.pdf"));
+            shell.AddTab(vm);
+            var window = new Views.MainWindow { DataContext = shell, Width = 900, Height = 700 };
+            window.SkipRecoveryOffer = true;
+            window.Show();
+            MenuProbe.Pump();
+            // Realised and settled first, so what follows is re-rendering rather than
+            // the first raster: the state a user is in when they reach for the zoom.
+            PumpUntil(() => vm.Pages.Count > 0 && vm.Pages.Any(p => p.IsRealised), TimeSpan.FromSeconds(20));
+            PumpUntil(() => vm.Pages.All(p => !p.IsRenderPending), TimeSpan.FromSeconds(20));
+            check("a page is on screen before the zoom", vm.Pages.Any(p => p.IsRealised));
+
+            // Each step asks every realised page to re-render, and nothing is pumped
+            // between them: by the last one there are rasters queued and running on
+            // the thread pool that nothing has collected.
+            foreach (var zoom in new[] { 2.0, 3.0, 4.0, 2.5, 3.5 })
+                vm.SetZoomCommand.Execute(zoom);
+
+            var outstanding = vm.Pages.Count(p => p.IsRenderPending);
+            check($"zooming leaves renders outstanding ({outstanding} of {vm.Pages.Count} pages)", outstanding > 0);
+
+            // No settling: the close lands on top of them. Getting past this line at
+            // all is the check — unfixed, the process does not.
+            window.SkipCloseConfirmation();
+            window.Close();
+            MenuProbe.Pump();
+            shell.Dispose();
+        }
+
+        check("closing a tab with renders outstanding leaves the process standing", true);
     }
 
     /// <summary>
@@ -3885,13 +4010,12 @@ internal static class Program
 
         static void CloseReadingWindow(ShellViewModel shell, Views.MainWindow window)
         {
-            // Let any render this check started finish before the document under it is
-            // disposed. A raster is produced on the thread pool from a page handle
-            // opened there (PageViewModel.StartRender), so closing the tab the instant
-            // after asking for one — which only a test does this quickly — pulls the
-            // document out from under PDFium mid-render.
-            PumpUntil(() => shell.Documents.All(d => d.Pages.All(p => !p.IsRenderPending)),
-                      TimeSpan.FromSeconds(20));
+            // Closed without settling the renders this check started. There was a
+            // PumpUntil here for exactly that, disclosed as a workaround when reading
+            // mode's own checks segfaulted on it (#533): a raster is produced on the
+            // thread pool from a page handle opened there, and nothing made the close
+            // wait for it. #536 moved that rule into the engine, so closing here is
+            // once again a real exercise of it rather than a way around it.
             window.SkipCloseConfirmation();
             window.Close();
             MenuProbe.Pump();
