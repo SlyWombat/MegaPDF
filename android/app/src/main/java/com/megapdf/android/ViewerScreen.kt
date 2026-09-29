@@ -9,6 +9,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculateCentroid
 import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -117,6 +118,29 @@ import androidx.compose.ui.res.stringResource
 // fresh process, and this is where it starts (#146).
 private const val MIN_ZOOM = 1f
 private const val MAX_ZOOM = 4f
+
+/**
+ * Pinch anchoring (#527): the scroll delta that keeps one content point fixed under the
+ * gesture's centroid while a zoom step scales the page around its own layout origin — a
+ * `LazyColumn` (and the plain `horizontalScroll` beside it) grows from its own top/left, not
+ * from wherever the fingers are, so nothing but an explicit scroll correction keeps the
+ * pinched point from sliding toward that corner.
+ *
+ * [currentOffsetPx] is how far the scrollable already sits from its own origin — `hScroll
+ * .value` for the horizontal axis, or (for the `LazyListState` axis) the negative of the
+ * offset of the item spanning the centroid, since a `LazyListState` never reports one flat
+ * "distance scrolled" the way a plain `ScrollState` does. [anchorPx] is the centroid's own
+ * distance from the *viewport's* origin in that axis. Both are pre-scale, current-frame
+ * values — together, `currentOffsetPx + anchorPx` is the centroid's distance from the
+ * scrollable content's own origin, and that distance is what has to scale by [appliedRatio]
+ * to match what the content itself just did.
+ *
+ * [appliedRatio] must be the ratio the zoom actually took, not the ratio the pinch asked
+ * for: those differ once zoom has clamped at MIN_ZOOM/MAX_ZOOM, and correcting by the
+ * requested ratio there drifts the page while the zoom itself holds still.
+ */
+internal fun anchoredScrollDelta(currentOffsetPx: Float, anchorPx: Float, appliedRatio: Float): Float =
+    (appliedRatio - 1f) * (currentOffsetPx + anchorPx)
 
 // A redaction drag, as a fraction of the page (#173). MIN_MARK_EXTENT is what tells a
 // drag from a tap; MIN_MARK_THICKNESS is what a flat drag along a line is grown to, so
@@ -785,9 +809,53 @@ fun ViewerScreen(
                         do {
                             val event = awaitPointerEvent(PointerEventPass.Initial)
                             if (event.changes.count { it.pressed } >= 2) {
-                                val change = event.calculateZoom()
-                                if (change != 1f) {
-                                    zoom = (zoom * change).coerceIn(MIN_ZOOM, MAX_ZOOM)
+                                val requestedZoom = event.calculateZoom()
+                                if (requestedZoom != 1f) {
+                                    val previousZoom = zoom
+                                    val newZoom = (previousZoom * requestedZoom).coerceIn(MIN_ZOOM, MAX_ZOOM)
+                                    // What actually lands, not what the fingers asked for: at
+                                    // MIN_ZOOM/MAX_ZOOM the coerce above absorbs some or all of
+                                    // requestedZoom, and correcting the scroll by requestedZoom
+                                    // there would keep sliding the page while the zoom itself
+                                    // has already stopped (#527).
+                                    val appliedRatio = newZoom / previousZoom
+                                    zoom = newZoom
+                                    if (appliedRatio != 1f) {
+                                        // Keep the point under the fingers' centroid where it
+                                        // is (#527): zoom here is a layout size change, not a
+                                        // transform on a layer, so that content point's
+                                        // position scales by appliedRatio the same way the
+                                        // page itself just did. The scroll distance from the
+                                        // content's own origin out to the centroid has to
+                                        // scale by the same ratio, in both axes, and the
+                                        // correction is applied right here as an immediate,
+                                        // un-debounced delta — the 200ms debounce further
+                                        // down is for the engine's re-raster, and gating the
+                                        // scroll on it too would show the page lurch into
+                                        // place once that catches up.
+                                        val centroid = event.calculateCentroid()
+                                        hScroll.dispatchRawDelta(
+                                            anchoredScrollDelta(hScroll.value.toFloat(), centroid.x, appliedRatio)
+                                        )
+                                        val visibleItems = listState.layoutInfo.visibleItemsInfo
+                                        // The item spanning the centroid vertically: its own
+                                        // top is what the page grows from (a LazyColumn places
+                                        // items in sequence, so an item's offset from the
+                                        // viewport does not move just because the item itself
+                                        // got taller), so distance from that top is what scales.
+                                        val anchorItem = visibleItems.firstOrNull {
+                                            it.offset <= centroid.y && it.offset + it.size > centroid.y
+                                        } ?: visibleItems.firstOrNull()
+                                        if (anchorItem != null) {
+                                            listState.dispatchRawDelta(
+                                                anchoredScrollDelta(
+                                                    -anchorItem.offset.toFloat(),
+                                                    centroid.y,
+                                                    appliedRatio,
+                                                )
+                                            )
+                                        }
+                                    }
                                     // Claim the gesture: two fingers moving apart
                                     // must not also scroll the list, and a pinch
                                     // already at the zoom limit must not turn into
