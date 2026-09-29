@@ -2747,7 +2747,16 @@ internal static class Program
         {
             var (vm, window) = Open();
             vm.HandlePageClick(0, tick);
-            MenuProbe.Pump();
+            // #548: with a window attached the click's own edit runs off the UI thread
+            // (#145), the same as every other click-then-assert pair in this file (see
+            // e.g. the reading-mode checks' PumpUntil(() => vm.IsDirty && !vm.Busy.IsBusy,
+            // ...)) — a bare MenuProbe.Pump() here asserted on IsDirty before that work
+            // had necessarily finished, which is what a loaded machine occasionally
+            // caught: nothing wrong with the click, just a check that had not waited for
+            // it. This is not the busy-indicator's own 0.5 s/0.3 s timing (#515 gave that
+            // an injectable clock, but freezing it here changed nothing, because it was
+            // never the deadline in the way) — it is the edit itself, still in flight.
+            PumpUntil(() => vm.IsDirty && !vm.Busy.IsBusy, TimeSpan.FromSeconds(5));
             check("a changed document: the tick made it dirty", vm.IsDirty);
 
             window.AnswerUnsavedChangesForTest = () => Views.UnsavedChangesWindow.Decision.Cancel;
@@ -2778,7 +2787,10 @@ internal static class Program
             if (dirty)
             {
                 vm.HandlePageClick(0, tick);
-                MenuProbe.Pump();
+                // #548: same wait as scenario 3 above — the click's edit runs off the UI
+                // thread with a window attached, and NeedsConfirmationBeforeClose below
+                // reads vm.IsDirty, so this has to be settled first.
+                PumpUntil(() => vm.IsDirty && !vm.Busy.IsBusy, TimeSpan.FromSeconds(5));
             }
             var asked = 0;
             window.QuitForTest = () => asked++;

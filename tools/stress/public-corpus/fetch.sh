@@ -14,7 +14,11 @@
 #   * a file already on disk with the right hash is left alone and not re-downloaded;
 #   * a file on disk with the WRONG hash is a hard failure, named, and the run exits
 #     non-zero -- it is never silently re-fetched over, because a corpus that heals
-#     itself is a corpus that cannot tell you its source changed under you.
+#     itself is a corpus that cannot tell you its source changed under you;
+#   * a hash that no longer verifies costs the one document it belongs to, never the
+#     rest of the run (#525) -- a re-rendering source (Wikipedia's PDF export is the
+#     known case) moves its own bytes on its own schedule, and the final summary
+#     counts exactly how many of the selected documents that happened to, by name.
 #
 # Politeness: --jobs is the total worker count, --jobs-per-host caps how many of those
 # hit any one host at once (default 2). govinfo.gov asks for rate limiting explicitly
@@ -104,6 +108,16 @@ TXT
 fi
 
 # ---- one document ----------------------------------------------------------------
+#
+# #525: every outcome below also appends one word to $RESULTS ("ok", "mismatch" or
+# "failed") ahead of $rel, so the run can total what happened to every row it touched
+# rather than collapsing the whole fetch to a single pass/fail bit. A mismatch (the
+# hash the manifest pinned no longer matches what the source serves -- Wikipedia
+# re-renders its PDF export, #525) refuses that one row: it costs the document, not
+# the run. $RESULTS is opened with >>, and every write here is one line short enough
+# to land in one write(2) -- the usual guarantee that keeps concurrent appends to the
+# same file from interleaving mid-line, which is all that is asked of it, is a count
+# read back afterwards, not a lock.
 fetch_one() {
     local url=$1 want=$2 size=$3 rel=$4
     local out="$DEST/$rel"
@@ -113,11 +127,13 @@ fetch_one() {
         local have; have=$(sha256sum "$out" | cut -d' ' -f1)
         if [ "$have" = "$want" ]; then
             echo "skip $rel"
+            echo "ok $rel" >> "$RESULTS"
             return 0
         fi
         # Not repaired by re-fetching: an existing file with the wrong hash means either
         # the source moved or the local copy is damaged, and both are worth knowing.
         echo "MISMATCH-ON-DISK $rel have=$have want=$want" >&2
+        echo "mismatch $rel" >> "$RESULTS"
         return 3
     fi
 
@@ -137,26 +153,33 @@ fetch_one() {
             if [ "$got" != "$want" ]; then
                 rm -f "$tmp"
                 echo "MISMATCH-ON-FETCH $rel have=$got want=$want url=$url" >&2
+                echo "mismatch $rel" >> "$RESULTS"
                 return 3
             fi
             local bytes; bytes=$(wc -c < "$tmp")
             if [ "$bytes" != "$size" ]; then
                 rm -f "$tmp"
                 echo "SIZE-MISMATCH $rel have=$bytes want=$size" >&2
+                echo "mismatch $rel" >> "$RESULTS"
                 return 3
             fi
             mv -f "$tmp" "$out" || return 1
             echo "got  $rel"
+            echo "ok $rel" >> "$RESULTS"
             return 0
         fi
         rm -f "$tmp"
         [ "$attempt" -lt 4 ] && sleep "$delay" && delay=$((delay * 2))
     done
     echo "FETCH-FAILED $rel url=$url" >&2
+    echo "failed $rel" >> "$RESULTS"
     return 1
 }
 export -f fetch_one
 export DEST
+RESULTS="$WORK/results.tsv"
+: > "$RESULTS"
+export RESULTS
 
 if [ "$VERIFY_ONLY" -eq 1 ]; then
     # No network at all: check what is on disk against the manifest.
@@ -185,7 +208,6 @@ fi
 echo "hosts:    $HOSTS, $PER_HOST connection(s) each"
 echo
 
-rc=0
 pids=()
 while read -r host; do
     # The line goes in as an ARGUMENT, not spliced into the script text: veraPDF's
@@ -197,12 +219,32 @@ while read -r host; do
               fetch_one "$u" "$w" "$s" "$r"' _ LINE ) &
     pids+=($!)
 done < "$WORK/hosts"
-for pid in "${pids[@]}"; do wait "$pid" || rc=1; done
+for pid in "${pids[@]}"; do wait "$pid"; done
+
+# #525: counted from $RESULTS, one word per row fetch_one actually touched, rather than
+# the single pass/fail bit `wait`'s exit status would give -- so a maintainer reads
+# "3 of 1777 documents" off the summary itself instead of scrolling back through
+# MISMATCH/FETCH-FAILED lines to work out how much of the corpus is actually affected.
+OK=$(grep -c '^ok ' "$RESULTS")
+MISMATCH=$(grep -c '^mismatch ' "$RESULTS")
+FAILED=$(grep -c '^failed ' "$RESULTS")
 
 echo
-if [ "$rc" -ne 0 ]; then
-    echo "FETCH INCOMPLETE -- see the MISMATCH / FETCH-FAILED lines above." >&2
-    echo "A mismatch is never re-fetched over: fix or remove the file, then re-run." >&2
+echo "fetched or verified: $OK of $TOTAL"
+if [ "$MISMATCH" -gt 0 ]; then
+    echo "could not verify:    $MISMATCH of $TOTAL -- the pinned hash no longer matches what" >&2
+    echo "                      the source serves (see the MISMATCH lines above). A" >&2
+    echo "                      re-rendering source is the known cause (#525, wiki-*); each" >&2
+    echo "                      such row is refused on its own -- it costs that document," >&2
+    echo "                      not the rest of the corpus." >&2
+fi
+if [ "$FAILED" -gt 0 ]; then
+    echo "failed to fetch:      $FAILED of $TOTAL -- see the FETCH-FAILED lines above." >&2
+fi
+if [ "$MISMATCH" -gt 0 ] || [ "$FAILED" -gt 0 ]; then
+    echo "$DEST is missing $((MISMATCH + FAILED)) of $TOTAL documents named above; every" >&2
+    echo "other row is complete. A mismatch is never re-fetched over: fix or remove the" >&2
+    echo "file, then re-run." >&2
     exit 1
 fi
 echo "corpus complete at $DEST"
