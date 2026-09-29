@@ -91,6 +91,19 @@ class PinchAnchorTest {
         // clamp case belongs to PinchAnchorMathTest, not this test.
         val anchorNode = rule.page().fetchSemanticsNode()
         val anchorLocal = Offset(anchorNode.size.width * xFrac, anchorNode.size.height * yFrac)
+        var scopeWidth = -1
+        var scopeHeight = -1
+        var scopeCenter = Offset.Zero
+        rule.page().performTouchInput {
+            scopeWidth = width
+            scopeHeight = height
+            scopeCenter = center
+        }
+        throw AssertionError(
+            "DIAGNOSTIC node.size=${anchorNode.size} node.positionInRoot=${anchorNode.positionInRoot} " +
+                "scope width=$scopeWidth height=$scopeHeight center=$scopeCenter anchorLocal=$anchorLocal",
+        )
+        @Suppress("UNREACHABLE_CODE")
         rule.page().performTouchInput {
             pinch(
                 start0 = anchorLocal - Offset(150f, 100f), end0 = anchorLocal - Offset(275f, 175f),
