@@ -74,6 +74,14 @@ public class StringCatalogueTests
         ["VersionWithBuild"] = "\"Version {0} ({1})\" — same (#176)",
         ["Zoom"] = "the Window menu item macOS itself calls Zoom in French (#176)",
         ["Copies"] = "\"Copies\" is the same word in both (#158, the Linux print dialog)",
+        // #174: the Pages sidebar. "Pages" is the same word, and the three file-name
+        // fragments are a number, a number range and a count with that same word — French
+        // writes "page 3", "pages 2-3" and "4 pages" exactly as English does.
+        ["ToolbarPages"] = "\"Pages\" is the same word in both (#174)",
+        ["ExtractedOnePageName"] = "\"page {0}\" is the same in both (#174)",
+        ["ExtractedPageRangeName"] = "\"pages {0}-{1}\" is digits and a dash (#174)",
+        ["ExtractedPageCountName"] = "\"{0} pages\" is the same in both (#174)",
+        ["PageThumbnailName"] = "\"Page {0}\" is the same in both, as the Windows PageN already is (#174)",
         // Android
         ["document"] = "file name stem",
         ["page_n"] = "\"Page %1$d\"",

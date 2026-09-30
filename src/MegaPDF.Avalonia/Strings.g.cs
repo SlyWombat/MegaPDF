@@ -1066,4 +1066,115 @@ public static partial class Strings
 
     /// <summary>Open documents in reading mode</summary>
     public static string OpenInReadingMode => Get("OpenInReadingMode");
+
+    /// <summary>Pages</summary>
+    public static string ToolbarPages => Get("ToolbarPages");
+
+    /// <summary>Page thumbnails</summary>
+    public static string PagesSidebarName => Get("PagesSidebarName");
+
+    /// <summary>Thumbnails</summary>
+    public static string PageThumbnailsMenuItem => Get("PageThumbnailsMenuItem");
+
+    /// <summary>Rotate Left</summary>
+    public static string RotatePageLeft => Get("RotatePageLeft");
+
+    /// <summary>Rotate Right</summary>
+    public static string RotatePageRight => Get("RotatePageRight");
+
+    /// <summary>Delete Page</summary>
+    public static string DeletePageItem => Get("DeletePageItem");
+
+    /// <summary>Move Page Up</summary>
+    public static string MovePageUpItem => Get("MovePageUpItem");
+
+    /// <summary>Move Page Down</summary>
+    public static string MovePageDownItem => Get("MovePageDownItem");
+
+    /// <summary>Insert Blank Page</summary>
+    public static string InsertBlankPageItem => Get("InsertBlankPageItem");
+
+    /// <summary>Insert Pages from File…</summary>
+    public static string InsertPagesFromFileItem => Get("InsertPagesFromFileItem");
+
+    /// <summary>Save Selected Pages As…</summary>
+    public static string ExtractPagesItem => Get("ExtractPagesItem");
+
+    /// <summary>Choose a PDF to insert</summary>
+    public static string ChoosePagesToInsert => Get("ChoosePagesToInsert");
+
+    /// <summary>Save selected pages</summary>
+    public static string SaveSelectedPagesTitle => Get("SaveSelectedPagesTitle");
+
+    /// <summary>Page {0} selected</summary>
+    public static string PageSelected(object? arg0) => string.Format(CultureInfo.CurrentCulture, Get("PageSelected"), arg0);
+
+    /// <summary>{0} pages selected</summary>
+    public static string PagesSelected(object? arg0) => string.Format(CultureInfo.CurrentCulture, Get("PagesSelected"), arg0);
+
+    /// <summary>Turned the page left.</summary>
+    public static string PageTurnedLeft => Get("PageTurnedLeft");
+
+    /// <summary>Turned {0} pages left.</summary>
+    public static string PagesTurnedLeft(object? arg0) => string.Format(CultureInfo.CurrentCulture, Get("PagesTurnedLeft"), arg0);
+
+    /// <summary>Turned the page right.</summary>
+    public static string PageTurnedRight => Get("PageTurnedRight");
+
+    /// <summary>Turned {0} pages right.</summary>
+    public static string PagesTurnedRight(object? arg0) => string.Format(CultureInfo.CurrentCulture, Get("PagesTurnedRight"), arg0);
+
+    /// <summary>Page deleted. Undo puts it back.</summary>
+    public static string PageDeleted => Get("PageDeleted");
+
+    /// <summary>{0} pages deleted. Undo puts them back.</summary>
+    public static string PagesDeleted(object? arg0) => string.Format(CultureInfo.CurrentCulture, Get("PagesDeleted"), arg0);
+
+    /// <summary>Page {0} moved to position {1}.</summary>
+    public static string PageMoved(object? arg0, object? arg1) => string.Format(CultureInfo.CurrentCulture, Get("PageMoved"), arg0, arg1);
+
+    /// <summary>Blank page added as page {0}.</summary>
+    public static string BlankPageInserted(object? arg0) => string.Format(CultureInfo.CurrentCulture, Get("BlankPageInserted"), arg0);
+
+    /// <summary>Added the pages from {0}.</summary>
+    public static string PagesInsertedFromFile(object? arg0) => string.Format(CultureInfo.CurrentCulture, Get("PagesInsertedFromFile"), arg0);
+
+    /// <summary>Saved the page as {0}.</summary>
+    public static string PageSavedAs(object? arg0) => string.Format(CultureInfo.CurrentCulture, Get("PageSavedAs"), arg0);
+
+    /// <summary>Saved {0} pages as {1}.</summary>
+    public static string PagesSavedAs(object? arg0, object? arg1) => string.Format(CultureInfo.CurrentCulture, Get("PagesSavedAs"), arg0, arg1);
+
+    /// <summary>page {0}</summary>
+    public static string ExtractedOnePageName(object? arg0) => string.Format(CultureInfo.CurrentCulture, Get("ExtractedOnePageName"), arg0);
+
+    /// <summary>pages {0}-{1}</summary>
+    public static string ExtractedPageRangeName(object? arg0, object? arg1) => string.Format(CultureInfo.CurrentCulture, Get("ExtractedPageRangeName"), arg0, arg1);
+
+    /// <summary>{0} pages</summary>
+    public static string ExtractedPageCountName(object? arg0) => string.Format(CultureInfo.CurrentCulture, Get("ExtractedPageCountName"), arg0);
+
+    /// <summary>Those pages could not be copied: their form fields belong to a group this app cannot carry across, and the copy would lose their names. Nothing has changed — you can still print the document or save a copy of the whole of it.</summary>
+    public static string PagesRefusedFormFields => Get("PagesRefusedFormFields");
+
+    /// <summary>A PDF has to have at least one page, so this one cannot be deleted. To keep only some pages, use Save Selected Pages As instead.</summary>
+    public static string CannotDeleteLastPage => Get("CannotDeleteLastPage");
+
+    /// <summary>This document does not allow its pages to be changed. Its owner password would unlock it.</summary>
+    public static string PageToolsRestricted => Get("PageToolsRestricted");
+
+    /// <summary>That PDF needs a password, or it does not allow copying from it.</summary>
+    public static string OtherFileNeedsPassword => Get("OtherFileNeedsPassword");
+
+    /// <summary>That file could not be read or written.</summary>
+    public static string PagesFileProblem => Get("PagesFileProblem");
+
+    /// <summary>That page is no longer there.</summary>
+    public static string PageNoLongerThere => Get("PageNoLongerThere");
+
+    /// <summary>Cancelled.</summary>
+    public static string PagesCancelled => Get("PagesCancelled");
+
+    /// <summary>Page {0}</summary>
+    public static string PageThumbnailName(object? arg0) => string.Format(CultureInfo.CurrentCulture, Get("PageThumbnailName"), arg0);
 }

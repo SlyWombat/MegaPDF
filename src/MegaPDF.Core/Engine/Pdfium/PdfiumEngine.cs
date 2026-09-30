@@ -542,6 +542,194 @@ internal sealed class PdfiumDocument : IPdfDocument
             throw new InvalidOperationException("The compressed image could not be applied.");
     }
 
+    // --- Page tools (#174, core contract 10) ---------------------------------
+    //
+    // Under PdfiumLibrary.Lock, every one of them. These are the only calls that renumber
+    // the document's pages, and a page handed out by GetPage (which also takes the lock) is
+    // being renumbered underneath while they run; the core keeps its own per-page state
+    // right, but only one of these may be in it at a time.
+
+    public int GetPageRotation(int pageIndex)
+    {
+        lock (PdfiumLibrary.Lock)
+        {
+            ThrowIfDisposed();
+            var rotation = CoreNative.megapdf_page_rotation(_core, pageIndex);
+            if (rotation < 0)
+                throw Refused(rotation, pageIndex);
+            return rotation;
+        }
+    }
+
+    public void RotatePage(int pageIndex, int quarterTurns)
+    {
+        lock (PdfiumLibrary.Lock)
+        {
+            ThrowIfDisposed();
+            Check(CoreNative.megapdf_page_rotate(_core, pageIndex, quarterTurns), pageIndex);
+        }
+    }
+
+    public RemovedPage DeletePage(int pageIndex)
+    {
+        lock (PdfiumLibrary.Lock)
+        {
+            ThrowIfDisposed();
+            // The core answers MEGAPDF_ERR_ARGUMENT both for a bad index and for the last
+            // page of a document, and the difference is the whole of what a person can act
+            // on, so it is told apart here — where the page count is known — rather than
+            // left to a caller reading an English message.
+            if (CoreNative.megapdf_page_count(_core) <= 1)
+                throw new PageToolException(PageToolFailure.LastPage,
+                    "A PDF must have at least one page, so the last one cannot be deleted.");
+            var status = CoreNative.megapdf_page_delete(_core, pageIndex, out var removed);
+            if (status != 0)
+                throw Refused(status, pageIndex);
+            return new RemovedPage(removed);
+        }
+    }
+
+    public void RestorePage(RemovedPage removed, int at)
+    {
+        ArgumentNullException.ThrowIfNull(removed);
+        lock (PdfiumLibrary.Lock)
+        {
+            ThrowIfDisposed();
+            if (!removed.IsHeld)
+                throw new PageToolException(PageToolFailure.OutOfRange,
+                    "That page has already been put back or let go of.");
+            var status = CoreNative.megapdf_page_restore(_core, removed.Handle, at);
+            if (status != 0)
+                // The core keeps the handle valid when PDFium refuses, so the undo step is
+                // still there to try again rather than having silently lost its page.
+                throw Refused(status, at);
+            removed.Released();
+        }
+    }
+
+    public void DiscardRemovedPage(RemovedPage removed)
+    {
+        ArgumentNullException.ThrowIfNull(removed);
+        lock (PdfiumLibrary.Lock)
+        {
+            if (_disposed || !removed.IsHeld)
+                return;   // closing the document frees every page still held
+            CoreNative.megapdf_discard_removed_page(removed.Handle);
+            removed.Released();
+        }
+    }
+
+    public void MovePage(int from, int to)
+    {
+        lock (PdfiumLibrary.Lock)
+        {
+            ThrowIfDisposed();
+            Check(CoreNative.megapdf_page_move(_core, from, to), from);
+        }
+    }
+
+    public void InsertBlankPage(int at, double widthPoints, double heightPoints)
+    {
+        lock (PdfiumLibrary.Lock)
+        {
+            ThrowIfDisposed();
+            Check(CoreNative.megapdf_page_insert_blank(_core, at, widthPoints, heightPoints), at);
+        }
+    }
+
+    public int ImportPages(string otherPath, string? password, IReadOnlyList<int>? pages, int insertAt)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(otherPath);
+        var indices = pages is { Count: > 0 } ? pages.ToArray() : null;
+        lock (PdfiumLibrary.Lock)
+        {
+            ThrowIfDisposed();
+            var status = CoreNative.megapdf_pages_import(_core, otherPath, password, indices,
+                (nuint)(indices?.Length ?? 0), insertAt, out var imported);
+            if (status != 0)
+                throw Refused(status, insertAt, otherPath);
+            return imported;
+        }
+    }
+
+    public void ExtractPages(IReadOnlyList<int>? pages, string outPath, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(outPath);
+        var indices = pages is { Count: > 0 } ? pages.ToArray() : null;
+
+        // The cancel flag is the core's, raised from this thread's registration; the flag is
+        // freed only once the call has returned, which is the contract's own rule.
+        var cancel = CoreNative.megapdf_cancel_new();
+        try
+        {
+            using var registration = cancellationToken.Register(() =>
+            {
+                if (cancel != IntPtr.Zero)
+                    CoreNative.megapdf_cancel_raise(cancel);
+            });
+            // Not under PdfiumLibrary.Lock, and for the same reason Save is not: an extract
+            // writes a whole file and changes nothing in this document, so holding the lock
+            // would stop every render for as long as the write takes. What it is instead is a
+            // *use* of the document (#145, #536), so Dispose waits for it rather than freeing
+            // the document under the write.
+            if (!TryBeginUse())
+                throw new ObjectDisposedException(nameof(PdfiumDocument));
+            int status;
+            try
+            {
+                status = CoreNative.megapdf_pages_extract(_core, indices, (nuint)(indices?.Length ?? 0),
+                    outPath, cancel);
+            }
+            finally
+            {
+                EndUse();
+            }
+            if (status == CoreNative.ErrCancelled)
+                throw new OperationCanceledException(cancellationToken);
+            if (status != 0)
+                throw Refused(status, 0, outPath);
+        }
+        finally
+        {
+            if (cancel != IntPtr.Zero)
+                CoreNative.megapdf_cancel_free(cancel);
+        }
+    }
+
+    private void Check(int status, int pageIndex)
+    {
+        if (status != 0)
+            throw Refused(status, pageIndex);
+    }
+
+    /// <summary>
+    /// A contract-10 status as a typed refusal. The wording here is English for logs and
+    /// tests; every app maps <see cref="PageToolFailure"/> to its own localised sentence.
+    /// </summary>
+    private PageToolException Refused(int status, int pageIndex, string? path = null)
+    {
+        var detail = CoreNative.LastErrorMessage();
+        return status switch
+        {
+            CoreNative.ErrFields => new PageToolException(PageToolFailure.FieldHierarchy,
+                "Those pages carry form fields in a /Parent hierarchy this build cannot copy, "
+                + "so nothing was changed."),
+            CoreNative.ErrRestricted when path is not null => new PageToolException(PageToolFailure.Password,
+                $"{path} needs a password, or its security does not allow copying from it."),
+            CoreNative.ErrRestricted => new PageToolException(PageToolFailure.Restricted,
+                "The document's security does not allow page assembly without its owner password."),
+            CoreNative.ErrRedact => new PageToolException(PageToolFailure.Redacted,
+                "A redaction failed part-way, so this document can no longer be changed or saved."),
+            CoreNative.ErrFile => new PageToolException(PageToolFailure.File,
+                $"{path ?? "The file"} could not be read or written. {detail}".TrimEnd()),
+            CoreNative.ErrCancelled => new PageToolException(PageToolFailure.Cancelled, "Cancelled."),
+            -1 => new PageToolException(PageToolFailure.OutOfRange,
+                $"Page {pageIndex + 1} is not a page of this document."),
+            _ => new PageToolException(PageToolFailure.Engine,
+                string.IsNullOrEmpty(detail) ? "The engine refused the page change." : detail),
+        };
+    }
+
     public void Dispose()
     {
         lock (PdfiumLibrary.Lock)
@@ -581,11 +769,14 @@ internal sealed class PdfiumPage : IPdfPage
     private readonly PdfiumDocument _owner;
     private bool _disposed;
 
+    /// <summary>The index this page was loaded at; what <see cref="Index"/> falls back to once disposed.</summary>
+    private readonly int _loadedIndex;
+
     internal PdfiumPage(PdfiumDocument owner, IntPtr core, int index)
     {
         _owner = owner;
         _core = core;
-        Index = index;
+        _loadedIndex = index;
         Width = CoreNative.megapdf_page_width(core);
         Height = CoreNative.megapdf_page_height(core);
         // pdfium reports page *content* in user space, whose origin is the
@@ -595,7 +786,16 @@ internal sealed class PdfiumPage : IPdfPage
         // returns crop space; this class only flips bottom-left to top-left.
     }
 
-    public int Index { get; }
+    /// <summary>
+    /// Where this page stands *now*, read from the core rather than remembered (#174,
+    /// contract 10): a page operation renumbers pages under any handle that is open, and the
+    /// core keeps every handle's index following its page. -1 once its page has been deleted —
+    /// such a handle still renders what was on the page, so a view holding one does not crash.
+    /// Falls back to the index it was loaded at once disposed, so a log line after the fact
+    /// still names a page.
+    /// </summary>
+    public int Index => _disposed ? _loadedIndex : CoreNative.megapdf_page_index(_core);
+
     public double Width { get; }
     public double Height { get; }
 

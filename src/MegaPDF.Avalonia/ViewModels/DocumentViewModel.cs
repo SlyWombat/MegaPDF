@@ -172,6 +172,8 @@ public sealed partial class DocumentViewModel : ObservableObject, IDisposable
             OnPropertyChanged(nameof(CanSign));
             OnPropertyChanged(nameof(CanPrint));
             OnPropertyChanged(nameof(CanShrink));
+            // #174: every page tool waits while blocking work runs, like every other tool.
+            RaisePageCommands();
             SaveCommand.NotifyCanExecuteChanged();
             PrintCommand.NotifyCanExecuteChanged();
             ToggleAddTextCommand.NotifyCanExecuteChanged();
@@ -311,6 +313,8 @@ public sealed partial class DocumentViewModel : ObservableObject, IDisposable
     [NotifyPropertyChangedFor(nameof(CanSign))]
     [NotifyPropertyChangedFor(nameof(CanPrint))]
     [NotifyPropertyChangedFor(nameof(IsRestricted))]
+    [NotifyPropertyChangedFor(nameof(CanAssemblePages))]
+    [NotifyPropertyChangedFor(nameof(CanExtractPages))]
     private bool _isDocumentOpen;
 
     // --- Document security (#131, ADR-004 §2, §3) ---
@@ -331,6 +335,8 @@ public sealed partial class DocumentViewModel : ObservableObject, IDisposable
     [NotifyCanExecuteChangedFor(nameof(ToggleAddTextCommand))]
     [NotifyCanExecuteChangedFor(nameof(ToggleWhiteoutCommand))]
     [NotifyCanExecuteChangedFor(nameof(ToggleRedactCommand))]
+    [NotifyPropertyChangedFor(nameof(CanAssemblePages))]
+    [NotifyPropertyChangedFor(nameof(CanExtractPages))]
     private DocumentCapabilities _capabilities = DocumentCapabilities.Unprotected;
 
     // Each also waits while blocking work runs (#145): a save, an open, a change on its way.
@@ -618,6 +624,8 @@ public sealed partial class DocumentViewModel : ObservableObject, IDisposable
         DocumentName = Path.GetFileName(path);
         IsDocumentOpen = true;
         CurrentPage = 1;
+        SelectedPageIndices = [];   // #174: nothing of the previous document is selected
+        RaisePageCommands();
         // Starting a session truncates any previous journal for this document, which
         // is why it happens after a successful open and not before. A document opened
         // with a password is not journaled at all, so its text never reaches disk
@@ -880,12 +888,30 @@ public sealed partial class DocumentViewModel : ObservableObject, IDisposable
             // once it knows what it did — a placed stamp's id, for instance.
             if (operation.ChangesTheFile)
                 _journal.Record(operation.ToJournalEntry(inverse: false));
-            AfterEdit(operation.PageIndex, doneMessage, operation.ChangesTheFile);
+            if (operation is IPageStructureOperation structure)
+            {
+                // #174: pages were renumbered, so what this owes the window is the
+                // renumbering — re-rendering "the operation's page index" would draw
+                // whichever page has since moved into that slot. -1 is no page.
+                ApplyPageShifts(structure.Shifts, structure.ChangedPages);
+                AfterEdit(-1, doneMessage, operation.ChangesTheFile);
+            }
+            else
+            {
+                AfterEdit(operation.PageIndex, doneMessage, operation.ChangesTheFile);
+            }
             applied?.Invoke();
         }
         catch (TextEditException ex) when (ex.Reason == TextEditFailure.LayoutWouldChange)
         {
             Status = LayoutRefusalText(ex.Layout);
+            cancelled?.Invoke();
+        }
+        catch (PageToolException ex)
+        {
+            // #174: the engine's refusals, said in the person's words — the refused field
+            // hierarchy and the last page above all. Nothing was changed either way.
+            Status = DescribePageToolFailure(ex);
             cancelled?.Invoke();
         }
         catch (Exception ex)
@@ -983,6 +1009,16 @@ public sealed partial class DocumentViewModel : ObservableObject, IDisposable
         if (op is { ChangesTheFile: false })
         {
             AfterEdit(op.PageIndex, message, changesTheFile: false);
+            return;
+        }
+        if (op is IPageStructureOperation structure)
+        {
+            // #174: an undo renumbers the other way round, which is exactly the inverse of
+            // the shifts the operation reported. A redo applies them again as they were.
+            ApplyPageShifts(inverse ? PageShift.Invert(structure.Shifts) : structure.Shifts,
+                            structure.ChangedPages);
+            _journal.Record(op.ToJournalEntry(inverse));
+            AfterEdit(-1, message);
             return;
         }
         if (op is not null)
@@ -1256,7 +1292,7 @@ public sealed partial class DocumentViewModel : ObservableObject, IDisposable
         {
             try
             {
-                applied = await OffUiThread(() => JournalReplayer.Replay(document, entries));
+                applied = await OffUiThread(() => JournalReplayer.Replay(document, entries, DocumentPath));
             }
             catch (Exception ex)
             {
@@ -2378,6 +2414,7 @@ public sealed partial class DocumentViewModel : ObservableObject, IDisposable
             // held the very objects the redaction freed (#173) — the core discards its
             // handles, so an undo could not put them back even if we kept it — and the
             // journal starts again, without the entries that led here.
+            DiscardHeldPages();
             _undoStack.Clear();
             RaiseUndoRedo();
             if (DocumentPath is { Length: > 0 } path)
@@ -2890,6 +2927,7 @@ public sealed partial class DocumentViewModel : ObservableObject, IDisposable
         if (!ReferenceEquals(document, _document))
             return;
 
+        DiscardHeldPages();
         _undoStack.Clear();
         Selection = null;
         RaiseUndoRedo();
@@ -3302,9 +3340,11 @@ public sealed partial class DocumentViewModel : ObservableObject, IDisposable
             page.Dispose();
         Pages.Clear();
 
+        DiscardHeldPages();
         _undoStack.Clear();
         _pageWarnings.Reset();
         _searchGeneration++;
+        SelectedPageIndices = [];
         Selection = null;
         RaiseUndoRedo();
 

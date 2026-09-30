@@ -17,10 +17,18 @@ namespace MegaPDF.Core.Services;
 /// | CanEditContent | modify | editing the document's own text, whiteout |
 /// | CanShrink | modify | shrink-for-email |
 /// | CanPrint | print | printing |
+/// | CanAssemblePages | assemble or modify | rotate, delete, reorder, insert, combine |
+/// | CanExtractPages | copy | save selected pages as a new file |
 ///
 /// A form that allows filling lets people fill in everything it offers: its fields,
 /// check marks on printed boxes, signatures and text boxes. Changing the document
 /// itself needs modify. Annotate implies form filling (ISO 32000).
+///
+/// Page assembly has its own bit, P-bit 11 (#174): ISO 32000-2 Table 22 gives "assemble the
+/// document — insert, rotate or delete pages" to a document that grants *either* assemble or
+/// modify, which is the one place in this table where two bits both open a tool. Extracting
+/// pages is not assembly at all: it makes a copy of some of the document and changes nothing,
+/// so it is the copy bit, the same as any other copy the security permits.
 ///
 /// Saving is not gated: a restricted open has nothing it may change, and Save a copy
 /// stays available. Changing or removing security needs full access.
@@ -33,7 +41,9 @@ public sealed record DocumentCapabilities(
     bool CanPrint,
     bool CanShrink,
     bool CanChangeSecurity,
-    bool IsRestricted)
+    bool IsRestricted,
+    bool CanAssemblePages,
+    bool CanExtractPages)
 {
     /// <summary>An unprotected document: every tool, nothing to unlock.</summary>
     public static DocumentCapabilities Unprotected { get; } = From(PdfSecurity.Unprotected);
@@ -56,7 +66,11 @@ public sealed record DocumentCapabilities(
             CanPrint: Allows(PdfPermissions.Print),
             CanShrink: modify,
             CanChangeSecurity: security.HasFullAccess,
-            IsRestricted: security.IsEncrypted && !security.HasFullAccess);
+            IsRestricted: security.IsEncrypted && !security.HasFullAccess,
+            // Either bit (#174): ISO 32000-2 Table 22's "assemble the document" is P-bit 11,
+            // and a document that grants modify grants the stronger right already.
+            CanAssemblePages: Allows(PdfPermissions.Assemble) || modify,
+            CanExtractPages: Allows(PdfPermissions.Copy));
     }
 
     /// <summary>
@@ -79,6 +93,10 @@ public sealed record DocumentCapabilities(
     /// </summary>
     public bool Allows(IPageEditOperation operation) => operation switch
     {
+        // Page assembly first: an IPageStructureOperation is not a content edit, and gating it
+        // on modify alone would refuse a document whose owner granted assemble and nothing more
+        // — which is the case the bit exists for (#174).
+        IPageStructureOperation => CanAssemblePages,
         CheckboxToggleOperation or FormTextEditOperation => CanFillForms,
         AddMarkOperation or RemoveMarkOperation
             or AddSignatureOperation or MoveSignatureOperation or RemoveSignatureOperation => CanSign,

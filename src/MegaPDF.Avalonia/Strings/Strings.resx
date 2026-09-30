@@ -1332,4 +1332,153 @@
     <value>Open documents in reading mode</value>
     <comment>Options: off by default (#168 decision 2, #511)</comment>
   </data>
+  <!-- Page tools (#174): the Pages sidebar, and rotate/delete/reorder/insert/combine/extract -->
+  <data name="ToolbarPages" xml:space="preserve">
+    <value>Pages</value>
+    <comment>Toolbar button and the Pages sidebar's name (#174)</comment>
+  </data>
+  <data name="PagesSidebarName" xml:space="preserve">
+    <value>Page thumbnails</value>
+    <comment>Accessible name of the Pages sidebar's list (#174)</comment>
+  </data>
+  <data name="PageThumbnailsMenuItem" xml:space="preserve">
+    <value>Thumbnails</value>
+    <comment>View menu: shows the Pages sidebar. Preview's own item name (#174)</comment>
+  </data>
+  <data name="RotatePageLeft" xml:space="preserve">
+    <value>Rotate Left</value>
+    <comment>Tools menu and the thumbnail's context menu (#174)</comment>
+  </data>
+  <data name="RotatePageRight" xml:space="preserve">
+    <value>Rotate Right</value>
+    <comment>Tools menu and the thumbnail's context menu (#174)</comment>
+  </data>
+  <data name="DeletePageItem" xml:space="preserve">
+    <value>Delete Page</value>
+    <comment>Edit menu and the thumbnail's context menu (#174)</comment>
+  </data>
+  <data name="MovePageUpItem" xml:space="preserve">
+    <value>Move Page Up</value>
+    <comment>Keyboard reordering, the way out of drag-and-drop (#174)</comment>
+  </data>
+  <data name="MovePageDownItem" xml:space="preserve">
+    <value>Move Page Down</value>
+    <comment>Keyboard reordering (#174)</comment>
+  </data>
+  <data name="InsertBlankPageItem" xml:space="preserve">
+    <value>Insert Blank Page</value>
+    <comment>Edit menu (#174)</comment>
+  </data>
+  <data name="InsertPagesFromFileItem" xml:space="preserve">
+    <value>Insert Pages from File…</value>
+    <comment>Edit menu: the combine feature (#174)</comment>
+  </data>
+  <data name="ExtractPagesItem" xml:space="preserve">
+    <value>Save Selected Pages As…</value>
+    <comment>File menu: the split feature (#174)</comment>
+  </data>
+  <data name="ChoosePagesToInsert" xml:space="preserve">
+    <value>Choose a PDF to insert</value>
+    <comment>File picker title for combine (#174)</comment>
+  </data>
+  <data name="SaveSelectedPagesTitle" xml:space="preserve">
+    <value>Save selected pages</value>
+    <comment>File picker title for extract (#174)</comment>
+  </data>
+  <data name="PageSelected" xml:space="preserve">
+    <value>Page {0} selected</value>
+    <comment>Status line, one thumbnail selected (#174)</comment>
+  </data>
+  <data name="PagesSelected" xml:space="preserve">
+    <value>{0} pages selected</value>
+    <comment>Status line, several thumbnails selected (#174)</comment>
+  </data>
+  <data name="PageTurnedLeft" xml:space="preserve">
+    <value>Turned the page left.</value>
+    <comment>Announced after a rotation (#174)</comment>
+  </data>
+  <data name="PagesTurnedLeft" xml:space="preserve">
+    <value>Turned {0} pages left.</value>
+    <comment>Announced after a rotation (#174)</comment>
+  </data>
+  <data name="PageTurnedRight" xml:space="preserve">
+    <value>Turned the page right.</value>
+    <comment>Announced after a rotation (#174)</comment>
+  </data>
+  <data name="PagesTurnedRight" xml:space="preserve">
+    <value>Turned {0} pages right.</value>
+    <comment>Announced after a rotation (#174)</comment>
+  </data>
+  <data name="PageDeleted" xml:space="preserve">
+    <value>Page deleted. Undo puts it back.</value>
+    <comment>Deleting is one undo step that restores the page itself (#174)</comment>
+  </data>
+  <data name="PagesDeleted" xml:space="preserve">
+    <value>{0} pages deleted. Undo puts them back.</value>
+    <comment>As PageDeleted, for a selection (#174)</comment>
+  </data>
+  <data name="PageMoved" xml:space="preserve">
+    <value>Page {0} moved to position {1}.</value>
+    <comment>Announced after a reorder (#174)</comment>
+  </data>
+  <data name="BlankPageInserted" xml:space="preserve">
+    <value>Blank page added as page {0}.</value>
+    <comment>Announced after an insert (#174)</comment>
+  </data>
+  <data name="PagesInsertedFromFile" xml:space="preserve">
+    <value>Added the pages from {0}.</value>
+    <comment>Announced after a combine (#174)</comment>
+  </data>
+  <data name="PageSavedAs" xml:space="preserve">
+    <value>Saved the page as {0}.</value>
+    <comment>Announced after an extract (#174)</comment>
+  </data>
+  <data name="PagesSavedAs" xml:space="preserve">
+    <value>Saved {0} pages as {1}.</value>
+    <comment>Announced after an extract (#174)</comment>
+  </data>
+  <data name="ExtractedOnePageName" xml:space="preserve">
+    <value>page {0}</value>
+    <comment>Suggested file name fragment for an extract (#174)</comment>
+  </data>
+  <data name="ExtractedPageRangeName" xml:space="preserve">
+    <value>pages {0}-{1}</value>
+    <comment>Suggested file name fragment for an extract (#174)</comment>
+  </data>
+  <data name="ExtractedPageCountName" xml:space="preserve">
+    <value>{0} pages</value>
+    <comment>Suggested file name fragment for an extract (#174)</comment>
+  </data>
+  <data name="PagesRefusedFormFields" xml:space="preserve">
+    <value>Those pages could not be copied: their form fields belong to a group this app cannot carry across, and the copy would lose their names. Nothing has changed — you can still print the document or save a copy of the whole of it.</value>
+    <comment>MEGAPDF_ERR_FIELDS (#174, #452): the engine refuses about 0.8% of real documents rather than write a form that has quietly lost its field names. Said as what happened and what still works</comment>
+  </data>
+  <data name="CannotDeleteLastPage" xml:space="preserve">
+    <value>A PDF has to have at least one page, so this one cannot be deleted. To keep only some pages, use Save Selected Pages As instead.</value>
+    <comment>The engine refuses the last page (#174); said as the rule it is, with the way round it</comment>
+  </data>
+  <data name="PageToolsRestricted" xml:space="preserve">
+    <value>This document does not allow its pages to be changed. Its owner password would unlock it.</value>
+    <comment>MEGAPDF_ERR_RESTRICTED for a page operation (#174, ADR-004)</comment>
+  </data>
+  <data name="OtherFileNeedsPassword" xml:space="preserve">
+    <value>That PDF needs a password, or it does not allow copying from it.</value>
+    <comment>The file being combined in could not be opened (#174)</comment>
+  </data>
+  <data name="PagesFileProblem" xml:space="preserve">
+    <value>That file could not be read or written.</value>
+    <comment>MEGAPDF_ERR_FILE for an import or an extract (#174)</comment>
+  </data>
+  <data name="PageNoLongerThere" xml:space="preserve">
+    <value>That page is no longer there.</value>
+    <comment>A page operation on an index that has since gone (#174)</comment>
+  </data>
+  <data name="PagesCancelled" xml:space="preserve">
+    <value>Cancelled.</value>
+    <comment>An extract that was stopped before it finished (#174)</comment>
+  </data>
+  <data name="PageThumbnailName" xml:space="preserve">
+    <value>Page {0}</value>
+    <comment>Accessible name of a row in the Pages sidebar (#174)</comment>
+  </data>
 </root>

@@ -446,7 +446,7 @@ The plain-text content-fidelity bar (every glyph search can find comes out exact
 the Markdown acceptance line are a later phase's (#355, #357); this phase has no writer to
 hold to them yet. The README's mention of a command line waits for the CLI itself (#356).
 
-### 3.10 F9 — Page tools *(scope amendment — 2026-09-27, #174; engine half)*
+### 3.10 F9 — Page tools *(scope amendment — 2026-09-27, #174; engine half, then the Mac/Linux desktops)*
 
 **User story:** *"This scan came in sideways. Take out the blank page. Put the signed pages
 from the other file after page 3. Save pages 2–4 as their own file."*
@@ -492,11 +492,65 @@ whole with `MEGAPDF_ERR_FIELDS` and nothing changes. A widget that is its own fi
 and extracts as above. The fix is a PDFium patch that copies the chain and registers the
 fields; until then the apps say so and offer nothing that would write a broken form.
 
-**Coordinates.** A rotated page renders rotated (contract 7 goes through PDFium's display
-matrix) and reports the rotated size; the crop-space rectangles the other contracts report
-are unrotated user space, as they were before this amendment for a document that arrived
-with `/Rotate` set. The rotation term in that transform is #174's next engine step, and it
-touches every rect-consuming call site in four apps.
+**Coordinates** *(amended — #439 landed)*. A rotated page renders rotated (contract 7 goes
+through PDFium's display matrix) and reports the rotated size, **and so does crop space
+itself**: since #439 every rectangle the contracts report — form fields, stamps, check marks,
+text runs and lines, search hits, redaction marks, page-object and structure-block bounds — is
+in the rotated space the render draws, and every coordinate passed *in* is read in that same
+space. There is one space and no flag to choose another, so a caller that draws a reported rect
+over a render needs no rotation term of its own, which is why the desktops' half below needed
+none. Content the core writes onto a rotated page is turned with it (#446).
+`megapdf_page_crop_origin()` and `megapdf_page_user_unit()` still report the two *unrotated*
+terms, for a caller that needs the page's own geometry.
+
+#### The desktops' half *(#174, Mac and Linux)*
+
+**Where pages are seen as pages: a thumbnail sidebar.** Both of these desktops already have
+one answer to "show me the pages" and it is the same answer — Preview's *View ▸ Thumbnails*
+(⌥⌘2) and Evince's, Papers' and Okular's side pane (F9). A strip down the left of the
+document, selectable, reorderable by drag, the page number under each thumbnail. Not a
+full-window page grid you enter and leave, which is Acrobat's *Organize Pages*: it takes the
+document away at the moment you most want to see what you are doing to it. Beside the page,
+turning page 3 turns page 3 in front of you. The strip is per tab, off by default, virtualizes
+like the page list (a thumbnail is drawn only for a row the strip has realised), and counts as
+chrome for reading mode — it leaves the tab order and the accessible tree, not merely the
+screen.
+
+**Keys, per platform rather than per modifier** (the rule #505 wrote down for reading mode):
+
+| | macOS | Linux | why |
+|---|---|---|---|
+| Thumbnails | ⌥⌘2 | F9 | Preview's own item; the side-pane key every GTK/KDE viewer answers |
+| Rotate left / right | ⌘L / ⌘R | Ctrl+← / Ctrl+→ | Preview's pair; Evince's and Okular's |
+| Reorder | ⌥↑ / ⌥↓ | Alt+↑ / Alt+↓ | the "move this row" modifier on both |
+| Delete | ⌫ or Delete, in the strip only | same | a bare Delete on the window would take the key from every text field |
+
+Menu homes follow Preview, which is where a Mac user looks: **Tools** ▸ Rotate Left/Right and
+Move Page Up/Down, **Edit** ▸ Insert Blank Page / Insert Pages from File… / Delete Page,
+**File** ▸ Save Selected Pages As…, **View** ▸ Thumbnails. Linux reaches the same commands
+through the window's own key bindings, because `MainWindow.axaml` hosts no menu bar on X11.
+
+Reordering is Move Up / Move Down rather than the cut-and-paste #174 asked for: a page held on
+a clipboard is a deleted page that can be lost by copying anything else, and a paste between
+two documents is an import under another name — which Insert Pages from File… already does,
+whole file at a time. One step that always has an inverse, and whose announcement says where
+the page landed, is also what a screen-reader user can follow.
+
+**The shared .NET layer** (`src/MegaPDF.Core`, used by WinUI and Avalonia alike): the
+contract-10 P/Invoke bindings; `PageToolException`/`PageToolFailure`, so a refusal is typed
+rather than a message to match on; `PageShift`, the renumbering primitive both apps apply to
+their own index-keyed state (a page that is gone maps to *null*, never to 0);
+`IPageStructureOperation` and the five reversible operations, each one undo step and one
+journal entry; the six journal entries and their replay;
+`DocumentCapabilities.CanAssemblePages`/`CanExtractPages`; and
+`PageRegenerationWarnings.Renumber`, so the once-per-page #139 warnings follow their pages.
+
+**The two refusals are surfaced, not hidden.** `MEGAPDF_ERR_FIELDS` becomes a sentence that
+says it is the form on those pages, that nothing was changed, and that printing and saving a
+copy still work — not "the change failed". The last page of a document becomes the rule it
+is, with the way round it (Save Selected Pages As). Neither is a disabled button with no
+explanation. The #118 layout guard is *not* in this path at all: no page operation rewrites a
+content stream, so none of them can answer `MEGAPDF_ERR_LAYOUT`.
 
 #### Acceptance criteria (this phase)
 
