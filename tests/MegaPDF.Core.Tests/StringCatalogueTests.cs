@@ -102,6 +102,16 @@ public class StringCatalogueTests
         ["Photos"] = "the Photos app keeps its name",
         ["Signature %lld"] = "same",
         ["Signatures"] = "same word",
+        // #174: the page tools' own. "Pages" is the glossary entry and the French for it is the
+        // English spelling; a count of pages is written the same way, as "1 image" already is
+        // above; and the three file-name fragments Save Pages As… builds are a number, a number
+        // range and a count with that same word — the iOS twins of macOS's ExtractedOnePageName,
+        // ExtractedPageRangeName and ExtractedPageCountName listed above.
+        ["Pages"] = "\"Pages\" is the same word in both (#174)",
+        ["1 page"] = "\"1 page\" is the same in both (#174)",
+        ["%lld pages"] = "\"%lld pages\" is the same in both (#174)",
+        ["page %lld"] = "\"page %lld\" is the same in both (#174)",
+        ["pages %lld-%lld"] = "digits and a dash (#174)",
         ["Version %@"] = "same",
         // #165: where a recent document lives. Apple's own French spells these two
         // exactly as English does — the Files app's sidebar reads "iCloud Drive" in

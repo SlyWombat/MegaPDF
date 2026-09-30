@@ -131,6 +131,24 @@ final class PageCheckCoordinator {
         }
     }
 
+    /// Follows a page operation's renumbering (#174).
+    ///
+    /// `settled` is keyed by page index, and a delete, a move or an insert moves every page
+    /// after it. Without this the first delete would leave "this page has already been asked
+    /// about" sitting on whichever page took its index — so a page that *would* change silently
+    /// stopped asking, which is the one thing the #139 question exists for. The desktops carry
+    /// the same fix as `PageRegenerationWarnings.Renumber`.
+    ///
+    /// A check in flight is cancelled rather than followed: its page has moved under it, and
+    /// the answer is cheap to ask for again (the core caches it).
+    func renumber(_ shifts: [PageShift]) {
+        guard !shifts.isEmpty else { return }
+        settled = settled.shifted(by: shifts)
+        running?.task.cancel()
+        running = nil
+        awaitedPage = nil
+    }
+
     /// Cancels every check and forgets every page: the document closed or another opened.
     func reset() {
         generation += 1

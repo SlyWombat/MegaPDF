@@ -96,6 +96,16 @@ struct SearchMatch: Equatable {
     let rects: [PdfRect]
 }
 
+/// A staged extract waiting for the export sheet (#174, *Save Pages As…*). The document itself
+/// is unchanged — an extract is a copy, not an edit — so unlike `exportFile` this never stands
+/// in for a save and never touches the unsaved flag.
+struct PageExport: Identifiable, Equatable {
+    let id = UUID()
+    let url: URL
+    let defaultName: String
+    let pageCount: Int
+}
+
 @MainActor
 final class ViewerModel: ObservableObject {
     @Published private(set) var state: ViewerState
@@ -234,6 +244,11 @@ final class ViewerModel: ObservableObject {
         guard readingMode != on else { return }
         readingMode = on
         if on {
+            // The pages are chrome, and reading mode is the chrome-free view (#506): the sheet
+            // would sit over the page it is meant to be showing, and the iPad's sidebar is
+            // exactly the kind of panel this mode takes away. It does not come back on the way
+            // out, for the same reason an armed tool does not.
+            setPagesOpen(false)
             redactMode = false
             isPlacingText = false
             pendingSignature = nil
@@ -263,6 +278,59 @@ final class ViewerModel: ObservableObject {
         guard let window = lastWindow else { return }
         updateRenderWindow(first: window.first, last: window.last, widthPx: window.widthPx)
     }
+
+    // MARK: - the page tools' own screen state (#174)
+
+    /// Whether the pages are on screen: a sheet over the document in compact width, a sidebar
+    /// beside it in regular. A screen state, not a document one — nothing about it is
+    /// persisted, and it goes with the document.
+    @Published private(set) var pagesOpen = false
+
+    /// Whether the grid is in Select mode. Out of it a tap on a page **goes to that page**,
+    /// which is what a thumbnail is for; in it a tap picks pages for the commands below. That
+    /// is iOS's own answer to "do this to some of these" (Photos, Files, Mail), and the reason
+    /// it is a mode here rather than Android's tap-to-select is that this grid sits beside or
+    /// over the document, so a plain tap has a navigation meaning worth protecting.
+    @Published private(set) var pagesSelecting = false
+
+    /// The pages Select mode has picked, by index. Renumbered by every page operation, like
+    /// every other index-keyed thing the app keeps (`applyPageShifts`).
+    @Published private(set) var pageSelection: Set<Int> = []
+
+    /// A page the grid has asked the document to show; consumed by `ViewerView`, which is the
+    /// only thing that holds a scroll proxy.
+    @Published var pageToShow: Int?
+
+    /// The grid's own small renders, by page index.
+    ///
+    /// Separate from `pageImages`, which holds the ±2 pages of the *reading* window at the width
+    /// they are read at: a thumbnail is a different picture of the same page, and drawing the
+    /// grid from the reading cache would either render a 1,000-page document whole or show three
+    /// tiles and 997 grey rectangles. Only the grid's visible window ±6 is held, through the
+    /// same engine clamp every other render goes through (#93/#111), so this screen costs the
+    /// same on a 1,000-page file as on a 2-page one.
+    @Published private(set) var pageThumbnails: [Int: CGImage] = [:]
+
+    private var thumbnailTask: Task<Void, Never>?
+    private var lastThumbnailWindow: (first: Int, last: Int)?
+    private static let thumbnailMargin = 6
+    /// Wide enough for the largest tile on an iPad at 3× before the clamp, small enough that a
+    /// window of fifteen of them is a few megabytes.
+    private static let thumbnailPixelWidth = 320
+
+    /// Why a page change was refused, in one sentence, shown once and dismissed. **Nothing was
+    /// changed** when this is set — that is the whole of what it says.
+    @Published var pageToolRefusal: String?
+
+    /// A staged extract waiting for the export sheet (*Save Pages As…*).
+    @Published var pageExport: PageExport?
+
+    /// The copies of picked files this document's imported pages are read from, kept for as
+    /// long as the document is open: contract 10 keeps the other document open inside this one,
+    /// and a redo imports from it again, so neither the file nor its name may go before the
+    /// document does. A URL the file picker lent the app does not last that long, which is why
+    /// these are copies.
+    private var importedSources: [URL] = []
 
     /// The Redact tool is armed: the next drag across a page marks an area.
     @Published private(set) var redactMode = false
@@ -566,6 +634,10 @@ final class ViewerModel: ObservableObject {
     private var exportEditCount: Int?
 
     private var searchToken: BusyToken?
+    /// What the find bar is looking for, so a page that arrives with an undo, an insert or an
+    /// import can be searched for the same thing (#174, `applyPageShifts`). Nil when nothing is
+    /// being searched for.
+    private var lastSearchTerm: String?
     private var pageRewriteContinuation: CheckedContinuation<Bool, Never>?
     private var sourceURL: URL?
     /// The picked file whose security-scoped access is held while its document is open (#147):
@@ -596,6 +668,13 @@ final class ViewerModel: ObservableObject {
 
     init() {
         state = .home(recents: recents.load(), error: nil)
+        // #174: a page delete holds the deleted page so the undo can put back the page itself.
+        // An operation that can never be undone again is holding a page nothing can restore, and
+        // on a phone a long session of deletes would otherwise keep every one of them alive for
+        // as long as the document was open. The history says what left; the engine frees it.
+        history.onDropped = { [weak self] operations in
+            self?.discardHeldPages(in: operations)
+        }
         refreshRecents()
         signatures = signatureStore.load()
         applyScreenshotModeIfNeeded()
@@ -968,9 +1047,17 @@ final class ViewerModel: ObservableObject {
     /// keep already-sharp pages, evict the rest.
     func updateRenderWindow(first: Int, last: Int, widthPx: Int) {
         guard case let .viewing(_, pageSizes) = state, let doc = document else { return }
+        guard !pageSizes.isEmpty else { return }
         lastWindow = (first, last, widthPx)
         pageShown(first)
-        let window = max(0, first - Self.renderMargin)...min(pageSizes.count - 1, last + Self.renderMargin)
+        // Clamped at both ends and ordered, not merely floored and ceilinged. Before #174 the
+        // visible range could only grow with the document; a delete can now leave the view
+        // holding indices past the last page, and `a...b` with a > b is a trap, not an empty
+        // range.
+        let top = pageSizes.count - 1
+        let lower = min(max(0, first - Self.renderMargin), top)
+        let upper = min(max(lower, last + Self.renderMargin), top)
+        let window = lower...upper
 
         for index in pageImages.keys where !window.contains(index) {
             pageImages.removeValue(forKey: index)
@@ -1539,8 +1626,12 @@ final class ViewerModel: ObservableObject {
             defer { busy.end(token) }
             do {
                 if let operation = try await history.undo(PdfEngine.shared, doc) {
-                    await afterHistoryChange(operation)
+                    await afterHistoryChange(operation, reverted: true)
                 }
+            } catch let error as PageToolError {
+                // A page change that could not be taken back says which refusal it was, not
+                // "couldn't undo that" (#174). The history has already put the operation back.
+                showPageToolRefusal(error.refusal)
             } catch {
                 statusMessage = String(localized: "Couldn't undo that.")
             }
@@ -1554,8 +1645,10 @@ final class ViewerModel: ObservableObject {
             defer { busy.end(token) }
             do {
                 if let operation = try await history.redo(PdfEngine.shared, doc) {
-                    await afterHistoryChange(operation)
+                    await afterHistoryChange(operation, reverted: false)
                 }
+            } catch let error as PageToolError {
+                showPageToolRefusal(error.refusal)
             } catch {
                 statusMessage = String(localized: "Couldn't redo that.")
             }
@@ -1569,14 +1662,22 @@ final class ViewerModel: ObservableObject {
         // permission never reaches the engine, even if a tool forgot to check.
         guard capabilities.allows(operation) else { throw PdfError.restricted }
         try await history.perform(operation, PdfEngine.shared, doc)
-        await afterHistoryChange(operation)
+        await afterHistoryChange(operation, reverted: false)
     }
 
-    private func afterHistoryChange(_ operation: PdfEditOperation) async {
+    private func afterHistoryChange(_ operation: PdfEditOperation, reverted: Bool) async {
         canUndo = history.canUndo
         canRedo = history.canRedo
         selectedStamp = nil
         selectedTextBox = nil
+        // #174: a page change renumbers the document, so what follows it is not "re-render one
+        // page" but "carry every index-keyed thing across". `applyPageShifts` does all of it,
+        // including the unsaved flag and the re-render, and `reverted` is why it has to know
+        // which way the history just moved.
+        if let pageOperation = operation as? PageStructureOperation {
+            await applyPageShifts(pageOperation, reverted: reverted)
+            return
+        }
         guard operation.changesDocument else {
             // A mark (#329): nothing on disk changed, so the document is not unsaved, there
             // is nothing to re-render and no page check to run — only the overlay moved.
@@ -1603,6 +1704,489 @@ final class ViewerModel: ObservableObject {
         if let w = lastWindow { updateRenderWindow(first: w.first, last: w.last, widthPx: w.widthPx) }
     }
 
+    // MARK: - page tools (#174, core contract 10)
+
+    /// The open document's page sizes, which is also the count of its pages.
+    var pageSizes: [CGSize] {
+        if case let .viewing(_, sizes) = state { return sizes }
+        return []
+    }
+
+    var pageCount: Int { pageSizes.count }
+
+    /// Whether the pages may be rearranged at all — what the Pages commands ask before they
+    /// offer themselves, and what `perform` checks again behind them.
+    var canAssemblePages: Bool { document != nil && capabilities.canAssemblePages }
+
+    /// Whether a selection may be written out as a new file. A different permission from the
+    /// one above (copy, not assemble), because it is a different act: nothing here changes the
+    /// document.
+    var canExtractPages: Bool { document != nil && capabilities.canExtractPages }
+
+    /// Opens or closes the pages, and says so.
+    func setPagesOpen(_ open: Bool) {
+        guard pagesOpen != open, document != nil || !open else { return }
+        pagesOpen = open
+        if !open {
+            pagesSelecting = false
+            pageSelection = []
+        }
+        announce(open ? String(localized: "Pages shown") : String(localized: "Pages hidden"))
+    }
+
+    func togglePages() { setPagesOpen(!pagesOpen) }
+
+    /// Enters or leaves Select mode. Leaving it drops the selection: a selection nothing can be
+    /// done to is a set of highlighted pages with no meaning.
+    func setPagesSelecting(_ on: Bool) {
+        guard pagesSelecting != on else { return }
+        pagesSelecting = on
+        if !on { pageSelection = [] }
+    }
+
+    func togglePageSelection(_ index: Int) {
+        guard pageSizes.indices.contains(index) else { return }
+        if pageSelection.contains(index) {
+            pageSelection.remove(index)
+        } else {
+            pageSelection.insert(index)
+        }
+    }
+
+    func selectAllPages() {
+        pageSelection = Set(0..<pageCount)
+    }
+
+    func clearPageSelection() {
+        pageSelection = []
+    }
+
+    /// Asks the document to show a page — what a tap on a thumbnail means outside Select mode.
+    func showPage(_ index: Int) {
+        guard pageSizes.indices.contains(index) else { return }
+        pageToShow = index
+    }
+
+    /// The grid's visible range changed: draw that window ±6 and hold nothing else.
+    func updateThumbnailWindow(first: Int, last: Int) {
+        let sizes = pageSizes
+        guard let doc = document, !sizes.isEmpty else { return }
+        lastThumbnailWindow = (first, last)
+        let top = sizes.count - 1
+        let lower = min(max(0, first - Self.thumbnailMargin), top)
+        let upper = min(max(lower, last + Self.thumbnailMargin), top)
+
+        for index in pageThumbnails.keys where !(lower...upper).contains(index) {
+            pageThumbnails.removeValue(forKey: index)
+        }
+
+        thumbnailTask?.cancel()
+        thumbnailTask = Task {
+            for index in lower...upper {
+                if Task.isCancelled { return }
+                guard pageThumbnails[index] == nil, index < sizes.count else { continue }
+                let size = sizes[index]
+                let width = Self.thumbnailPixelWidth
+                let height = max(1, Int(Double(width) * Double(size.height) / Double(size.width)))
+                // Never tinted: reading mode's page colours are for reading, and a grid of sepia
+                // thumbnails would say something about the document that is not true of it.
+                if let image = try? await PdfEngine.shared.render(
+                    doc, index: index, pixelWidth: width, pixelHeight: height, tint: .normal) {
+                    guard !Task.isCancelled, document === doc else { return }
+                    pageThumbnails[index] = image
+                }
+            }
+        }
+    }
+
+    /// The pages a command acts on: whatever it was handed, deduplicated, in order, and only
+    /// pages this document actually has.
+    private func resolved(_ pages: [Int]) -> [Int] {
+        let range = 0..<pageCount
+        return Array(Set(pages.filter { range.contains($0) })).sorted()
+    }
+
+    /// Turns pages a quarter turn: one operation for the whole selection, so "turn these six
+    /// pages" is one press of Undo rather than six.
+    func rotatePages(_ pages: [Int], quarterTurns: Int) {
+        let targets = resolved(pages)
+        guard !targets.isEmpty else { return }
+        Task { @MainActor in
+            guard await performPageOperation(
+                RotatePagesOperation(pages: targets, quarterTurns: quarterTurns)) else { return }
+            announce(targets.count == 1
+                     ? String(localized: "Page turned.")
+                     : String(localized: "\(targets.count) pages turned."))
+        }
+    }
+
+    /// Takes pages off the document — one undo step however many pages, and the undo puts back
+    /// the pages themselves rather than blank ones (contract 10's `megapdf_page_restore`).
+    ///
+    /// The one-page rule is said **here**, when Delete is pressed, rather than left as a command
+    /// that quietly does nothing: a PDF has to keep a page, and the way round it is *Save Pages
+    /// As…*.
+    func deletePages(_ pages: [Int]) {
+        let targets = resolved(pages)
+        guard !targets.isEmpty else { return }
+        guard targets.count < pageCount else {
+            showPageToolRefusal(.lastPage)
+            return
+        }
+        Task { @MainActor in
+            guard await performPageOperation(DeletePagesOperation(pages: targets)) else { return }
+            announce(targets.count == 1
+                     ? String(localized: "Page deleted.")
+                     : String(localized: "\(targets.count) pages deleted."))
+        }
+    }
+
+    /// Moves one page so it stands at `to` afterwards. `to` is where the page ends up, which is
+    /// what the drag, *Move Earlier*/*Move Later* and *Move to…* all speak in.
+    func movePage(from: Int, to: Int) {
+        guard pageSizes.indices.contains(from), (0..<pageCount).contains(to), from != to else { return }
+        Task { @MainActor in
+            guard await performPageOperation(MovePageOperation(from: from, to: to)) else { return }
+            announce(String(localized: "Page moved to \(to + 1)."))
+        }
+    }
+
+    /// Adds an empty page at `index` (0 … the page count, which appends), the size of the page
+    /// in front of it — a blank page in a letter-sized document should be letter-sized, and only
+    /// the document can say what that is.
+    func insertBlankPage(at index: Int) {
+        let sizes = pageSizes
+        let at = min(max(index, 0), sizes.count)
+        let template = sizes.indices.contains(at - 1) ? sizes[at - 1]
+                     : (sizes.first ?? CGSize(width: 612, height: 792))
+        Task { @MainActor in
+            guard await performPageOperation(
+                InsertBlankPageOperation(at: at,
+                                         widthPoints: Double(template.width),
+                                         heightPoints: Double(template.height))) else { return }
+            announce(String(localized: "Blank page added as page \(at + 1)."))
+        }
+    }
+
+    /// Combine: the pages of a picked PDF, inserted after the selection (or at the end).
+    ///
+    /// The picked file is **copied into this app's container first**. Contract 10 keeps the other
+    /// document open inside this one for as long as this one lives, and a redo imports from it
+    /// again; the URL a file picker lends an app is readable for neither. The copy is removed
+    /// when the document closes.
+    func importPages(from url: URL) {
+        guard document != nil, permitsAssembly() else { return }
+        let insertAt = pageSelection.max().map { $0 + 1 } ?? pageCount
+        Task { @MainActor in
+            guard let staged = await Self.stagePickedPdf(url) else {
+                showPageToolRefusal(.file)
+                return
+            }
+            let operation = ImportPagesOperation(path: staged.path, insertAt: insertAt)
+            guard await performPageOperation(operation) else {
+                try? FileManager.default.removeItem(at: staged.deletingLastPathComponent())
+                return
+            }
+            importedSources.append(staged)
+            announce(operation.imported == 1
+                     ? String(localized: "1 page added.")
+                     : String(localized: "\(operation.imported) pages added."))
+        }
+    }
+
+    /// A copy of a picked PDF inside the app's own temporary directory, in a folder of its own so
+    /// it can keep the picked file's name. Off the main actor: this reads a whole file, and for
+    /// one on a cloud drive that is a download.
+    private nonisolated static func stagePickedPdf(_ url: URL) async -> URL? {
+        await Task.detached(priority: .userInitiated) { () -> URL? in
+            let scoped = url.startAccessingSecurityScopedResource()
+            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+            let folder = FileManager.default.temporaryDirectory
+                .appendingPathComponent("combine-\(UUID().uuidString)", isDirectory: true)
+            let name = url.lastPathComponent.isEmpty ? "source.pdf" : url.lastPathComponent
+            do {
+                try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+                try FileManager.default.copyItem(at: url, to: folder.appendingPathComponent(name))
+                return folder.appendingPathComponent(name)
+            } catch {
+                try? FileManager.default.removeItem(at: folder)
+                return nil
+            }
+        }.value
+    }
+
+    // MARK: - extract: a copy, not an edit
+
+    /// Stages the pages as a new PDF for the export sheet. The document is untouched and nothing
+    /// is recorded, so this is not undoable and does not make the document unsaved.
+    func startPageExport(pages: [Int], documentName: String) {
+        guard let doc = document else { return }
+        let targets = resolved(pages).isEmpty ? Array(0..<pageCount) : resolved(pages)
+        guard !targets.isEmpty else { return }
+        guard capabilities.canExtractPages else {
+            pageToolRefusal = String(localized:
+                "This document doesn't allow its pages to be copied out. Its owner password would.")
+            return
+        }
+        guard let token = busy.begin(.saving, scope: .document, blocksFileCommands: true) else { return }
+        Task { @MainActor in
+            defer { busy.end(token) }
+            discardPageExportFile()
+            let name = Self.extractName(documentName: documentName, pages: targets, of: pageCount)
+            do {
+                let staged = try Self.namedStagingURL(for: name)
+                try await PdfEngine.shared.extractPages(doc, pages: targets, to: staged)
+                guard document === doc else {
+                    try? FileManager.default.removeItem(at: staged.deletingLastPathComponent())
+                    return
+                }
+                pageExport = PageExport(url: staged, defaultName: name, pageCount: targets.count)
+            } catch let error as PageToolError {
+                showPageToolRefusal(error.refusal)
+            } catch {
+                statusMessage = String(localized: "Those pages couldn't be saved.")
+            }
+        }
+    }
+
+    /// The export sheet finished. Deliberately parallel to, but simpler than, `finishExport`: it
+    /// never touches `isDirty` or `editCount`, because an extract wrote a *different* file and
+    /// the open document still has whatever unsaved changes it had.
+    func finishPageExport(saved: Bool) {
+        let count = pageExport?.pageCount ?? 0
+        discardPageExportFile()
+        guard saved else { return }
+        setPagesSelecting(false)
+        showNotice(count == 1
+                   ? String(localized: "1 page saved.")
+                   : String(localized: "\(count) pages saved."))
+    }
+
+    private func discardPageExportFile() {
+        if let export = pageExport {
+            try? FileManager.default.removeItem(at: export.url.deletingLastPathComponent())
+        }
+        pageExport = nil
+    }
+
+    /// What the export sheet offers to call the file: the document's own name and which pages
+    /// these are — one page, a run of them, or a count. The same three shapes the Mac app's
+    /// *Save Selected Pages As…* uses (#556), so a file extracted on either platform is named
+    /// the same way.
+    static func extractName(documentName: String, pages: [Int], of count: Int) -> String {
+        var base = documentName
+        if base.lowercased().hasSuffix(".pdf") { base = String(base.dropLast(4)) }
+        if base.isEmpty { base = String(localized: "Document") }
+        let fragment: String
+        if pages.count == 1 {
+            fragment = String(localized: "page \(pages[0] + 1)")
+        } else if pages.count == count {
+            fragment = String(localized: "\(pages.count) pages")
+        } else if pages.last! - pages.first! == pages.count - 1 {
+            fragment = String(localized: "pages \(pages.first! + 1)-\(pages.last! + 1)")
+        } else {
+            fragment = String(localized: "\(pages.count) pages")
+        }
+        return base + " " + fragment
+    }
+
+    // MARK: - one pipeline, one undo step
+
+    /// Every page change goes through here: gated by the assemble permission, waiting while
+    /// other blocking work runs, recorded as **one** undo step, and its refusals worded once.
+    @discardableResult
+    private func performPageOperation(_ operation: PageStructureOperation) async -> Bool {
+        guard let doc = document, permitsAssembly() else { return false }
+        guard let token = busy.begin(.applying, scope: .document, blocksFileCommands: true) else { return false }
+        defer { busy.end(token) }
+        do {
+            try await perform(operation, doc: doc)
+            return true
+        } catch let error as PageToolError {
+            showPageToolRefusal(error.refusal)
+            return false
+        } catch PdfError.restricted {
+            showPageToolRefusal(.restricted)
+            return false
+        } catch {
+            showPageToolRefusal(.engine)
+            return false
+        }
+    }
+
+    private func permitsAssembly() -> Bool {
+        guard capabilities.canAssemblePages else {
+            showPageToolRefusal(.restricted)
+            return false
+        }
+        return true
+    }
+
+    private func showPageToolRefusal(_ refusal: PageToolRefusal) {
+        pageToolRefusal = Self.sentence(for: refusal)
+    }
+
+    /// One sentence per refusal, saying what happened and that nothing was changed.
+    ///
+    /// The two the issue singles out are the first and the fourth. The **field hierarchy** is
+    /// the engine limit that is surfaced rather than hidden: a page whose form fields take their
+    /// names from a parent field cannot be copied where that name is already taken, and the
+    /// refusal is *whole* — the alternative is a document whose fields quietly lost their names
+    /// and values. The words are Android's, to the letter (#554), so the four platforms say the
+    /// same thing about the same limit.
+    ///
+    /// The #118 **layout guard** has no sentence here, because it is not reachable: no page
+    /// operation rewrites a page's content stream, so contract 10 lists no `MEGAPDF_ERR_LAYOUT`
+    /// among its statuses. No dialog is invented for a state that cannot happen, and
+    /// `PageToolsTests` asserts that rather than leaving it as a claim.
+    static func sentence(for refusal: PageToolRefusal) -> String {
+        switch refusal {
+        case .restricted:
+            return String(localized:
+                "This document doesn't allow its pages to be rotated, deleted, moved or added to. Its owner password would.")
+        case .sourceNeedsPassword:
+            return String(localized: "That file needs a password, so MegaPDF can't take pages out of it.")
+        case .sourceRestricted:
+            return String(localized:
+                "That file doesn't allow anything to be copied out of it, so its pages can't be added here.")
+        case .fieldHierarchy:
+            return String(localized:
+                "Those pages carry a form field whose name belongs to a group of fields, and this document already has a field of that name. MegaPDF can't rename it without breaking the form, so it added nothing rather than damage it.")
+        case .lastPage:
+            return String(localized: "A PDF has to keep at least one page.")
+        case .file:
+            return String(localized: "The file couldn't be read or written.")
+        case .redactionPoisoned:
+            return String(localized:
+                "A redaction on this document didn't finish, so it can only be closed now. Close it and open it again — nothing was written.")
+        case .spentPage, .engine:
+            return String(localized:
+                "MegaPDF couldn't make that page change safely, so it left the document as it was.")
+        }
+    }
+
+    // MARK: - following the renumbering
+
+    /// Applies a page operation's renumbering to everything the *app* keeps by page index.
+    ///
+    /// Contract 10 is explicit that this is the app's job: the core keeps its own per-page state
+    /// right — handles, marks, layout verdicts, detached objects — and cannot see the render
+    /// cache, the page sizes the list lays out from, the settled #139 pages, the search hits or
+    /// the grid's selection. `PageShift` is the renumbering as a value so this is one pass over
+    /// a list rather than five bespoke rewrites, and `reverted` is why the shifts are a method:
+    /// an undo renumbers the other way.
+    private func applyPageShifts(_ operation: PageStructureOperation, reverted: Bool) async {
+        guard let doc = document, case let .viewing(displayName, oldSizes) = state else { return }
+        let shifts = operation.shifts(reverted: reverted)
+        let engine = PdfEngine.shared
+        let fallback = CGSize(width: 612, height: 792)
+
+        var sizes = oldSizes
+        /// Where the pages that arrived ended up, for the two things only the document can answer
+        /// about a page the app has never seen: how big it is, and what it says.
+        var arrivedPages: [Int] = []
+        for shift in shifts {
+            if case let .inserted(at, count) = shift {
+                arrivedPages.append(contentsOf: at..<(at + count))
+                // Only the document can say how big a page that has just arrived is. Read at its
+                // final index, which is where it now stands: these shifts are applied in the
+                // order the operation performed them, so each insert lands where it was read.
+                var arrived: [CGSize] = []
+                for index in at..<(at + count) {
+                    arrived.append((try? await engine.pageSize(doc, index: index)) ?? fallback)
+                }
+                sizes = sizes.shifted(by: shift, inserted: arrived)
+            } else {
+                sizes = sizes.shifted(by: shift)
+            }
+        }
+        // A rotation renumbers nothing and swaps the page's reported width and height — the one
+        // page change whose shifts are empty and whose sizes are all wrong.
+        for page in operation.changedPages where sizes.indices.contains(page) {
+            if let size = try? await engine.pageSize(doc, index: page) { sizes[page] = size }
+        }
+        // The engine is the authority on how many pages there are. If the shifts and the document
+        // disagree, the shifts are wrong, and the honest recovery is to read the document rather
+        // than lay out from a list that does not describe it.
+        let engineCount = await engine.pageCount(doc)
+        if sizes.count != engineCount {
+            var fresh: [CGSize] = []
+            for index in 0..<engineCount {
+                fresh.append((try? await engine.pageSize(doc, index: index)) ?? fallback)
+            }
+            sizes = fresh
+        }
+
+        pageImages = pageImages.shifted(by: shifts)
+        renderedKeys = renderedKeys.shifted(by: shifts)
+        pageThumbnails = pageThumbnails.shifted(by: shifts)
+        for page in operation.changedPages {
+            pageImages.removeValue(forKey: page)
+            renderedKeys.removeValue(forKey: page)
+            pageThumbnails.removeValue(forKey: page)
+        }
+        var matches = searchMatches.compactMap { match in
+            shifts.map(index: match.pageIndex)
+                .map { SearchMatch(pageIndex: $0, rects: match.rects) }
+        }
+        // A page that has just arrived — restored by an undo, inserted, or imported — has never
+        // been searched, and shifting a list cannot invent its hits. Without this, undoing a
+        // delete gave the page back with its highlights missing until the term was typed again,
+        // which reads as "the search lost it". Only the pages that arrived are scanned, so this
+        // costs one page's work rather than the document's, and it is skipped entirely when
+        // nothing is being searched for.
+        if let term = lastSearchTerm, !term.isEmpty, !arrivedPages.isEmpty {
+            for page in arrivedPages {
+                let hits = (try? await engine.search(doc, pageIndex: page, term: term)) ?? []
+                matches.append(contentsOf: hits.map { SearchMatch(pageIndex: page, rects: $0.rects) })
+            }
+            // Back into page order, which is the order the flat match list is built in and the
+            // order "next match" walks.
+            matches.sort { $0.pageIndex < $1.pageIndex }
+        }
+        searchMatches = matches
+        if searchMatches.isEmpty {
+            currentMatchIndex = nil
+        } else if let current = currentMatchIndex {
+            currentMatchIndex = min(current, searchMatches.count - 1)
+        }
+        pageChecks.renumber(shifts)
+        pageSelection = pageSelection.shifted(by: shifts)
+        if let page = currentPage { currentPage = shifts.map(index: page) }
+
+        state = .viewing(displayName: displayName, pageSizes: sizes)
+        // The core drops a deleted page's marks and carries the rest with their pages (contract
+        // 10), so the truthful thing to do with the overlay's index-keyed map is read it back —
+        // and only when there is something in it, which is almost never.
+        if !redactionMarks.isEmpty { await refreshRedactionMarks() }
+        noteDocumentChanged()
+        if var window = lastWindow {
+            let last = max(sizes.count - 1, 0)
+            window.first = min(window.first, last)
+            window.last = min(window.last, last)
+            lastWindow = window
+            updateRenderWindow(first: window.first, last: window.last, widthPx: window.widthPx)
+        }
+        // A rotation gives a tile whose index did not change a picture that is now the wrong way
+        // up, and an insert gives the grid a tile with no picture at all. Neither makes a row
+        // appear, so neither would push the window on its own.
+        if let window = lastThumbnailWindow {
+            let last = max(sizes.count - 1, 0)
+            updateThumbnailWindow(first: min(window.first, last), last: min(window.last, last))
+        }
+    }
+
+    /// Lets go of the deleted pages an operation that has left the history for good was holding
+    /// (`EditHistory.onDropped`). Guarded inside the engine against a document that has already
+    /// closed, which frees them itself.
+    private func discardHeldPages(in operations: [PdfEditOperation]) {
+        let held = operations.compactMap { $0 as? PageStructureOperation }.flatMap { $0.heldPages }
+        guard !held.isEmpty else { return }
+        Task {
+            for page in held { await PdfEngine.shared.discardRemovedPage(page) }
+        }
+    }
+
     // MARK: - search (#26)
 
     /// As-you-type search: brief debounce, then a whole-document scan for
@@ -1612,6 +2196,7 @@ final class ViewerModel: ObservableObject {
     func search(term: String, debounce: Bool = true) {
         searchTask?.cancel()
         endSearchBusy()
+        lastSearchTerm = term
         searchMatches = []
         currentMatchIndex = nil
         guard !term.isEmpty, case let .viewing(_, pageSizes) = state,
@@ -1659,6 +2244,7 @@ final class ViewerModel: ObservableObject {
     func clearSearch() {
         searchTask?.cancel()
         endSearchBusy()
+        lastSearchTerm = nil
         searchMatches = []
         currentMatchIndex = nil
         isSearching = false
@@ -2351,6 +2937,26 @@ final class ViewerModel: ObservableObject {
         redactionSummary = nil
         redactionRefusal = nil
         summaryForSave = nil
+        // The pages belong to the document on screen too (#174), and so do the copies its
+        // imported pages are read from: contract 10 keeps the other document open inside this
+        // one, and closing this one is what lets those files go. Set directly rather than
+        // through `setPagesOpen`, which would announce "Pages hidden" to a document that is
+        // already gone. The deleted pages the history is holding go with `history.clear()`
+        // above, through `onDropped`.
+        pagesOpen = false
+        pagesSelecting = false
+        pageSelection = []
+        pageToShow = nil
+        pageToolRefusal = nil
+        thumbnailTask?.cancel()
+        thumbnailTask = nil
+        lastThumbnailWindow = nil
+        pageThumbnails = [:]
+        discardPageExportFile()
+        for staged in importedSources {
+            try? FileManager.default.removeItem(at: staged.deletingLastPathComponent())
+        }
+        importedSources = []
         // Reading mode belongs to the document on screen (#506): the next one decides for
         // itself, from *Open documents in reading mode* and nothing else. Set directly
         // rather than through `setReadingMode`, which would announce "Reading mode off"

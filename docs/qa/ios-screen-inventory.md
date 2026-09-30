@@ -252,11 +252,21 @@ as it was.
 
 ## 9. iPad vs iPhone
 
-The app has **no iPad-specific layout**: no split view, no sidebar, no idiom
-branching. The only adaptation is the bottom toolbar, which shows **icon only on
-iPhone (compact)** and **icon + title on iPad (regular)**. Everything else adapts
-only through system behaviour, so these are the surfaces worth extra attention on
-an iPad:
+*Out of date since #172 and #506, and further since #174: the iPad has a tool strip of its own,
+its own reading-mode entry point, and — as of #174 — a **pages sidebar** where the phone gets a
+**sheet with detents**. Read "no iPad-specific layout" below as history; the checklist itself is
+still worth walking.*
+
+Extra attention on an iPad, per #174:
+
+- [ ] the pages sidebar at 280 pt beside a 13" page, in both orientations
+- [ ] the same sidebar in a Split View narrow enough to be compact width — it should become the
+      sheet, and the strip's Pages button should go with the strip
+- [ ] a tile's long-press menu as a **popover**, and the same menu from a right-click
+- [ ] drag-to-reorder with a trackpad as well as with a finger
+- [ ] ⌥⌘2 on a hardware keyboard, and the ⌘-hold overlay listing *Pages*
+
+The older list:
 
 - [ ] the More menu and the card ⋯ menu as **popovers**
 - [ ] Delete "{name}?" as a **popover anchored to the card**, not a sheet
@@ -277,6 +287,32 @@ Dynamic Type — so at AX5 the risk is fixed **frames**, not fixed fonts. Check:
 - [ ] `.lineLimit(1)` truncation: the signature name, the find count
 - [ ] the stacked Draw / Type / Photo labels (`minimumScaleFactor(0.8)`) — **in French**
 - [ ] the bottom toolbar, especially whether iOS folds it into a system More
+
+## 10b. A trap worth writing down: a container's accessibility identifier
+
+`accessibilityIdentifier` on a SwiftUI **container** does not add an identifier — it
+**replaces** the identifier of every descendant that is not itself an accessibility element.
+An identifier on the pages panel made every button inside it read as `pagesPanel`, and the tool
+strip added in #172 has been doing the same to its own buttons ever since: `viewerPagesButton`
+and `viewerReadingModeButton` are in the source, but what is actually in the accessibility tree
+is a row of buttons each carrying `viewerToolStrip` and its own label.
+
+Consequences for anybody writing a UI test here (found the hard way, #174):
+
+- Query the strip's buttons by **identifier and label together**
+  (`identifier == 'viewerToolStrip' AND label == 'Pages'`), not by the identifier the source
+  asks for.
+- `app.otherElements["viewerToolStrip"]` finds nothing; those elements are buttons.
+- Put identifiers on **controls**, not on the views that hold them. A container that genuinely
+  needs a name should use `accessibilityElement(children: .contain)` and accept that it becomes
+  one element.
+- A page **tile** keeps its own `pageTile-N` because `accessibilityElement(children: .combine)`
+  makes it a leaf element first — which is why the tiles were findable while the header's
+  buttons were not, and why the symptom read as "the sheet is not there".
+
+From the same pass: a page tile is labelled "Page 1" exactly as the document's own page is, and
+it should be — that is what VoiceOver ought to say about it. A test that wants the *document's*
+page must ask for an **image** with that label, because a tile is a button.
 
 ## 11. Things that look like defects but are not
 

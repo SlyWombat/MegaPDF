@@ -164,6 +164,12 @@ struct ViewerView: View {
                 // The pinch itself lives in the overlay inside the stack above, not
                 // here: `MagnificationGesture` reports a bare scale and no location at
                 // all, so nothing hung off it could know where to anchor (#530).
+                // The iPad's pages sidebar (#174), inset *before* the top chrome so the tool
+                // strip spans the whole width above both of them — the arrangement the
+                // desktops use, in this platform's own controls. Inset rather than an HStack
+                // around `document` so the scroll view keeps its own safe area, its own
+                // scrolling and the pinch recogniser #530 works through.
+                .safeAreaInset(edge: .leading, spacing: 0) { pagesSidebar }
                 .safeAreaInset(edge: .top, spacing: 0) { topChrome }
                 // Reading mode's own chrome: the floating bar, the way out by the edge,
                 // and the box the page number opens (#506).
@@ -198,6 +204,27 @@ struct ViewerView: View {
                         withAnimation { proxy.scrollTo(matchAnchorID, anchor: .center) }
                     }
                 }
+            }
+        }
+    }
+
+    // MARK: - the pages (#174)
+
+    /// Whether the pages are a sidebar rather than a sheet: regular width, open, and not in
+    /// reading mode — which takes the chrome away and this with it.
+    private var showsPagesSidebar: Bool { isRegular && model.pagesOpen && !model.readingMode }
+
+    /// The iPad's pages sidebar. Built at all only when it is showing, so its tiles are out of
+    /// the tab order and out of the accessibility tree the rest of the time — the rule #506 wrote
+    /// down for reading mode, applied to the one piece of chrome added since.
+    @ViewBuilder
+    private var pagesSidebar: some View {
+        if showsPagesSidebar {
+            HStack(spacing: 0) {
+                PagesPanel(model: model, documentName: displayName,
+                           presentation: .sidebar, onDismiss: { model.setPagesOpen(false) })
+                    .frame(width: 280)
+                Divider()
             }
         }
     }
@@ -411,6 +438,19 @@ struct ViewerView: View {
                     .font(.system(size: 6))
                     .foregroundColor(.clear)
                     .accessibilityIdentifier("viewerReadingProbe")
+                // #174: what the app itself has, for the tests that drive a page change. The
+                // page *sizes* are the identity a reorder is visible in — the fixture's pages
+                // are deliberately different sizes — and a rotation shows up in the same string
+                // as a swapped width and height, which is how "the rotate arrived and did
+                // something" is told from "the rotate arrived and did nothing".
+                Text("pages \(model.pagesOpen ? "on" : "off")"
+                     + " selecting \(model.pagesSelecting ? "on" : "off")"
+                     + " selected \(model.pageSelection.count)"
+                     + " count \(pageSizes.count)"
+                     + " sizes \(pageSizeFingerprint)")
+                    .font(.system(size: 6))
+                    .foregroundColor(.clear)
+                    .accessibilityIdentifier("viewerPagesProbe")
                 Color.clear
                     .frame(width: max(geo.size.width * 0.7, 40),
                            height: max(geo.size.height * 0.4, 40))
@@ -423,6 +463,11 @@ struct ViewerView: View {
             }
             .allowsHitTesting(false)
         }
+    }
+
+    /// The pages as the probe reports them: "612x792,400x300,…", in document order.
+    private var pageSizeFingerprint: String {
+        pageSizes.map { "\(Int($0.width))x\(Int($0.height))" }.joined(separator: ",")
     }
 
     /// Reading mode's own presentations, sat on top of `presentations` rather than in it.
@@ -461,6 +506,36 @@ struct ViewerView: View {
                 if on { showReadingBar() }
             }
             .onChange(of: pageColours) { _ in syncPageTint() }
+            // The phone's pages: a sheet over the document, half height to begin with, so the
+            // page being worked on is still on screen above the grid (#174).
+            .sheet(isPresented: Binding(get: { model.pagesOpen && !isRegular },
+                                        set: { if !$0 { model.setPagesOpen(false) } })) {
+                PagesPanel(model: model, documentName: displayName,
+                           presentation: .sheet, onDismiss: { model.setPagesOpen(false) })
+                    .presentationDetents([.medium, .large])
+                    .presentationDragIndicator(.visible)
+            }
+            // A page change that was refused, in one sentence saying what happened and that
+            // nothing changed (#174).
+            //
+            // Raised from here only when the pages sheet is **not** up: an alert attached below a
+            // sheet never appears over it, so in compact width `PagesPanel` presents this same
+            // value instead. Two presenters, each answering for its own case and never both live
+            // — the shape #173 settled on for the redaction question.
+            .alert("Nothing was changed",
+                   isPresented: Binding(get: { model.pageToolRefusal != nil && !(model.pagesOpen && !isRegular) },
+                                        set: { if !$0 { model.pageToolRefusal = nil } })) {
+                Button("OK", role: .cancel) { model.pageToolRefusal = nil }
+            } message: {
+                Text(model.pageToolRefusal ?? "")
+            }
+            // A tap on a thumbnail asks for its page; the scroll itself belongs to the reader
+            // inside `document`, which already has a way to be asked (#506's `pendingScrollTarget`).
+            .onChange(of: model.pageToShow) { target in
+                guard let target else { return }
+                pendingScrollTarget = target
+                model.pageToShow = nil
+            }
             .onReceive(NotificationCenter.default.publisher(
                 for: UIAccessibility.voiceOverStatusDidChangeNotification)) { _ in
                 voiceOverRunning = ViewerView.screenReaderRunning()
@@ -791,6 +866,13 @@ struct ViewerView: View {
                 // so this row can only ever turn it on, and a checkmark that is never seen
                 // ticked would be furniture. The way back is the bar's Exit or the edge
                 // swipe.
+                // #174: the pages, beside Reading mode, Share and Export as Markdown — where
+                // this app keeps what is done to the document as a whole. Never disabled: the
+                // grid opens on a restricted document too, and says there what it will not let
+                // you change, rather than being a row that cannot be tapped for reasons the
+                // menu has no room to give.
+                Button("Pages") { model.setPagesOpen(true) }
+                    .accessibilityIdentifier("viewerPages")
                 Button("Reading mode") { model.setReadingMode(true) }
                     .accessibilityIdentifier("viewerReadingMode")
                 Button("Settings…") { settingsOpen = true }
@@ -900,6 +982,7 @@ struct ViewerView: View {
         if canSave { target.save = saveTapped }
         if !model.fileCommandsBlocked { target.close = closeTapped }
         target.find = toggleSearch
+        target.pages = model.togglePages
         if model.canUndo && !model.fileCommandsBlocked { target.undo = model.undo }
         if model.canRedo && !model.fileCommandsBlocked { target.redo = model.redo }
         return target
@@ -1106,6 +1189,15 @@ struct ViewerView: View {
             // the issue means by an iPad-specific placement. The ⋯ row stays on both
             // layouts, because compact width (an iPhone, or an iPad in Slide Over) has no
             // strip to put this on.
+            // #174: the iPad has a bar of its own (#172), and the sidebar it toggles is the
+            // one piece of chrome that belongs on it rather than three taps down the dot-dot-dot
+            // menu — the same argument #506 made for reading mode's second entry point. The
+            // wash says whether the sidebar is showing, which is what a toggle on a strip owes.
+            toolStripButton("Pages", systemImage: "square.grid.2x2", titled: titled,
+                            selected: model.pagesOpen) {
+                model.togglePages()
+            }
+            .accessibilityIdentifier("viewerPagesButton")
             toolStripButton("Reading mode", systemImage: "book", titled: titled) {
                 model.setReadingMode(true)
             }
