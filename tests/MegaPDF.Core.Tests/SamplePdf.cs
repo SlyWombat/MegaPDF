@@ -377,6 +377,45 @@ internal static class SamplePdf
     }
 
     /// <summary>
+    /// One page with an OVER-SAMPLED raster image: 200x200 RGB drawn at 36x36pt, so it carries
+    /// about 400 dpi of detail for a 150 dpi slot.
+    ///
+    /// Two things this gets right that <see cref="BuildWithLargeImage"/> does not, both of which
+    /// <see cref="MegaPDF.Core.Imaging.ImageShrinker"/> checks before it will touch a picture:
+    ///
+    ///   * it is genuinely over-sampled. 100 pixels across a 200pt box is under fifty dpi, so
+    ///     shrink declines that one — correctly — and a test that asked it to shrink that
+    ///     document would be asserting on a refusal while looking like it asserted on a re-encode;
+    ///   * its pixels do not compress. A uniform fill deflates to a few hundred bytes when the
+    ///     document is written, which puts it under shrink's 8 KB floor, so the picture comes back
+    ///     from a round trip too small to be worth re-encoding however over-sampled it is. The
+    ///     fill here is a deterministic pseudo-random run of printable bytes, which stays large
+    ///     through a save.
+    /// </summary>
+    public static byte[] BuildWithOversampledImage()
+    {
+        var content = "q 36 0 0 36 100 400 cm /Im1 Do Q\n";
+        var pixels = new char[200 * 200 * 3];
+        // A plain LCG, so the bytes are the same on every machine and every run: a fixture that
+        // compressed differently per run would make shrink's own size rules flaky.
+        var seed = 0x2545F491u;
+        for (var i = 0; i < pixels.Length; i++)
+        {
+            seed = seed * 1664525u + 1013904223u;
+            pixels[i] = (char)('!' + (seed >> 16) % 90); // printable ASCII, ~6.5 bits each
+        }
+        var imageData = new string(pixels);
+        return Assemble(
+        [
+            "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n",
+            "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n",
+            "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /XObject << /Im1 5 0 R >> >> >>\nendobj\n",
+            $"4 0 obj\n<< /Length {content.Length} >>\nstream\n{content}endstream\nendobj\n",
+            $"5 0 obj\n<< /Type /XObject /Subtype /Image /Width 200 /Height 200 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Length {imageData.Length} >>\nstream\n{imageData}\nendstream\nendobj\n",
+        ]);
+    }
+
+    /// <summary>
     /// One-page PDF with drawn (non-form) rectangles: an 18pt stroked square at
     /// 100,500 (a checkbox), a 100x50 stroked box (too big), and a 10pt filled
     /// square (decoration, not a checkbox).
