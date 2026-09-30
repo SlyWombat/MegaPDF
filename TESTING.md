@@ -981,6 +981,154 @@ result, but it should not be read as answered by this run.
 No new issue was filed from this run: the one failing gate is #445, already open and explicitly
 not to be re-filed; nothing else was red.
 
+### Ninth run, 2026-09-30: page tools (#174, #567) — insert and import added, `pages-battery.sh`, main at 7786c7f
+
+The eighth run's own coverage-gap note is what this run closes: `pages-battery.sh` drove
+`rotate`, `delete`, `move` and `extract` but never `--blank` (insert) or `--import`, the other
+two operations `megapdf-cli pages --help` and #174's own scope both name. #567 extended the
+harness to drive both, on the same gates as the rest, and this is that run — the same four
+corpora, on `main` at `7786c7f` (unchanged since the eighth run), PDFium still at 33 patches.
+
+**Blank** appends one page after the document's last, sized to match it (`pdfinfo`'s own
+"Page size", already rotation-adjusted — the same rule `DocumentViewModel.Pages.cs`'s
+`BlankPageSize` uses on the desktop apps) rather than the CLI's own Letter default, so the
+corpus's mixed and unusual page sizes are what actually gets exercised.
+
+**Import** is the operation #567 named as mattering most, and the one this run has the most to
+say about. Two calls per document, both population-wide, neither a sub-sample of the corpus:
+
+- **importself** — every page of the document, imported into a fresh copy of *itself*,
+  appended at the end. Expected page count 2n, always known.
+- **importpair** — every page of a *second*, different document imported the same way: the
+  document standing half the corpus's length further along the same sorted file listing,
+  wrapping around. One pairing per document (N calls, not N² — a full pairwise sweep was
+  considered and rejected as quadratically more expensive for a return this run's numbers
+  don't show it earning; see the pairing-rule discussion below).
+
+Every document that opens is visited by **both** — importself is exhaustive by construction,
+and importpair's fixed offset means every document appears exactly once as an import target
+and (for an even-sized corpus) very close to exactly once as another document's import source.
+Neither call's page-count expectation, or damaged/clean classification, is taken from the
+primary document alone: the *other* document in each call is independently `qpdf --check`'d
+and `qpdf --show-npages`'d, and damage or an unknown count on either side is handled the same
+way #445 already handles it for the primary document (folded into the expected-count skip and
+the damaged-input carve-out, never blamed on the side that was actually clean).
+
+**Population — nothing quietly narrowed. 5,763 documents, the same size as the seventh and
+eighth runs:**
+
+| corpus | on disk | visited | opened | the rest |
+|---|---:|---:|---:|---|
+| private | 4,158 | 4,158 | 4,084 | 12 encrypted, 62 unreadable format |
+| public | 1,381 | 1,381 | 1,374 | 4 encrypted, 3 unreadable format |
+| Canadian | 134 | 134 | 134 | — |
+| UN | 90 | 90 | 90 | — |
+
+Identical to the eighth run's own table on every corpus — the two runs are the same
+population, extended with two more operations, not a different sample.
+
+**Gates** (0 crashes, 0 hangs, 0 qpdf failures, 0 page-count mismatches, 0 write failures, 0
+refusals outside the two the contract documents — a security-forbidden operation, exit 8, and
+the field-`/Parent`-hierarchy refusal, exit 9 with that message, now reachable from `import` as
+well as `extract`):
+
+| corpus | crashes/hangs | QPDF FAILED | COUNT MISMATCH | WRITE FAILED | REFUSED, other | |
+|---|---:|---:|---:|---:|---:|---|
+| private | 0/0 | 0 | 0 | 0 | 0 | pass |
+| public | 0/0 | 0 | 0 | 0 | **9** | **fail — #445, extended** |
+| Canadian | 0/0 | 0 | 0 | 0 | 0 | pass |
+| UN | 0/0 | 0 | 0 | 0 | 0 | pass |
+
+Private, Canadian and UN are clean across all seven operations, blank and both imports
+included. Public's own gate is red for the same reason the eighth run's was.
+
+**Public's failure is #445, confirmed rather than rediscovered, and now visible through two
+more operations.** The same two documents #445 already tracks — pages the engine cannot load,
+not a `pages-battery` defect — account for every one of the nine `REFUSED, other` instances:
+`rotate` (2), `move` (1) and `extract` (2) exactly as the eighth run counted them, plus, now,
+`importself` (2: each of the two documents refusing to import a copy of its own unloadable
+pages into itself) and `importpair` (2: two *different*, otherwise-clean documents whose fixed
+partner happens to be one of the two #445 documents, so importing pages from it fails the same
+way). Four distinct documents in total (checked by path-hash, not by name) — the original pair,
+plus the two documents that happen to sit opposite them in the pairing. Not re-filed, no
+threshold moved.
+
+**A second, smaller and genuinely new observation, filed as #574 rather than folded into
+#445.** Fixing an accounting gap this run's own per-op breakdown had — `protected` /
+`unsupported security` / `did not open` were previously summed only at the top level (the
+*primary* document failing before any operation ran), never per operation — surfaced two
+*more* public-corpus documents where `qpdf` reports a page count fine but `megapdf-cli`'s own
+open fails outright on every operation run against them, `rotate` and `extract` included. This
+is a different failure shape from #445 (which opens fine and fails on specific pages) and was
+sitting in every prior run's own log, uncounted in the printed table. Not gated (an open
+failure was never part of this battery's crash/hang/refusal gate, in this run or any before
+it), 2 of 1,381 public documents, not seen on the other three corpora. #574 has the detail;
+#567's PR carries the reporting fix that found it.
+
+**The genuine finding, and the reason #567 was filed the way it was: the field-hierarchy
+refusal is not gone — `extract` on this PDFium (33 patches) simply cannot reach it any more,
+and `import` can.** The eighth run (and the seventh) measured `extract`'s own refusal at
+**zero** on every corpus, against roughly 0.8% expected, and flagged rather than confirmed the
+gap: `core/megapdf_core.h`'s own comment on the patched copy explains why — extracting pages
+into a brand-new document has no pre-existing field name for the collision check to trip over,
+so past patch 33 `extract` structurally cannot produce `MEGAPDF_ERR_FIELDS` at all. Importing
+pages *into an existing document* still can, and `importself` guarantees the collision (every
+field name in the copy already exists, verbatim, in the target), so it measures the population
+that actually carries hierarchical form fields, not a sampled fraction of it:
+
+| corpus | importself refused-fields | rate | importpair refused-fields | rate |
+|---|---:|---:|---:|---:|
+| private | 37 / 4,084 | **0.91%** | 0 / 4,084 | 0% |
+| public | 212 / 1,374 | **15.4%** | 0 / 1,374 | 0% |
+| Canadian | 5 / 134 | 3.7% | 4 / 134 | 3.0% |
+| UN | 0 / 90 | 0% | 0 / 90 | 0% |
+
+**The private corpus's own rate — 0.91% — lands right where the eighth run said it expected
+extract's to be (roughly 0.8%), on the same corpus composition (identical document counts
+since the seventh run).** That is exactly the confirmation #567 asked for: the zero the last
+two runs measured was the absence of a working probe, not the absence of the problem, and the
+problem is still there, at essentially the rate it was always expected at. Public's much higher
+rate (15.4%) is not a surprise once the corpus is considered rather than compared directly to
+private's: the public corpus is disproportionately government fillable forms, and an earlier
+run over this same corpus already found 90% of real IRS forms alone hit this exact hierarchy
+before #452/#463 relaxed it (see the second public-corpus run, above) — `importself` measuring
+a corpus-wide 15.4% where forms are a large minority of 1,374 documents is consistent with
+that, not a contradiction of it.
+
+**Cross-document import (`importpair`) almost never collides, and that is itself informative,
+not a null result.** A field-name clash needs the same top-level name on both sides, and two
+arbitrary documents essentially never share one — except on the Canadian corpus, where four
+documents do (3.0%, against zero on private and public despite far larger populations). The
+Canadian corpus is entirely Canada Revenue Agency fillable forms sharing a generated
+field-naming convention across different forms, exactly the condition that makes a collision
+between two *different* documents plausible. This is the shape a self-import can never produce
+(there is only one document in it) and the reason the pairing rule keeps a real cross-document
+case in the run at all, rather than relying on self-import alone.
+
+**The pairing rule, stated as the issue asked: every document once as a target, every document
+once as a source, no full pairwise sweep.** `importself` is exhaustive over the corpus by
+construction. `importpair` pairs document *i* with the document standing at *i* + half the
+(limited) file count, wrapping around — a fixed, population-wide sample rather than a
+sub-sample of it, and, for an even-sized listing, a perfect one-to-one matching (every document
+is some other document's partner exactly once). A full O(n²) sweep was considered and rejected:
+it is quadratically more expensive against a corpus where this run's own numbers (0% collision
+rate on two of the four corpora, and the Canadian corpus's real collisions already found by the
+cheap version) do not show it buying more than a fixed offset already reaches. The next person
+extending this should read that as "no evidence a denser sample would find more," not as "a
+denser sample was ruled out on principle" — the corpus composition could change that.
+
+**Blank is clean everywhere.** Zero `REFUSED, other`, zero count mismatches, zero crashes or
+hangs on any corpus. `dims-unknown` (the page `pdfinfo` could not size, so the harness declined
+to guess rather than sending a request that was never really formed) was 0 on private, Canadian
+and UN, and 2 on public — one of them the #574 document that needs a password `qpdf` does not,
+the other a clean document `pdfinfo` simply could not report a size for. Neither is gated.
+
+No issue was re-filed for #445 (confirmed, not rediscovered). #574 is new, small, not gated and
+not #567's own finding, but disclosed rather than folded silently into this run's numbers.
+With insert and import now both run at corpus scale, #174 has exercised its full contract-10
+surface: rotate, delete, move, extract, blank and import all ran clean except for #445's
+already-known, already-excused pair (and #574's two, also unrelated to #567).
+
 ## Reporting
 
 For each issue: what you clicked, what you expected, what happened, and the PDF
