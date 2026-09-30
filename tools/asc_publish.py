@@ -396,6 +396,29 @@ def cmd_previews(captures):
             print(f"  {locale} {ptype}: {os.path.basename(path)}")
 
 
+# #417: the app review contact's phone. Dave's instruction is that his personal number
+# is never published or printed anywhere a store asks for one, and the agreed stand-in is
+# an 888 555 number. Both 1212 and 1222 have been used — the live record and this file say
+# 1212, Dave said 1222 — so this recognises either as the placeholder rather than picking a
+# winner. Which digits Apple actually holds is a question for him, not for this constant.
+REVIEW_PHONE = "18885551212"
+
+
+def describe_phone(value):
+    """What a phone number is, never what it says (#417).
+
+    Returns a phrase safe to print. A number that is not the agreed placeholder is
+    reported as present, with its length, and nothing else — the case this matters for
+    is precisely the one where the digits must not reach a log.
+    """
+    digits = re.sub(r"\D", "", value or "")
+    if not digits:
+        return "no phone set"
+    if digits.endswith("5551222") or digits.endswith("5551212"):
+        return "the 888 555 placeholder"
+    return f"a phone NOT the placeholder ({len(digits)} digits) — see #417"
+
+
 def cmd_review(attachments):
     v = editable_version()
     notes = review_notes()
@@ -409,12 +432,18 @@ def cmd_review(attachments):
             "type": "appStoreReviewDetails", "id": detail["id"], "attributes": attrs}})
         did = detail["id"]
         c = detail["attributes"]
+        # #417: say whether the phone is the agreed placeholder, never what it is.
+        # This line used to print the number itself, so every run put a phone number
+        # into its own output and into whatever log or transcript held it. It is the
+        # placeholder today, which is why nobody noticed; the day it is not, printing
+        # it is exactly what this issue exists to prevent. tools/play_listing.py's
+        # contact command has always been written this way — match it.
         print(f"  review detail updated; contact {c.get('contactFirstName')} {c.get('contactLastName')} "
-              f"{c.get('contactEmail')} {c.get('contactPhone')}")
+              f"{c.get('contactEmail')} {describe_phone(c.get('contactPhone'))}")
     else:
         attrs.update({"contactFirstName": "David", "contactLastName": "Seaman",
                       "contactEmail": "info@electricrv.ca",
-                      "contactPhone": "18885551212"})
+                      "contactPhone": REVIEW_PHONE})
         try:
             did = api("POST", "/v1/appStoreReviewDetails", {"data": {
                 "type": "appStoreReviewDetails", "attributes": attrs,
