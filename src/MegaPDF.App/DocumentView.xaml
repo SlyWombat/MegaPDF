@@ -58,11 +58,110 @@
 
     <Grid x:Name="DocumentAreaRoot">
 
+        <!-- Two columns since #174: the Pages pane, then everything that was already here.
+             Every one of the overlays below (the notice bars, the page-indicator pill, the
+             find bar) is tagged into column 1 so it floats over the *page* and not over the
+             pane — a find bar centred over a 260 px pane is a find bar half off the page. -->
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+
+        <!-- The Pages pane (#174): a reflowing grid of page tiles, docked left, inside the tab.
+
+             Left and inside the tab because that is where the PDF reader every Windows machine
+             already has keeps it — Edge's page pane — and not a full-window mode you enter and
+             leave, which is Acrobat's Organize Pages and takes the document away at the moment
+             you most want to see what you are doing to it.
+
+             A GridView rather than a one-column list because acting on many thumbnails at once
+             is File Explorer's Gallery and the Photos app on this platform: extended
+             multi-select, drag to reorder, and the commands on the right-click menu. At this
+             width it shows two pages across, and more as the pane is widened, so a twelve-page
+             scan is one glance instead of a scroll. It is also why the reorder commands are
+             Earlier/Later rather than Up/Down: in two columns the tile above a page is two
+             pages back.
+
+             CanReorderItems is deliberately OFF. WinUI's own reorder mutates the bound
+             collection directly, which would move a page in the pane without moving it in the
+             document, and then the renumbering this app owes contract 10 would move it a second
+             time. The drag is handled here instead and goes through MovePageAsync, so a drop is
+             one undo step like every other reorder.
+
+             Collapsed, not merely hidden, when the pane is shut or reading mode is on: nothing
+             in it may be left in the tab order of a window that is showing the page and
+             nothing else (#504). -->
+        <Grid x:Name="PagesPane"
+              Grid.Column="0"
+              Width="252"
+              Visibility="{x:Bind ViewModel.PagesPaneVisibility, Mode=OneWay}"
+              Background="{ThemeResource LayerFillColorDefaultBrush}"
+              BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+              BorderThickness="0,0,1,0">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+            <TextBlock
+                x:Name="PagesPaneHeading"
+                Grid.Row="0"
+                Margin="14,10,14,6"
+                Text="{x:Bind ViewModel.PagesPaneHeading, Mode=OneWay}"
+                TextTrimming="CharacterEllipsis"
+                Style="{StaticResource CaptionTextBlockStyle}"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                AutomationProperties.LiveSetting="Polite"
+                AutomationProperties.AutomationId="PagesPaneHeading" />
+            <GridView
+                x:Name="PageTiles"
+                Grid.Row="1"
+                ItemsSource="{x:Bind ViewModel.Thumbnails}"
+                SelectionMode="Extended"
+                CanReorderItems="False"
+                CanDragItems="True"
+                AllowDrop="True"
+                IsSwipeEnabled="False"
+                Padding="8,0,8,12"
+                SelectionChanged="OnPageTileSelectionChanged"
+                ContainerContentChanging="OnPageTileChanging"
+                DragItemsStarting="OnPageTileDragStarting"
+                DragItemsCompleted="OnPageTileDragCompleted"
+                DragOver="OnPageTileDragOver"
+                Drop="OnPageTileDrop"
+                ContextRequested="OnPageTileContextRequested"
+                PreviewKeyDown="OnPageTileKeyDown"
+                AutomationProperties.AutomationId="PageTiles">
+                <GridView.ItemTemplate>
+                    <DataTemplate x:DataType="local:PageThumbnail">
+                        <StackPanel Spacing="2" Margin="2,4">
+                            <Border
+                                Width="{x:Bind BoxWidth, Mode=OneWay}"
+                                Height="{x:Bind BoxHeight, Mode=OneWay}"
+                                Background="White"
+                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                BorderThickness="1">
+                                <Image Source="{x:Bind Source, Mode=OneWay}" Stretch="Uniform" />
+                            </Border>
+                            <!-- The number alone under the picture, which is what a page
+                                 thumbnail wears; the tile's UIA name says "Page 3", because
+                                 "3" on its own means nothing without the picture. -->
+                            <TextBlock
+                                Text="{x:Bind PageNumberLabel, Mode=OneWay}"
+                                HorizontalAlignment="Center"
+                                Style="{StaticResource CaptionTextBlockStyle}"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        </StackPanel>
+                    </DataTemplate>
+                </GridView.ItemTemplate>
+            </GridView>
+        </Grid>
+
         <!-- A tab stop (SDD §2.2, #2): Tab onto the pages lands on the first field,
              checkbox or line of the page on screen, and walks on from there. Focus
              stays here while the ring moves; see DocumentView.Keyboard.cs. -->
         <ScrollViewer
             x:Name="PagesScroll"
+            Grid.Column="1"
             x:Uid="PagesScroll"
             AutomationProperties.AutomationId="PagesScroll"
             IsTabStop="True"
@@ -143,7 +242,7 @@
              paper, with white text on it, so the message is invisible (#87).
              An opaque background makes them chrome, which is what the find bar
              below already does. -->
-        <StackPanel VerticalAlignment="Bottom" HorizontalAlignment="Center" Margin="24" Spacing="{ThemeResource SpaceS}">
+        <StackPanel Grid.Column="1" VerticalAlignment="Bottom" HorizontalAlignment="Center" Margin="24" Spacing="{ThemeResource SpaceS}">
             <InfoBar
                 x:Uid="FontNoticeBar"
                 Background="{ThemeResource SolidBackgroundFillColorSecondaryBrush}"
@@ -204,6 +303,20 @@
             <!-- What a redaction removed (#173). The view model has said this since the
                  feature landed; on Windows nothing showed it, so a redaction finished in
                  silence. -->
+            <!-- What a page tool refused, and why (#174). A notice and not a dialog: the
+                 engine changed nothing, so there is nothing for the person to decide — and
+                 two of the refusals here (a form field hierarchy the page copy cannot carry,
+                 the last page of a document) are limits the engine has on purpose, said as
+                 what happened and what still works rather than as "the change failed".
+                 Informational, not Error, for the same reason. Also spoken through Narrator
+                 when it appears, because a bar at the foot of the page is easy to miss. -->
+            <InfoBar
+                AutomationProperties.AutomationId="PageToolNoticeBar"
+                Background="{ThemeResource SolidBackgroundFillColorSecondaryBrush}"
+                IsOpen="{x:Bind ViewModel.IsPageToolNoticeOpen, Mode=TwoWay}"
+                Message="{x:Bind ViewModel.PageToolNotice, Mode=OneWay}"
+                Severity="Informational"
+                IsClosable="True" />
             <InfoBar
                 AutomationProperties.AutomationId="RedactionSummaryBar"
                 Background="{ThemeResource SolidBackgroundFillColorSecondaryBrush}"
@@ -213,7 +326,7 @@
                 IsClosable="True" />
         </StackPanel>
 
-        <StackPanel VerticalAlignment="Top" HorizontalAlignment="Center" Margin="24,12" Spacing="{ThemeResource SpaceS}">
+        <StackPanel Grid.Column="1" VerticalAlignment="Top" HorizontalAlignment="Center" Margin="24,12" Spacing="{ThemeResource SpaceS}">
             <InfoBar
                 AutomationProperties.AutomationId="PlacementHintBar"
                 Background="{ThemeResource SolidBackgroundFillColorSecondaryBrush}"
@@ -241,6 +354,7 @@
              tab switch inside the mode hands it over (MainWindow.ReadingMode.cs). -->
         <Border
             x:Name="PageIndicatorPill"
+            Grid.Column="1"
             HorizontalAlignment="Right"
             VerticalAlignment="Bottom"
             Margin="0,0,28,14"
@@ -316,6 +430,7 @@
         <!-- Ctrl+F find bar: compact Edge-style overlay (issue #26 simple search) -->
         <Border
             x:Name="FindBar"
+            Grid.Column="1"
             Visibility="Collapsed"
             HorizontalAlignment="Right"
             VerticalAlignment="Top"
