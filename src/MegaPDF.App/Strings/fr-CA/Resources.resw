@@ -828,6 +828,54 @@ Enregistrée sous {2}, prête pour le courriel.</value>
     <value>Restauration de vos modifications…</value>
     <comment>Busy strip while unsaved edits are replayed after a crash (#145)</comment>
   </data>
+  <data name="BusyPageOfPages" xml:space="preserve">
+    <value>Page {0} de {1}</value>
+    <comment>Busy strip progress under the label, work counted in pages (#145). #145 — new French, for francophone review</comment>
+  </data>
+  <data name="BusyCancelling" xml:space="preserve">
+    <value>Arrêt…</value>
+    <comment>Busy strip, Stop was pressed and the work has not stopped yet (#145). #145 — new French, for francophone review</comment>
+  </data>
+  <data name="CancelThisWork" xml:space="preserve">
+    <value>Arrêter</value>
+    <comment>Busy strip button that cancels the work it is reporting (#145). #145 — new French, for francophone review</comment>
+  </data>
+  <data name="SearchCancelled" xml:space="preserve">
+    <value>Recherche arrêtée.</value>
+    <comment>Announced when a search is stopped with the busy strip's Stop (#145). #145 — new French, for francophone review</comment>
+  </data>
+  <data name="BusyCombiningPages" xml:space="preserve">
+    <value>Combinaison des pages…</value>
+    <comment>Busy strip while pages from another file are inserted (#145, #174). #145 — new French, for francophone review</comment>
+  </data>
+  <data name="BusyDeletingPages" xml:space="preserve">
+    <value>Suppression des pages…</value>
+    <comment>Busy strip while pages are deleted (#145, #174). #145 — new French, for francophone review</comment>
+  </data>
+  <data name="BusyTurningPages" xml:space="preserve">
+    <value>Rotation des pages…</value>
+    <comment>Busy strip while pages are rotated (#145, #174). #145 — new French, for francophone review</comment>
+  </data>
+  <data name="BusyMovingPage" xml:space="preserve">
+    <value>Déplacement de la page…</value>
+    <comment>Busy strip while a page is moved (#145, #174). #145 — new French, for francophone review</comment>
+  </data>
+  <data name="BusyInsertingPage" xml:space="preserve">
+    <value>Insertion d'une page…</value>
+    <comment>Busy strip while a blank page is inserted (#145, #174). #145 — new French, for francophone review</comment>
+  </data>
+  <data name="BusyExtractingPages" xml:space="preserve">
+    <value>Enregistrement des pages…</value>
+    <comment>Busy strip while selected pages are written to a new file (#145, #174). #145 — new French, for francophone review</comment>
+  </data>
+  <data name="BusyPictureOfPictures" xml:space="preserve">
+    <value>Image {0} de {1}</value>
+    <comment>Busy strip progress under the label, work counted in pictures (#145, shrink). #145 — new French, for francophone review</comment>
+  </data>
+  <data name="WorkStopped" xml:space="preserve">
+    <value>Arrêté.</value>
+    <comment>Announced when work is stopped with the busy strip's Stop (#145). #145 — new French, for francophone review</comment>
+  </data>
   <data name="CouldNotPrintTitle" xml:space="preserve">
     <value>Impossible d'imprimer</value>
     <comment>Error dialog title when printing fails (#145)</comment>

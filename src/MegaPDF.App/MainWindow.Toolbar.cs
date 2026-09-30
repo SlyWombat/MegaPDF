@@ -92,6 +92,7 @@ public sealed partial class MainWindow
         InitializeTextPickers();
         InitializeAccelerators();
         InitializePageAccelerators();   // #174: F4, Ctrl+R, Ctrl+Shift+R
+        InitializeBusyStrip();   // #145
 
         RootGrid.Loaded += (_, _) =>
         {
@@ -105,6 +106,44 @@ public sealed partial class MainWindow
             ApplyToolbarLayout();
         };
     }
+
+    /// <summary>
+    /// The busy strip's static chrome (#145): Stop's content and name, and "Stopping…"'s text.
+    /// Both are plain strings, not bound to anything that changes while the app runs, so they
+    /// are set once here — the same reason every toolbar label above is.
+    /// </summary>
+    private void InitializeBusyStrip()
+    {
+        BusyCancelButton.Content = Strings.CancelThisWork;
+        ToolTipService.SetToolTip(BusyCancelButton, Strings.CancelThisWork);
+        AutomationProperties.SetName(BusyCancelButton, Strings.CancelThisWork);
+        BusyCancellingLabel.Text = Strings.BusyCancelling;
+    }
+
+    /// <summary>
+    /// Stop, in the busy strip (#145). Straight to the busy state rather than through a tab's own
+    /// guard: the whole point of the button is to be usable while work is running, and asking an
+    /// operation to stop cannot itself fail. <c>RequestCancel</c> is a no-op when nothing
+    /// cancellable is running, so a click landing as the strip goes away does nothing rather than
+    /// cancelling whatever starts next.
+    /// </summary>
+    private void OnBusyCancelButtonClick(object sender, RoutedEventArgs e) => Shell.Active?.Busy.RequestCancel();
+
+    // --- For the `progress` self-test (#145) ---
+
+    internal bool BusyStripIsVisibleForTest => BusyStrip.Visibility == Visibility.Visible;
+    internal string BusyLabelTextForTest => BusyLabel.Text;
+    internal bool BusyBarIsIndeterminateForTest => BusyBar.IsIndeterminate;
+    internal double BusyBarValueForTest => BusyBar.Value;
+    internal bool BusyProgressTextIsVisibleForTest => BusyProgressText.Visibility == Visibility.Visible;
+    internal string BusyProgressTextForTest => BusyProgressText.Text;
+    internal bool BusyCancelButtonIsVisibleForTest => BusyCancelButton.Visibility == Visibility.Visible;
+    internal bool BusyCancellingLabelIsVisibleForTest => BusyCancellingLabel.Visibility == Visibility.Visible;
+
+    /// <summary>The same route a click on Stop takes — WinUI cannot synthesize a pointer press,
+    /// the same honest limit <c>DropPageForTest</c> and <c>ClickFirstRegionsForTest</c> already
+    /// document — but a real activation of the real handler, not a shortcut around it.</summary>
+    internal void ClickBusyCancelButtonForTest() => OnBusyCancelButtonClick(BusyCancelButton, new RoutedEventArgs());
 
     private static void SetLabels(AppBarButton button, string label, string tooltip, string? name = null)
     {

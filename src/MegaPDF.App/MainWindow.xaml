@@ -64,6 +64,12 @@
              sharp edge. Shell.Active can be null with zero tabs open; x:Bind null-checks
              every step of a path automatically, so these simply evaluate to null/false
              rather than throwing. -->
+        <!-- Work that can count itself draws a determinate bar and says where it is —
+             "Picture 312 of 1,000" — and work that can be stopped puts Stop beside it (#145).
+             Measured, not guessed: a shrink of a 2.5 GB document takes 39.7 s and a search of
+             2,000 text-heavy pages 1.27 s, and those are the two operations that carry both.
+             The shape is settled at Begin, before the strip is first shown, so nothing here is
+             chrome that appears or disappears mid-operation. -->
         <Grid
             x:Name="BusyStrip"
             Grid.Row="1"
@@ -72,14 +78,52 @@
             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
             BorderThickness="0,0,0,1"
             Padding="16,6,16,4">
-            <StackPanel Spacing="{ThemeResource SpaceXs}">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <StackPanel Grid.Column="0" Spacing="{ThemeResource SpaceXs}" VerticalAlignment="Center">
                 <TextBlock
                     x:Name="BusyLabel"
                     Text="{x:Bind Shell.Active.Busy.Label, Mode=OneWay}"
                     FontSize="{ThemeResource TypeCaption}"
                     AutomationProperties.LiveSetting="Polite" />
-                <ProgressBar IsIndeterminate="True" AutomationProperties.Name="{x:Bind Shell.Active.Busy.Label, Mode=OneWay}" />
+                <!-- Its own line rather than folded into the label: the label is the strip's
+                     polite live region, and "Picture 312 of 1,000" inside it would have Narrator
+                     announce a thousand times over one shrink. This line is not a live region. -->
+                <TextBlock
+                    x:Name="BusyProgressText"
+                    Text="{x:Bind Shell.Active.Busy.ProgressText, Mode=OneWay}"
+                    Visibility="{x:Bind Shell.Active.Busy.HasProgress, Mode=OneWay}"
+                    FontSize="{ThemeResource TypeCaption}"
+                    Opacity="0.8" />
+                <ProgressBar
+                    x:Name="BusyBar"
+                    IsIndeterminate="{x:Bind Shell.Active.Busy.IsIndeterminate, Mode=OneWay}"
+                    Minimum="0" Maximum="1"
+                    Value="{x:Bind Shell.Active.Busy.ProgressValue, Mode=OneWay}"
+                    AutomationProperties.Name="{x:Bind Shell.Active.Busy.Label, Mode=OneWay}" />
             </StackPanel>
+            <!-- Stop, not Cancel: Cancel is the word on the button that abandons a dialog, and
+                 this one abandons work rather than a question. It goes away the moment it is
+                 pressed (BusyState.CanCancel) and "Stopping…" takes its place, because a
+                 40-second shrink does not stop the instant it is asked to and a button that
+                 still invites a second press implies the first did nothing. -->
+            <Button
+                x:Name="BusyCancelButton"
+                Grid.Column="1"
+                Margin="12,0,0,0"
+                VerticalAlignment="Center"
+                Visibility="{x:Bind Shell.Active.Busy.CanCancel, Mode=OneWay}"
+                Click="OnBusyCancelButtonClick" />
+            <TextBlock
+                x:Name="BusyCancellingLabel"
+                Grid.Column="1"
+                Margin="12,0,0,0"
+                VerticalAlignment="Center"
+                Visibility="{x:Bind Shell.Active.Busy.IsCancelling, Mode=OneWay}"
+                FontSize="{ThemeResource TypeCaption}"
+                Opacity="0.8" />
         </Grid>
 
         <CommandBar

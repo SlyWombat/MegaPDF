@@ -151,6 +151,20 @@ public sealed class BusyState : INotifyPropertyChanged
     /// <summary>An indeterminate bar or a determinate one.</summary>
     public bool HasProgress => _progress is not null;
 
+    /// <summary>
+    /// <see cref="Progress"/> as a plain, non-null fraction, for a binding that cannot take a
+    /// null double — WinUI's <c>ProgressBar.Value</c> among them, since x:Bind has no
+    /// <c>TargetNullValue</c>. 0 when there is nothing to show, the same as the bar sitting at
+    /// its start.
+    /// </summary>
+    public double ProgressValue => _progress ?? 0;
+
+    /// <summary>
+    /// The bar should draw as indeterminate: the same fact as <c>!HasProgress</c>, spelled out
+    /// as its own property so a binding can target it directly rather than negate one.
+    /// </summary>
+    public bool IsIndeterminate => _progress is null;
+
     /// <summary>How many units of the work are done; -1 when the work does not count in units.</summary>
     public int ProgressDone => _progressDone;
 
@@ -379,7 +393,11 @@ public sealed class BusyState : INotifyPropertyChanged
         Set(ref _canCancel, canCancel, nameof(CanCancel));
         Set(ref _isCancelling, cancelling, nameof(IsCancelling));
         if (changed.Contains(nameof(Progress)))
+        {
             changed.Add(nameof(HasProgress));
+            changed.Add(nameof(ProgressValue));
+            changed.Add(nameof(IsIndeterminate));
+        }
         if (changed.Contains(nameof(IsIndicatorVisible)) || changed.Contains(nameof(Scope)))
         {
             changed.Add(nameof(ShowsStrip));

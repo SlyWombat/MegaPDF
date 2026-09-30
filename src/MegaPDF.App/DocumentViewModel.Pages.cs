@@ -197,6 +197,22 @@ public partial class DocumentViewModel
         ExtractSelectedPagesCommand.NotifyCanExecuteChanged();
     }
 
+    /// <summary>
+    /// What the strip says while a page operation runs (#145). A structure operation renumbers
+    /// the whole document rather than changing one page — <see cref="DoEditAsync"/>'s own comment
+    /// on this is what led here — so it is worded by what it does rather than the generic
+    /// "Applying…", the same choice the Mac and Linux leg made (#563).
+    /// </summary>
+    internal static string StructureBusyLabel(IPageEditOperation operation) => operation switch
+    {
+        ImportPagesOperation => Strings.BusyCombiningPages,
+        DeletePagesOperation => Strings.BusyDeletingPages,
+        RotatePagesOperation => Strings.BusyTurningPages,
+        MovePageOperation => Strings.BusyMovingPage,
+        InsertBlankPageOperation => Strings.BusyInsertingPage,
+        _ => Strings.BusyApplying,
+    };
+
     // --- The operations ------------------------------------------------------
 
     [RelayCommand(CanExecute = nameof(CanRotatePages))]
@@ -329,6 +345,13 @@ public partial class DocumentViewModel
     /// through its own staged-then-verified write (SDD §3.4), so a crash or a full disk leaves
     /// either the old file or the new one and never a torn one — which is why this hands it a
     /// path rather than the picked file's stream.
+    ///
+    /// Cancellable, with a Stop and no progress (#145): measured at 1.35 s for 500 pages out of a
+    /// 2.5 GB document, and the engine has taken a <see cref="CancellationToken"/> since #174. Safe
+    /// to stop because a cancelled extract leaves nothing at <paramref name="path"/> — the engine
+    /// states that (MEGAPDF_ERR_CANCELLED, "nothing left at out_path_utf8") — and nothing changed
+    /// in the open document either way. There is no honest count to give: one engine call, not a
+    /// per-page loop this side of the boundary, so the strip's bar stays indeterminate.
     /// </summary>
     public async Task<bool> ExtractPagesToPathAsync(string path, IReadOnlyList<int>? pages = null)
     {
@@ -343,10 +366,18 @@ public partial class DocumentViewModel
         if (wanted.Count == 0)
             return false;
 
+        var operation = Busy.Begin(Strings.BusyExtractingPages, cancellable: true);
+        var token = operation.CancellationToken;
         try
         {
-            using (Busy.Begin(Strings.BusySaving))
-                await Task.Run(() => document.ExtractPages(wanted, path));
+            using (operation)
+                await Task.Run(() => document.ExtractPages(wanted, path, token));
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        {
+            // Not a failure: asked for, and nothing was written.
+            Announced?.Invoke(Strings.WorkStopped);
+            return false;
         }
         catch (PageToolException ex)
         {

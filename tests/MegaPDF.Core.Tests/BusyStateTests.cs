@@ -216,6 +216,33 @@ public sealed class BusyStateTests
         Assert.Equal("", busy.ProgressText);
     }
 
+    /// <summary>
+    /// <see cref="BusyState.ProgressValue"/> and <see cref="BusyState.IsIndeterminate"/> exist for
+    /// a binding target that cannot take a null double or negate one — WinUI's x:Bind, which has
+    /// no <c>TargetNullValue</c> the way Avalonia's binding does (#145).
+    /// </summary>
+    [Fact]
+    public void ProgressValueAndIsIndeterminate_MirrorProgressForABindingThatCannotTakeNull()
+    {
+        var busy = NewState();
+        Assert.Equal(0, busy.ProgressValue);
+        Assert.True(busy.IsIndeterminate);
+
+        using var work = busy.Begin("Making a smaller copy…");
+        Assert.Equal(0, busy.ProgressValue);
+        Assert.True(busy.IsIndeterminate);
+
+        work.Report(3, 12);
+        Assert.Equal(0.25, busy.ProgressValue);
+        Assert.False(busy.IsIndeterminate);
+
+        // Not countable after all: back to indeterminate, and the plain value back to 0 rather
+        // than holding the last fraction.
+        work.Report(0, 0);
+        Assert.Equal(0, busy.ProgressValue);
+        Assert.True(busy.IsIndeterminate);
+    }
+
     [Fact]
     public void OnlyWorkBegunCancellable_OffersCancel()
     {
@@ -346,6 +373,8 @@ public sealed class BusyStateTests
         {
             Assert.Contains(nameof(BusyState.Progress), raised);
             Assert.Contains(nameof(BusyState.HasProgress), raised);
+            Assert.Contains(nameof(BusyState.ProgressValue), raised);
+            Assert.Contains(nameof(BusyState.IsIndeterminate), raised);
             Assert.Contains(nameof(BusyState.ProgressDone), raised);
             Assert.Contains(nameof(BusyState.ProgressTotal), raised);
             Assert.Contains(nameof(BusyState.ProgressText), raised);

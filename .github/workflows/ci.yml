@@ -669,6 +669,10 @@ jobs:
           # It builds its own work.pdf copy from fixture.pdf, so it needs nothing else from
           # the fixtures directory.
           Run-Check "whiteout-text" 60
+          # #145: progress and Stop on search, extract and shrink, and the busy strip's bar,
+          # count and Stop in a real window. Builds its own work.pdf and a two-picture PDF from
+          # fixture.pdf, so it needs nothing else from the fixtures directory.
+          Run-Check "progress" 60
 
           if ($failed.Count -gt 0) {
             Write-Output "FAILED: $($failed -join ', ')"
