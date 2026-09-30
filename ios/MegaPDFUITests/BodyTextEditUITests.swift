@@ -14,6 +14,26 @@ final class BodyTextEditUITests: XCTestCase {
         app = XCUIApplication()
         // English labels regardless of the simulator's language.
         app.launchArguments += ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        // The notices below are pinned for the whole suite (#487, `NoticeLifetime`). All
+        // four tests in here turn on whether a one-line banner is on screen — two that it
+        // is, two that it is not — and the app takes it away after four seconds: on a
+        // runner slow enough (testTier3 has been measured at 106 seconds there against a
+        // median of 13 on the Mac mini) the banner can come and go between two
+        // accessibility snapshots, so both kinds of check were races rather than
+        // measurements.
+        app.launchArguments += ["-uiTestPinNotices"]
+    }
+
+    /// Ends the app after every test, passed or failed (#487).
+    ///
+    /// Without this a test that could not launch the app leaves its process behind, and the
+    /// *next* test's launch tries to resume that stale process and fails too — "Failed to
+    /// get background assertion for target app with pid 0", which is what turned one launch
+    /// timeout into two red tests in runs 36427711297 and 36440146938. A test should be
+    /// able to fail without taking the one after it down.
+    override func tearDown() {
+        app?.terminate()
+        app = nil
     }
 
     // MARK: - documents
@@ -71,8 +91,13 @@ final class BodyTextEditUITests: XCTestCase {
         return page
     }
 
-    /// Taps a point on the page given in PDF points (origin bottom-left), then waits out
-    /// the double-tap-to-zoom window so the single tap is delivered.
+    /// Taps a point on the page given in PDF points (origin bottom-left).
+    ///
+    /// The app defers a single tap by the double-tap-to-zoom window before dispatching it,
+    /// so nothing here can assume the tap has been acted on when this returns; what waits
+    /// for that is the `waitForExistence` in `retype`, or the banner's own wait. (An
+    /// earlier version of this comment claimed the helper waited the window out. It never
+    /// did, and nothing needed it to.)
     private func tap(_ page: XCUIElement, x: Double, yFromBottom: Double) {
         page.coordinate(withNormalizedOffset: CGVector(dx: x / 612.0, dy: (792.0 - yFromBottom) / 792.0)).tap()
     }
@@ -84,6 +109,13 @@ final class BodyTextEditUITests: XCTestCase {
         let field = app.descendants(matching: .any).matching(identifier: "bodyTextField").firstMatch
         XCTAssertTrue(field.waitForExistence(timeout: 10), "tapping the line did not open the text editor")
         field.tap()
+        // A tap is delivered long before the keyboard is up on a loaded machine, and text
+        // typed before the field has focus is simply thrown away — XCTest reports it as
+        // "Neither element nor any descendant has keyboard focus", which is how this test
+        // failed in run 36435613648. Waiting for the keyboard is waiting for the thing
+        // `typeText` actually needs.
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 15),
+                      "the keyboard never came up for the text editor, so nothing could be typed")
         if let current = field.value as? String, !current.isEmpty {
             field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: current.count + 2))
         }
@@ -108,7 +140,10 @@ final class BodyTextEditUITests: XCTestCase {
         tap(page, x: 90, yFromBottom: 708)
         retype("Hello")
         let banner = app.staticTexts["noticeBanner"]
-        XCTAssertTrue(banner.waitForExistence(timeout: 5), "a substituted font must be announced")
+        // 15 seconds, and it is a real 15 now: the notice is pinned, so the wait is bounded
+        // by how long the engine and a render take on a loaded machine rather than by the
+        // four seconds the app would otherwise have taken the banner away after (#487).
+        XCTAssertTrue(banner.waitForExistence(timeout: 15), "a substituted font must be announced")
         XCTAssertTrue(banner.label.contains("standard font"), banner.label)
     }
 
@@ -143,7 +178,8 @@ final class BodyTextEditUITests: XCTestCase {
         let page = launch(with: pictureOnly)
         tap(page, x: 300, yFromBottom: 550)
         let banner = app.staticTexts["noticeBanner"]
-        XCTAssertTrue(banner.waitForExistence(timeout: 5), "a picture-only page must explain why nothing happened")
+        XCTAssertTrue(banner.waitForExistence(timeout: 15),
+                      "a picture-only page must explain why nothing happened")
         XCTAssertTrue(banner.label.contains("scanned"), banner.label)
         XCTAssertFalse(app.descendants(matching: .any).matching(identifier: "bodyTextField").firstMatch.exists,
                        "there is no text to edit")

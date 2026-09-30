@@ -1277,12 +1277,13 @@ final class ViewerModel: ObservableObject {
         bodyDraft = ""
     }
 
-    /// Shows a notice over the page for a few seconds.
+    /// Shows a notice over the page for a few seconds (`NoticeLifetime`).
     func showNotice(_ text: String) {
         noticeTask?.cancel()
         notice = text
+        guard NoticeLifetime.clearsItself() else { return }
         noticeTask = Task {
-            try? await Task.sleep(nanoseconds: 4_000_000_000)
+            try? await Task.sleep(nanoseconds: NoticeLifetime.visibleNanoseconds)
             if !Task.isCancelled { notice = nil }
         }
     }
@@ -2359,5 +2360,40 @@ final class ViewerModel: ObservableObject {
             document = nil
             Task { await PdfEngine.shared.close(doc) }
         }
+    }
+}
+
+/// How long a notice stays over the page, and the one case where it does not go away
+/// (#487).
+///
+/// Four seconds is long enough to read one line and short enough not to sit over the page.
+/// It is also, unavoidably, **a deadline a UI test has to beat**: `BodyTextEditUITests`
+/// waits for the substitution notice and the scanned-page hint to appear, and on a loaded
+/// CI runner — where one of those tests has been measured at 106 seconds against a median
+/// of 13 on the Mac mini — the banner can appear and be taken away again between two
+/// accessibility snapshots. No longer timeout fixes that. Waiting longer than four seconds for something
+/// that is removed after four is not a longer wait, it is a race with a shorter deadline
+/// than it looks; the evidence has to outlive the wait instead.
+///
+/// `-uiTestPinNotices` is what makes it outlive the wait, and it is the same kind of lever
+/// as `-uiTestPinReadingBar` (#506) and `-uiTestZoomProbes` (#531): it substitutes this one
+/// decision and nothing downstream of it. The notice is shown, worded and animated exactly
+/// as it is in the app; it simply is not taken away. Nothing but a UI test passes it.
+///
+/// It makes the *absence* checks stricter as well as the presence ones honest: a notice
+/// that appeared and cleared itself before the assertion looked used to be indistinguishable
+/// from a notice that was never shown, and those two tests exist precisely to tell the
+/// difference.
+enum NoticeLifetime {
+    /// What a person sees.
+    static let visible: TimeInterval = 4
+
+    static var visibleNanoseconds: UInt64 { UInt64(visible * 1_000_000_000) }
+
+    /// Whether a notice clears itself at all.
+    static func clearsItself(
+        arguments: [String] = ProcessInfo.processInfo.arguments
+    ) -> Bool {
+        !arguments.contains("-uiTestPinNotices")
     }
 }
