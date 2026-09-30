@@ -459,6 +459,22 @@ Saved as {2} — ready to email.</value>
     <value>Edit text</value>
     <comment>UIA name of the inline editor</comment>
   </data>
+  <data name="TypeThenEnterMultiline" xml:space="preserve">
+    <value>Type, Shift+Enter for a new line, Enter when done</value>
+    <comment>#4: placeholder text on the inline editor while placing new text</comment>
+  </data>
+  <data name="TextSizeSmallName" xml:space="preserve">
+    <value>Small</value>
+    <comment>#4: UIA name of the S size chip on the inline editor</comment>
+  </data>
+  <data name="TextSizeMediumName" xml:space="preserve">
+    <value>Medium</value>
+    <comment>#4: UIA name of the M size chip on the inline editor</comment>
+  </data>
+  <data name="TextSizeLargeName" xml:space="preserve">
+    <value>Large</value>
+    <comment>#4: UIA name of the L size chip on the inline editor</comment>
+  </data>
   <data name="RestoreTitle" xml:space="preserve">
     <value>Restore unsaved changes?</value>
   </data>

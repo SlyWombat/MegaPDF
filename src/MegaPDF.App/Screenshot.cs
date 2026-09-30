@@ -181,6 +181,12 @@ internal static class Screenshot
             case "pages":
                 return await CheckPageToolsAsync(window);
 
+            // #3/#4: a whiteout's move/resize chrome, and the inline text editor's
+            // persona-simple S/M/L sizes and Shift+Enter multi-line — in a real window, for
+            // the same reason `pages` needs one. Needs a document; the exit code is the test.
+            case "whiteout-text":
+                return await CheckWhiteoutAndTextAsync(window);
+
             default:
                 Console.Error.WriteLine($"unknown --screenshot-state '{state}'");
                 return false;
@@ -1374,6 +1380,253 @@ internal static class Screenshot
                   tab.Thumbnails.Count == tab.Pages.Count
                   && tab.Thumbnails.Select(t => t.Index).SequenceEqual(Enumerable.Range(0, tab.Pages.Count)));
         }
+    }
+
+    /// <summary>
+    /// Whiteout move/resize chrome (#3) and text box ergonomics — persona-simple sizes and
+    /// Shift+Enter multi-line (#4) — in a real window, for the same reason `pages` needs one
+    /// (#462: no headless platform, no CI desktop session).
+    ///
+    /// Two things proved here are assertions rather than assumptions, because each is a rule
+    /// that can regress while the window still looks perfectly right:
+    ///
+    ///   1. A whiteout's object index changes on every move (there is no native "move in
+    ///      place" for page content — <c>MoveWhiteoutOperation</c> detaches and re-appends).
+    ///      Deleting one right after moving it is the sharpest check of the chrome's own
+    ///      re-anchoring: get it wrong and the wrong rectangle disappears, or the delete
+    ///      throws reaching for an index that no longer exists.
+    ///   2. A two-line note is two independently selectable objects, and undoing it is one
+    ///      step that removes both — not "undo, undo".
+    ///
+    /// Two honest limits, stated here rather than discovered later:
+    ///
+    ///   * WinUI cannot synthesize a pointer press or a manipulation gesture, so selecting is
+    ///     driven through <c>RoutePageActivationAsync</c> (via <c>ActivatePageForTest</c>) —
+    ///     the same route a tap, Enter or Space takes — and a completed drag is driven by
+    ///     setting the chrome's on-screen rect the way one would have left it
+    ///     (<c>DragSelectionForTest</c>), the same honest limit <c>DropPageForTest</c>
+    ///     documents for a page reorder's drag. Neither can exercise the resize handle's own
+    ///     live aspect-lock math, which only runs mid-gesture against a real manipulation
+    ///     event — free-form vs. proportional resize is a by-hand gate.
+    ///   * Nor can it synthesize a key press, so Shift+Enter's own effect (inserting a literal
+    ///     newline at the caret) is not driven through a key event either — the note's text is
+    ///     set directly on the open editor with the newline already in it
+    ///     (<c>ActiveEditorTextForTest</c>), proving what committing a such a string does
+    ///     (<c>AddTextBoxesOperation</c>, one object per line) rather than the key binding
+    ///     that produces the string in the first place.
+    ///
+    /// Everything this writes lives in its own scratch directory and its own tab, and both are
+    /// gone before it returns: the tab the fixture was opened in is left exactly as found.
+    /// </summary>
+    private static async Task<bool> CheckWhiteoutAndTextAsync(MainWindow window)
+    {
+        if (window.Shell.Active is not { IsDocumentOpen: true } fixtureTab
+            || fixtureTab.DocumentPath is not { } fixturePath)
+        {
+            Console.Error.WriteLine("--screenshot-state whiteout-text needs a document.");
+            return false;
+        }
+
+        var passed = 0;
+        var failed = 0;
+        void Check(string what, bool ok)
+        {
+            Console.Error.WriteLine($"{(ok ? "PASS" : "FAIL")}: {what}");
+            if (ok)
+                passed++;
+            else
+                failed++;
+        }
+
+        var scratch = Path.Combine(Path.GetTempPath(), "megapdf-selftest-whiteout-text");
+        Directory.CreateDirectory(scratch);
+        try
+        {
+            await RunWhiteoutAndTextChecksAsync(window, fixtureTab, fixturePath, scratch, Check);
+        }
+        catch (Exception ex)
+        {
+            // A throw here is a FAIL with a stack, not a window left standing (see
+            // CheckPageToolsAsync's own remark — the same failure mode either check learnt).
+            Console.Error.WriteLine($"FAIL: the whiteout/text check threw: {ex}");
+            failed++;
+        }
+        finally
+        {
+            foreach (var tab in window.Shell.Documents.Where(t => !ReferenceEquals(t, fixtureTab)).ToList())
+            {
+                tab.HasUnsavedChanges = false;   // never ask about scratch (#145 D5's dialog)
+                await window.CloseTabAsync(tab);
+            }
+            try { Directory.Delete(scratch, recursive: true); } catch { /* best-effort scratch cleanup */ }
+        }
+
+        Console.Error.WriteLine($"whiteout-text: {passed} passed, {failed} failed ({passed + failed} checks)");
+        return failed == 0;
+    }
+
+    private static async Task RunWhiteoutAndTextChecksAsync(
+        MainWindow window, DocumentViewModel fixtureTab, string fixturePath, string scratch,
+        Action<string, bool> Check)
+    {
+        // A copy, not the fixture path itself — opening a path a tab already holds activates
+        // that tab instead of opening another (the same reason `pages` and `close-tabs` copy).
+        var work = Path.Combine(scratch, "work.pdf");
+        File.Copy(fixturePath, work, overwrite: true);
+
+        var tab = await window.Shell.OpenInTabAsync(work);
+        await Task.Delay(1500);
+        var view = tab.View;
+        Check("a working tab opened on the fixture", tab.IsDocumentOpen && view is not null);
+        if (view is null)
+            return;
+
+        static bool Close(PdfRect a, PdfRect b, double tol = 1.5) =>
+            Math.Abs(a.X - b.X) < tol && Math.Abs(a.Y - b.Y) < tol
+            && Math.Abs(a.Width - b.Width) < tol && Math.Abs(a.Height - b.Height) < tol;
+
+        // --- #3: a whiteout selects for move and resize, not remove-only -------------------
+
+        var placedAt = new PdfRect(60, 60, 80, 40);
+        await tab.AddWhiteoutAsync(0, placedAt);
+        await Task.Delay(300);
+        Check("a whiteout can still be placed",
+              tab.HitTestPage(0, placedAt.Center).Kind == PageHitKind.Whiteout);
+
+        Check("clicking it selects it", await view.ActivatePageForTest(0, placedAt.Center));
+        Check("  offering move, not remove-only chrome", view.SelectionIsMovableForTest);
+        Check("  and a resize handle too", view.SelectionIsResizableForTest);
+
+        var movedTo = new PdfRect(placedAt.X + 90, placedAt.Y + 50, placedAt.Width + 30, placedAt.Height - 10);
+        var dragged = await view.DragSelectionForTest(movedTo);
+        await Task.Delay(300); // the move re-renders the page and re-selects on the new object index
+        Check("dragging and resizing it in one gesture lands",
+              dragged && view.SelectionBoundsForTest is { } landedBounds && Close(landedBounds, movedTo));
+        Check("  the old spot is no longer covered",
+              tab.HitTestPage(0, placedAt.Center).Kind != PageHitKind.Whiteout);
+        Check("  and it is one undo step", tab.UndoCommand.CanExecute(null));
+
+        await tab.UndoCommand.ExecuteAsync(null);
+        await Task.Delay(300);
+        Check("undo restores the prior rect, in one step",
+              tab.HitTestPage(0, placedAt.Center).Kind == PageHitKind.Whiteout
+              && tab.HitTestPage(0, movedTo.Center).Kind != PageHitKind.Whiteout);
+
+        await tab.RedoCommand.ExecuteAsync(null);
+        await Task.Delay(300);
+        Check("redo re-applies the move",
+              tab.HitTestPage(0, movedTo.Center).Kind == PageHitKind.Whiteout
+              && tab.HitTestPage(0, placedAt.Center).Kind != PageHitKind.Whiteout);
+
+        // Persistence: what a move actually wrote survives a save and a reopen.
+        var savedCover = Path.Combine(scratch, "cover.pdf");
+        await tab.SaveToPathForTestAsync(savedCover);
+        using (var engine = new PdfiumEngine())
+        using (var reopened = engine.Open(savedCover))
+        {
+            using var page = reopened.GetPage(0);
+            Check("the moved cover is in the saved file",
+                  page.GetWhiteouts().Any(w => Close(w.Bounds, movedTo)));
+        }
+
+        // The undo/redo above ran under the chrome the drag left showing — a click on an
+        // already-selected item deselects it rather than reselecting it (pre-existing chrome
+        // behaviour, shared by every selectable kind, not specific to a whiteout), and neither
+        // Undo nor Redo itself clears a selection made before them. One throwaway click clears
+        // whatever that left before the real one below actually selects.
+        await view.ActivatePageForTest(0, movedTo.Center);
+
+        // The sharpest check of the chrome's own re-anchoring (#3): a whiteout's object index
+        // is not the one the selection started with any more, after a move. Deleting it right
+        // here is what would go wrong first if that re-anchoring were broken.
+        Check("re-selecting the moved cover", await view.ActivatePageForTest(0, movedTo.Center));
+        Check("deleting it after a move takes off the right rectangle",
+              await view.RemoveSelectionForTest()
+              && tab.HitTestPage(0, movedTo.Center).Kind != PageHitKind.Whiteout);
+        await tab.UndoCommand.ExecuteAsync(null);
+        await Task.Delay(300);
+        Check("  and undo puts that same one back",
+              tab.HitTestPage(0, movedTo.Center).Kind == PageHitKind.Whiteout);
+
+        // Clean up: back to nothing added, so the text checks below start from a known page.
+        while (tab.UndoCommand.CanExecute(null))
+            await tab.UndoCommand.ExecuteAsync(null);
+        await Task.Delay(300);
+
+        // --- #4: persona-simple size chips and Shift+Enter multi-line -----------------------
+
+        var before = tab.TextBoxesOn(0).Count;
+        var placePoint = new PdfPoint(72, 300);
+        tab.StartTextBoxMode();
+        Check("Add text arms the new-text editor",
+              await view.ActivatePageForTest(0, placePoint) && view.HasActiveEditorForTest);
+        Check("  offering the S/M/L size chips", view.SizeChipsShownForTest);
+
+        Check("picking Large writes the same size the toolbar's own picker would",
+              await view.ClickSizeChipForTest(DocumentViewModel.TextSizeLarge)
+              && window.SizePickerValueForTest is { } shown && Math.Abs(shown - DocumentViewModel.TextSizeLarge) < 0.01);
+
+        // Shift+Enter cannot be synthesized (see this method's own remark) — the text is set
+        // with the newline already in it, exactly what a real Shift+Enter would have produced.
+        view.ActiveEditorTextForTest = "First line\nSecond line";
+        await view.CommitActiveEditorForTest();
+        await Task.Delay(500);
+
+        var boxes = tab.TextBoxesOn(0);
+        Check($"a two-line note becomes two objects ({boxes.Count - before} new)", boxes.Count == before + 2);
+        var added = boxes.Skip(before).ToList();
+        Check("  both at the chosen (Large) size",
+              added.Count == 2 && added.All(b => Math.Abs(b.FontSize - DocumentViewModel.TextSizeLarge) < 0.01));
+        Check("  the two lines are not on top of each other",
+              added.Count == 2 && Math.Abs(added[0].Bounds.Y - added[1].Bounds.Y) > 1);
+
+        if (added.Count == 2)
+        {
+            Check("each line is individually selectable — the first",
+                  await view.ActivatePageForTest(0, added[0].Bounds.Center)
+                  && view.SelectionBoundsForTest is { } firstSel && Close(firstSel, added[0].Bounds));
+            // A click while something is already selected deselects it first (pre-existing
+            // chrome behaviour, shared by every selectable kind) — a second click on the
+            // second line is what actually selects it, the same two taps a person would need.
+            await view.ActivatePageForTest(0, added[1].Bounds.Center);
+            Check("  and the second, separately",
+                  await view.ActivatePageForTest(0, added[1].Bounds.Center)
+                  && view.SelectionBoundsForTest is { } secondSel && Close(secondSel, added[1].Bounds));
+        }
+
+        Check("undo removes the whole note as one step",
+              tab.UndoCommand.CanExecute(null));
+        await tab.UndoCommand.ExecuteAsync(null);
+        await Task.Delay(300);
+        Check("  both lines gone at once", tab.TextBoxesOn(0).Count == before);
+
+        await tab.RedoCommand.ExecuteAsync(null);
+        await Task.Delay(300);
+        Check("redo brings both back together", tab.TextBoxesOn(0).Count == before + 2);
+
+        // Existing added text still restyles in place rather than growing a second line
+        // (scoped out of #4 — see AddTextBoxesOperation's own remark): the chips apply to an
+        // existing note's size, and nothing here should turn one line into two after the fact.
+        if (tab.TextBoxesOn(0).Skip(before).FirstOrDefault() is { } existing)
+        {
+            var beforeEdit = tab.TextBoxesOn(0).Count;
+            Check("double-clicking an existing box opens its editor",
+                  await view.EditTextBoxForTest(0, existing.Bounds.Center) && view.HasActiveEditorForTest);
+            Check("  still offering the size chips (#4)", view.SizeChipsShownForTest);
+
+            await view.ClickSizeChipForTest(DocumentViewModel.TextSizeSmall);
+            await view.CommitActiveEditorForTest();
+            await Task.Delay(400);
+            var afterEdit = tab.TextBoxesOn(0);
+            Check("  restyles the one box in place at the new size, rather than growing a second line",
+                  afterEdit.Count == beforeEdit
+                  && afterEdit.Any(b => Math.Abs(b.FontSize - DocumentViewModel.TextSizeSmall) < 0.01));
+        }
+
+        // Clean up: undo everything this check did, so the fixture tab is left as it opened.
+        while (tab.UndoCommand.CanExecute(null))
+            await tab.UndoCommand.ExecuteAsync(null);
+        await Task.Delay(300);
     }
 
     /// <summary>A notice or an announcement cut down to a log line's worth, whatever its length.</summary>

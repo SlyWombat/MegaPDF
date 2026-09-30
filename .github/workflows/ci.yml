@@ -665,6 +665,10 @@ jobs:
           Run-Check "close-tabs" 60
           Run-Check "pages" 120
           Run-Check "more" 45
+          # #3/#4: whiteout move/resize chrome and the inline editor's size chips/multi-line.
+          # It builds its own work.pdf copy from fixture.pdf, so it needs nothing else from
+          # the fixtures directory.
+          Run-Check "whiteout-text" 60
 
           if ($failed.Count -gt 0) {
             Write-Output "FAILED: $($failed -join ', ')"
