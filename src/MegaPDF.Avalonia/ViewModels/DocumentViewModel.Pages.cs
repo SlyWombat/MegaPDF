@@ -353,31 +353,42 @@ public sealed partial class DocumentViewModel
     /// The engine's own write is unchanged — staged, read back, page count checked — so nothing
     /// is copied that has not already been proved to open; what this gives up is the atomic
     /// rename *at the destination*, which is the trade a granted stream forces anyway.
+    ///
+    /// One hop off the UI thread, and the file work synchronous inside it, deliberately. With a
+    /// second genuinely-asynchronous await in here — a <c>CopyToAsync</c>, say — the continuation
+    /// is posted back to whatever <see cref="SynchronizationContext"/> the caller had, and a
+    /// caller that is *blocking* on this task cannot pump it: the self-test calls straight into
+    /// the view model and waits, and after any check has initialised Avalonia the waiting thread
+    /// is the dispatcher's own. That deadlocked. Everything here is ordinary file I/O, so the one
+    /// hop is all it ever needed.
     /// </summary>
-    private async Task StagedExtractAsync(IPdfDocument document, IReadOnlyList<int> pages,
-                                          Func<Task<Stream>> openDestination)
-    {
-        var staged = Path.Combine(Path.GetTempPath(), $"megapdf-pages-{Guid.NewGuid():N}.pdf");
-        try
+    private Task StagedExtractAsync(IPdfDocument document, IReadOnlyList<int> pages,
+                                    Func<Task<Stream>> openDestination) =>
+        OffUiThread(() =>
         {
-            await OffUiThread(() => document.ExtractPages(pages, staged));
-            await using var source = File.OpenRead(staged);
-            await using var destination = await openDestination();
-            await source.CopyToAsync(destination);
-        }
-        finally
-        {
+            var staged = Path.Combine(Path.GetTempPath(), $"megapdf-extract-staged-{Guid.NewGuid():N}.pdf");
             try
             {
-                if (File.Exists(staged))
-                    File.Delete(staged);
+                document.ExtractPages(pages, staged);
+                // Opened only once the staged file exists and has been read back, so a
+                // destination is never truncated for an extract that then failed.
+                using var source = File.OpenRead(staged);
+                using var destination = openDestination().GetAwaiter().GetResult();
+                source.CopyTo(destination);
             }
-            catch (IOException)
+            finally
             {
-                // A temporary file we could not remove is not worth failing a save over.
+                try
+                {
+                    if (File.Exists(staged))
+                        File.Delete(staged);
+                }
+                catch (IOException)
+                {
+                    // A temporary file we could not remove is not worth failing a save over.
+                }
             }
-        }
-    }
+        });
 
     /// <summary>
     /// A suggested name for the extracted file: "Form (pages 2-3).pdf". Static so the Windows

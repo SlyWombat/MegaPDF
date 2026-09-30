@@ -2612,6 +2612,33 @@ internal static class Program
             if (File.Exists(extracted)) File.Delete(extracted);
         }
 
+        // The staged route, which is what a sandboxed destination takes — and, since the Snap's
+        // `home` plug refuses the engine's hidden sibling temporary file, what an extract into
+        // the home folder falls back to (#158). Exercised here rather than only on the snap leg:
+        // a path that only one CI job can reach is a path nobody debugs.
+        var through = Path.Combine(saveDir, $"megapdf-selftest-through-{Guid.NewGuid():N}.pdf");
+        try
+        {
+            using (var vm = new DocumentViewModel(state))
+            {
+                vm.Open(fixture);
+                var ok = vm.ExtractPagesThroughAsync(
+                    () => Task.FromResult<Stream>(File.Create(through)),
+                    Path.GetFileName(through), [0, 1]).GetAwaiter().GetResult();
+                check("  extracting through a stream writes the file too", ok && File.Exists(through));
+                check("  the document is still untouched", vm.Pages.Count == 2 && !vm.IsDirty);
+            }
+            using var engine = new PdfiumEngine();
+            using var copy = engine.Open(through);
+            check("  with both pages in it", copy.PageCount == 2);
+            check("  and its own staging cleaned up",
+                  !Directory.EnumerateFiles(Path.GetTempPath(), "megapdf-extract-staged-*.pdf").Any());
+        }
+        finally
+        {
+            if (File.Exists(through)) File.Delete(through);
+        }
+
         check("  a run of pages is suggested as a range",
               DocumentViewModel.SuggestExtractedFileName("Form.pdf", [1, 2])
               == $"Form ({Strings.ExtractedPageRangeName(2, 3)}).pdf");
