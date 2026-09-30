@@ -49,6 +49,7 @@ Stating what MegaPDF will *not* do is as important as what it will. Out of scope
 - Cloud storage integration beyond what the Windows file picker already provides (OneDrive etc. work transparently through the file system)
 - macOS/Linux desktop versions
 - ~~mobile versions~~ *(scope amendment, 2026-08-08 — mobile is now in scope with a reduced feature set; see §6)*
+- A reading mode that edits, exports, prints, or reformats the document beyond looking at it *(scope amendment, 2026-09-29 — reading mode (chrome-free view and page-colour/zoom preferences) is in scope and shipped on all four platforms as F10; see §3.11 and #168. It adds no editing surface of its own: reflow, the one tier that would touch how the document's text is laid out, remains unshipped.)*
 
 ---
 
@@ -564,6 +565,133 @@ content stream, so none of them can answer `MEGAPDF_ERR_LAYOUT`.
 - The corpus battery (`tools/stress/pages-battery.sh`): rotate, delete, move and extract on
   every document with 0 crashes, 0 hangs, every output passing `qpdf --check` with the page
   count expected, and no refusal but the two the contract documents.
+
+---
+
+### 3.11 F10 — Reading mode *(scope amendment — 2026-09-29, #168, #502)*
+
+**User story:** *"I just want to read this. Take the toolbar away, let me turn pages, and
+put me back exactly where I was when I'm done."*
+
+**This amendment lands after the fact, not before it** — the gate §1.4 sets for every
+other F-section, and that F5–F9 each went through first. Reading mode's four platform
+legs (#505/#511 Mac and Linux, #504/#510 Windows, #507/#513 Android, #506/#512 iPhone and
+iPad) shipped against `docs/reading-mode-plan.md`'s tiers 1 and 2 while this section was
+still open. What follows describes what those four merges actually built, not the plan's
+intentions where the two differ; the plan itself remains the pre-implementation record and
+is not amended.
+
+**Is.** A way of *looking at* the document already open: the page and nothing else, plus
+(tier 2) a few preferences about how the page is shown. Same document handle, same tab,
+same undo stack, same recovery journal. Entering it changes nothing in the document or on
+disk; the unsaved-changes indicator keeps whatever state it had (the Save As Markdown
+posture — §3.9 — "the PDF is untouched").
+
+**Is not.** Not an edit, not an export, not a second document. Not a "mode" in the §2.2
+sense (that rule is about what a click means on the page; reading mode turns page clicks
+off entirely, the opposite of a tool palette). Not a presentation mode (no auto-advance).
+Not OCR (§1.4, #175) — a scanned page is still a picture. Not page assembly (§3.10, F9);
+the two are unrelated except that the desktops' page-thumbnail strip (§3.10) counts as
+chrome and hides with everything else.
+
+**The invariant: leaving reading mode returns to the page view at the same place** — same
+tab, same page, same zoom, same scroll offset, no re-render. The page host is never torn
+down; only the chrome around it hides.
+
+#### What shipped (tiers 1 and 2, all four platforms)
+
+1. **Entry, in each platform's own idiom, not a shared shortcut.** Windows: **Reading
+   mode** in the zoom flyout beside Fit width/Fit page, in the "…" overflow, and **Ctrl+H**
+   on the window's accelerator table; **F11** for full screen, offered only once reading
+   mode is on. Mac: **View ▸ Reading Mode ⇧⌘R** (⌘H is already Hide) and **View ▸ Enter
+   Full Screen ⌃⌘F**, the standard AppKit item. Linux (same Avalonia build as Mac, no
+   native menu bar on X11): the equivalent commands are bound on the window itself as
+   **Ctrl+H** and **F11**, matching desktop-Linux convention rather than the Mac chord.
+   iPhone and iPad: **Reading mode** in the ⋯ menu beside Share and Export as Markdown; on
+   iPad also a button on the tool strip (#172). Android: **Reading mode** as a
+   `DropdownMenuItem` in the More menu, beside Share and Export as Markdown — no
+   accelerator and no toolbar button, which is the phones' idiom, not a gap.
+2. **The chrome leaves the tab and accessibility order, not merely the screen.** Every
+   platform removes it rather than dims it: WinUI `Visibility.Collapsed`, Avalonia
+   `IsVisible=false` (with a wrapper host where the toolbar's or busy strip's own binding
+   could otherwise put it back mid-mode), SwiftUI `.toolbar(.hidden)` plus not composing
+   the items at all, and Compose simply not composing the `Scaffold`'s `TopAppBar` and
+   `BottomAppBar`. The find bar is the one piece of chrome allowed back over the reading
+   view on every platform, and it closes back into the chrome-free view.
+3. **The floating bar** is the only chrome reading mode keeps: previous/next page, the
+   page number (tap or click to type one), fit width, fit page, −, +, and Exit, on all four
+   platforms. **On the phones only, it also carries a magnifier that opens Find.** With the
+   bottom bar not composed, there is no other route left to Find on a touch device once
+   reading mode is on; the desktops keep Ctrl+F/⌘F live on the keyboard instead and their
+   bars carry no Find control. The bar appears on entry and on movement/tap/keyboard focus,
+   fades after ~2 s idle, and **never fades while it holds keyboard focus or while a screen
+   reader is running** (`AutomationPeer`-equivalent checks per platform: UIA, VoiceOver,
+   TalkBack's touch exploration, and Avalonia's own per-desktop check). Reduced motion
+   swaps the fade for an instant show/hide on every platform.
+4. **Editing is off.** Page taps/clicks are suppressed, not rerouted, on all four
+   platforms; armed tools disarm on entry and do not re-arm on exit; undo and redo stay
+   live throughout, since they act on the document, not on the page.
+5. **Exiting steps back exactly one level, and the order is platform-shaped, not
+   identical.** Desktops (Windows, Mac, Linux): find bar → full screen → reading mode →
+   whatever Escape did before. Android: find bar → reading mode → whatever **Back** did
+   before — which matters because reading mode sits ahead of the unsaved-changes prompt, so
+   Back never asks about unsaved changes while it is only leaving reading mode. iPhone and
+   iPad have no system Back to inherit (the viewer is the navigation stack's root), so
+   reading mode provides its own edge-swipe gesture and steps back the same one level at a
+   time; an iPad keyboard's Escape key does the same. Every exit restores the hidden chrome,
+   restores focus, and is announced to a screen reader.
+6. **Page colours: Normal / Sepia / Night**, applied at render time only, never written to
+   the file, on all four platforms, through the engine's contract-7 render flags. Render
+   caches are keyed on the tint as well as the page, so switching re-renders the visible
+   window only.
+7. **Zoom presets.** Fit width and fit page are on the floating bar on every platform;
+   fit page is new work on the phones, whose zoom was width-relative only before this.
+8. **Settings, app-level and not per document** (decision 2 below): *Open documents in
+   reading mode* (off by default) and the page-colour choice. Desktops share one
+   `AppSettings`/`settings.json` row for both fields; the phones had no settings screen
+   before this and each gained a first one — iOS an `@AppStorage`-backed sheet reached
+   from ⋯ and from Home, Android a `DataStore<Preferences>`-backed screen reached from the
+   More menu and from Home — because the setting has to be choosable before a document is
+   open.
+
+**Not shipped: tier 3 (reflow).** No platform lays out a document's text to the screen
+today; `docs/reading-mode-plan.md` §5's two-week spike with numeric exit criteria has not
+run. `core/megapdf_write_text.cpp` already notes that a future reflow view and the F8 text
+writer will read the same canonical block text (§3.9) when it exists — nothing about tiers
+1–2 constrains that later work, and nothing here should be read as describing it.
+
+#### Dave's three decisions (#168), recorded here rather than only on the issue
+
+1. **Name: *Reading mode*, French *Mode lecture*.** Not "Read Mode" (Acrobat's capitalised
+   proper noun) or "Reading view" (Word's) — "Reading mode" is what people say. The glossary
+   entry (`docs/localisation-glossary.md`) is the one spelling every platform's catalogue
+   uses; a second term is not to be introduced anywhere else in the docs or the apps.
+2. **No per-document memory.** Reading mode is a *window* state (the chrome is the
+   window's), not a document state — with tabs (§6.1), a per-document flag would flip the
+   whole window's chrome when a different tab is selected. There is one app setting, *Open
+   documents in reading mode* (off by default), plus the last state persisting for a
+   window's session; there is no per-file record of whether a document was last read in
+   reading mode.
+3. **Night mode inverts everything, images included — deliberately.** The alternative
+   (`FPDF_COLORSCHEME`) recolours text and paths and leaves images alone, but flattens every
+   path to one fill colour (a diagram loses its colours) and has no form-field-aware
+   variant, so it is documented here as the rejected alternative, not implemented. Every
+   platform's settings copy says the trade-off in the same words: **"Night inverts the
+   page, pictures included."**
+
+#### Acceptance criteria (this phase)
+
+- Each platform's own automated suite passes: the Escape/Back level-unwinding order
+  (`tests/MegaPDF.Core.Tests/ReadingModeTests.cs`, `ReadingModeTest.kt`,
+  `ReadingModeUITests.swift`), the bar never fading with a screen reader or touch
+  exploration running, hidden chrome absent from the accessibility tree (not merely
+  invisible), page colours and *Open documents in reading mode* round-tripping through
+  each platform's settings store, and armed tools disarming on entry.
+- The settings copy for Night mode reads identically, word for word, across all four
+  platforms' string catalogues.
+- Captures (en, fr-CA, fr-FR, light and dark) are tracked per platform in
+  `docs/qa/*-screen-inventory.md`; Android's and iOS's were deliberately deferred past
+  their tier-1/2 PRs and are still outstanding at the time of this amendment.
 
 ---
 
