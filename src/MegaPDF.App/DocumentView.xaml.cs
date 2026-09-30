@@ -94,6 +94,7 @@ public sealed partial class DocumentView : UserControl
         _wired = true;
 
         ViewModel.View = this;
+        InitializePagesPane();   // #174
         _lastKnownZoomFactor = ViewModel.ZoomFactor;
         ViewModel.ScrollRestoreRequested += offset =>
             DispatcherQueue.TryEnqueue(() => PagesScroll.ChangeView(null, offset, null, disableAnimation: true));

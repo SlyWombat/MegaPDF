@@ -195,6 +195,7 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
         ShrinkForEmailCommand.NotifyCanExecuteChanged();
         UndoCommand.NotifyCanExecuteChanged();
         RedoCommand.NotifyCanExecuteChanged();
+        RaisePageCommands();   // #174: every page tool waits too, like every other tool
     };
 
     private static string SaveStageLabel(VerifiedSave.SaveStage stage) =>
@@ -214,7 +215,14 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
         _pageWarnings.Prepare(document, pageIndex);
     }
 
-    partial void OnCurrentPageChanged(int value) => PreparePageCheck(value - 1);
+    partial void OnCurrentPageChanged(int value)
+    {
+        PreparePageCheck(value - 1);
+        // #174: with nothing selected in the Pages pane, the page commands act on the page in
+        // view, so which page that is decides whether Move Page Earlier (say) can run at all.
+        if (!HasPageSelection)
+            RaisePageCommands();
+    }
 
     /// <summary>
     /// Save, Don't save or Cancel when the open document has unsaved changes — before closing
@@ -415,6 +423,7 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
     /// stay live — they act on the document, not on the page.
     /// </summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PagesPaneVisibility))]   // #174: the pane is chrome the mode hides
     private bool _isReadingMode;
 
     /// <summary>
@@ -446,6 +455,7 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
     /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsEditingAllowed), nameof(IsSigningAllowed), nameof(IsTextBoxAllowed), nameof(IsPrintAllowed))]
+    [NotifyPropertyChangedFor(nameof(CanAssemblePages), nameof(CanExtractPages))]
     [NotifyCanExecuteChangedFor(nameof(ShrinkForEmailCommand))]
     private DocumentCapabilities _capabilities = DocumentCapabilities.Unprotected;
 
@@ -644,8 +654,10 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
 
         DocumentPath = path;
         HasUnsavedChanges = false;
+        DiscardHeldPages();   // #174: pages the previous document's history was holding for an undo
         _undoStack.Clear();
         _pageWarnings.Reset();
+        ResetPagesPane();     // #174: nothing of the previous document is selected or tiled
         // Marks belong to the document that carried them (#329): the old count and the old
         // overlays must not outlive it. Set rather than refreshed off the new document, which
         // `Pages` does not describe yet — a redraw now would ask a stale page canvas for a
@@ -703,6 +715,8 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
 
         for (var i = 0; i < sizes.Count; i++)
             Pages.Add(Placeholder(i, sizes[i].W, sizes[i].H));
+        BuildThumbnails(doc, sizes);   // #174: geometry only — no tile is drawn until the pane asks
+        RaisePageCommands();
         PreparePageCheck(0); // the first page is shown: its #139 check starts now (#145)
 
         await UpdateViewportAsync(0, Math.Min(2, PageCount - 1));
@@ -746,6 +760,9 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
         _disposed = true;
         DisposeDocument();
         Pages.Clear();
+        // #174: the tiles hold rasters, and the document that could have drawn more is gone.
+        // Any page a delete in the history was holding goes with the document itself.
+        ResetPagesPane();
     }
 
     private bool _disposed;
@@ -1780,7 +1797,11 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
         if (Busy.IsBusy || _document is not { } document)
             return false;
 
-        using (var busy = Busy.Begin(Strings.BusyApplying, scope: BusyScope.Page, pageIndex: op.PageIndex))
+        // A page operation has no one page to put the spinner on — the page it names is about
+        // to move, or to stop existing — so it gets the page-scoped busy state with no page,
+        // the same way a redaction mark does (#174).
+        using (var busy = Busy.Begin(Strings.BusyApplying, scope: BusyScope.Page,
+                                     pageIndex: op is IPageStructureOperation ? -1 : op.PageIndex))
         {
             try
             {
@@ -1808,6 +1829,14 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
             {
                 throw; // the text guard's refusal: the caller words it
             }
+            catch (PageToolException ex)
+            {
+                // #174: the engine's typed refusals, said in the person's words — the refused
+                // field hierarchy and the last page above all. Nothing was changed either way,
+                // so this is a notice over the page and not a dialog with a decision in it.
+                ShowPageToolNotice(DescribePageToolFailure(ex));
+                return false;
+            }
             catch (Exception ex)
             {
                 await ShowErrorAsync(Strings.CouldNotEditTitle, UserFacing.Describe(ex));
@@ -1821,8 +1850,31 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
         HasUnsavedChanges = true;
         UndoCommand.NotifyCanExecuteChanged();
         RedoCommand.NotifyCanExecuteChanged();
-        await RefreshPageAsync(op.PageIndex);
+        if (op is IPageStructureOperation structure)
+        {
+            // #174: pages were renumbered, so what this owes the view is the renumbering.
+            // Re-rendering "the operation's page index" would draw whichever page has since
+            // moved into that slot — or a slot that is no longer there.
+            await ApplyPageShiftsAsync(structure.Shifts, structure.ChangedPages);
+        }
+        else
+        {
+            await RefreshPageAsync(op.PageIndex);
+        }
         return true;
+    }
+
+    /// <summary>
+    /// A page operation (#174) through the very same pipeline every other edit uses, with the
+    /// sentence to announce once it has happened. Nothing is announced for an operation that was
+    /// refused: <see cref="DoEditAsync"/> has already said why.
+    /// </summary>
+    private async Task<bool> DoPageEditAsync(IPageStructureOperation op, string announcement)
+    {
+        var applied = await DoEditAsync(op);
+        if (applied)
+            Announced?.Invoke(announcement);
+        return applied;
     }
 
     /// <summary>
@@ -2075,6 +2127,7 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
             }
             // The removed content is gone, and so is every way back to it: the undo stack
             // held the very objects the redaction freed (#173), and the journal starts again.
+            DiscardHeldPages();   // #174: and any page a delete in that history was holding
             _undoStack.Clear();
             UndoCommand.NotifyCanExecuteChanged();
             RedoCommand.NotifyCanExecuteChanged();
@@ -2203,6 +2256,7 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
     /// <summary>After flattening, prior edits reference annotations that no longer exist.</summary>
     private async Task OnDocumentFlattenedAsync()
     {
+        DiscardHeldPages();   // #174
         _undoStack.Clear();
         UndoCommand.NotifyCanExecuteChanged();
         RedoCommand.NotifyCanExecuteChanged();
@@ -2430,8 +2484,7 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
             }
         }
         AfterHistoryChange(op, inverse: true);
-        if (op is IPageEditOperation pageEdit && pageEdit.ChangesTheFile)
-            await RefreshPageAsync(pageEdit.PageIndex);
+        await AfterHistoryRedrawAsync(op, inverse: true);
     }
 
     [RelayCommand(CanExecute = nameof(CanRedo))]
@@ -2453,6 +2506,23 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
             }
         }
         AfterHistoryChange(op, inverse: false);
+        await AfterHistoryRedrawAsync(op, inverse: false);
+    }
+
+    /// <summary>
+    /// What an undo or a redo owes the view once the operation itself has been reversed or
+    /// re-applied. For an ordinary edit that is the one page it touched; for a page operation
+    /// (#174) it is the renumbering, which for an undo is exactly the inverse of the shifts the
+    /// operation reported, and for a redo is those shifts again as they were.
+    /// </summary>
+    private async Task AfterHistoryRedrawAsync(IEditOperation? op, bool inverse)
+    {
+        if (op is IPageStructureOperation structure)
+        {
+            await ApplyPageShiftsAsync(inverse ? PageShift.Invert(structure.Shifts) : structure.Shifts,
+                                       structure.ChangedPages);
+            return;
+        }
         if (op is IPageEditOperation pageEdit && pageEdit.ChangesTheFile)
             await RefreshPageAsync(pageEdit.PageIndex);
     }

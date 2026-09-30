@@ -109,8 +109,10 @@ sha256 is unchanged; fill a line, tick a box, place a signature, Save, reopen an
 result back **outside MegaPDF** (`pdftotext`, `qpdf --check`); **About** says the version;
 switch to **fr-CA** and read the chrome; close dirty and get the prompt, per tab.
 
-On Windows three parts of this *are* automated, and have to be run by hand because CI cannot
-(#462): from a built tree on GPD-DAVE,
+On Windows four parts of this *are* automated. They now run in CI too — the
+`windows-ui-selftest` job on `windows-latest`, non-blocking until it has held green for a
+few weeks (#462) — so what is below is the by-hand gate for a release, and the belt to that
+job's braces. From a built tree on GPD-DAVE,
 `MegaPDF.exe --screenshot <out.png> --screenshot-state reading <fixture.pdf>` drives
 reading mode in a real window — Ctrl+H's command, the Escape ladder, the tab order,
 the floating bar's screen-reader rule, the page colours and the shared settings
@@ -120,9 +122,15 @@ and asserts the point each one was anchored on has not moved (#528).
 `MegaPDF.exe --screenshot <out.png> --screenshot-state close-tabs <fixture.pdf>` drives
 closing a tab, replacing a tab's document, and the window closing with tabs still open,
 and asserts each document was actually disposed — not just that its tab left the strip
-(#543). All three print a PASS/FAIL line per check and **the exit code is the test**. Run
+(#543). `MegaPDF.exe --screenshot <out.png> --screenshot-state pages <fixture.pdf>` drives
+the page tools: the Pages pane (F4), rotate, delete, reorder, insert, combine and extract,
+every undo, the renumbering the app owes core contract 10, the two refusals the engine makes
+on purpose, and the recovery journal's replay of all of it — 107 checks, and it prints its
+own passed/failed tally on the last line (#174). It builds the two form fixtures it needs
+itself, so `fixture.pdf` is all it wants from the fixtures directory. All four print a
+PASS/FAIL line per check and **the exit code is the test**. Run
 them before the package checks below; `reading` puts the settings it writes back as it
-found them. `reading`'s own multi-tab check opens a second tab on a fixture named
+found them, and `pages` closes every tab it opened and deletes its own scratch directory. `reading`'s own multi-tab check opens a second tab on a fixture named
 `demo.pdf` beside the one passed on the command line — passing `demo.pdf` itself as
 `<fixture.pdf>` makes that check activate the already-open tab instead of opening a
 second one and fails for that reason, not a real regression; use `fixture.pdf` (or any

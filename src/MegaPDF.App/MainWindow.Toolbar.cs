@@ -88,8 +88,10 @@ public sealed partial class MainWindow
         SetLabels(CloseTabButton, Strings.CloseTab, Strings.CloseTab);
         SetLabels(NewWindowButton, Strings.NewWindow, Strings.NewWindow);
 
+        InitializePagesToolbar();   // #174
         InitializeTextPickers();
         InitializeAccelerators();
+        InitializePageAccelerators();   // #174: F4, Ctrl+R, Ctrl+Shift+R
 
         RootGrid.Loaded += (_, _) =>
         {

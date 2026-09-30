@@ -1,3 +1,8 @@
+using System.Globalization;
+using MegaPDF.Core.Editing;
+using MegaPDF.Core.Engine;
+using MegaPDF.Core.Engine.Pdfium;
+using MegaPDF.Core.Recovery;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media.Imaging;
@@ -168,6 +173,13 @@ internal static class Screenshot
             // document; the exit code is the test.
             case "close-tabs":
                 return await CheckCloseDisposesDocumentsAsync(window);
+
+            // #174: the page tools — the Pages pane, rotate, delete, reorder, insert, combine and
+            // extract — in a real window, because half of what can break is the window's (the
+            // toolbar's Pages control, the accelerator grid, the tab order, the grid's own
+            // selection). Needs a document; the exit code is the test.
+            case "pages":
+                return await CheckPageToolsAsync(window);
 
             default:
                 Console.Error.WriteLine($"unknown --screenshot-state '{state}'");
@@ -776,6 +788,675 @@ internal static class Screenshot
         }
 
         return ok;
+    }
+
+    /// <summary>
+    /// Page tools (#174), end to end, in the real window this process already has open — the
+    /// Windows counterpart of the Avalonia leg's `page tools` self-test block.
+    ///
+    /// Why a window and not a view model: half of what is worth breaking here is the window's.
+    /// Whether the Pages control is still on the toolbar, whether F4 is still on the accelerator
+    /// grid, whether the pane leaves the tab order when reading mode hides it, and whether the
+    /// grid's own selection and the view model's stay in step through a renumbering — a
+    /// view-model check can see none of those, and each is how a keyboard or screen-reader user
+    /// meets the feature.
+    ///
+    /// Three things in here are assertions rather than assumptions, because each is a rule a
+    /// later change can break while the window still looks perfectly right:
+    ///
+    ///   1. The undo of a delete puts back the *page*, not a blank one — proved by hit-testing
+    ///      the drawn square that only the original first page of fixture.pdf carries.
+    ///   2. The app's own index-keyed state follows the renumbering, which contract 10 says in so
+    ///      many words is the app's job: the page list, the tiles, the page sizes, the search
+    ///      hits, the pane's selection and the page indicator.
+    ///   3. The engine's two deliberate refusals reach the person as sentences that say what
+    ///      happened and what still works, not as "the change failed".
+    ///
+    /// Three honest limits, stated here rather than discovered later:
+    ///
+    ///   * A WinUI process cannot synthesise its own key presses, so this reads the accelerator
+    ///     grid to prove F4 and the two rotate chords are registered, and drives the commands
+    ///     they invoke. That Windows delivers those keys is not checkable from here.
+    ///   * Nor can it synthesise a drag, so the drop is driven through the same
+    ///     gap-to-index step a real drop runs (<c>DropPageForTest</c>) rather than through a
+    ///     pointer. The pane's own hit testing of a drop point is the by-hand part.
+    ///   * Which behaviour this build's PDFium has for a form-field hierarchy is fixed at compile
+    ///     time and cannot be asked for, so both branches are accepted and the log says which one
+    ///     ran. The refusal itself is asserted where it is certain — a hierarchy whose name is
+    ///     already taken, which no build can rename.
+    ///
+    /// Everything this writes lives in its own scratch directory and in extra tabs, and both are
+    /// gone before it returns: the tab the fixture was opened in is left exactly as found.
+    /// </summary>
+    private static async Task<bool> CheckPageToolsAsync(MainWindow window)
+    {
+        if (window.Shell.Active is not { IsDocumentOpen: true } fixtureTab
+            || fixtureTab.DocumentPath is not { } fixturePath)
+        {
+            Console.Error.WriteLine("--screenshot-state pages needs a document.");
+            return false;
+        }
+
+        var passed = 0;
+        var failed = 0;
+        void Check(string what, bool ok)
+        {
+            Console.Error.WriteLine($"{(ok ? "PASS" : "FAIL")}: {what}");
+            if (ok)
+                passed++;
+            else
+                failed++;
+        }
+
+        var scratch = Path.Combine(Path.GetTempPath(), "megapdf-selftest-pages");
+        Directory.CreateDirectory(scratch);
+        try
+        {
+            await RunPageToolChecksAsync(window, fixtureTab, fixturePath, scratch, Check);
+        }
+        catch (Exception ex)
+        {
+            // A throw here is a FAIL with a stack, not a window left standing: an exception
+            // escaping into the dispatcher hangs the process with nothing said, which is how a
+            // check becomes worse than no check at all (the reading-mode state learnt this).
+            Console.Error.WriteLine($"FAIL: the page-tools check threw: {ex}");
+            failed++;
+        }
+        finally
+        {
+            // Left as found: every tab but the fixture's, and the scratch directory.
+            foreach (var tab in window.Shell.Documents.Where(t => !ReferenceEquals(t, fixtureTab)).ToList())
+            {
+                tab.HasUnsavedChanges = false;   // never ask about scratch (#145 D5's dialog)
+                await window.CloseTabAsync(tab);
+            }
+            fixtureTab.IsPagesPaneOpen = false;
+            fixtureTab.SelectedPageIndices = [];
+            try { Directory.Delete(scratch, recursive: true); } catch { /* best-effort scratch cleanup */ }
+        }
+
+        Console.Error.WriteLine($"pages: {passed} passed, {failed} failed ({passed + failed} checks)");
+        return failed == 0;
+    }
+
+    private static async Task RunPageToolChecksAsync(
+        MainWindow window, DocumentViewModel fixtureTab, string fixturePath, string scratch,
+        Action<string, bool> Check)
+    {
+        // The centre of the 12x12 pt square stroked on fixture.pdf's first page, in the top-left
+        // page space the core reports and reads (#439). Page 2 has no square, and neither has a
+        // blank page — which is what makes "the page that came back is the page that went" an
+        // assertion rather than a page count.
+        var drawnCentre = new PdfPoint(78, 186);
+
+        // A copy per document opened, because opening a path a tab already holds activates that
+        // tab instead of opening another (the same reason `close-tabs` copies).
+        var work = Path.Combine(scratch, "work.pdf");
+        var other = Path.Combine(scratch, "other.pdf");
+        var form = Path.Combine(scratch, "form.pdf");
+        var hierarchy = Path.Combine(scratch, "hierarchy.pdf");
+        File.Copy(fixturePath, work, overwrite: true);
+        File.Copy(fixturePath, other, overwrite: true);
+        // Built here rather than generated into the fixtures directory, so this check needs no
+        // change to CI — the same choice the Avalonia leg made for the same two documents.
+        File.WriteAllBytes(form, FlatPersonFieldPdf());
+        File.WriteAllBytes(hierarchy, ParentFieldsPdf());
+
+        var tab = await window.Shell.OpenInTabAsync(work);
+        await Task.Delay(1500);
+        var view = tab.View;
+
+        // A fresh two-page document in the working tab, between sections. The unsaved flag is
+        // cleared first because replacing a document that has unsaved changes asks about them in a
+        // ContentDialog (#145 D5) — and a self-test that opens a modal has hung rather than failed,
+        // with nothing said, which is the one failure mode worse than no check at all.
+        // What Narrator was last told. The view model raises its announcement and the view posts it
+        // to the dispatcher (DocumentView.Keyboard.cs), so reading it in the same turn as the
+        // command that caused it can see the one before — this yields a turn first.
+        async Task<string> SaidAsync()
+        {
+            await Task.Delay(120);
+            return view!.LastAnnouncement;
+        }
+
+        async Task StartOverAsync(string path)
+        {
+            tab.SelectedPageIndices = [];
+            tab.IsPageToolNoticeOpen = false;
+            tab.HasUnsavedChanges = false;
+            await tab.OpenDocumentAsync(path);
+            await Task.Delay(1200);
+        }
+        Check("a working tab opened on a two-page document", tab.Pages.Count == 2 && view is not null);
+        if (view is null)
+            return;
+
+        static bool HasDrawnSquare(DocumentViewModel vm, int pageIndex, PdfPoint point)
+        {
+            if (vm.CurrentDocument is not { } document || pageIndex < 0 || pageIndex >= document.PageCount)
+                return false;
+            using var page = document.GetPage(pageIndex);
+            return page.HitTest(point).Kind == PageHitKind.DrawnCheckbox;
+        }
+
+        static PdfFormField? FieldAt(DocumentViewModel vm, int pageIndex, PdfPoint point)
+        {
+            if (vm.CurrentDocument is not { } document || pageIndex < 0 || pageIndex >= document.PageCount)
+                return null;
+            using var page = document.GetPage(pageIndex);
+            return page.HitTest(point).Field;
+        }
+
+        // --- 1. Where the affordance is, and the keys ---------------------------
+        {
+            var entries = window.PageToolEntryPointsForTest();
+            Check($"the page tools are reachable from the toolbar and from “…” ({string.Join(", ", entries)})",
+                  entries.Contains("Toolbar/PagesMenuButton")
+                  && entries.Contains("PagesMenu/PagesPaneItem")
+                  && entries.Contains("More/PagesPaneButton"));
+
+            var accelerators = window.PageAcceleratorsForTest();
+            Check($"F4 shows the pane, the way Acrobat's navigation pane does on Windows ({accelerators.Count} accelerators on the window)",
+                  accelerators.Contains("None+F4"));
+            Check("Ctrl+R turns the page right, as it does in Windows Photos",
+                  accelerators.Contains("Control+R"));
+            Check("and Ctrl+Shift+R turns it left",
+                  accelerators.Contains("Control, Shift+R") || accelerators.Contains("Control,Shift+R"));
+
+            var items = window.PagesMenuItemsForTest();
+            Check($"every operation has a home in the Pages menu ({string.Join(", ", items)})",
+                  items.SequenceEqual(new[]
+                  {
+                      "PagesPaneItem", "RotateRightItem", "RotateLeftItem", "DeletePagesItem",
+                      "MovePageEarlierItem", "MovePageLaterItem", "InsertBlankPageItem",
+                      "InsertPagesFromFileItem", "ExtractPagesItem",
+                  }));
+        }
+
+        // --- 2. The pane itself -------------------------------------------------
+        {
+            Check("the Pages pane starts shut", !tab.IsPagesPaneOpen && !view.IsPagesPaneShown);
+            Check("  and nothing in it is in the tab order while it is",
+                  !window.FocusableControlIds().Contains("PageTile"));
+
+            window.TogglePagesPane();
+            await Task.Delay(1200);
+            Check("Pages opens it", tab.IsPagesPaneOpen && view.IsPagesPaneShown);
+            Check($"  and its tiles join the tab order ({window.FocusableControlIds().Count(id => id == "PageTile")} of them)",
+                  window.FocusableControlIds().Contains("PageTile"));
+            window.OpenPagesMenuForTest();
+            Check("  the menu item is ticked while it is open", window.PagesPaneItemIsCheckedForTest);
+            Check("  every page has a tile, numbered from one",
+                  tab.Thumbnails.Select(t => t.PageNumberLabel).SequenceEqual(["1", "2"]));
+            Check($"  and a tile says which page it is out loud (“{tab.Thumbnails[1].AccessibleName}”)",
+                  tab.Thumbnails[1].AccessibleName == Strings.PageThumbnailName(2)
+                  && view.TileAccessibleNameForTest(1) == Strings.PageThumbnailName(2));
+            Check($"  the tiles are drawn ({tab.Thumbnails.Count(t => t.Source is not null)} of {tab.Thumbnails.Count})",
+                  tab.Thumbnails.All(t => t.Source is not null));
+
+            // Reading mode hides the chrome, and the pane is chrome (#504).
+            window.ToggleReadingMode();
+            await Task.Delay(800);
+            Check("reading mode hides the pane, chrome and all",
+                  window.IsReadingMode && !view.IsPagesPaneShown && tab.IsPagesPaneOpen);
+            Check("  so nothing of it is left in the tab order either",
+                  !window.FocusableControlIds().Contains("PageTile"));
+            window.ToggleReadingMode();
+            await Task.Delay(800);
+            Check("and leaving puts it back, because it was never closed",
+                  !window.IsReadingMode && view.IsPagesPaneShown);
+
+            tab.SelectedPageIndices = [0];
+            Check($"selecting one tile says which page (“{tab.PagesPaneHeading}”)",
+                  tab.PagesPaneHeading == Strings.PageSelected(1));
+            Check("  and the grid's own selection follows the view model's",
+                  view.PageTilesForTest.SelectedItems.OfType<PageThumbnail>().Select(t => t.Index).SequenceEqual([0]));
+            tab.SelectedPageIndices = [0, 1];
+            Check($"selecting both says how many (“{tab.PagesPaneHeading}”)",
+                  tab.PagesPaneHeading == Strings.PagesSelected(2));
+            tab.SelectedPageIndices = [];
+        }
+
+        // --- 3. Rotate ----------------------------------------------------------
+        {
+            var portrait = (tab.Pages[0].PointsWidth, tab.Pages[0].PointsHeight);
+            Check("the first page arrives unrotated", tab.PageRotation(0) == 0);
+
+            tab.SelectedPageIndices = [0];
+            await tab.RotatePagesRightCommand.ExecuteAsync(null);
+            Check("Rotate Right turns it a quarter turn clockwise", tab.PageRotation(0) == 1);
+            Check("  the page's width and height swap with it",
+                  Math.Abs(tab.Pages[0].PointsWidth - portrait.PointsHeight) < 0.5
+                  && Math.Abs(tab.Pages[0].PointsHeight - portrait.PointsWidth) < 0.5);
+            Check("  and so does its tile's, so the pane is not showing a portrait box",
+                  Math.Abs(tab.Thumbnails[0].PointsWidth - portrait.PointsHeight) < 0.5);
+            Check("  it makes the document unsaved", tab.HasUnsavedChanges);
+            var said = await SaidAsync();
+            Check($"  said out loud for Narrator (“{said}”)", said == Strings.PageTurnedRight);
+
+            await tab.UndoCommand.ExecuteAsync(null);
+            Check("undo turns it back", tab.PageRotation(0) == 0);
+            Check("  and the page is its own size again",
+                  Math.Abs(tab.Pages[0].PointsWidth - portrait.PointsWidth) < 0.5);
+            await tab.RedoCommand.ExecuteAsync(null);
+            Check("redo turns it again", tab.PageRotation(0) == 1);
+            await tab.UndoCommand.ExecuteAsync(null);
+
+            tab.SelectedPageIndices = [];
+            await tab.RotatePagesLeftCommand.ExecuteAsync(null);
+            Check("with nothing selected, Rotate Left turns the page you are looking at",
+                  tab.PageRotation(0) == 3);
+            await tab.UndoCommand.ExecuteAsync(null);
+
+            tab.SelectedPageIndices = [0, 1];
+            await tab.RotatePagesRightCommand.ExecuteAsync(null);
+            Check("a selection turns together", tab.PageRotation(0) == 1 && tab.PageRotation(1) == 1);
+            Check($"  and says how many ({await SaidAsync()})",
+                  await SaidAsync() == Strings.PagesTurnedRight(2));
+            await tab.UndoCommand.ExecuteAsync(null);
+            Check("  and comes back together, in one step",
+                  tab.PageRotation(0) == 0 && tab.PageRotation(1) == 0 && !tab.UndoCommand.CanExecute(null));
+            tab.SelectedPageIndices = [];
+        }
+
+        // --- 4. A rotation survives a save and a reopen -------------------------
+        {
+            var saved = Path.Combine(scratch, "rotated.pdf");
+            tab.SelectedPageIndices = [1];
+            await tab.RotatePagesRightCommand.ExecuteAsync(null);
+            await tab.SaveToPathForTestAsync(saved);
+            tab.SelectedPageIndices = [];
+            using var engine = new PdfiumEngine();
+            using var reopened = engine.Open(saved);
+            Check("a rotation is in the saved file", reopened.GetPageRotation(1) == 1);
+            Check("  and only on the page that was turned", reopened.GetPageRotation(0) == 0);
+        }
+
+        // --- 5. Delete, and the undo that puts the page itself back -------------
+        {
+            await StartOverAsync(work);
+            Check("the drawn square is on the first page", HasDrawnSquare(tab, 0, drawnCentre));
+
+            tab.SelectedPageIndices = [0];
+            await tab.DeletePagesCommand.ExecuteAsync(null);
+            Check("deleting a page leaves the other one", tab.Pages.Count == 1 && tab.Thumbnails.Count == 1);
+            Check("  the tiles are renumbered from one", tab.Thumbnails[0].PageNumberLabel == "1");
+            Check("  the page indicator follows", tab.PageCount == 1 && tab.CurrentPage == 1);
+            Check("  nothing is selected in the pane any more", !tab.HasPageSelection);
+            Check("  the grid agrees, so a following command cannot act on a page that is gone",
+                  view.PageTilesForTest.SelectedItems.Count == 0);
+            Check($"  and it says Undo puts it back (“{await SaidAsync()}”)",
+                  await SaidAsync() == Strings.PageDeleted);
+
+            await tab.UndoCommand.ExecuteAsync(null);
+            Check("undo puts the page back", tab.Pages.Count == 2 && tab.Thumbnails.Count == 2);
+            // The whole point of megapdf_page_restore: what comes back is the page that went, not
+            // a blank sheet of the same size.
+            Check("  and it is the page that went, not a blank one", HasDrawnSquare(tab, 0, drawnCentre));
+            await tab.RedoCommand.ExecuteAsync(null);
+            Check("redo takes it off again", tab.Pages.Count == 1);
+
+            // A PDF must have a page. The command is off rather than failing, and the rule is
+            // still said out loud when the key is pressed on it.
+            tab.SelectedPageIndices = [0];
+            Check("Delete Page is off for the last page a document has",
+                  !tab.DeletePagesCommand.CanExecute(null));
+            tab.ShowLastPageRefusal();
+            Check($"  with the rule said out loud, and the way round it (“{Shorten(tab.PageToolNotice)}”)",
+                  tab.IsPageToolNoticeOpen && tab.PageToolNotice == Strings.CannotDeleteLastPage);
+            Check("  which is the same sentence the engine's own refusal gets",
+                  DocumentViewModel.DescribePageToolFailure(
+                      new PageToolException(PageToolFailure.LastPage, "x")) == Strings.CannotDeleteLastPage);
+            tab.IsPageToolNoticeOpen = false;
+        }
+
+        // --- 6. Reorder ---------------------------------------------------------
+        {
+            await StartOverAsync(work);
+            // The first page is marked by turning it, so "the page moved" is an assertion about
+            // that page rather than about a page count.
+            tab.SelectedPageIndices = [0];
+            await tab.RotatePagesRightCommand.ExecuteAsync(null);
+            await tab.MovePageLaterCommand.ExecuteAsync(null);
+            Check("Move Page Later moves the page, rotation and all",
+                  tab.PageRotation(1) == 1 && tab.PageRotation(0) == 0);
+            Check("  the pane's selection follows the page, not the index", tab.SelectedPageIndices is [1]);
+            // Not the drawn square: the page was turned a moment ago, and every rectangle on a
+            // turned page is reported in the rotated crop space (#439), so the square is no longer
+            // where it was. What the tile owes is the turned page's shape.
+            Check("  and its tile went with it, landscape and all",
+                  Math.Abs(tab.Thumbnails[1].PointsWidth - tab.Pages[1].PointsWidth) < 0.5
+                  && tab.Thumbnails[1].PointsWidth > tab.Thumbnails[1].PointsHeight
+                  && tab.Thumbnails[0].PointsWidth < tab.Thumbnails[0].PointsHeight);
+            Check($"  said out loud, with where it landed (“{await SaidAsync()}”)",
+                  await SaidAsync() == Strings.PageMoved(1, 2));
+            await tab.UndoCommand.ExecuteAsync(null);
+            Check("undo moves it back", tab.PageRotation(0) == 1 && tab.SelectedPageIndices is [0]);
+            Check("Move Page Earlier is off for the first page", !tab.MovePageEarlierCommand.CanExecute(null));
+            tab.SelectedPageIndices = [1];
+            Check("  and Move Page Later is off for the last", !tab.MovePageLaterCommand.CanExecute(null));
+
+            // The drag's own arithmetic: a page dropped into the gap past the last tile lands
+            // last, because it leaves its own place before it arrives.
+            tab.SelectedPageIndices = [];
+            await view.DropPageForTest(0, 2);
+            Check("a drop past the last tile puts the page at the end", tab.PageRotation(1) == 1);
+            await tab.UndoCommand.ExecuteAsync(null);
+            Check("  and it is one undo step like any other reorder", tab.PageRotation(0) == 1);
+        }
+
+        // --- 7. A blank page ----------------------------------------------------
+        {
+            await StartOverAsync(work);
+            var size = (tab.Pages[0].PointsWidth, tab.Pages[0].PointsHeight);
+            tab.SelectedPageIndices = [0];
+            await tab.InsertBlankPageCommand.ExecuteAsync(null);
+            Check("a blank page goes in after the page you are on",
+                  tab.Pages.Count == 3 && tab.Thumbnails.Count == 3);
+            Check("  it is the size of the page it follows",
+                  Math.Abs(tab.Pages[1].PointsWidth - size.PointsWidth) < 0.5
+                  && Math.Abs(tab.Pages[1].PointsHeight - size.PointsHeight) < 0.5);
+            Check("  and it is blank: the square is still on page 1 only",
+                  HasDrawnSquare(tab, 0, drawnCentre) && !HasDrawnSquare(tab, 1, drawnCentre));
+            Check($"  said out loud (“{await SaidAsync()}”)",
+                  await SaidAsync() == Strings.BlankPageInserted(2));
+            await tab.UndoCommand.ExecuteAsync(null);
+            Check("undo takes it out again", tab.Pages.Count == 2 && tab.Thumbnails.Count == 2);
+        }
+
+        // --- 8. Combine ---------------------------------------------------------
+        {
+            await StartOverAsync(work);
+            var added = await tab.ImportPagesAsync(other);
+            Check("pages from another file are inserted", added && tab.Pages.Count == 4);
+            Check("  with a tile each", tab.Thumbnails.Count == 4);
+            Check($"  said out loud, naming the file (“{Shorten(await SaidAsync())}”)",
+                  await SaidAsync() == Strings.PagesInsertedFromFile(Path.GetFileName(other)));
+            Check("  and it is one undo step", tab.UndoCommand.CanExecute(null));
+            await tab.UndoCommand.ExecuteAsync(null);
+            Check("undo takes exactly the imported pages off", tab.Pages.Count == 2 && tab.Thumbnails.Count == 2);
+            Check("  and leaves this document's own pages alone", HasDrawnSquare(tab, 0, drawnCentre));
+
+            // A form document combined with itself: the field names clash, which is the case the
+            // engine renames rather than letting two fields merge into one.
+            await StartOverAsync(form);
+            var centre = new PdfPoint(200, 792 - 610);
+            var source = FieldAt(tab, 0, centre);
+            Check($"the form document has a field to bring ({source?.Name})", source?.Name == "person");
+            Check("a form document combined with itself doubles its pages",
+                  await tab.ImportPagesAsync(form) && tab.Pages.Count == 2);
+            Check("  the imported page came with its form field", FieldAt(tab, 1, centre) is not null);
+            Check($"  renamed so the two never merge into one field ({FieldAt(tab, 1, centre)?.Name})",
+                  FieldAt(tab, 1, centre)?.Name == "person_2");
+            Check("  while this document's own field keeps its name", FieldAt(tab, 0, centre)?.Name == "person");
+            await tab.UndoCommand.ExecuteAsync(null);
+            Check("  and undo leaves one page with one field",
+                  tab.Pages.Count == 1 && FieldAt(tab, 0, centre)?.Name == "person");
+        }
+
+        // --- 9. The refusal the engine makes on purpose (MEGAPDF_ERR_FIELDS) ----
+        //
+        // A page whose form fields hang off a /Parent field cannot be copied by a PDFium without
+        // patch 0033: the copy would name an object that is not the widget's parent, and the form
+        // would quietly lose its field names. About 0.8% of a real corpus, and refused rather
+        // than corrupted on purpose. What is asserted unconditionally is what the interface owes:
+        // when it is refused, the document is untouched and the person is told what happened and
+        // what still works.
+        {
+            await StartOverAsync(work);
+            var imported = await tab.ImportPagesAsync(hierarchy);
+            Check($"a hierarchy with no name clash {(imported ? "imports" : "is refused")} on this build's PDFium",
+                  imported
+                      ? tab.Pages.Count == 3
+                      : tab.Pages.Count == 2 && !tab.HasUnsavedChanges && !tab.UndoCommand.CanExecute(null));
+            if (imported)
+                await tab.UndoCommand.ExecuteAsync(null);
+
+            // Certain on either build: a widget whose name lives on its /Parent has no /T of its
+            // own to rename, so a hierarchy whose top-level name is already taken here is refused
+            // whole and nothing is changed.
+            await StartOverAsync(form);
+            var refused = !await tab.ImportPagesAsync(hierarchy);
+            Check("a form field the copy cannot carry refuses the whole import", refused);
+            Check("  and leaves the document exactly as it was",
+                  tab.Pages.Count == 1 && tab.Thumbnails.Count == 1
+                  && !tab.HasUnsavedChanges && !tab.UndoCommand.CanExecute(null));
+            Check($"  saying what happened and what still works (“{Shorten(tab.PageToolNotice)}”)",
+                  tab.IsPageToolNoticeOpen && tab.PageToolNotice == Strings.PagesRefusedFormFields);
+            Check("  out loud as well, because a bar at the foot of the page is easy to miss",
+                  await SaidAsync() == Strings.PagesRefusedFormFields);
+            tab.IsPageToolNoticeOpen = false;
+
+            // Deterministic whatever this build's PDFium does: the sentence a person would read.
+            Check("the field-hierarchy refusal has its own wording",
+                  DocumentViewModel.DescribePageToolFailure(
+                      new PageToolException(PageToolFailure.FieldHierarchy, "x")) == Strings.PagesRefusedFormFields);
+            Check("  and it is not the generic could-not-edit line",
+                  Strings.PagesRefusedFormFields != Strings.CouldNotEditTitle);
+            Check("a restricted document's page tools say the owner password would unlock them",
+                  DocumentViewModel.DescribePageToolFailure(
+                      new PageToolException(PageToolFailure.Restricted, "x")) == Strings.PageToolsRestricted);
+            Check("and a file that could not be read says so rather than naming an errno",
+                  DocumentViewModel.DescribePageToolFailure(
+                      new PageToolException(PageToolFailure.File, "x")) == Strings.PagesFileProblem);
+        }
+
+        // --- 10. There is no layout refusal in this path at all -----------------
+        //
+        // #556 established it and this holds it: no page operation rewrites a content stream — a
+        // rotation is /Rotate and nothing else — so the #118 guard is never consulted and
+        // MEGAPDF_ERR_LAYOUT cannot be the answer. Which is why there is no dialog for it here,
+        // and why inventing one would be a dialog for a state that cannot happen.
+        {
+            using var engine = new PdfiumEngine();
+            using var document = engine.Open(work);
+            IPageEditOperation[] operations =
+            [
+                new RotatePagesOperation(document, [0], 1),
+                new DeletePagesOperation(document, [1]),
+                new MovePageOperation(document, 0, 1),
+                new InsertBlankPageOperation(document, 1, 300, 400),
+                new ImportPagesOperation(document, other, null, null, 0),
+            ];
+            Check("no page operation asks the #118 layout guard anything, so none can be refused by it",
+                  operations.All(op => !PageRegenerationWarnings.RegeneratesUnjudged(op)));
+            Check("  and every one of them is a page-structure operation the assemble bit gates",
+                  operations.All(op => op is IPageStructureOperation)
+                  && operations.All(MegaPDF.Core.Services.DocumentCapabilities.Unprotected.Allows));
+        }
+
+        // --- 11. Extract --------------------------------------------------------
+        {
+            await StartOverAsync(work);
+            var extracted = Path.Combine(scratch, "extracted.pdf");
+            tab.SelectedPageIndices = [1];
+            var wrote = await tab.ExtractPagesToPathAsync(extracted);
+            Check("the selected page is written to a new file", wrote && File.Exists(extracted));
+            Check("  the document itself is untouched",
+                  tab.Pages.Count == 2 && !tab.HasUnsavedChanges);
+            Check("  and there is nothing to undo, because nothing was changed",
+                  !tab.UndoCommand.CanExecute(null));
+            Check($"  said out loud (“{Shorten(await SaidAsync())}”)",
+                  await SaidAsync() == Strings.PageSavedAs(Path.GetFileName(extracted)));
+            using (var engine = new PdfiumEngine())
+            using (var copy = engine.Open(extracted))
+                Check("  the new file holds exactly the pages that were selected", copy.PageCount == 1);
+            tab.SelectedPageIndices = [];
+
+            Check("a run of pages is suggested as a range",
+                  DocumentViewModel.SuggestExtractedFileName("Form.pdf", [1, 2])
+                  == $"Form ({Strings.ExtractedPageRangeName(2, 3)}).pdf");
+            Check("one page is suggested by its number",
+                  DocumentViewModel.SuggestExtractedFileName("Form.pdf", [4])
+                  == $"Form ({Strings.ExtractedOnePageName(5)}).pdf");
+            Check("and a scattered selection by how many there are",
+                  DocumentViewModel.SuggestExtractedFileName("Form.pdf", [0, 2])
+                  == $"Form ({Strings.ExtractedPageCountName(2)}).pdf");
+        }
+
+        // --- 12. The app's index-keyed state follows the renumbering ------------
+        {
+            await StartOverAsync(work);
+            await tab.ImportPagesAsync(other, insertAt: 0);
+            Check("a combine can insert before the first page", tab.Pages.Count == 4);
+            await tab.SearchAsync("Page 2");
+            var found = tab.SearchMatchCount;
+            Check($"there is something to find in the document ({found} hit(s))", found > 0);
+            tab.SelectedPageIndices = [0];
+            await tab.DeletePagesCommand.ExecuteAsync(null);
+            Check("deleting a page keeps the hits that are still there", tab.SearchMatchCount == found);
+            Check("  and the page indicator counts the pages that are left",
+                  tab.PageCount == 3 && tab.CurrentPage <= 3);
+            tab.ClearSearch();
+            tab.SelectedPageIndices = [];
+        }
+
+        // --- 13. The recovery journal replays every page operation --------------
+        //
+        // Front to back, each entry carrying the page index the document had when it was made,
+        // which is why no entry needs a renumbering term. The insert entry is the one that catches
+        // a replayer written the obvious way: its index may be the page count itself, which is not
+        // a page to load.
+        {
+            using var engine = new PdfiumEngine();
+            using var replayed = engine.Open(work);
+            JournalEntry[] entries =
+            [
+                new PagesRotateEntry(0, [0], 1),
+                new PageInsertBlankEntry(2, 300, 400),   // appends: the index is the page count
+                new PageMoveEntry(2, 0),
+                new PagesDeleteEntry(0, [0]),
+            ];
+            var applied = JournalReplayer.Replay(replayed, entries, work);
+            Check($"every page-operation journal entry replays ({applied} of {entries.Length})",
+                  applied == entries.Length);
+            Check("  and lands the document where it was left", replayed.PageCount == 2);
+            Check("  with the rotation the first entry made", replayed.GetPageRotation(0) == 1);
+
+            // The undo of a delete: a journal cannot carry a page, so contract 10 replays it by
+            // importing that page back out of the file on disk.
+            JournalEntry[] restore =
+            [
+                new PagesDeleteEntry(0, [0]),
+                new PagesRestoreEntry(0, [0]),
+            ];
+            using var fresh = engine.Open(work);
+            Check("a delete and its undo both replay", JournalReplayer.Replay(fresh, restore, work) == 2);
+            Check("  leaving the page count it started with", fresh.PageCount == 2);
+            using var noFile = engine.Open(work);
+            Check("with no file to read the page back out of, the restore is skipped, not fatal",
+                  JournalReplayer.Replay(noFile, restore, null) == 1);
+        }
+
+        // --- 14. Every operation is one undo step, all the way back -------------
+        {
+            await StartOverAsync(work);
+            tab.SelectedPageIndices = [0];
+            await tab.RotatePagesRightCommand.ExecuteAsync(null);
+            await tab.InsertBlankPageCommand.ExecuteAsync(null);
+            tab.SelectedPageIndices = [2];
+            await tab.MovePageEarlierCommand.ExecuteAsync(null);
+            await tab.ImportPagesAsync(other);
+            tab.SelectedPageIndices = [0];
+            await tab.DeletePagesCommand.ExecuteAsync(null);
+            Check($"five page operations in a row ({tab.Pages.Count} pages)", tab.Pages.Count == 4);
+            var steps = 0;
+            while (tab.UndoCommand.CanExecute(null) && steps < 10)
+            {
+                await tab.UndoCommand.ExecuteAsync(null);
+                steps++;
+            }
+            Check($"each is one undo step ({steps})", steps == 5);
+            Check("and undoing them all is the document it opened",
+                  tab.Pages.Count == 2 && tab.Thumbnails.Count == 2 && tab.PageRotation(0) == 0
+                  && HasDrawnSquare(tab, 0, drawnCentre));
+            Check("  with the pane and the page list still agreeing about how many pages there are",
+                  tab.Thumbnails.Count == tab.Pages.Count
+                  && tab.Thumbnails.Select(t => t.Index).SequenceEqual(Enumerable.Range(0, tab.Pages.Count)));
+        }
+    }
+
+    /// <summary>A notice or an announcement cut down to a log line's worth, whatever its length.</summary>
+    private static string Shorten(string text) => text.Length <= 48 ? text : text[..48] + "…";
+
+    /// <summary>
+    /// A one-page form whose single text widget carries the top-level name "person" on itself —
+    /// the same name <see cref="ParentFieldsPdf"/>'s parent field carries. Importing that document
+    /// into this one is the clash a rename cannot reach, because a hierarchical widget has no name
+    /// of its own to rename, and is therefore refused whole with MEGAPDF_ERR_FIELDS on any PDFium.
+    /// The Avalonia leg builds the same two documents, for the same reason: built here rather than
+    /// generated into the fixtures directory, so this check needs no change to CI.
+    /// </summary>
+    private static byte[] FlatPersonFieldPdf()
+    {
+        var pdf = new System.Text.StringBuilder("%PDF-1.4\n");
+        var offsets = new List<int>();
+        void Add(string body)
+        {
+            offsets.Add(pdf.Length);
+            pdf.Append(CultureInfo.InvariantCulture, $"{offsets.Count} 0 obj\n{body}\nendobj\n");
+        }
+
+        Add("<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [5 0 R] /DA (/Helv 0 Tf 0 g) "
+            + "/DR << /Font << /Helv 4 0 R >> >> >> >>");
+        Add("<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+        Add("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> "
+            + "/Annots [5 0 R] >>");
+        Add("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>");
+        Add("<< /Type /Annot /Subtype /Widget /FT /Tx /T (person) /V (Grace) /DA (/Helv 12 Tf 0 g) "
+            + "/Rect [100 600 300 620] /F 4 /P 3 0 R >>");
+
+        return Finish(pdf, offsets);
+    }
+
+    /// <summary>
+    /// core/tests/core_tests.cpp's <c>parent_fields_pdf()</c>: a one-page form whose two text
+    /// widgets ("first", "last") are kids of a parent field "person", so the top-level name lives
+    /// on the parent dictionary and not on the widgets. That is the shape a PDFium page copy could
+    /// not carry before patch 0033, and the one <c>MEGAPDF_ERR_FIELDS</c> exists for.
+    /// </summary>
+    private static byte[] ParentFieldsPdf()
+    {
+        var pdf = new System.Text.StringBuilder("%PDF-1.4\n");
+        var offsets = new List<int>();
+        void Add(string body)
+        {
+            offsets.Add(pdf.Length);
+            pdf.Append(CultureInfo.InvariantCulture, $"{offsets.Count} 0 obj\n{body}\nendobj\n");
+        }
+        static string Stream(string dict, string body) =>
+            $"<< {dict} /Length {body.Length} >>\nstream\n{body}\nendstream";
+
+        Add("<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [6 0 R] /DA (/Helv 0 Tf 0 g) "
+            + "/DR << /Font << /Helv 4 0 R >> >> >> >>");
+        Add("<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+        Add("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> "
+            + "/Contents 5 0 R /Annots [7 0 R 8 0 R] >>");
+        Add("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>");
+        Add(Stream("", "BT /F1 14 Tf 72 720 Td (Two fields under one parent) Tj ET"));
+        Add("<< /FT /Tx /T (person) /Kids [7 0 R 8 0 R] >>");
+        Add("<< /Type /Annot /Subtype /Widget /Parent 6 0 R /T (first) /V (Ada) /DA (/Helv 12 Tf 0 g) "
+            + "/Rect [100 600 300 620] /F 4 /P 3 0 R /AP << /N 9 0 R >> >>");
+        Add("<< /Type /Annot /Subtype /Widget /Parent 6 0 R /T (last) /V (Lovelace) /DA (/Helv 12 Tf 0 g) "
+            + "/Rect [100 560 300 580] /F 4 /P 3 0 R /AP << /N 10 0 R >> >>");
+        Add(Stream("/Type /XObject /Subtype /Form /BBox [0 0 200 20] /Resources << /Font << /Helv 4 0 R >> >>",
+                   "0.13 G 1 w 0.5 0.5 199 19 re S BT /Helv 12 Tf 0 g 2 5 Td (Ada) Tj ET"));
+        Add(Stream("/Type /XObject /Subtype /Form /BBox [0 0 200 20] /Resources << /Font << /Helv 4 0 R >> >>",
+                   "0.13 G 1 w 0.5 0.5 199 19 re S BT /Helv 12 Tf 0 g 2 5 Td (Lovelace) Tj ET"));
+
+        return Finish(pdf, offsets);
+    }
+
+    /// <summary>The xref table and trailer both builders above need, from the offsets they recorded.</summary>
+    private static byte[] Finish(System.Text.StringBuilder pdf, List<int> offsets)
+    {
+        var xref = pdf.Length;
+        pdf.Append(CultureInfo.InvariantCulture, $"xref\n0 {offsets.Count + 1}\n0000000000 65535 f \n");
+        foreach (var offset in offsets)
+            pdf.Append(CultureInfo.InvariantCulture, $"{offset:D10} 00000 n \n");
+        pdf.Append(CultureInfo.InvariantCulture,
+            $"trailer\n<< /Size {offsets.Count + 1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n");
+        return System.Text.Encoding.ASCII.GetBytes(pdf.ToString());
     }
 
     /// <summary>

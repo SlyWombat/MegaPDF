@@ -647,16 +647,23 @@ jobs:
           }
 
           # Every state the harness has (#541 reading, #546 zoom-anchor, #543
-          # close-tabs), not a subset -- each has already caught a real defect
-          # by hand and is worth exactly as much here. `more` (the toolbar
-          # overflow flyout) is included too: its own popup content will not
-          # be in the captured PNG -- RenderTargetBitmap renders the XAML tree,
-          # not the popup layer (#144) -- but nothing this check asserts
+          # close-tabs, #174 pages), not a subset -- each has already caught a
+          # real defect by hand and is worth exactly as much here. `more` (the
+          # toolbar overflow flyout) is included too: its own popup content will
+          # not be in the captured PNG -- RenderTargetBitmap renders the XAML
+          # tree, not the popup layer (#144) -- but nothing this check asserts
           # depends on that, and it is not particular to running in CI, so it
           # is left alone rather than chased here.
+          #
+          # `pages` (#174) gets 120s where the others get 60: it is 107 checks
+          # over eleven documents, it opens a second tab and reopens a document
+          # into it a dozen times, and every reopen waits for the first page to
+          # raster. It builds the two form fixtures it needs itself, so it needs
+          # nothing from the fixtures directory beyond fixture.pdf.
           Run-Check "reading" 60
           Run-Check "zoom-anchor" 60
           Run-Check "close-tabs" 60
+          Run-Check "pages" 120
           Run-Check "more" 45
 
           if ($failed.Count -gt 0) {

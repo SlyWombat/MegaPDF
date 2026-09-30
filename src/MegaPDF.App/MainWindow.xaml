@@ -135,6 +135,75 @@
                           AutomationProperties.AutomationId="SizePicker"
                           SelectionChanged="OnTextPickerChanged" DropDownClosed="OnTextPickerClosed" />
             </AppBarElementContainer>
+            <!-- Pages (#174): one DropDownButton carrying every page command, which is the
+                 shape the zoom control two groups along already has on this row — and the
+                 only shape available, since this app has no menu bar to hang an Edit or a
+                 View menu off. The pane itself is the first item in the flyout, so "show me
+                 the pages" and "do something to a page" are one place to look.
+
+                 Overflows after Whiteout and Redact and before Undo (order 45): a narrow
+                 window should lose page assembly before it loses the history. -->
+            <AppBarElementContainer x:Name="PagesMenuItem" DynamicOverflowOrder="45"
+                                    VerticalContentAlignment="Center" IsTabStop="False">
+                <DropDownButton
+                    x:Name="PagesMenuButton"
+                    Margin="2,0"
+                    VerticalAlignment="Center"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    IsEnabled="{x:Bind Shell.Active.IsDocumentOpen, Mode=OneWay}"
+                    AutomationProperties.AutomationId="PagesMenuButton">
+                    <DropDownButton.Content>
+                        <FontIcon Glyph="&#xE736;" FontSize="{ThemeResource TypeCaption}" />
+                    </DropDownButton.Content>
+                    <DropDownButton.Flyout>
+                        <MenuFlyout x:Name="PagesMenu" Placement="BottomEdgeAlignedLeft" Opening="OnPagesMenuOpening">
+                            <!-- The pane, and the key that shows it. Every command below acts
+                                 on the pane's selection, or on the page in view when there is
+                                 none, so they all work with the pane shut. -->
+                            <ToggleMenuFlyoutItem x:Name="PagesPaneItem" Click="OnTogglePagesPaneClicked"
+                                                  KeyboardAcceleratorTextOverride="F4"
+                                                  AutomationProperties.AutomationId="PagesPaneItem" />
+                            <MenuFlyoutSeparator />
+                            <MenuFlyoutItem x:Name="RotateRightItem" Command="{x:Bind Shell.Active.RotatePagesRightCommand, Mode=OneWay}"
+                                            KeyboardAcceleratorTextOverride="Ctrl+R"
+                                            AutomationProperties.AutomationId="RotateRightItem">
+                                <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE7AD;" /></MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
+                            <MenuFlyoutItem x:Name="RotateLeftItem" Command="{x:Bind Shell.Active.RotatePagesLeftCommand, Mode=OneWay}"
+                                            KeyboardAcceleratorTextOverride="Ctrl+Shift+R"
+                                            AutomationProperties.AutomationId="RotateLeftItem">
+                                <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE7A7;" /></MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
+                            <MenuFlyoutItem x:Name="DeletePagesItem" Command="{x:Bind Shell.Active.DeletePagesCommand, Mode=OneWay}"
+                                            AutomationProperties.AutomationId="DeletePagesItem">
+                                <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE74D;" /></MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
+                            <MenuFlyoutSeparator />
+                            <MenuFlyoutItem x:Name="MovePageEarlierItem" Command="{x:Bind Shell.Active.MovePageEarlierCommand, Mode=OneWay}"
+                                            KeyboardAcceleratorTextOverride="Ctrl+Shift+Left"
+                                            AutomationProperties.AutomationId="MovePageEarlierItem" />
+                            <MenuFlyoutItem x:Name="MovePageLaterItem" Command="{x:Bind Shell.Active.MovePageLaterCommand, Mode=OneWay}"
+                                            KeyboardAcceleratorTextOverride="Ctrl+Shift+Right"
+                                            AutomationProperties.AutomationId="MovePageLaterItem" />
+                            <MenuFlyoutSeparator />
+                            <MenuFlyoutItem x:Name="InsertBlankPageItem" Command="{x:Bind Shell.Active.InsertBlankPageCommand, Mode=OneWay}"
+                                            AutomationProperties.AutomationId="InsertBlankPageItem">
+                                <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE710;" /></MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
+                            <MenuFlyoutItem x:Name="InsertPagesFromFileItem" Command="{x:Bind Shell.Active.InsertPagesFromFileCommand, Mode=OneWay}"
+                                            AutomationProperties.AutomationId="InsertPagesFromFileItem">
+                                <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE8E5;" /></MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
+                            <MenuFlyoutSeparator />
+                            <MenuFlyoutItem x:Name="ExtractPagesItem" Command="{x:Bind Shell.Active.ExtractSelectedPagesCommand, Mode=OneWay}"
+                                            AutomationProperties.AutomationId="ExtractPagesItem">
+                                <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE792;" /></MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
+                        </MenuFlyout>
+                    </DropDownButton.Flyout>
+                </DropDownButton>
+            </AppBarElementContainer>
             <AppBarSeparator DynamicOverflowOrder="50" />
 
             <AppBarButton x:Name="UndoButton" Command="{x:Bind Shell.Active.UndoCommand, Mode=OneWay}" KeyboardAcceleratorTextOverride="Ctrl+Z" DynamicOverflowOrder="50" AutomationProperties.AutomationId="UndoButton">
@@ -211,6 +280,13 @@
                      belongs among the view commands, and "…" is where a Windows user
                      looks when the toolbar is narrow enough to have swallowed the zoom
                      control altogether. -->
+                <!-- The pane's second home (#174), for the same reason Reading mode has one:
+                     at a narrow width the Pages control has moved into this menu as an
+                     element container, where a DropDownButton's own flyout is awkward, so the
+                     pane at least stays one click away. -->
+                <AppBarButton x:Name="PagesPaneButton" Click="OnTogglePagesPaneClicked" IsEnabled="{x:Bind Shell.Active.IsDocumentOpen, Mode=OneWay}" KeyboardAcceleratorTextOverride="F4" AutomationProperties.AutomationId="PagesPaneButton">
+                    <AppBarButton.Icon><FontIcon Glyph="&#xE736;" /></AppBarButton.Icon>
+                </AppBarButton>
                 <AppBarButton x:Name="ReadingModeButton" Click="OnReadingModeClicked" IsEnabled="{x:Bind Shell.HasDocuments, Mode=OneWay}" KeyboardAcceleratorTextOverride="Ctrl+H" AutomationProperties.AutomationId="ReadingModeButton">
                     <AppBarButton.Icon><FontIcon Glyph="&#xE890;" /></AppBarButton.Icon>
                 </AppBarButton>
