@@ -227,7 +227,9 @@ final class PageToolsModelTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: url) }
 
         model.deletePages([0])
-        XCTAssertEqual(model.pageToolRefusal, "A PDF has to keep at least one page.")
+        // The sentence by the refusal it belongs to, never by its English text: this suite runs
+        // again under fr-CA in CI.
+        XCTAssertEqual(model.pageToolRefusal, ViewerModel.sentence(for: .lastPage))
         XCTAssertEqual(model.pageCount, 1)
         XCTAssertFalse(model.isDirty, "nothing was changed, so nothing is unsaved")
         XCTAssertFalse(model.canUndo, "and nothing went on the history")
@@ -244,7 +246,7 @@ final class PageToolsModelTests: XCTestCase {
         XCTAssertEqual(model.pageSelection.count, 4)
 
         model.deletePages(model.pageSelection.sorted())
-        XCTAssertEqual(model.pageToolRefusal, "A PDF has to keep at least one page.")
+        XCTAssertEqual(model.pageToolRefusal, ViewerModel.sentence(for: .lastPage))
         XCTAssertEqual(model.pageCount, 4)
     }
 

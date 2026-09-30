@@ -252,7 +252,12 @@ final class PageToolsTests: XCTestCase {
         }
         let count = await engine.pageCount(doc)
         XCTAssertEqual(count, 1, "and nothing was changed")
-        XCTAssertEqual(ViewerModel.sentence(for: .lastPage), "A PDF has to keep at least one page.")
+        // The sentence is asserted *against the other sentences*, never against its English text:
+        // the whole unit suite runs again under fr-CA in CI, and a test that pinned the English
+        // would only be pinning the language the runner happened to be in.
+        XCTAssertNotEqual(ViewerModel.sentence(for: .lastPage),
+                          ViewerModel.sentence(for: .engine),
+                          "the one-page rule has a sentence of its own, not the generic refusal")
     }
 
     /// The shape of #429 and #441: an operation naming something the engine no longer has must
@@ -449,11 +454,15 @@ final class PageToolsTests: XCTestCase {
         let fields = try await engine.fieldNames(doc, pageIndex: 0)
         XCTAssertEqual(fields, ["person"], "and this document's own field is untouched")
 
-        // And it reaches the person as a sentence that says what happened and that nothing
-        // changed, rather than "the change failed".
+        // And it reaches the person as a sentence of its own — not "the change failed", which is
+        // what `engine` says. Held against the other sentences rather than against its English
+        // text, because this suite runs again in French.
         let sentence = ViewerModel.sentence(for: .fieldHierarchy)
-        XCTAssertTrue(sentence.contains("form field"), sentence)
-        XCTAssertTrue(sentence.contains("added nothing"), sentence)
+        XCTAssertNotEqual(sentence, ViewerModel.sentence(for: .engine),
+                          "the field-hierarchy refusal is the one that most needs its own words")
+        XCTAssertNotEqual(sentence, ViewerModel.sentence(for: .restricted))
+        XCTAssertGreaterThan(sentence.count, 80,
+                             "it has to say what happened and that nothing was changed")
     }
 
     /// The same hierarchy, where the name is *free*, imports and keeps its names — so the refusal
@@ -725,5 +734,12 @@ final class PageToolsTests: XCTestCase {
             XCTAssertTrue(sentence.hasSuffix("."), "\(refusal) is not a sentence: \(sentence)")
             XCTAssertFalse(sentence.contains("MEGAPDF_"), "\(refusal) leaks a status code")
         }
+        // And each refusal a person can act on has words of its own. `spentPage` is the deliberate
+        // exception: it is a broken history rather than anything a person did, so it borrows
+        // `engine`'s sentence — there is nothing useful to say to them about it.
+        let named = refusals.filter { $0 != .spentPage }
+        let sentences = Set(named.map { ViewerModel.sentence(for: $0) })
+        XCTAssertEqual(sentences.count, named.count,
+                       "two refusals share a sentence, so one of them cannot be acted on")
     }
 }
