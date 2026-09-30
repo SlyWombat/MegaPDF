@@ -31,15 +31,43 @@ public static class ImageShrinker
     /// Re-encodes what is worth re-encoding, in place, on the supplied document.
     /// Callers work on a copy: this degrades image quality by design.
     /// </summary>
-    public static Result Shrink(IPdfDocument document, JpegEncoder encodeJpeg)
+    /// <param name="progress">
+    /// Told how many of the document's images have been considered, and how many there are, after
+    /// each one (#145). This is the longest operation either desktop has: measured 7.1 s over a
+    /// 280 MB scan's 100 images, 12.5 s over 400 and <b>39.7 s over the 1,000 images of a 2.5 GB
+    /// document</b> — and those are floors, taken with a stub encoder, so the real JPEG encode is
+    /// on top. An indeterminate bar for forty seconds says nothing a frozen window does not, and
+    /// the count of images is known before the first one is touched, so this reports honestly.
+    ///
+    /// It counts images *considered*, not images replaced: most of the loop's cost is the
+    /// <see cref="IPdfDocument.RenderImageAt"/> and the encode, but the cheap skips still have to
+    /// be walked, and a bar that only moved for a replacement would stall on a document full of
+    /// images not worth touching.
+    /// </param>
+    /// <param name="cancellationToken">
+    /// Checked before each image. Cancelling throws <see cref="OperationCanceledException"/> and
+    /// leaves <paramref name="document"/> part-shrunk, which is safe and is the whole reason this
+    /// is the operation that most deserves a Cancel: callers run it on a copy they made for the
+    /// purpose and throw the copy away, so nothing of the person's is half-done. A caller that
+    /// ever ran this on a document someone is editing must not offer cancel.
+    /// </param>
+    public static Result Shrink(IPdfDocument document, JpegEncoder encodeJpeg,
+                                Action<int, int>? progress = null,
+                                CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(encodeJpeg);
 
         var replaced = 0;
+        var images = document.GetImages();
+        var considered = 0;
+        progress?.Invoke(0, images.Count);
 
-        foreach (var image in document.GetImages())
+        foreach (var image in images)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+            considered++;
+            using var _ = new Reporter(progress, considered, images.Count);
             var targetWidth = (int)Math.Round(image.DisplayWidthPoints / 72 * TargetDpi);
             var targetHeight = (int)Math.Round(image.DisplayHeightPoints / 72 * TargetDpi);
 
@@ -73,5 +101,17 @@ public static class ImageShrinker
         }
 
         return new Result(replaced);
+    }
+
+    /// <summary>
+    /// Reports one image done as the loop body leaves, however it leaves it. The body has three
+    /// <c>continue</c>s in it — the skips for an image not worth re-encoding — and a bar that
+    /// only moved on the paths that did work would stall on a document full of images that are
+    /// already small enough, which is a common document rather than an odd one. A <c>using</c>
+    /// over the body is the one shape that cannot miss an exit as the skips are edited.
+    /// </summary>
+    private readonly struct Reporter(Action<int, int>? progress, int done, int total) : IDisposable
+    {
+        public void Dispose() => progress?.Invoke(done, total);
     }
 }

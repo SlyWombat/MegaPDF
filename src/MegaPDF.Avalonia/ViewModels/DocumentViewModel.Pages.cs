@@ -141,6 +141,23 @@ public sealed partial class DocumentViewModel
         InsertBlankPageCommand.NotifyCanExecuteChanged();
     }
 
+    /// <summary>
+    /// What the strip says while a page operation runs (#145). Named work rather than
+    /// "Applying…": these are the operations whose cost is in the document's size, and the
+    /// measured worst case — 4.8 s to combine a 10,000-page file — is long enough that "what is
+    /// it doing?" is a fair question. The wording lives here rather than on the operation
+    /// because <see cref="MegaPDF.Core.Editing"/> holds no strings.
+    /// </summary>
+    internal static string StructureBusyLabel(IPageEditOperation operation) => operation switch
+    {
+        ImportPagesOperation => Strings.BusyCombiningPages,
+        DeletePagesOperation => Strings.BusyDeletingPages,
+        RotatePagesOperation => Strings.BusyTurningPages,
+        MovePageOperation => Strings.BusyMovingPage,
+        InsertBlankPageOperation => Strings.BusyInsertingPage,
+        _ => Strings.BusyApplying,
+    };
+
     // --- The operations ------------------------------------------------------
 
     [RelayCommand(CanExecute = nameof(CanRotatePages))]
@@ -271,14 +288,20 @@ public sealed partial class DocumentViewModel
         if (wanted.Count == 0)
             return false;
 
-        using var busy = Busy.Begin(Strings.BusySaving);
+        // Cancellable (#145): measured at 1.35 s for 500 pages out of a 2.5 GB document, and the
+        // engine has taken a CancellationToken since #174. Safe to stop because the write is
+        // staged beside the destination and read back before anything is renamed into place, so a
+        // cancelled extract leaves nothing at the destination and nothing changed in the document
+        // — the core states that (MEGAPDF_ERR_CANCELLED, "nothing left at out_path_utf8").
+        using var busy = Busy.Begin(Strings.BusyExtractingPages, cancellable: true);
+        var token = busy.CancellationToken;
         try
         {
             try
             {
-                await OffUiThread(() => document.ExtractPages(wanted, path));
+                await OffUiThread(() => document.ExtractPages(wanted, path, token));
             }
-            catch (PageToolException ex) when (ex.Reason == PageToolFailure.File)
+            catch (PageToolException ex) when (ex.Reason == PageToolFailure.File && !token.IsCancellationRequested)
             {
                 // The engine writes through a *sibling* temporary file, read back and then
                 // renamed into place (SDD §3.4). Under the Snap's `home` plug that sibling is
@@ -289,12 +312,20 @@ public sealed partial class DocumentViewModel
                 // staged and read back before anything is copied; only the last step becomes a
                 // copy rather than a rename, which is the trade the sandboxed save path makes.
                 await StagedExtractAsync(document, wanted,
-                    () => Task.FromResult<Stream>(File.Create(path)));
+                    () => Task.FromResult<Stream>(File.Create(path)), token);
             }
             Status = Strings.Plural(wanted.Count,
                 Strings.PageSavedAs(Path.GetFileName(path)),
                 Strings.PagesSavedAs(wanted.Count, Path.GetFileName(path)));
             return true;
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        {
+            // Not a failure: the person asked for it to stop, and nothing was written. Said in the
+            // word the button used. Strings.PagesCancelled stays where it is, reporting the
+            // engine's own MEGAPDF_ERR_CANCELLED for a stop nobody in the app asked for.
+            Status = Strings.WorkStopped;
+            return false;
         }
         catch (PageToolException ex)
         {
@@ -328,13 +359,19 @@ public sealed partial class DocumentViewModel
         if (wanted.Count == 0)
             return false;
 
-        using var busy = Busy.Begin(Strings.BusySaving);
+        using var busy = Busy.Begin(Strings.BusyExtractingPages, cancellable: true);
+        var token = busy.CancellationToken;
         try
         {
-            await StagedExtractAsync(document, wanted, openDestination);
+            await StagedExtractAsync(document, wanted, openDestination, token);
             Status = Strings.Plural(wanted.Count,
                 Strings.PageSavedAs(fileName), Strings.PagesSavedAs(wanted.Count, fileName));
             return true;
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        {
+            Status = Strings.WorkStopped;
+            return false;
         }
         catch (PageToolException ex)
         {
@@ -363,13 +400,17 @@ public sealed partial class DocumentViewModel
     /// hop is all it ever needed.
     /// </summary>
     private Task StagedExtractAsync(IPdfDocument document, IReadOnlyList<int> pages,
-                                    Func<Task<Stream>> openDestination) =>
+                                    Func<Task<Stream>> openDestination, CancellationToken cancellationToken) =>
         OffUiThread(() =>
         {
             var staged = Path.Combine(Path.GetTempPath(), $"megapdf-extract-staged-{Guid.NewGuid():N}.pdf");
             try
             {
-                document.ExtractPages(pages, staged);
+                document.ExtractPages(pages, staged, cancellationToken);
+                // A cancel that arrives between the extract and the copy must still not touch the
+                // destination: openDestination() truncates it, so this is the last moment the
+                // person's file is safe, and it is checked here rather than trusted to luck.
+                cancellationToken.ThrowIfCancellationRequested();
                 // Opened only once the staged file exists and has been read back, so a
                 // destination is never truncated for an extract that then failed.
                 using var source = File.OpenRead(staged);

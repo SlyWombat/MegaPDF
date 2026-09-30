@@ -430,19 +430,54 @@
     </Border>
 
     <!-- Document-level work (#145): opening, saving, a password change, shrinking, print
-         preparation, restoring and searching. Shown only 0.5 s into the work and kept at least
-         0.3 s (BusyState), so quick work never flickers it. -->
+         preparation, restoring, searching, and every page tool (#174 — a rotate, delete, move,
+         insert or combine renumbers the document, so it reports here and not on a page).
+         Shown only 0.5 s into the work and kept at least 0.3 s (BusyState), so quick work
+         never flickers it.
+
+         Work that can count itself draws a determinate bar and says where it is — "Picture 312
+         of 1,000" — and work that can be stopped puts Stop beside it. Measured, not guessed:
+         a shrink of a 2.5 GB document takes 39.7 s and a search of 2,000 text-heavy pages
+         1.27 s, and those are the two operations that carry both. Nothing here is conditional
+         chrome that appears and disappears mid-operation: an operation decides at Begin whether
+         it counts and whether it can be stopped, so the row's shape is settled before it is
+         first drawn. -->
     <Border Name="BusyStripHost" DockPanel.Dock="Top">
     <Border Name="BusyStrip" Padding="8,6,8,0" IsVisible="{Binding Active.Busy.ShowsStrip, FallbackValue=False}"
             BorderThickness="0,0,0,1"
             BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
             Background="{DynamicResource BrandAccentSubtle}">
-      <StackPanel Spacing="{DynamicResource SpaceXs}">
-        <TextBlock Name="BusyLabel" Text="{Binding Active.Busy.Label}" FontSize="{DynamicResource TypeBody}"
-                   AutomationProperties.LiveSetting="Polite" />
-        <ProgressBar IsIndeterminate="True" Height="3" MinHeight="3" Margin="0,0,0,4"
-                     AutomationProperties.Name="{Binding Active.Busy.Label}" />
-      </StackPanel>
+      <Grid ColumnDefinitions="*,Auto">
+        <StackPanel Grid.Column="0" Spacing="{DynamicResource SpaceXs}" VerticalAlignment="Center">
+          <TextBlock Name="BusyLabel" Text="{Binding Active.Busy.Label}" FontSize="{DynamicResource TypeBody}"
+                     AutomationProperties.LiveSetting="Polite" />
+          <!-- The count is its own line rather than part of the label, because the label is the
+               strip's polite live region: folding "Picture 312 of 1,000" into it would have a
+               screen reader announce a thousand times over one shrink. This line is not a live
+               region, so it is there to be read and never read out. -->
+          <TextBlock Name="BusyProgressText" Text="{Binding Active.Busy.ProgressText}"
+                     IsVisible="{Binding Active.Busy.HasProgress, FallbackValue=False}"
+                     FontSize="{DynamicResource TypeCaption}" Opacity="0.8" />
+          <ProgressBar Name="BusyBar" Height="3" MinHeight="3" Margin="0,0,0,4"
+                       IsIndeterminate="{Binding !Active.Busy.HasProgress, FallbackValue=True}"
+                       Minimum="0" Maximum="1" Value="{Binding Active.Busy.Progress, FallbackValue=0, TargetNullValue=0}"
+                       AutomationProperties.Name="{Binding Active.Busy.Label}" />
+        </StackPanel>
+        <!-- Stop, not "Cancel": Cancel is the word on the button that abandons a dialog, and this
+             one abandons work rather than a question. It goes insensitive the moment it is pressed
+             (BusyState.CanCancel) and says so, because a 40-second shrink does not stop the
+             instant it is asked to and a button that still invites a second press implies the
+             first did nothing. -->
+        <Button Grid.Column="1" Name="BusyCancelButton" Margin="12,0,0,4" VerticalAlignment="Center"
+                IsVisible="{Binding Active.Busy.CanCancel, FallbackValue=False}"
+                Content="{x:Static loc:Strings.CancelThisWork}"
+                ToolTip.Tip="{x:Static loc:Strings.CancelThisWork}"
+                AutomationProperties.Name="{x:Static loc:Strings.CancelThisWork}" />
+        <TextBlock Grid.Column="1" Name="BusyCancellingLabel" Margin="12,0,0,4" VerticalAlignment="Center"
+                   IsVisible="{Binding Active.Busy.IsCancelling, FallbackValue=False}"
+                   Text="{x:Static loc:Strings.BusyCancelling}" FontSize="{DynamicResource TypeCaption}"
+                   Opacity="0.8" />
+      </Grid>
     </Border>
     </Border>
 

@@ -156,6 +156,218 @@ public sealed class BusyStateTests
         }
     }
 
+    // --- Progress and Cancel (#145 P2) -------------------------------------------------------
+
+    [Fact]
+    public void WorkThatCountsItself_PublishesItsProgressAndItsWords()
+    {
+        var busy = NewState();
+        Assert.Null(busy.Progress);
+        Assert.False(busy.HasProgress);
+        Assert.Equal(-1, busy.ProgressDone);
+        Assert.Equal(-1, busy.ProgressTotal);
+        Assert.Equal("", busy.ProgressText);
+
+        using var search = busy.Begin("Searching…", blocksEditing: false,
+                                      progressFormat: (done, total) => $"Page {done} of {total}");
+        // Begun, but nothing reported yet: an indeterminate bar, not a bar sitting at zero,
+        // because "0 of 2000" before the first page is read is a claim about work not yet begun.
+        Assert.False(busy.HasProgress);
+
+        search.Report(0, 2000);
+        Assert.True(busy.HasProgress);
+        Assert.Equal(0.0, busy.Progress);
+        Assert.Equal("Page 0 of 2000", busy.ProgressText);
+
+        search.Report(500, 2000);
+        Assert.Equal(0.25, busy.Progress);
+        Assert.Equal(500, busy.ProgressDone);
+        Assert.Equal(2000, busy.ProgressTotal);
+        Assert.Equal("Page 500 of 2000", busy.ProgressText);
+
+        search.Report(2000, 2000);
+        Assert.Equal(1.0, busy.Progress);
+    }
+
+    [Fact]
+    public void ProgressIsClamped_AndATotalOfNoneMeansIndeterminate()
+    {
+        var busy = NewState();
+        using var work = busy.Begin("Making a smaller copy…",
+                                    progressFormat: (done, total) => $"Picture {done} of {total}");
+        work.Report(5, 10);
+        Assert.Equal(0.5, busy.Progress);
+
+        // More done than there is to do, and less than none: a miscount must not draw a bar
+        // past its end or before its start, and must not throw inside a publish every other
+        // binding rides on.
+        work.Report(50, 10);
+        Assert.Equal(1.0, busy.Progress);
+        Assert.Equal(10, busy.ProgressDone);
+        work.Report(-5, 10);
+        Assert.Equal(0.0, busy.Progress);
+        Assert.Equal(0, busy.ProgressDone);
+
+        // A total that turns out not to be countable after all puts the bar back to
+        // indeterminate rather than leaving it stuck where it was.
+        work.Report(0, 0);
+        Assert.False(busy.HasProgress);
+        Assert.Null(busy.Progress);
+        Assert.Equal("", busy.ProgressText);
+    }
+
+    [Fact]
+    public void OnlyWorkBegunCancellable_OffersCancel()
+    {
+        var busy = NewState();
+        Assert.False(busy.CanCancel);
+
+        using (var save = busy.Begin("Saving…"))
+        {
+            // A save is deliberately not cancellable: there is no honest half-saved file to
+            // leave behind, so the strip must not offer a way out that it cannot honour.
+            Assert.False(busy.CanCancel);
+            Assert.Equal(CancellationToken.None, save.CancellationToken);
+            busy.RequestCancel();
+            Assert.False(save.IsCancellationRequested);
+        }
+
+        using var shrink = busy.Begin("Making a smaller copy…", cancellable: true);
+        Assert.True(busy.CanCancel);
+        Assert.False(busy.IsCancelling);
+        Assert.False(shrink.CancellationToken.IsCancellationRequested);
+    }
+
+    [Fact]
+    public void Cancel_RaisesTheTokenOnceAndThenStopsOffering()
+    {
+        var busy = NewState();
+        using var shrink = busy.Begin("Making a smaller copy…", cancellable: true);
+        var token = shrink.CancellationToken;
+
+        busy.RequestCancel();
+        Assert.True(token.IsCancellationRequested);
+        Assert.True(shrink.IsCancellationRequested);
+        // The button goes away the moment it is pressed, and "Stopping…" takes its place: a
+        // forty-second shrink does not stop the instant it is asked to, and a button still
+        // inviting a second press implies the first one did nothing.
+        Assert.False(busy.CanCancel);
+        Assert.True(busy.IsCancelling);
+
+        // Idempotent: a double click is not two cancels.
+        busy.RequestCancel();
+        Assert.True(busy.IsCancelling);
+    }
+
+    [Fact]
+    public async Task CancelReachesOnlyRunningWork_NotTheIndicatorOnItsWayOut()
+    {
+        var (busy, time) = NewControlledState();
+        var shrink = busy.Begin("Making a smaller copy…", cancellable: true);
+        shrink.Report(300, 1000);
+        await AdvanceAsync(time, ShowAfter);
+        Assert.True(busy.IsIndicatorVisible);
+        Assert.True(busy.CanCancel);
+
+        // The work ends while the indicator still owes its minimum. The strip is still up, and
+        // still says what it said, but there is nothing left to stop — so Stop is gone. A cancel
+        // that survived this window would be aimed at whatever operation begins next.
+        shrink.Dispose();
+        Assert.True(busy.IsIndicatorVisible);
+        Assert.Equal("Making a smaller copy…", busy.Label);
+        Assert.False(busy.CanCancel);
+        Assert.False(busy.IsCancelling);
+
+        // And the bar holds its last value rather than falling back to indeterminate for the
+        // final 0.3 s, which would be exactly the flicker this class exists to prevent.
+        Assert.True(busy.HasProgress);
+        Assert.Equal(0.3, busy.Progress);
+
+        busy.RequestCancel(); // must be a no-op, and must not throw on the disposed source
+        Assert.False(busy.IsCancelling);
+
+        await AdvanceAsync(time, MinimumVisible);
+        Assert.False(busy.IsIndicatorVisible);
+    }
+
+    [Fact]
+    public void ProgressAndCancel_ComeFromTheSameOperationTheLabelDoes()
+    {
+        var busy = NewState();
+        using var search = busy.Begin("Searching…", blocksEditing: false, cancellable: true,
+                                      progressFormat: (done, total) => $"Page {done} of {total}");
+        search.Report(10, 100);
+        Assert.True(busy.CanCancel);
+        Assert.Equal("Page 10 of 100", busy.ProgressText);
+
+        // A page check nested inside it takes over the label, so it takes over the bar and the
+        // button too: a strip that said "Checking this page…" over a search's progress, with a
+        // Stop that stopped the search, would be reporting one thing and doing another.
+        using (var check = busy.Begin("Checking this page…", scope: BusyScope.Page, pageIndex: 3))
+        {
+            Assert.Equal("Checking this page…", busy.Label);
+            Assert.False(busy.HasProgress);
+            Assert.Equal("", busy.ProgressText);
+            Assert.False(busy.CanCancel);
+            busy.RequestCancel();
+            Assert.False(search.IsCancellationRequested);
+        }
+
+        // And the search gets them back when the check ends.
+        Assert.Equal("Searching…", busy.Label);
+        Assert.Equal("Page 10 of 100", busy.ProgressText);
+        Assert.True(busy.CanCancel);
+    }
+
+    [Fact]
+    public void WorkWithNoFormat_StillDrawsABarButSaysNothing()
+    {
+        var busy = NewState();
+        using var work = busy.Begin("Opening…");
+        work.Report(1, 4);
+        Assert.True(busy.HasProgress);
+        Assert.Equal(0.25, busy.Progress);
+        Assert.Equal("", busy.ProgressText);
+    }
+
+    [Fact]
+    public async Task ProgressAndCancelChanges_AreRaised()
+    {
+        var busy = NewState();
+        var raised = new List<string>();
+        busy.PropertyChanged += (_, e) => { lock (raised) raised.Add(e.PropertyName!); };
+        var work = busy.Begin("Making a smaller copy…", cancellable: true,
+                              progressFormat: (done, total) => $"Picture {done} of {total}");
+        work.Report(1, 10);
+        busy.RequestCancel();
+        await WaitFor(() => busy.IsIndicatorVisible, TimeSpan.FromSeconds(5));
+        work.Dispose();
+        lock (raised)
+        {
+            Assert.Contains(nameof(BusyState.Progress), raised);
+            Assert.Contains(nameof(BusyState.HasProgress), raised);
+            Assert.Contains(nameof(BusyState.ProgressDone), raised);
+            Assert.Contains(nameof(BusyState.ProgressTotal), raised);
+            Assert.Contains(nameof(BusyState.ProgressText), raised);
+            Assert.Contains(nameof(BusyState.CanCancel), raised);
+            Assert.Contains(nameof(BusyState.IsCancelling), raised);
+        }
+    }
+
+    [Fact]
+    public void AFormatThatThrows_CostsItsOwnLineAndNothingElse()
+    {
+        var busy = NewState();
+        using var work = busy.Begin("Searching…",
+                                    progressFormat: (_, _) => string.Format("{1}", 1));
+        // The publish that carries every other binding must survive a bad format string, so
+        // this must not throw and the rest of the state must still be right.
+        work.Report(3, 9);
+        Assert.Equal("", busy.ProgressText);
+        Assert.Equal(1.0 / 3, busy.Progress!.Value, 10);
+        Assert.True(busy.IsBusy);
+    }
+
     private static async Task WaitFor(Func<bool> condition, TimeSpan timeout)
     {
         var deadline = DateTime.UtcNow + timeout;

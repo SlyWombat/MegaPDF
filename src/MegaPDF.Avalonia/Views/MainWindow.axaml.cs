@@ -83,6 +83,14 @@ public partial class MainWindow : Window
         EmptyOpenButton.Click += async (_, _) => await GuardedAsync(OpenDocumentAsync);
         UnlockButton.Click += async (_, _) => await GuardedAsync(UnlockAsync);
 
+        // Stop, in the busy strip (#145). Straight to the busy state rather than through
+        // GuardedAsync: the whole point of the button is to be usable while work is running, so
+        // it must not be gated on the document being idle, and asking an operation to stop cannot
+        // itself fail. BusyState.RequestCancel is a no-op when nothing cancellable is running, so
+        // a click landing as the strip goes away does nothing rather than cancelling whatever
+        // starts next.
+        BusyCancelButton.Click += (_, _) => Active?.Busy.RequestCancel();
+
         RecentList.SelectionChanged += async (_, _) =>
         {
             if (RecentList.SelectedItem is not ShellViewModel.RecentRow row)

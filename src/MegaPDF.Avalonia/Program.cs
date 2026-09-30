@@ -2305,8 +2305,488 @@ internal static class Program
             failures++;
         }
 
+        // --- progress, stopping long work, and what a page tool reports (#145 P2) ---
+        //
+        // Which operations are actually slow was measured, not guessed, against the synthetic
+        // large fixtures tools/gen_large_fixtures.py builds (no corpus document is involved).
+        // Worst cases, on a warm NVMe container:
+        //
+        //   shrink                        39.7 s   2.5 GB / 1,000 pictures   (12.5 s at 1 GB)
+        //   combine (import 10,000 pages)  4.8 s
+        //   the page strip's first 40 thumbnails
+        //                                  2.6 s   280 MB scan  (already drawn one at a time,
+        //                                                        off the UI thread: unchanged)
+        //   save, full rewrite             1.4 s   2.5 GB
+        //   extract 500 pages              1.35 s  → 1.3 GB out
+        //   search                         1.27 s  2,000 text-heavy pages
+        //   delete 200 pages               0.33 s  2.5 GB   ← under the indicator's own 0.5 s
+        //   rotate 200 pages / open / render / page check / insert
+        //                                 ≤ 0.13 s
+        //
+        // So: shrink and search count themselves and can be stopped; extract can be stopped but
+        // has no count to give (one engine call); save is left alone — it already reports its two
+        // stages and has no honest denominator, and a half-saved file is not a thing to leave
+        // behind; combine is not stoppable because it is one FPDF_ImportPagesByIndex with no
+        // interior at which a flag could be read; rotate, delete, move and insert finish inside
+        // the 0.5 s before anything is drawn at all.
+        //
+        // And the defect this section exists for: every page tool reported *nowhere*.
+        Console.WriteLine("progress, stopping long work, and what a page tool reports (#145):");
+        try
+        {
+            CheckProgressAndCancel(dir, saveDir, state, Check);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"::error::progress and cancel: {ex.GetType().Name}: {ex.Message}");
+            failures++;
+        }
+
+        Console.WriteLine("the busy strip's bar, count and Stop, in a real window (#145):");
+        try
+        {
+            CheckBusyStripControls(dir, Check);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"::error::busy strip controls: {ex.GetType().Name}: {ex.Message}");
+            failures++;
+        }
+
         Console.WriteLine(failures == 0 ? "self-test: PASS" : $"::error::self-test: {failures} check(s) failed");
         return failures == 0 ? 0 : 1;
+    }
+
+    /// <summary>
+    /// The strip's new controls, on the real controls in a real window (#145).
+    ///
+    /// <see cref="CheckProgressAndCancel"/> proves the view model and the busy state; this proves
+    /// the four bindings between them and the window, which is the half that can be silently wrong
+    /// while every view-model check still passes — #412's lesson, where the view model was right
+    /// the whole time and the bindings were not. The operation is begun by hand rather than by
+    /// running a real shrink: what is under test is the row, and a fixture whose pictures are
+    /// already small enough would report nothing to draw it from.
+    /// </summary>
+    private static void CheckBusyStripControls(string dir, Action<string, bool> check)
+    {
+        var state = Path.Combine(Path.GetTempPath(), $"megapdf-selftest-strip-{Guid.NewGuid():N}");
+        var shell = new ShellViewModel(state);
+        Views.MainWindow? window = null;
+        try
+        {
+            var vm = shell.CreateDocument();
+            vm.Open(Path.Combine(dir, "fixture.pdf"));
+            shell.AddTab(vm);
+            window = new Views.MainWindow { DataContext = shell, Width = 1280, Height = 800 };
+            window.SkipRecoveryOffer = true;
+            window.Show();
+            MenuProbe.Pump();
+            check("  the strip is not up before any work", !window.BusyStrip.IsVisible);
+
+            // Work that counts itself and can be stopped: shrink's shape.
+            using (var operation = vm.Busy.Begin(Strings.BusyShrinking, cancellable: true,
+                                                 progressFormat: (d, t) => Strings.BusyPictureOfPictures(d, t)))
+            {
+                operation.Report(250, 1000);
+                // Waited for by its own condition, not by a margin: the 0.5 s before the indicator
+                // appears is BusyState's documented rule and is the thing being relied on here.
+                PumpUntil(() => window.BusyStrip.IsVisible, TimeSpan.FromSeconds(5));
+                check("  work that lasts brings the strip up", window.BusyStrip.IsVisible);
+                check($"  under its own label (\"{window.BusyLabel.Text}\")",
+                      window.BusyLabel.Text == Strings.BusyShrinking);
+                check("  the bar is determinate, not a barber's pole",
+                      !window.BusyBar.IsIndeterminate);
+                check($"  and stands a quarter of the way along ({window.BusyBar.Value:0.##})",
+                      Math.Abs(window.BusyBar.Value - 0.25) < 0.001);
+                check($"  the count says where it is (\"{window.BusyProgressText.Text}\")",
+                      window.BusyProgressText.IsVisible
+                      && window.BusyProgressText.Text == Strings.BusyPictureOfPictures(250, 1000));
+                check("  Stop is on the strip and reachable by keyboard",
+                      window.BusyCancelButton.IsVisible && window.BusyCancelButton.IsEffectivelyVisible
+                      && window.BusyCancelButton.Focusable && window.BusyCancelButton.IsEnabled);
+                check("  and says so out loud",
+                      global::Avalonia.Automation.AutomationProperties
+                            .GetName(window.BusyCancelButton) == Strings.CancelThisWork);
+                check("  with nothing yet saying it is stopping",
+                      !window.BusyCancellingLabel.IsVisible);
+
+                // Pressed from the keyboard, which is a real activation of the real button and
+                // proves the way in that a mouse click cannot: that Stop can be reached without
+                // one. Clicking is the single thing this harness cannot do.
+                window.BusyCancelButton.Focus();
+                MenuProbe.Pump();
+                HeadlessWindowExtensions.KeyPress(window, Key.Space, RawInputModifiers.None,
+                                                  PhysicalKey.Space, " ");
+                HeadlessWindowExtensions.KeyRelease(window, Key.Space, RawInputModifiers.None,
+                                                   PhysicalKey.Space, " ");
+                MenuProbe.Pump();
+                check("  pressing Stop asks the work to stop",
+                      operation.IsCancellationRequested && vm.Busy.IsCancelling);
+                check("  the button goes, so it cannot be pressed twice",
+                      !window.BusyCancelButton.IsVisible);
+                check("  and \"Stopping…\" takes its place", window.BusyCancellingLabel.IsVisible);
+            }
+
+            // The work has ended; the indicator lives out its minimum with nothing left to stop.
+            check("  once the work has ended there is nothing to stop",
+                  !window.BusyCancelButton.IsVisible && !vm.Busy.CanCancel);
+            PumpUntil(() => !window.BusyStrip.IsVisible, TimeSpan.FromSeconds(5));
+            check("  and the strip goes", !window.BusyStrip.IsVisible);
+
+            // Work that cannot count itself gets the indeterminate bar and no count line — the
+            // save's shape, and the one every other operation has.
+            using (vm.Busy.Begin(Strings.BusySaving))
+            {
+                PumpUntil(() => window.BusyStrip.IsVisible, TimeSpan.FromSeconds(5));
+                check("  work that cannot count itself gets an indeterminate bar",
+                      window.BusyBar.IsIndeterminate);
+                check("  no count line", !window.BusyProgressText.IsVisible);
+                check("  and no Stop", !window.BusyCancelButton.IsVisible);
+            }
+        }
+        finally
+        {
+            if (window is not null)
+            {
+                window.SkipCloseConfirmation();
+                window.Close();
+                MenuProbe.Pump();
+            }
+            shell.Dispose();
+            try
+            {
+                if (Directory.Exists(state))
+                    Directory.Delete(state, recursive: true);
+            }
+            catch (IOException)
+            {
+            }
+        }
+    }
+
+    /// <summary>
+    /// A view model whose busy state raises its changes on whichever thread changes it —
+    /// <see cref="BusyState"/>'s documented <c>context: null</c> mode — rather than posting them
+    /// to Avalonia's dispatcher.
+    ///
+    /// Why this section needs it and no other does. The synchronous wrappers the self-test and the
+    /// capture runs call (<c>Search</c>, the <c>Apply</c> path behind every page command,
+    /// <c>PrepareShrunkCopy</c>) clear the synchronization context for the duration of the work,
+    /// deliberately, so that work awaited inline never waits on a UI thread the caller may be
+    /// blocking — see <c>DocumentViewModel.RunSynchronously</c>. With a context captured at
+    /// construction, every <c>Publish</c> from inside that work is therefore <c>Post</c>ed to the
+    /// dispatcher, which nothing pumps while the wrapper blocks, and the notifications arrive
+    /// after the check that wanted to see them. That is not a bug in the app: with a window,
+    /// <c>RunsInBackground</c> is set, the work is genuinely on the thread pool and the dispatcher
+    /// is running, so they arrive on time.
+    ///
+    /// What is observed here is the real sequence the real busy state publishes — the same frames,
+    /// in the order the work produced them, on the thread that produced them. Which is also what
+    /// makes these checks free of any wait: a cancel asked for from inside a frame is asked for
+    /// from inside the work.
+    /// </summary>
+    private static DocumentViewModel WatchableDocument(string state)
+    {
+        var previous = SynchronizationContext.Current;
+        SynchronizationContext.SetSynchronizationContext(null);
+        try
+        {
+            return new DocumentViewModel(state);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(previous);
+        }
+    }
+
+    /// <summary>
+    /// Everything the busy state published over one operation, in order (#145).
+    ///
+    /// Long work is watched rather than waited for. Without a window the view model runs its
+    /// engine work inline (<c>DocumentViewModel.OffUiThread</c>), and BusyState publishes on the
+    /// context it was built on, so every <c>Report</c> from inside a search's page loop raises
+    /// PropertyChanged <b>synchronously, on the thread running the loop</b>. That is what lets
+    /// these checks both observe progress mid-operation and cancel mid-operation without a single
+    /// artificial wait: <see cref="StopWhen"/> runs inside the work it is stopping.
+    /// </summary>
+    private sealed class BusyWatcher : IDisposable
+    {
+        private readonly BusyState _busy;
+        private readonly List<Frame> _frames = [];
+        private Func<Frame, bool>? _stopWhen;
+        private bool _stopped;
+
+        internal readonly record struct Frame(BusyScope Scope, string Label, int PageIndex, bool HasProgress,
+                                              int Done, int Total, string Text, bool CanCancel, bool IsCancelling);
+
+        internal BusyWatcher(BusyState busy)
+        {
+            _busy = busy;
+            _busy.PropertyChanged += OnChanged;
+        }
+
+        internal IReadOnlyList<Frame> Frames => _frames;
+
+        /// <summary>Calls <c>RequestCancel</c> the first time a published frame matches — from inside the work.</summary>
+        internal void StopWhen(Func<Frame, bool> predicate)
+        {
+            _stopWhen = predicate;
+            _stopped = false;
+        }
+
+        internal void Forget()
+        {
+            _frames.Clear();
+            _stopWhen = null;
+            _stopped = false;
+        }
+
+        private void OnChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            var frame = new Frame(_busy.Scope, _busy.Label, _busy.PageIndex, _busy.HasProgress,
+                                  _busy.ProgressDone, _busy.ProgressTotal, _busy.ProgressText,
+                                  _busy.CanCancel, _busy.IsCancelling);
+            _frames.Add(frame);
+            // Once only: RequestCancel publishes, which re-enters this handler.
+            if (_stopped || _stopWhen is not { } stop || !stop(frame))
+                return;
+            _stopped = true;
+            _busy.RequestCancel();
+        }
+
+        /// <summary>Whether any frame over the watched work said this.</summary>
+        internal bool Saw(Func<Frame, bool> predicate) => _frames.Any(predicate);
+
+        /// <summary>The work reported in the strip under the toolbar, under this label.</summary>
+        internal bool SawStrip(string label) =>
+            Saw(f => f.Scope == BusyScope.Document && f.Label == label);
+
+        public void Dispose() => _busy.PropertyChanged -= OnChanged;
+    }
+
+    /// <summary>
+    /// Progress, Stop, and the page tools' missing report (#145 P2). See the call site for the
+    /// measurements that decided which operation gets which.
+    ///
+    /// The two data-loss checks at the end are the point of the last group: Stop must not become
+    /// a way round the unsaved-changes question, and stopping work must never leave a document
+    /// that is still unsaved looking saved. #145's other half was a quit that discarded edits
+    /// without asking, and adding a button that abandons work is exactly the kind of change that
+    /// could reopen it through a new door.
+    /// </summary>
+    private static void CheckProgressAndCancel(string dir, string saveDir, string state, Action<string, bool> check)
+    {
+        var fixture = Path.Combine(dir, "fixture.pdf");
+        var drawnCentre = new PdfPoint(78, 186);
+
+        // --- a page tool reports in the strip, not on a page that may not be there ---
+        using (var vm = WatchableDocument(state))
+        {
+            vm.Open(fixture);
+            using var watcher = new BusyWatcher(vm.Busy);
+
+            vm.SelectedPageIndices = [1];
+            vm.RotatePagesRightCommand.Execute(null);
+            check("  a rotate reports in the strip, and says it is turning pages",
+                  watcher.SawStrip(Strings.BusyTurningPages));
+            check("  and never as a spinner on a page",
+                  !watcher.Saw(f => f.Scope == BusyScope.Page));
+            vm.UndoCommand.Execute(null);
+
+            watcher.Forget();
+            vm.SelectedPageIndices = [1];
+            vm.MovePage(1, 0);
+            check("  a move reports in the strip", watcher.SawStrip(Strings.BusyMovingPage));
+            vm.UndoCommand.Execute(null);
+
+            watcher.Forget();
+            vm.SelectedPageIndices = [0];
+            vm.InsertBlankPageCommand.Execute(null);
+            check("  an insert reports in the strip", watcher.SawStrip(Strings.BusyInsertingPage));
+            vm.UndoCommand.Execute(null);
+
+            // The one that reported nothing at all rather than merely reporting it out of sight:
+            // a delete's own PageIndex is a page the delete removes, so ApplyPageShifts disposes
+            // the PageViewModel the spinner was on and it never appears.
+            watcher.Forget();
+            vm.SelectedPageIndices = [1];
+            vm.DeletePagesCommand.Execute(null);
+            check("  a delete reports in the strip", watcher.SawStrip(Strings.BusyDeletingPages));
+            check("  and not on the page it is deleting",
+                  !watcher.Saw(f => f.Scope == BusyScope.Page && f.PageIndex == 1));
+            vm.UndoCommand.Execute(null);
+
+            watcher.Forget();
+            vm.ImportPagesAsync(fixture).GetAwaiter().GetResult();
+            check("  a combine reports in the strip, and says it is combining",
+                  watcher.SawStrip(Strings.BusyCombiningPages));
+            vm.UndoCommand.Execute(null);
+
+            // The contrast that keeps the fix honest: an ordinary content edit is a change to one
+            // page, and still says so on that page.
+            watcher.Forget();
+            vm.HandlePageClick(0, drawnCentre);
+            check("  while an edit to one page still reports on that page",
+                  watcher.Saw(f => f.Scope == BusyScope.Page && f.PageIndex == 0
+                                   && f.Label == Strings.BusyApplying));
+            vm.DiscardChanges();
+        }
+
+        // --- search counts the pages it has walked, and can be stopped ---
+        using (var vm = WatchableDocument(state))
+        {
+            vm.Open(fixture);
+            using var watcher = new BusyWatcher(vm.Busy);
+
+            vm.Search("checkbox");
+            check("  a search found something to begin with", vm.MatchCount > 0);
+            check("  it counts itself against the page count",
+                  watcher.Saw(f => f.HasProgress && f.Total == vm.Pages.Count));
+            check("  it reaches the last page",
+                  watcher.Saw(f => f.Done == vm.Pages.Count && f.Total == vm.Pages.Count));
+            check("  and says where it is in words",
+                  watcher.Saw(f => f.Text == Strings.BusyPageOfPages(1, vm.Pages.Count)));
+            check("  a search offers Stop while it runs",
+                  watcher.Saw(f => f.CanCancel && f.Label == Strings.BusySearching));
+            check("  and offers nothing once it is over", !vm.Busy.CanCancel);
+
+            // Stopped from inside its own page loop, at the first page it finishes: no wait, and
+            // no dependence on how fast a page reads.
+            var found = vm.MatchCount;
+            watcher.Forget();
+            watcher.StopWhen(f => f.Label == Strings.BusySearching && f.Done == 1);
+            vm.Search("checkbox");
+            check("  a search stopped part-way says so",
+                  vm.Status == Strings.SearchCancelled);
+            check("  and stops where it was, not at the end",
+                  !watcher.Saw(f => f.Done == vm.Pages.Count && f.Total == vm.Pages.Count));
+            check("  the matches it already had are still there",
+                  vm.MatchCount == found);
+            check("  and nothing is left running", !vm.Busy.IsWorking && !vm.Busy.CanCancel);
+
+            // A *superseded* search is a different thing from a stopped one: the newer term owns
+            // the result from then on, so it does clear the matches.
+            watcher.Forget();
+            vm.Search("thereisnosuchwordinthisdocument");
+            check("  while a search for something absent does empty the matches", vm.MatchCount == 0);
+        }
+
+        // --- extract can be stopped, and leaves nothing behind when it is ---
+        var extracted = Path.Combine(saveDir, $"megapdf-selftest-stop-extract-{Guid.NewGuid():N}.pdf");
+        try
+        {
+            using var vm = WatchableDocument(state);
+            vm.Open(fixture);
+            using var watcher = new BusyWatcher(vm.Busy);
+
+            watcher.StopWhen(f => f.Label == Strings.BusyExtractingPages && f.CanCancel);
+            var saved = vm.ExtractPagesToPathAsync(extracted, [0]).GetAwaiter().GetResult();
+            check("  extract offers Stop while it runs",
+                  watcher.Saw(f => f.CanCancel && f.Label == Strings.BusyExtractingPages));
+            check("  an extract that was stopped does not claim to have saved", !saved);
+            check("  it says it was stopped", vm.Status == Strings.WorkStopped);
+            // The one that matters: the engine's contract is "nothing left at out_path_utf8", and
+            // this is the check that holds it to it. A stopped extract that left a truncated or
+            // half-written PDF where the person asked for one would be worse than no Stop at all.
+            check("  and leaves no file where the pages were going", !File.Exists(extracted));
+            check("  the document itself is untouched",
+                  vm.Pages.Count == 2 && !vm.IsDirty && !vm.CanUndo);
+
+            // And the same extract, unstopped, still works — so Stop did not break the path it
+            // was added to.
+            watcher.Forget();
+            saved = vm.ExtractPagesToPathAsync(extracted, [0]).GetAwaiter().GetResult();
+            check("  while an extract nobody stops writes its file", saved && File.Exists(extracted));
+        }
+        finally
+        {
+            if (File.Exists(extracted)) File.Delete(extracted);
+        }
+
+        // --- shrink can be stopped, and the open document is never the thing it was working on ---
+        var shrinkSource = Path.Combine(saveDir, $"megapdf-selftest-stop-shrink-{Guid.NewGuid():N}.pdf");
+        try
+        {
+            File.Copy(fixture, shrinkSource);
+            using var vm = WatchableDocument(state);
+            vm.Open(shrinkSource);
+            using var watcher = new BusyWatcher(vm.Busy);
+
+            watcher.StopWhen(f => f.Label == Strings.BusyShrinking && f.CanCancel);
+            var (result, copy) = vm.PrepareShrunkCopy();
+            using (copy)
+            {
+                check("  shrink offers Stop while it runs",
+                      watcher.Saw(f => f.CanCancel && f.Label == Strings.BusyShrinking));
+                check("  a shrink that was stopped hands back no copy to write", copy is null);
+                check("  and re-encoded nothing", result.ImagesReplaced == 0);
+            }
+            // Shrink works on its own second open of the file, so stopping it cannot have touched
+            // the document on screen. Asserted rather than assumed, because the day that stops
+            // being true is the day Stop starts destroying pictures.
+            check("  the open document is unchanged and still unsaved-free",
+                  vm.Pages.Count == 2 && !vm.IsDirty && vm.IsDocumentOpen);
+            check("  and the file it came from is untouched",
+                  File.ReadAllBytes(shrinkSource).AsSpan().SequenceEqual(File.ReadAllBytes(fixture)));
+        }
+        finally
+        {
+            if (File.Exists(shrinkSource)) File.Delete(shrinkSource);
+        }
+
+        // --- Stop is offered only where it can be honoured, and is never a way round D1 ---
+        var guarded = Path.Combine(saveDir, $"megapdf-selftest-stop-guard-{Guid.NewGuid():N}.pdf");
+        var guardState = Path.Combine(Path.GetTempPath(), $"megapdf-selftest-stopguard-{Guid.NewGuid():N}");
+        try
+        {
+            File.Copy(fixture, guarded);
+            using (var vm = WatchableDocument(guardState))
+            {
+                vm.Open(guarded);
+
+                // A save must not offer Stop. There is no honest half-saved file to leave behind,
+                // and the strip must never offer a way out it cannot honour.
+                using (vm.Busy.Begin(Strings.BusySaving))
+                {
+                    check("  a save offers no Stop", !vm.Busy.CanCancel);
+                    vm.Busy.RequestCancel();
+                    check("  and asking anyway changes nothing",
+                          !vm.Busy.IsCancelling && vm.Busy.IsBusy);
+                }
+                check("  with nothing running there is nothing to stop", !vm.Busy.CanCancel);
+                vm.Busy.RequestCancel();
+                check("  and asking then is a no-op too", !vm.Busy.IsCancelling);
+
+                // D1, through the newest door. A page tool is the most recent way to make a
+                // document unsaved, and a stopped operation is the newest way to leave one that
+                // way; neither may end up looking saved, because a window that closes without
+                // asking is #145's other, worse half.
+                vm.SelectedPageIndices = [1];
+                vm.RotatePagesRightCommand.Execute(null);
+                check("  a page tool leaves the document unsaved", vm.IsDirty);
+
+                using var watcher = new BusyWatcher(vm.Busy);
+                watcher.StopWhen(f => f.Label == Strings.BusySearching && f.Done == 1);
+                vm.Search("checkbox");
+                check("  and stopping work does not make it look saved", vm.IsDirty);
+            } // closed with that rotation unsaved, and nobody agreed to lose it
+
+            using (var vm = new DocumentViewModel(guardState))
+                check("  so closing after a page tool keeps its journal (D1)",
+                      vm.FindRecoverableSessions().Count == 1);
+        }
+        finally
+        {
+            if (File.Exists(guarded)) File.Delete(guarded);
+            try
+            {
+                if (Directory.Exists(guardState))
+                    Directory.Delete(guardState, recursive: true);
+            }
+            catch (IOException)
+            {
+            }
+        }
     }
 
 

@@ -851,7 +851,24 @@ public sealed partial class DocumentViewModel : ObservableObject, IDisposable
             return;
         }
 
-        using var busy = Busy.Begin(Strings.BusyApplying, scope: BusyScope.Page, pageIndex: operation.PageIndex);
+        // A page operation (#174) is about the document, not about a page, and reporting it on a
+        // page reported it nowhere (#145). Every other edit is a change to one page, so the small
+        // spinner sits on that page; a rotate, delete, move, insert or combine renumbers the whole
+        // document, and `operation.PageIndex` is then only the first page it touched. This method
+        // already knows that — it hands AfterEdit -1 rather than that index for exactly this
+        // reason — but the busy state was still pinned to it, with two consequences:
+        //
+        //   * for a combine, the index is the insertion point, which is very often off-screen, so
+        //     the 4.8 s measured on a 10,000-page import drew a spinner nobody could see;
+        //   * for a delete, the index is a page that is about to stop existing. Its PageViewModel
+        //     is disposed by ApplyPageShifts, so the spinner did not merely go unseen — it never
+        //     appeared at all.
+        //
+        // Structure operations therefore report in the strip under the toolbar, with a label that
+        // names the work rather than the generic "Applying…".
+        using var busy = operation is IPageStructureOperation
+            ? Busy.Begin(StructureBusyLabel(operation), scope: BusyScope.Document)
+            : Busy.Begin(Strings.BusyApplying, scope: BusyScope.Page, pageIndex: operation.PageIndex);
         try
         {
             // #139: whiteouts and text boxes make PDFium rewrite the page, which on a few pages
@@ -1212,18 +1229,42 @@ public sealed partial class DocumentViewModel : ObservableObject, IDisposable
         if (_document is not { } document || Busy.IsBusy)
             return (new ImageShrinker.Result(0), (VerifiedSave.StagedCopy?)null);
 
-        using var busy = Busy.Begin(Strings.BusyShrinking);
-        return await OffUiThread(() =>
+        // The longest operation on either desktop, and the one with the best claim on both halves
+        // of #145's P2 (#145). Measured on the synthetic large fixtures, with a stub encoder so
+        // the numbers are floors: 7.1 s over a 280 MB scan's 100 images, 12.5 s over 400 images of
+        // a 1 GB document, 39.7 s over the 1,000 images of a 2.5 GB one. Forty seconds behind an
+        // indeterminate bar with no way out is indistinguishable from a hung app.
+        //
+        // Cancelling is free of consequence here, which is rarer than it sounds. The work happens
+        // on `copy` — a second open of the file from disk, made for this purpose — and a cancel
+        // simply drops it: the open document is never touched, no destination has been opened yet
+        // (#59 made sure of that), and nothing has been staged.
+        using var busy = Busy.Begin(Strings.BusyShrinking, cancellable: true,
+                                    progressFormat: (done, total) => Strings.BusyPictureOfPictures(done, total));
+        var token = busy.CancellationToken;
+        try
         {
-            // Opened like the document, so a protected one opens with its own password; the
-            // copy then saves and verifies protected like any other (#134).
-            using var copy = _engine.OpenLike(document, path);
-            var result = ImageShrinker.Shrink(copy, Platform.SkiaJpeg.Encode);
-            if (result.ImagesReplaced == 0)
-                return (result, (VerifiedSave.StagedCopy?)null);
+            return await OffUiThread(() =>
+            {
+                // Opened like the document, so a protected one opens with its own password; the
+                // copy then saves and verifies protected like any other (#134).
+                using var copy = _engine.OpenLike(document, path);
+                var result = ImageShrinker.Shrink(copy, Platform.SkiaJpeg.Encode,
+                                                  progress: busy.Report, cancellationToken: token);
+                if (result.ImagesReplaced == 0)
+                    return (result, (VerifiedSave.StagedCopy?)null);
 
-            return (result, VerifiedSave.ToStagedFile(_engine, copy));
-        });
+                // The staging write is deliberately outside the cancellable part: past this point
+                // the images are re-encoded and a cancel would throw the whole forty seconds away
+                // for the sake of the second or so the write takes.
+                return (result, VerifiedSave.ToStagedFile(_engine, copy));
+            });
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        {
+            Status = Strings.WorkStopped;
+            return (new ImageShrinker.Result(0), (VerifiedSave.StagedCopy?)null);
+        }
     }
 
     /// <summary>Shrinking rewrites the document's images, which is modify (#131).</summary>
@@ -2509,6 +2550,17 @@ public sealed partial class DocumentViewModel : ObservableObject, IDisposable
     /// <summary>
     /// Search walks every page, which on a long document takes seconds: off the UI thread, with
     /// "Searching…" (#145). It disables nothing — typing on supersedes it.
+    ///
+    /// It is the one long operation with both a denominator and nothing at stake, so it carries
+    /// the full #145 P2 treatment: it reports the page it is on, so the strip draws a determinate
+    /// bar and says "Page 37 of 2,000", and it is cancellable, so a search of a long document can
+    /// be stopped without typing over it. Measured worst case on the synthetic large fixtures:
+    /// 1.27 s over 2,000 text-heavy pages, which is well past the 0.5 s the indicator waits.
+    ///
+    /// A cancelled search keeps the matches it already had rather than clearing them: stopping a
+    /// search is asking for the work to end, not for the previous find to be thrown away. A
+    /// *superseded* search (a newer term) does clear them, because the newer search owns the
+    /// result from then on.
     /// </summary>
     public async Task SearchAsync(string term)
     {
@@ -2519,8 +2571,10 @@ public sealed partial class DocumentViewModel : ObservableObject, IDisposable
         if (_document is { } document && !string.IsNullOrWhiteSpace(term))
         {
             var pageCount = Pages.Count;
-            using (Busy.Begin(Strings.BusySearching, blocksEditing: false))
+            using (var busy = Busy.Begin(Strings.BusySearching, blocksEditing: false, cancellable: true,
+                                         progressFormat: (done, total) => Strings.BusyPageOfPages(done, total)))
             {
+                var token = busy.CancellationToken;
                 try
                 {
                     found = await OffUiThread(() =>
@@ -2528,12 +2582,23 @@ public sealed partial class DocumentViewModel : ObservableObject, IDisposable
                         var hits = new List<Match>();
                         for (var i = 0; i < pageCount && generation == _searchGeneration; i++)
                         {
+                            if (token.IsCancellationRequested)
+                                throw new OperationCanceledException(token);
                             using var page = document.GetPage(i);
                             foreach (var hit in page.FindText(term))
                                 hits.Add(new Match(i, hit.Rects));
+                            // After the page, not before it: "Page 1 of N" while page 1 is still
+                            // being read would be a bar that finishes before the work does.
+                            busy.Report(i + 1, pageCount);
                         }
                         return hits;
                     });
+                }
+                catch (OperationCanceledException) when (token.IsCancellationRequested)
+                {
+                    if (generation == _searchGeneration && ReferenceEquals(document, _document))
+                        Status = Strings.SearchCancelled;
+                    return; // the matches from before the search stay as they were
                 }
                 catch (Exception) when (!ReferenceEquals(document, _document) || generation != _searchGeneration)
                 {
