@@ -913,6 +913,74 @@ an artifact of #519's correction, whose effect is about 0.00002.
 Read the private corpus's 0.998880 as a first figure, not a comparison: no private baseline is
 committed, by design, because the corpus is personal.
 
+### Eighth run, 2026-09-30: page tools (#174) corpus battery, `pages-battery.sh`, main at 5483095
+
+The outstanding item #174 itself named: three platforms now ship a page-tools interface
+(Android #554, Mac/Linux #556, the shared .NET layer Windows builds on), the engine side
+(#430, contract 10) and rotation-aware coordinates (#439) had landed, but no pass had run the
+corpus through `rotate`/`delete`/`move`/`extract` since #430's engine-only pass over the
+private corpus alone. This run adds the other three corpora and measures against `main` at
+`5483095`, on top of PDFium at 33 patches (`pdfium-7934-megapdf-2b3b415e86b1`), the drawn-em
+font-size fix and the vertical-writing frame (#521) the seventh run already covered. Run on
+kdocker3 in a container, all four corpora through `tools/stress/pages-battery.sh` (the private
+and public corpora concurrently, `--jobs 8` / `--jobs 6` on 16 cores; Canadian and UN
+sequentially first, `--jobs 8`).
+
+**Zero crashes and zero hangs, on every operation, on every corpus. 5,763 documents — the same
+population size as the seventh run.** As in that run, nothing was silently narrowed:
+
+| corpus | on disk | visited | opened | the rest |
+|---|---:|---:|---:|---|
+| private | 4,158 | 4,158 | 4,084 | 12 encrypted, 62 unreadable format |
+| public | 1,381 | 1,381 | 1,374 | 4 encrypted, 3 unreadable format |
+| Canadian | 134 | 134 | 134 | — |
+| UN | 90 | 90 | 90 | — |
+
+Gates (0 crashes, 0 hangs, 0 qpdf failures, 0 page-count mismatches, 0 write failures, 0
+refusals outside the two the contract documents — a security-forbidden operation, exit 8, and
+the field-`/Parent`-hierarchy refusal, exit 9 with that message):
+
+| corpus | crashes/hangs | QPDF FAILED | COUNT MISMATCH | WRITE FAILED | REFUSED, other | |
+|---|---:|---:|---:|---:|---:|---|
+| private | 0/0 | 0 | 0 | 0 | 0 | pass |
+| public | 0/0 | 0 | 0 | 0 | **5** | **fail — #445** |
+| Canadian | 0/0 | 0 | 0 | 0 | 0 | pass |
+| UN | 0/0 | 0 | 0 | 0 | 0 | pass |
+
+**Public's failure is the confirmation the task brief said to expect, not a new finding.** The
+five `refused, other` (2 `rotate`, 1 `move`, 2 `extract`) resolve to exactly two documents (checked
+by their path-hash in the log, not their names) — the same pair #445 already tracks as pages the
+engine cannot load. Not re-filed, no threshold moved.
+
+**The field-hierarchy refusal (`refused-fields`, the other named-in-advance result) did not
+reproduce at the rate expected.** `extract`'s field-`/Parent`-hierarchy refusal came back **0
+on every operation, on every one of the four corpora** — not the roughly 0.8% quoted going in.
+This is not an instrument or engine defect: the sixth and seventh runs already recorded the
+private corpus at 0 refused-fields, "down from 33," once #452/#463's relaxation landed, and
+this run's corpus composition (document counts identical to the seventh run on every corpus)
+is consistent with that fix simply still holding rather than a new regression to chase. The
+~0.8% figure appears to predate #452/#463 landing; flagged here rather than restated as
+confirmed, per the instruction to check the instrument before concluding.
+
+Permission-restricted documents (exit 8, the security itself forbidding the operation — expected,
+not gated) were common on the Canadian and public corpora specifically: Canadian `rotate`
+52/134, `delete`/`move` 46/134 (plus 51 single-page documents skipped), `extract` 67/134 — the
+Canada Revenue Agency's fillable-form family carries assembly restrictions; public corpus
+`restricted` ran 36–47 per operation out of 1,374 opened. Private and UN corpora carried far
+fewer (private 37–51 of 4,084; UN 0 of 90).
+
+**Coverage gap worth stating plainly: this run, like #430's, only exercises `rotate`, `delete`,
+`move` and `extract`.** `megapdf-cli pages --help` lists two more contract-10 operations,
+`--blank` (insert) and `--import` (pages from another document), that `pages-battery.sh` never
+calls. #174's own scope names insert and import alongside the other four; **they remain
+untested at corpus scale** — the harness would need extending to drive them (`--import` in
+particular needs a second document per call) before that half of #174's ask is answered. No
+issue filed for this here since it is a coverage gap in the harness rather than a battery
+result, but it should not be read as answered by this run.
+
+No new issue was filed from this run: the one failing gate is #445, already open and explicitly
+not to be re-filed; nothing else was red.
+
 ## Reporting
 
 For each issue: what you clicked, what you expected, what happened, and the PDF
