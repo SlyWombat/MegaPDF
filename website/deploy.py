@@ -12,6 +12,18 @@ Fileman/upload_files pattern as that project's server/deploy.py.
 Privacy is opt-in because it is the URL both app-store listings point at, and it
 should only change deliberately.
 
+The support page is opt-in and, unlike everything else, it *needs* --privacy:
+
+    /usr/bin/python3 website/deploy.py --support --privacy   # also support/
+
+The policy's own §11 promises it is updated before anything that collects data
+ships, and a page that composes a message to us is that kind of thing. So
+--support refuses to start without --privacy, and refuses again unless the
+policy it is uploading alongside actually carries the support section (an
+`id="support"` heading — the anchor the page links). Without --support the page
+stays off the server and every other page goes up with its `support:` regions
+resolved to nothing, so nothing links a page that is not there.
+
 Linux is opt-in too (#158), because it ships after the other platforms:
 
     /usr/bin/python3 website/deploy.py --linux          # also linux/ and the APT repo
@@ -121,7 +133,7 @@ class Server:
 
 
 # Directories that go up only when asked for, and the flag that asks.
-OPT_IN = {"privacy": "privacy", "linux": "linux", "apt": "linux"}
+OPT_IN = {"privacy": "privacy", "linux": "linux", "apt": "linux", "support": "support"}
 
 REGION = r"<!--{name}:live-->(.*?)<!--{name}:soon(.*?){name}:end-->"
 
@@ -189,14 +201,166 @@ def check_linux(snap):
             f"linux/index.html offers {offered[0]}; Snap section {'live' if snap else 'held back'}")
 
 
-def plan(dest, include_privacy, include_linux=False):
+# The platforms the support page's answers may be tagged for; "all" means every
+# one. Kept here so a typo in data-plat is a refused deploy rather than an answer
+# that silently never appears.
+SUPPORT_PLATFORMS = {"all", "windows", "mac", "ios", "android", "linux"}
+SUPPORT_ADDRESS = "info@electricrv.ca"
+
+
+def check_support(include_privacy):
+    """Refuse a --support deploy that would publish the support page without the
+    privacy section covering it, or with an answers list its own matcher cannot
+    use. Returns a line describing what was checked.
+
+    The page is static and posts nothing, but it is still the page that composes a
+    message to us, so the policy has to be part of the same upload (#418, the same
+    ordering #501 followed). The rest is the answers list: it is the single copy of
+    every answer — the browser-side matcher reads these very elements — so an
+    attribute the matcher cannot read is an answer nobody will ever be shown, and
+    that is worth refusing a deploy over rather than discovering months later.
+    """
+    page_path = os.path.join(SITE, "support", "index.html")
+    if not os.path.isfile(page_path):
+        raise SystemExit("--support: website/megapdf/support/index.html is not there")
+    with open(page_path, encoding="utf-8") as f:
+        page = f.read()
+
+    if not include_privacy:
+        raise SystemExit("--support needs --privacy: the support page is disclosed in "
+                         "the privacy policy, and the policy's own rule is that the "
+                         "disclosure goes up first or in the same deploy. Run "
+                         "--support --privacy.")
+    policy_path = os.path.join(SITE, "privacy", "index.html")
+    with open(policy_path, encoding="utf-8") as f:
+        policy = f.read()
+    if 'id="support"' not in policy:
+        raise SystemExit('--support: privacy/index.html has no id="support" section, so '
+                         "the support page would link an anchor that is not there and "
+                         "would go up undisclosed. Add the section to the policy first.")
+
+    if SUPPORT_ADDRESS not in page:
+        raise SystemExit(f"--support: the support page never names {SUPPORT_ADDRESS}. "
+                         "It is the one page whose job is that address.")
+
+    # The policy says, in so many words, that this page submits nothing and sends
+    # nothing. That is a promise about the bytes, so the deploy checks the bytes:
+    # anything that could carry what a reader typed off their machine has to fail here
+    # rather than be noticed by someone reading the source months later. Checked on the
+    # page as it will be uploaded — regions resolved and comments stripped — because the
+    # source's own notes talk about forms and fetches in prose.
+    for label, live in (("with Linux live", True), ("with Linux held back", False)):
+        sent = resolve(page, {"linux": live, "snap": live, "support": True})
+        if re.search(r"<form\b", sent, flags=re.I):
+            raise SystemExit(f"--support: the support page has a <form> ({label}). Policy §4 "
+                             "says it has no form to submit and nothing to submit it to. If "
+                             "that is changing, the policy changes first.")
+        leak = re.search(r"\bfetch\s*\(|XMLHttpRequest|sendBeacon|WebSocket|EventSource"
+                         r"|method\s*=\s*[\"']post", sent, flags=re.I)
+        if leak:
+            raise SystemExit(f"--support: the support page contains {leak.group(0)!r} ({label}), "
+                             "which could send what someone typed. Policy §4 promises it "
+                             "cannot. If that is changing, the policy changes first.")
+        scripts = re.findall(r'<script[^>]*\bsrc="([^"]+)"', sent)
+        if scripts != ["https://electricrv.ca/api/analytics/a.js"]:
+            raise SystemExit(f"--support: the support page's external scripts are {scripts} "
+                             f"({label}) — the only one it may load is the page-view counter "
+                             "disclosed in policy §3.")
+        origins = sorted({m for m in re.findall(r"https?://([a-z0-9.\-]+)/", sent)})
+        allowed = ["electricrv.ca", "fonts.googleapis.com", "github.com"]
+        if origins != allowed:
+            raise SystemExit(f"--support: the support page names the origin(s) {origins} "
+                             f"({label}); only {allowed} are accounted for in the privacy "
+                             "policy.")
+
+    # Each answer, as <details class="answer" ...> ... </details>.
+    blocks = re.findall(r'<details class="answer"([^>]*)>(.*?)</details>', page, flags=re.S)
+    if len(blocks) < 5:
+        raise SystemExit(f"--support: the answers list holds {len(blocks)} answers. That is "
+                         "not a support page; check that details.answer markup is intact.")
+    ids = []
+    for attrs, body in blocks:
+        aid = re.search(r'\bid="([^"]+)"', attrs)
+        if not aid:
+            raise SystemExit(f"--support: an answer has no id (attributes: {attrs.strip()!r}). "
+                             "The composed message names answers by id.")
+        aid = aid.group(1)
+        ids.append(aid)
+        if "<summary>" not in body or 'class="body"' not in body:
+            raise SystemExit(f"--support: answer {aid} has no <summary> or no .body; the "
+                             "matcher reads the title from one and the text from the other.")
+        plats = (re.search(r'\bdata-plat="([^"]*)"', attrs) or _empty()).group(1).split()
+        if not plats:
+            raise SystemExit(f"--support: answer {aid} has no data-plat (use "
+                             'data-plat="all" for one that applies everywhere)')
+        unknown = sorted(set(plats) - SUPPORT_PLATFORMS)
+        if unknown:
+            raise SystemExit(f"--support: answer {aid} names the unknown platform(s) "
+                             f"{', '.join(unknown)}; known: {', '.join(sorted(SUPPORT_PLATFORMS))}")
+        if "all" in plats and len(plats) > 1:
+            raise SystemExit(f'--support: answer {aid} is data-plat="all" and also names '
+                             "platforms; pick one or the other")
+        terms = [t.strip() for t in
+                 (re.search(r'\bdata-match="([^"]*)"', attrs) or _empty()).group(1).split("|")
+                 if t.strip()]
+        strong = [t.strip() for t in
+                  (re.search(r'\bdata-strong="([^"]*)"', attrs) or _empty()).group(1).split("|")
+                  if t.strip()]
+        if not terms and not strong:
+            raise SystemExit(f"--support: answer {aid} has no data-match or data-strong terms, "
+                             "so nothing anyone types can ever surface it")
+        for t in terms + strong:
+            # The matcher lowercases the text and replaces everything that is not a
+            # letter, a digit or an accented letter with a space, then looks for the
+            # term between spaces. A term with anything else in it, or with a capital,
+            # can never match.
+            if t != t.lower() or re.search(r"[^a-z0-9 àâäçéèêëîïôöùûüÿœæ]", t):
+                raise SystemExit(f"--support: answer {aid} has the unmatchable term {t!r} — "
+                                 "the matcher lowercases and strips punctuation, so a term "
+                                 "with a capital or a symbol in it never fires")
+        # data-strong is worth 2 on its own and data-match 1, so a term in both would
+        # quietly score 3 and outrank everything. Whichever it belongs in, it belongs in
+        # one of them.
+        both = sorted(set(terms) & set(strong))
+        if both:
+            raise SystemExit(f"--support: answer {aid} lists {', '.join(both)} in both "
+                             "data-match and data-strong; pick one")
+        # A short list is the whole point of data-strong: one of these words alone
+        # surfaces the answer, so a long list of them is the matcher guessing again.
+        if len(strong) > 6:
+            raise SystemExit(f"--support: answer {aid} has {len(strong)} data-strong terms. "
+                             "Those fire on their own, so keep them to the few words that "
+                             "really can only mean this answer (six at most).")
+    dupes = sorted({i for i in ids if ids.count(i) > 1})
+    if dupes:
+        raise SystemExit(f"--support: duplicate answer id(s) {', '.join(dupes)}")
+
+    # The support page must not link a part of the site a deploy can leave off.
+    # Resolved with Linux held back, no reference to linux/ may survive.
+    held = resolve(page, {"linux": False, "snap": False, "support": True})
+    if "../linux/" in held:
+        raise SystemExit("--support: the support page links ../linux/ outside a "
+                         "<!--linux:live--> region, so that link 404s on a deploy without "
+                         "--linux. Move it inside one.")
+    return (f"support/ checked: {len(blocks)} answers, all matchable; "
+            f'privacy/ carries the id="support" section and goes up with it')
+
+
+def _empty():
+    """A no-match stand-in whose .group(1) is "", so a missing attribute reads as
+    absent rather than raising."""
+    return re.match(r"()", "")
+
+
+def plan(dest, include_privacy, include_linux=False, include_support=False):
     """Every file under website/megapdf/, with the remote directory it goes to.
 
     Subdirectories are walked, so screenshots/linux/ (the AppStream set, #254 A1)
-    goes up with everything else. privacy/, linux/ and apt/ are the exceptions:
-    each is skipped unless its flag asks for it.
+    goes up with everything else. privacy/, linux/, apt/ and support/ are the
+    exceptions: each is skipped unless its flag asks for it.
     """
-    wanted = {"privacy": include_privacy, "linux": include_linux}
+    wanted = {"privacy": include_privacy, "linux": include_linux,
+              "support": include_support}
     targets = []
     for root, dirs, files in os.walk(SITE):
         rel = os.path.relpath(root, SITE)
@@ -262,6 +426,8 @@ def main():
                     help="also upload linux/ and the APT repository in apt/, and link them")
     ap.add_argument("--snap", action="store_true",
                     help="with --linux: show the Snap Store section of linux/")
+    ap.add_argument("--support", action="store_true",
+                    help="also upload support/, and link it — needs --privacy")
     ap.add_argument("--dry-run", action="store_true",
                     help="list what would be uploaded and where; no .env, no network")
     ap.add_argument("--only", metavar="NAMES",
@@ -275,7 +441,9 @@ def main():
     if args.snap and not args.linux:
         ap.error("--snap needs --linux: the Snap section is on the Linux page")
     linux_note = check_linux(args.snap) if args.linux else "Linux held back: linux/ and apt/ stay off the server, pages say \"coming soon\""
-    live = {"linux": args.linux, "snap": args.snap}
+    support_note = (check_support(args.privacy) if args.support
+                    else "Support page held back: support/ stays off the server and no page links it")
+    live = {"linux": args.linux, "snap": args.snap, "support": args.support}
 
     if args.landing and not args.only:
         ap.error("--landing goes with --only: without it the staged index.html goes up")
@@ -283,7 +451,7 @@ def main():
         ap.error(f"--landing: no such file {args.landing}")
 
     dest = args.dest.rstrip("/")
-    chosen = plan(dest, args.privacy, args.linux)
+    chosen = plan(dest, args.privacy, args.linux, args.support)
     if args.only:
         chosen = only(chosen, args.only)
     tmp, targets = staged(chosen, live)
@@ -323,6 +491,7 @@ def main():
         print(f"\n{len(targets)} files, {total:,} B, into {len(needed)} directories"
               + (" — privacy/ included" if args.privacy else " — privacy/ untouched"))
         print(linux_note)
+        print(support_note)
         print("To do it for real, run the same command without --dry-run.")
         shutil.rmtree(tmp, ignore_errors=True)
         return 0
@@ -343,6 +512,7 @@ def main():
     print(f"\n{len(targets) - failures}/{len(targets)} uploaded to {dest}/"
           + (" — privacy/ included" if args.privacy else " — privacy/ untouched"))
     print(linux_note)
+    print(support_note)
     return 1 if failures else 0
 
 

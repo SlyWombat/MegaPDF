@@ -9,7 +9,12 @@ machine is limited to `deploy.py --dry-run`.
 - `megapdf/index.html` — landing page (linked from the main-page teaser)
 - `megapdf/privacy/index.html` — privacy policy, the URL both app-store
   listings reference. **Update this file and redeploy BEFORE shipping any
-  feature that collects data** (policy §9 promises that ordering).
+  feature that collects data** (policy §11 promises that ordering — it was §9
+  until the page-view counter added §3 and the support page added §4).
+- `megapdf/support/index.html` — the support page (#418): the known answers, a
+  browser-side matcher over them, and a composer that hands a message to the
+  reader's own email program. **Only goes up with `--support`, which itself
+  refuses to run without `--privacy`.** Policy §4 is its disclosure.
 - `icon.png` (512, from the iOS AppIcon)
 - `screenshot-viewer.png`, `shot-*.png` — the gallery. Where each one comes
   from is below.
@@ -39,6 +44,7 @@ The main-page teaser block (`.megapdf-teaser` CSS + section) lives in
 /usr/bin/python3 website/deploy.py --privacy     # the same, plus privacy/
 /usr/bin/python3 website/deploy.py --linux       # also linux/ and apt/, and every page links them
 /usr/bin/python3 website/deploy.py --linux --snap  # ...and the Snap Store section on linux/
+/usr/bin/python3 website/deploy.py --support --privacy   # also support/ — needs --privacy
 /usr/bin/python3 website/deploy.py --dry-run --privacy --dest /public_html/megapdf-preview
 /usr/bin/python3 website/deploy.py --linux --privacy --only linux,apt,privacy,screenshots/linux \
     --landing live-index.html                    # only those parts, and this file as index.html
@@ -84,15 +90,79 @@ back until a deploy says otherwise. Every page can carry gated regions:
 <!--linux:live-->what goes up with --linux<!--linux:soon what goes up without it linux:end-->
 ```
 
-and `snap:` regions the same way for `--snap`. A browser opening the file
-straight from the repository sees the live text (the "soon" text is inside a
-comment), which is also what a `--linux` deploy uploads. **Without `--linux`**,
-`linux/` and `apt/` stay off the server and every page goes up with its "soon"
-text: the landing page's Linux chip is the dashed *Coming to Linux* and nothing
-links a page that is not there. Today the regions are in `index.html` (both
-meta descriptions, the Linux chip, the Linux gallery caption), `privacy/`
-(§6: the Linux channels and the APT repository's server log) and `linux/`
-(everything about the Snap Store).
+and `snap:` regions the same way for `--snap`, and `support:` regions for
+`--support`. A browser opening the file straight from the repository sees the
+live text (the "soon" text is inside a comment), which is also what a `--linux`
+deploy uploads. **Without `--linux`**, `linux/` and `apt/` stay off the server
+and every page goes up with its "soon" text: the landing page's Linux chip is
+the dashed *Coming to Linux* and nothing links a page that is not there. Today
+the regions are in `index.html` (both meta descriptions, the Linux chip, the
+Linux gallery caption), `privacy/` (§8: the Linux channels and the APT
+repository's server log) and `linux/` (everything about the Snap Store).
+
+### The support page is gated too, and it drags the policy with it
+
+`support/` goes up only with `--support`, and `--support` **refuses to start
+without `--privacy`**. The support page is the page that composes a message to
+us, so the policy section describing what happens to that message has to be part
+of the same upload — the ordering §11 promises and the one the page-view counter
+followed (#501). `--support` also refuses unless the policy it is about to
+upload really carries that section (an `id="support"` heading, the anchor the
+support page links), so a policy edited back to its old text cannot slip through.
+
+`--dry-run --support --privacy` runs the same checks, so it is the rehearsal.
+Besides the policy, it validates the answers list, because that list is the one
+copy of every answer — the page's matcher reads those very elements, so an
+attribute the matcher cannot read is an answer nobody is ever shown:
+
+- every `<details class="answer">` has an `id` (the composed message names
+  answers by it), a `<summary>` and a `.body`;
+- `data-plat` is present and names only `all`, `windows`, `mac`, `ios`,
+  `android`, `linux` — and `all` is not mixed with named platforms;
+- `data-match` has at least one term, and no term contains a capital or a symbol,
+  because the matcher lowercases the reader's text and strips everything that is
+  not a letter or a digit before looking for it;
+- ids are unique, there are at least five answers, the page names
+  `info@electricrv.ca`, and nothing in it links `../linux/` outside a
+  `linux:` region (which would 404 on a deploy without `--linux`).
+
+It also refuses a support page that could send what someone typed — a `<form>`, a
+`fetch(`, `XMLHttpRequest`, `sendBeacon`, a `WebSocket`, a second external script
+or an origin the policy does not account for — checked on the bytes that would go
+up, both with Linux live and with it held back. Policy §4 promises the page cannot
+do any of that, so the deploy is where that promise is kept rather than a thing to
+notice in a diff later. If it ever *should* change, the policy changes first and
+this check changes with it.
+
+`support:` regions currently appear in `index.html` (the support strip above the
+footer, and the footer link), `privacy/` (§4, where the page's URL is a link only
+once the page is up, so the policy can go first) and `linux/` (the footer link).
+
+### Checking the triage itself
+
+`website/check-support-page.js` drives the page in a real DOM and checks the
+matcher's behaviour, which no static check can see: that one ordinary word
+surfaces nothing, that a sentence someone would actually type surfaces the right
+answer, that a desktop-only answer is withheld on a phone, that "Not it" and
+"That was it" are recorded in the composed message, and that every answer is
+reachable by its own terms. **Run it by hand after editing the page or its
+answers** — it found three real faults in the first draft:
+
+```sh
+npm install jsdom      # once
+node website/check-support-page.js
+```
+
+Not in CI, on purpose: the site has no build and nothing else here needs node.
+`deploy.py --dry-run --support --privacy` is the check that always runs.
+
+**The page is deliberately not the whole of #418.** It runs its triage in the
+reader's browser and posts nothing anywhere; there is no intake endpoint and no
+automatic ticket. What it is and is not is written down in the scope comment on
+#418, and the answers themselves were checked against the app's code rather than
+against a listing. When an answer stops being true, it is wrong on a live page —
+so treat `support/index.html` like the Linux page's version numbers: part of a
+release, not set-and-forget.
 
 **`--linux` refuses to start** unless `apt/` is a complete repository whose
 `InRelease` and `Release.gpg` verify against `apt/megapdf.gpg`, and whose `.deb`
