@@ -856,6 +856,8 @@ internal static class Screenshot
     {
         private readonly BusyState _busy;
         private readonly List<Frame> _frames = [];
+        private Func<Frame, bool>? _stopWhen;
+        private bool _stopped;
 
         internal readonly record struct Frame(BusyScope Scope, string Label, int PageIndex, bool HasProgress,
                                               int Done, int Total, string Text, bool CanCancel, bool IsCancelling);
@@ -868,16 +870,75 @@ internal static class Screenshot
 
         internal IReadOnlyList<Frame> Frames => _frames;
 
-        private void OnChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e) =>
-            _frames.Add(new Frame(_busy.Scope, _busy.Label, _busy.PageIndex, _busy.HasProgress,
-                                  _busy.ProgressDone, _busy.ProgressTotal, _busy.ProgressText,
-                                  _busy.CanCancel, _busy.IsCancelling));
+        /// <summary>
+        /// Calls <c>RequestCancel</c> the first time a published frame matches (#145) — from
+        /// inside the work when <paramref name="busy"/> was built with no captured
+        /// <see cref="SynchronizationContext"/> (see <see cref="WatchableDocument"/>), which is
+        /// the only way this is a deterministic stop rather than a race against how fast the
+        /// work finishes.
+        /// </summary>
+        internal void StopWhen(Func<Frame, bool> predicate)
+        {
+            _stopWhen = predicate;
+            _stopped = false;
+        }
 
-        internal void Clear() => _frames.Clear();
+        private void OnChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            var frame = new Frame(_busy.Scope, _busy.Label, _busy.PageIndex, _busy.HasProgress,
+                                  _busy.ProgressDone, _busy.ProgressTotal, _busy.ProgressText,
+                                  _busy.CanCancel, _busy.IsCancelling);
+            _frames.Add(frame);
+            // Once only: RequestCancel publishes IsCancelling, which re-enters this handler.
+            if (_stopped || _stopWhen is not { } stop || !stop(frame))
+                return;
+            _stopped = true;
+            _busy.RequestCancel();
+        }
+
+        internal void Clear()
+        {
+            _frames.Clear();
+            _stopWhen = null;
+            _stopped = false;
+        }
 
         internal bool Saw(Func<Frame, bool> predicate) => _frames.Any(predicate);
 
         public void Dispose() => _busy.PropertyChanged -= OnChanged;
+    }
+
+    /// <summary>
+    /// A document view model whose busy state raises its changes on whichever thread changes
+    /// them, not on the UI dispatcher (#145).
+    ///
+    /// The loops this exists to watch — <c>SearchAsync</c>'s page walk,
+    /// <c>ReplaceOversizedImagesAsync</c>'s picture walk, and the one call behind an extract —
+    /// call <c>Report</c> and end their operation from a thread-pool thread by way of
+    /// <c>Task.Run</c>. <see cref="BusyState"/> posts a change to the UI dispatcher whenever the
+    /// calling thread differs from the one the state was built on, so a real tab's busy state —
+    /// built on the UI thread, watched from the UI thread — only lets a <see cref="BusyRecorder"/>
+    /// ask for a stop *after* the work has already gone as far as it is going to: racing how fast
+    /// a two-page search or a two-picture shrink finishes, not proving anything about Stop. That
+    /// race is exactly what a real `windows-ui-selftest` run hit for search's fixture-sized work.
+    ///
+    /// A document view model built with no captured <see cref="SynchronizationContext"/> instead
+    /// publishes on whichever thread calls it, so <see cref="BusyRecorder.StopWhen"/>'s
+    /// <c>RequestCancel</c> runs on the very thread running the loop, from inside its own call
+    /// stack — a stop asked for from inside the work, not a wait or a margin.
+    /// </summary>
+    private static DocumentViewModel WatchableDocument(MainWindow window, ShellViewModel shell)
+    {
+        var previous = SynchronizationContext.Current;
+        SynchronizationContext.SetSynchronizationContext(null);
+        try
+        {
+            return new DocumentViewModel(window, shell.Settings, shell.RecentFiles, shell.SignatureLibrary);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(previous);
+        }
     }
 
     private static async Task<bool> CheckPageToolsAsync(MainWindow window)
@@ -1839,58 +1900,83 @@ internal static class Screenshot
             Check("a search offers Stop while it runs",
                   recorder.Saw(f => f.CanCancel && f.Label == Strings.BusySearching));
             Check("and offers nothing once it is over", !tab.Busy.CanCancel);
+        }
 
-            // Cancelled from the outside, the instant it can be: SearchAsync's Busy.Begin runs
-            // before its first await, so by this line the search is already the newest
-            // operation and RequestCancel reaches it — deterministic, not a race against how
-            // many of the document's two pages it gets through first.
-            recorder.Clear();
+        // Stopped from inside its own page loop, at the first page it finishes: no wait, and no
+        // dependence on how fast a two-page document's search finishes — a real
+        // `windows-ui-selftest` run hit exactly that race the first time this used `tab.Busy`
+        // directly (Stop requested from the outside, "instantly" but still after the whole
+        // two-page search had already finished on a fast runner). WatchableDocument's own remark
+        // says why a separate, unbound view model is what makes this deterministic.
+        {
+            using var watchVm = WatchableDocument(window, window.Shell);
+            await watchVm.OpenDocumentAsync(work);
+            using var watchRecorder = new BusyRecorder(watchVm.Busy);
+            await watchVm.SearchAsync("Page 2");
+            var found = watchVm.SearchMatchCount;
+            Check($"a search found something to begin with, to be stopped below ({found} hit(s))", found > 0);
+
+            watchRecorder.Clear();
+            watchRecorder.StopWhen(f => f.Label == Strings.BusySearching && f.Done == 1);
             string? announced = null;
             void OnAnnounced(string said) => announced = said;
-            tab.Announced += OnAnnounced;
-            var searchTask = tab.SearchAsync("Page 2");
-            var offeredCancel = tab.Busy.CanCancel;
-            tab.Busy.RequestCancel();
-            await searchTask;
-            tab.Announced -= OnAnnounced;
-            Check("Stop is offered the instant a search begins", offeredCancel);
+            watchVm.Announced += OnAnnounced;
+            await watchVm.SearchAsync("Page 2");
+            watchVm.Announced -= OnAnnounced;
             Check($"a search stopped part-way says so (\"{announced}\")", announced == Strings.SearchCancelled);
-            Check("the matches it already had are still there", tab.SearchMatchCount == baseline);
-            Check("nothing is left running once it is stopped", !tab.Busy.IsWorking && !tab.Busy.CanCancel);
+            Check("and stops where it was, not at the end",
+                  !watchRecorder.Saw(f => f.Done == watchVm.Pages.Count && f.Total == watchVm.Pages.Count));
+            Check("the matches it already had are still there", watchVm.SearchMatchCount == found);
+            Check("nothing is left running once it is stopped", !watchVm.Busy.IsWorking && !watchVm.Busy.CanCancel);
 
             // A *superseded* search (a newer term) is a different thing from a stopped one: the
             // newer term owns the result from then on, so it does clear the matches.
-            await tab.SearchAsync("thereisnosuchwordinthisdocument");
-            Check("while a search for something absent does empty the matches", tab.SearchMatchCount == 0);
-            tab.ClearSearch();
+            await watchVm.SearchAsync("thereisnosuchwordinthisdocument");
+            Check("while a search for something absent does empty the matches", watchVm.SearchMatchCount == 0);
+
+            // Not a tab, so CloseTabAsync never ends this view model's journal session for it —
+            // done by hand, the same way CloseTabAsync does, so this check does not leave a
+            // journal behind for work.pdf that the scratch cleanup below cannot see.
+            watchVm.EndJournalSession();
         }
 
         // --- extract can be stopped, and leaves nothing behind when it is -----------------
         {
             var extracted = Path.Combine(scratch, "extracted.pdf");
+            using var watchVm = WatchableDocument(window, window.Shell);
+            await watchVm.OpenDocumentAsync(work);
+            watchVm.SelectedPageIndices = [0];
+
+            // Stopped the instant Stop is offered — deterministic for the same reason search's
+            // is above: Busy.Begin publishes synchronously on whichever thread calls it when the
+            // view model was built with no captured context, and this operation's very first
+            // publish is the one that turns CanCancel on.
+            using var watchRecorder = new BusyRecorder(watchVm.Busy);
+            watchRecorder.StopWhen(f => f.Label == Strings.BusyExtractingPages && f.CanCancel);
             string? announced = null;
             void OnAnnounced(string said) => announced = said;
-            tab.Announced += OnAnnounced;
-            tab.SelectedPageIndices = [0];
-            var extractTask = tab.ExtractPagesToPathAsync(extracted);
-            var offeredCancel = tab.Busy.CanCancel;
-            tab.Busy.RequestCancel();
-            var saved = await extractTask;
-            tab.Announced -= OnAnnounced;
-            Check("extract offers Stop the instant it begins", offeredCancel);
+            watchVm.Announced += OnAnnounced;
+            var saved = await watchVm.ExtractPagesToPathAsync(extracted);
+            watchVm.Announced -= OnAnnounced;
+            Check("extract offers Stop while it runs",
+                  watchRecorder.Saw(f => f.CanCancel && f.Label == Strings.BusyExtractingPages));
             Check("an extract that was stopped does not claim to have saved", !saved);
             Check($"it says it was stopped (\"{announced}\")", announced == Strings.WorkStopped);
             // The one that matters: the engine's contract is nothing left at the destination, and
             // this is the check that holds it to it. A stopped extract that left a truncated or
             // half-written file where the pages were going would be worse than no Stop at all.
             Check("and leaves no file where the pages were going", !File.Exists(extracted));
-            Check("the document itself is untouched", tab.Pages.Count == 2 && !tab.HasUnsavedChanges);
+            Check("the document itself is untouched", watchVm.Pages.Count == 2 && !watchVm.HasUnsavedChanges);
 
             // And the same extract, unstopped, still works — so Stop did not break the path it
             // was added to.
-            saved = await tab.ExtractPagesToPathAsync(extracted);
+            watchRecorder.Clear();
+            saved = await watchVm.ExtractPagesToPathAsync(extracted);
             Check("while an extract nobody stops writes its file", saved && File.Exists(extracted));
-            tab.SelectedPageIndices = [];
+
+            // Not a tab, so CloseTabAsync never ends this view model's journal session for it —
+            // done by hand, the same way CloseTabAsync does.
+            watchVm.EndJournalSession();
         }
 
         // --- shrink counts the images it has considered, and can be stopped --------------
@@ -1902,6 +1988,7 @@ internal static class Screenshot
             var imagesPdf = Path.Combine(scratch, "two-images.pdf");
             File.WriteAllBytes(imagesPdf, TwoImagesPdf());
             using var engine = new PdfiumEngine();
+            using var watchVm = WatchableDocument(window, window.Shell);
 
             using (var copy = engine.Open(imagesPdf))
             {
@@ -1919,18 +2006,23 @@ internal static class Screenshot
                 Check("and offers nothing once it is over", !tab.Busy.CanCancel);
             }
 
+            // Stopped from inside its own picture loop, at the first picture it finishes: the
+            // same deterministic route as search, needed for the same reason — two tiny pictures
+            // can finish before an outside "start it, then cancel" call ever lands.
             using (var copy = engine.Open(imagesPdf))
             {
-                var task = tab.ReplaceOversizedImagesAsync(copy);
-                var offeredCancel = tab.Busy.CanCancel;
-                tab.Busy.RequestCancel();
+                using var watchRecorder = new BusyRecorder(watchVm.Busy);
+                watchRecorder.StopWhen(f => f.Label == Strings.BusyShrinking && f.Done == 1);
                 Exception? thrown = null;
-                try { await task; }
+                try { await watchVm.ReplaceOversizedImagesAsync(copy); }
                 catch (Exception ex) { thrown = ex; }
-                Check("Stop is offered the instant a shrink begins", offeredCancel);
+                Check("Stop is still offered right up to when it is used",
+                      watchRecorder.Saw(f => f.CanCancel && f.Label == Strings.BusyShrinking));
                 Check("a stopped shrink throws rather than pretending to finish",
                       thrown is OperationCanceledException);
-                Check("and nothing is left running", !tab.Busy.IsWorking && !tab.Busy.CanCancel);
+                Check("and stops where it was, not at the end",
+                      !watchRecorder.Saw(f => f.Done == 2 && f.Total == 2));
+                Check("and nothing is left running", !watchVm.Busy.IsWorking && !watchVm.Busy.CanCancel);
             }
             // Shrink works on its own copy, opened separately above: stopping it cannot have
             // touched the document this tab has open. Asserted rather than assumed, because the

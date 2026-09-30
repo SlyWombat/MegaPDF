@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.Input;
 using MegaPDF.Core.Editing;
 using MegaPDF.Core.Engine;
 using MegaPDF.Core.Engine.Pdfium;
+using MegaPDF.Core.Imaging;
 using MegaPDF.Core.Recovery;
 using MegaPDF.Core.Services;
 using MegaPDF.Core.Viewing;
@@ -2493,8 +2494,17 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
                 var oversized = image.PixelWidth > targetWidth * 1.2;
                 if ((!oversized && image.StoredByteLength < 100_000) || image.StoredByteLength < 8_000)
                     continue;
-                targetWidth = Math.Clamp(targetWidth, 8, image.PixelWidth);
-                targetHeight = Math.Clamp(targetHeight, 8, image.PixelHeight);
+
+                // Nothing this small is worth re-encoding, and clamping it would throw:
+                // Math.Clamp requires min <= max, so Clamp(n, 8, 4) is an ArgumentException
+                // that would abandon every remaining image in the document (#64, pre-existing
+                // and caught only now while this loop was being split out for #145). A 4x4
+                // divider carrying a fat ICC profile is enough to reach here.
+                if (image.PixelWidth < ImageShrinker.MinTargetPixels || image.PixelHeight < ImageShrinker.MinTargetPixels)
+                    continue;
+
+                targetWidth = Math.Clamp(targetWidth, ImageShrinker.MinTargetPixels, image.PixelWidth);
+                targetHeight = Math.Clamp(targetHeight, ImageShrinker.MinTargetPixels, image.PixelHeight);
 
                 var img = image;
                 var pixels = await Task.Run(() => copy.RenderImageAt(img, targetWidth, targetHeight));
