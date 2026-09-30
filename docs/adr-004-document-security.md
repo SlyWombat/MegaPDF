@@ -111,6 +111,86 @@ well as by PDFium itself.
     pdftotext — readers that are not PDFium — confirm each copy is not encrypted and still
     readable.
 
+## Proposed amendment: assemble and copy for page tools (pending Dave's decision — #558)
+
+**Status: proposed, not accepted.** Decisions 1–10 above are settled; this section is a
+recommendation for Dave to approve, amend, or reject. Nothing below is implemented or
+changed because of this section — it is the write-up #558 asked for, so that whichever way
+it is decided, four platforms build the same rule instead of four readings of it.
+
+### Where this comes from
+
+Page tools (§3.10 F9, #174) shipped on Android, then on Windows and Avalonia (Mac/Linux),
+over 2026-09-29 and -30. Decision 2's table above maps five permission bits to MegaPDF's
+existing tools; it has no row for **assemble** (P-bit 11) or for what **copy** (P-bit 5)
+governs beyond the word "copying," because nothing before #174 took pages out of, or
+rearranged pages within, a document. #558 was opened the moment Android's page tools
+landed, naming the gap: Android now reads the assemble bit and no other platform did.
+
+That gap closed faster than #558 anticipated. By the time this is written, it is stale on
+three of the four platforms:
+
+- The shared engine core already refuses the call. Contract 10's own header comment
+  (`core/megapdf_core.h`, the block above `megapdf_page_rotate`) states the rule it
+  enforces: every call that changes the document needs `MEGAPDF_PERMIT_ASSEMBLE` **or**
+  `MEGAPDF_PERMIT_MODIFY`; `megapdf_pages_extract` needs `MEGAPDF_PERMIT_COPY`; otherwise
+  `MEGAPDF_ERR_RESTRICTED`. This is not a proposal — it is what the C++ core has done since
+  #174's engine half landed, underneath every platform's page-tools UI.
+- Android's `DocumentCapabilities.kt`, and the shared `MegaPDF.Core`
+  `DocumentCapabilities.cs` that both Windows and Avalonia consume, each independently
+  added `canAssemblePages`/`CanAssemblePages` (assemble **or** modify) and
+  `canExtractPages`/`CanExtractPages` (copy), for the same reason: so a button is never
+  offered that the core would only refuse. The three files were written within about two
+  hours of each other and agree exactly, without anyone having stated the rule out loud
+  first — they read it off the core's own comment.
+- **iPhone and iPad have no page-tools UI yet** (tracked separately for 2.2/#174); the one
+  iOS function that calls contract 10 today (`extractPages`, `PdfEngine+Pages.swift`) exists
+  for a field-hierarchy test, not a shipped feature, and consults no permission at all. iOS
+  is not a fourth disagreement — it has nothing built to agree or disagree with.
+
+So the four platforms already agree, in effect, except that nobody has written the rule
+down as a decision, and iOS still needs it stated before it builds page tools. What follows
+proposes making the accidental agreement the recorded rule, rather than inventing a new one.
+
+### The recommendation
+
+| Permission bit (ISO 32000-2 Table 22) | Governs |
+|---|---|
+| **Assemble** (P-bit 11) **or Modify** (P-bit 4) | Rotate, delete, reorder, insert a blank page, combine (import pages from another file) — any operation that changes this document's own pages or page order. Either bit is sufficient, matching the spec's own text ("assemble the document … even if bit 4 is clear") and what the core and three platforms already enforce. |
+| **Copy** (P-bit 5) | Extract (save a selection of pages as a new file). Extraction changes nothing in the source; it manufactures a new file holding a copy of some of the original content, which is what the copy bit is for. A document may permit copying without permitting modification (a read-only handout, fine to excerpt but not to restructure) or the reverse (a form meant to be filled and reassembled but not copied from) — treating extraction as its own bit rather than folding it into assemble/modify is what keeps those two documents distinguishable. |
+| **Accessibility** (P-bit 10) | Nothing, deliberately. No MegaPDF operation identifies itself as acting on behalf of assistive technology, so there is no correct place to grant this bit's narrower exception. Extraction keeps needing the stronger Copy bit for everyone, screen reader or not, rather than adding a bit we have no reliable way to attribute. |
+| **Print, high quality** (P-bit 12) | Nothing separately. MegaPDF's Print command has no quality tiers; it continues to gate on **Print** (P-bit 3) alone, as decision 2 above already does. A separate high-quality path is not recommended unless a feature actually needs one. |
+
+This is the whole rule: two new rows added to decision 2's table, nothing else. Once
+approved, it is small work per platform — the permission set is already read at open time
+on all four (decision 2), and Android/Windows/Avalonia already do exactly this.
+
+### Said plainly, because it should be
+
+These bits are advisory. Any tool holding the owner password can clear them outright, and
+plenty of PDF tools ignore them entirely — nothing about the standard security handler
+makes P-bit 11 or P-bit 5 into real access control. MegaPDF honours them because the
+document's author asked it to, the same reasoning decision 2 above already gives for
+modify, fill-forms, annotate, copy and print. This amendment does not make the bits
+enforceable; it extends the set of MegaPDF operations that ask the question before acting.
+
+The principle and its wording both already exist: MegaPDF already refuses to edit a
+document when modify is withheld, and says so — a typed refusal
+(`MEGAPDF_ERR_RESTRICTED`, decision 3) explained in the UI, never a silently disabled
+button. This proposal is that same behaviour, extended to two operations (assembly,
+extraction) that had not asked the question before #174 gave them something to ask about.
+
+### Out of scope here, flagged for a separate decision
+
+**F8 Text out (§3.9)** — the structure/Markdown/CLI extraction — also takes content out of
+an open document and consults no permission bit on any platform today. Whether that should
+require Copy (it is arguably "extract text and graphics," the same ISO 32000-2 wording the
+Copy bit uses) is a related question this proposal does not answer: F8 never writes a new
+PDF, has no equivalent of "the source is unaffected" to point to for reassurance the way
+page extraction does, and mixing that question into #558 risks blocking the smaller,
+already-converged-on page-tools rule while it is decided. Recommend a separate issue once
+this one is resolved.
+
 ## Consequences
 
 - The apps need MegaPDF's PDFium from patch 0010 on; from 0029 on for the removal to

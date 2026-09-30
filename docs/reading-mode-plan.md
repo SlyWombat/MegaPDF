@@ -1,5 +1,11 @@
 # Reading mode (#168) — plan for 2.2
 
+**Status, 2026-09-29: tiers 1 and 2 shipped on all four platforms** (#505/#511 Mac and
+Linux, #504/#510 Windows, #507/#513 Android, #506/#512 iPhone and iPad). This document is
+kept as the pre-implementation plan and is not amended to match what shipped — where the
+two differ, `SDD.md` §3.11 F10 describes reality and is the one to trust. Tier 3 (reflow)
+remains unshipped, as §5 below recommended.
+
 *Plan only, 2026-09-27, for Dave's "plan+". No code, no issues opened. Sources read: #168 and its comments (Dave's 2026-09-17 decision that #142 goes first; the triage note); `docs/adr-003-shared-engine-core.md`; `SDD.md` §1.4, §2.2, §3.9 F8, §6.1, §6.2 contracts 5–6; `core/megapdf_core.h` contracts 1–9; `core/megapdf_structure.cpp`; `core/megapdf_write_text.cpp`; `docs/design-tokens.md`; `docs/design-brief.md` ("each platform's own idiom"); `docs/localisation.md`; `docs/release-notes/2.1.1/release-notes-2.1.1.md`; #354's census, #358, #187, #174, #175, #172; the four apps' main views, recents stores and settings.*
 
 ## 1. What reading mode is, and is not
