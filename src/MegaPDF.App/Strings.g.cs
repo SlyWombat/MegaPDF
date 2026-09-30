@@ -226,6 +226,18 @@ public static partial class Strings
     /// <summary>Edit text</summary>
     public static string EditTextName => Get("EditTextName");
 
+    /// <summary>Type, Shift+Enter for a new line, Enter when done</summary>
+    public static string TypeThenEnterMultiline => Get("TypeThenEnterMultiline");
+
+    /// <summary>Small</summary>
+    public static string TextSizeSmallName => Get("TextSizeSmallName");
+
+    /// <summary>Medium</summary>
+    public static string TextSizeMediumName => Get("TextSizeMediumName");
+
+    /// <summary>Large</summary>
+    public static string TextSizeLargeName => Get("TextSizeLargeName");
+
     /// <summary>Restore unsaved changes?</summary>
     public static string RestoreTitle => Get("RestoreTitle");
 

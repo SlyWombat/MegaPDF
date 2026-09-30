@@ -66,6 +66,11 @@ public sealed partial class DocumentView : UserControl
     private TextBox? _activeEditor;
     private Func<Task>? _activeEditorCommit;
 
+    /// <summary>MainWindow's hook: a size chip on the open editor was picked (#4) — keeps the
+    /// toolbar's own SizePicker showing the same value, the way <see cref="ApplyPickedStyleToOpenEditor"/>
+    /// already keeps the open editor's own on-screen size in step with the toolbar.</summary>
+    internal Action<double>? SizeChipPickedCallback { get; set; }
+
     private bool _wired;
 
     /// <summary>
@@ -279,7 +284,8 @@ public sealed partial class DocumentView : UserControl
                 (newText, style) => string.IsNullOrWhiteSpace(newText)
                     ? Task.CompletedTask
                     : ViewModel.AddTextBoxAsync(pageView.Index, pagePoint, newText,
-                        style!.FontName, style.FontSize));
+                        style!.FontName, style.FontSize),
+                allowMultiline: true);
             return;
         }
 
@@ -323,8 +329,12 @@ public sealed partial class DocumentView : UserControl
                 break;
 
             case PageHitKind.Whiteout:
-                // Select with a remove-only chrome (redraw to reposition).
-                SelectStamp(pageGrid, pageView, $"whiteout:{hit.ObjectIndex}", hit.Bounds!.Value, movable: false);
+                // Selects for move, resize and delete, exactly like a signature (#3) — no
+                // longer remove-only chrome (redraw by hand to reposition). The resize is
+                // free-form rather than proportional (see the aspectLocked check in
+                // SelectStamp): a cover is an area the person is choosing what to hide, the
+                // same reasoning that already makes a redaction mark's resize free-form.
+                SelectStamp(pageGrid, pageView, $"whiteout:{hit.ObjectIndex}", hit.Bounds!.Value);
                 break;
 
             case PageHitKind.TextBox:
@@ -431,10 +441,22 @@ public sealed partial class DocumentView : UserControl
     /// only for MegaPDF's own text boxes. It is null for the document's own text and
     /// for form fields, where SDD §3.1 is explicit that no formatting UI appears
     /// because the formatting is inherited.
+    ///
+    /// <paramref name="allowMultiline"/> is Shift+Enter for a new line (#4) — new-text
+    /// placement only: a document's own line, a form field and an *existing* added box
+    /// (restyle-in-place; see <see cref="EditTextBoxAtAsync"/>) are each already exactly
+    /// one line in the format this app writes, so Shift+Enter has nothing to grow there,
+    /// and turning an existing note into more than one line after the fact is a different
+    /// shape of edit (replace one object with several) than a restyle's "same id, new
+    /// text". <paramref name="style"/> non-null also brings the persona-simple S/M/L size
+    /// chips (#4), on top of what the toolbar's own point-size list already offers —
+    /// choosing a size for an added box's text is part of the same ergonomics whether the
+    /// box is brand new or already on the page.
     /// </summary>
     private void ShowInlineEditor(Grid pageGrid, PdfRect bounds, string initialText,
                                   double fontSizePoints, TextStyleChoice? style,
-                                  Func<string, TextStyleChoice?, Task> commit)
+                                  Func<string, TextStyleChoice?, Task> commit,
+                                  bool allowMultiline = false)
     {
         var toDip = 96.0 / 72 * ViewModel.ZoomFactor;
         var editor = new TextBox
@@ -445,7 +467,8 @@ public sealed partial class DocumentView : UserControl
             VerticalAlignment = VerticalAlignment.Top,
             Margin = new Thickness(bounds.X * toDip - 6, bounds.Y * toDip - 8, 0, 0),
             MinWidth = Math.Max(bounds.Width * toDip + 28, 140),
-            AcceptsReturn = false,
+            AcceptsReturn = allowMultiline,
+            PlaceholderText = allowMultiline ? Strings.TypeThenEnterMultiline : "",
             // The words here are the document's, and Windows would check them against
             // the display language rather than the document's: on an English desktop
             // every French surname came back red-underlined (#212). Nothing in a PDF
@@ -467,7 +490,11 @@ public sealed partial class DocumentView : UserControl
         }
 
         // PreviewKeyDown, not KeyDown: TextBox handles Escape internally (reverting
-        // its text) and marks it handled, so KeyDown never sees it.
+        // its text) and marks it handled, so KeyDown never sees it. With AcceptsReturn
+        // true (allowMultiline), WinUI's own TextBox would otherwise also consume a
+        // plain Enter as a second newline before ever reaching the Enter branch below —
+        // this sees every key first, which is what lets Shift+Enter and plain Enter mean
+        // two different things at all.
         //
         // Opened from the keyboard (#2), closing hands focus back to the page, and Tab
         // commits and moves on to the next region — filling a form is type, Tab, type.
@@ -475,7 +502,15 @@ public sealed partial class DocumentView : UserControl
         // toolbar (#144), and the edit stays open while they are used.
         editor.PreviewKeyDown += async (_, args) =>
         {
-            if (args.Key == VirtualKey.Enter)
+            if (allowMultiline && args.Key == VirtualKey.Enter && IsShiftDown())
+            {
+                args.Handled = true;
+                var caret = editor.SelectionStart;
+                editor.Text = editor.Text.Insert(caret, "\n");
+                editor.SelectionStart = caret + 1;
+                editor.SelectionLength = 0;
+            }
+            else if (args.Key == VirtualKey.Enter)
             {
                 args.Handled = true;
                 var committing = CommitAsync(); // closes the editor before its first await
@@ -504,7 +539,9 @@ public sealed partial class DocumentView : UserControl
         };
         // Focus moving into the toolbar's pickers, or the list one has open, must not
         // commit and tear the editor down (#144) — MainWindow decides that (it owns the
-        // pickers) through IsFocusMovingToPickers.
+        // pickers) through IsFocusMovingToPickers. The size chips (#4) are this view's
+        // own, so a press on one marks itself handled instead (see BuildSizeChips) rather
+        // than needing a hook here.
         editor.LostFocus += async (_, _) =>
         {
             if (style is not null && IsFocusMovingToPickers is { } check && check())
@@ -525,6 +562,110 @@ public sealed partial class DocumentView : UserControl
         _activeEditorCommit = CommitAsync;
         editor.Focus(FocusState.Programmatic);
         editor.SelectAll();
+
+        if (style is not null)
+            BuildSizeChips(pageGrid, bounds, toDip, style, ChosenStyle);
+    }
+
+    private FrameworkElement? _activeSizeChipRow;
+    private Action<double>? _highlightSizeChip;
+    private Func<double, Task>? _activeSizeChipPick;
+
+    /// <summary>
+    /// The persona-simple S/M/L size choice (#4): three small buttons sitting just above
+    /// the open editor, alongside whatever the toolbar's own full point-size list already
+    /// offers (SizePicker, #144). Picking one writes the very same <see cref="TextSize"/>
+    /// the toolbar's own picker would, through the same two calls
+    /// <c>MainWindow.OnTextPickerChanged</c> already makes — <see cref="ApplyPickedStyleToOpenEditor"/>
+    /// for an editor that is still open, <see cref="RestyleSelectedRunAsync"/> for a box
+    /// that is merely selected — so the two controls can never show different things.
+    /// </summary>
+    private void BuildSizeChips(Grid pageGrid, PdfRect bounds, double toDip,
+                                TextStyleChoice style, Func<TextStyleChoice?> chosenStyle)
+    {
+        var accent = Brand.Brush("BrandAccentBrush");
+        var chips = new List<(double Size, Border Fill)>();
+
+        void Highlight(double current)
+        {
+            foreach (var (size, fill) in chips)
+                fill.Background = Math.Abs(size - current) < 0.01
+                    ? accent
+                    : new SolidColorBrush(Microsoft.UI.Colors.White);
+        }
+
+        async Task PickAsync(double size)
+        {
+            var fontName = chosenStyle()?.FontName ?? style.FontName;
+            ApplyPickedStyleToOpenEditor(size, fontName);
+            Highlight(size);
+            await RestyleSelectedRunAsync(size, fontName);
+            SizeChipPickedCallback?.Invoke(size);
+        }
+
+        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 2 };
+        foreach (var (label, size, name) in new (string Label, double Size, string Name)[]
+                 {
+                     ("S", DocumentViewModel.TextSizeSmall, Strings.TextSizeSmallName),
+                     ("M", DocumentViewModel.TextSizeMedium, Strings.TextSizeMediumName),
+                     ("L", DocumentViewModel.TextSizeLarge, Strings.TextSizeLargeName),
+                 })
+        {
+            var fill = new Border
+            {
+                CornerRadius = new CornerRadius(3),
+                BorderBrush = accent,
+                BorderThickness = new Thickness(1),
+                Child = new TextBlock
+                {
+                    Text = label,
+                    FontSize = 11,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center,
+                },
+            };
+            chips.Add((size, fill));
+            var chip = new Button
+            {
+                Content = fill,
+                Width = 24,
+                Height = 20,
+                Padding = new Thickness(0),
+                BorderThickness = new Thickness(0),
+                Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
+            };
+            AutomationProperties.SetName(chip, name);
+            ToolTipService.SetToolTip(chip, name);
+            // The page beneath must not also read this press as a click of its own, the
+            // same reason the selection chrome's own ✕ chip marks its press handled.
+            chip.PointerPressed += (_, e) => e.Handled = true;
+            chip.Click += async (_, _) => await PickAsync(size);
+            row.Children.Add(chip);
+        }
+        Highlight(chosenStyle()?.FontSize ?? style.FontSize);
+
+        var host = new Border
+        {
+            Name = "TextSizeChips",
+            Child = row,
+            Padding = new Thickness(2),
+            Margin = new Thickness(bounds.X * toDip - 6, bounds.Y * toDip - 30, 0, 0),
+            HorizontalAlignment = HorizontalAlignment.Left,
+            VerticalAlignment = VerticalAlignment.Top,
+        };
+        pageGrid.Children.Add(host);
+        _activeSizeChipRow = host;
+        _highlightSizeChip = Highlight;
+        _activeSizeChipPick = PickAsync;
+    }
+
+    private void RemoveSizeChips(Grid pageGrid)
+    {
+        if (_activeSizeChipRow is { } row)
+            pageGrid.Children.Remove(row);
+        _activeSizeChipRow = null;
+        _highlightSizeChip = null;
+        _activeSizeChipPick = null;
     }
 
     /// <summary>MainWindow's hook: whether focus is moving from the open editor into its own font/size pickers.</summary>
@@ -545,6 +686,9 @@ public sealed partial class DocumentView : UserControl
         _lastPickedFontName = fontName;
         if (_styleEditorOpen && _activeEditor is { } editor)
             editor.FontSize = Math.Max(fontSize * 96.0 / 72 * ViewModel.ZoomFactor, 10);
+        // The toolbar's full point-size list changing is also the size chips' own cue (#4):
+        // the two must never show different things.
+        _highlightSizeChip?.Invoke(fontSize);
     }
 
     /// <summary>MainWindow calls this after a picker change with an added box selected.</summary>
@@ -592,6 +736,7 @@ public sealed partial class DocumentView : UserControl
         {
             _activeEditor = null;
             _activeEditorCommit = null;
+            RemoveSizeChips(pageGrid);
             if (_styleEditorOpen)
             {
                 _styleEditorOpen = false;
@@ -616,7 +761,7 @@ public sealed partial class DocumentView : UserControl
 
     /// <summary><paramref name="Run"/> is set for an added text box: what the toolbar's pickers restyle (#144).</summary>
     /// <param name="Pad">DIPs the chrome stands off the item on every side; taken back out when a move is committed.</param>
-    internal sealed record StampSelection(PageCanvas Canvas, PageView Page, string Id, PdfRect Bounds, bool Movable, PdfTextRun? Run = null, double Pad = 0);
+    internal sealed record StampSelection(PageCanvas Canvas, PageView Page, string Id, PdfRect Bounds, bool Movable, bool Resizable = true, PdfTextRun? Run = null, double Pad = 0);
 
     private StampSelection? _selection;
     private Grid? _selectionChrome;
@@ -635,14 +780,18 @@ public sealed partial class DocumentView : UserControl
         // text instead, and the chip sits outside it.
         var isTextBox = annotationId.StartsWith("textbox:", StringComparison.Ordinal);
         var pad = isTextBox ? 4 : 0;
-        _selection = new StampSelection(canvas, pageView, annotationId, bounds, movable, run, pad);
+        _selection = new StampSelection(canvas, pageView, annotationId, bounds, movable, resizable, run, pad);
 
         var accent = Brand.Brush("BrandAccentBrush");
         var aspect = bounds.Height / bounds.Width;
         // Signatures and text boxes resize proportionally (SDD §3.3 — a face may not be
         // stretched). A redaction mark is the exception (#329): it is an area, and the person
-        // is deciding what it covers, so its corner handle drags each edge on its own.
-        var aspectLocked = !annotationId.StartsWith("redaction:", StringComparison.Ordinal);
+        // is deciding what it covers, so its corner handle drags each edge on its own. A
+        // whiteout is exactly that kind of area too (#3) — it has no face to distort, only a
+        // rectangle of paper whose extent the person is choosing — so it gets the same
+        // free-form resize rather than a signature's locked one.
+        var aspectLocked = !annotationId.StartsWith("redaction:", StringComparison.Ordinal)
+                         && !annotationId.StartsWith("whiteout:", StringComparison.Ordinal);
 
         var chrome = new Grid
         {
@@ -863,7 +1012,11 @@ public sealed partial class DocumentView : UserControl
         Deselect();
         var isTextBox = selection.Id.StartsWith("textbox:", StringComparison.Ordinal);
         var isMark = selection.Id.StartsWith(RedactionIdPrefix, StringComparison.Ordinal);
+        var isWhiteout = selection.Id.StartsWith("whiteout:", StringComparison.Ordinal);
         var moved = true;
+        // The id to re-select on below — ordinarily selection.Id itself, except a whiteout's
+        // (see the isWhiteout branch: its object index does not survive the move).
+        var selectId = selection.Id;
         if (isTextBox)
             moved = await ViewModel.MoveTextBoxAsync(selection.Page.Index,
                 int.Parse(selection.Id.AsSpan("textbox:".Length)), selection.Bounds, newBounds);
@@ -873,11 +1026,29 @@ public sealed partial class DocumentView : UserControl
             // re-selects.
             await ViewModel.MoveRedactionMarkAsync(selection.Page.Index, MarkIdOf(selection.Id),
                 selection.Bounds, newBounds);
+        else if (isWhiteout)
+        {
+            // A whiteout has no native "move in place" (#3): the core detaches the rectangle
+            // that is there and appends a fresh one, so this chrome's id — built from the
+            // object index the selection started with — is only good until the move actually
+            // lands. Re-select on whatever index the operation says it landed at, the same
+            // way the Avalonia leg's DocumentViewModel.ReanchorWhiteout does.
+            var objectIndex = int.Parse(selection.Id.AsSpan("whiteout:".Length));
+            var (didMove, newIndex) = await ViewModel.MoveWhiteoutAsync(selection.Page.Index,
+                objectIndex, selection.Bounds, newBounds);
+            moved = didMove;
+            selectId = $"whiteout:{(didMove ? newIndex : objectIndex)}";
+        }
         else
             await ViewModel.MoveSignatureAsync(selection.Page.Index, selection.Id, selection.Bounds, newBounds);
 
         // The page container was regenerated by the re-render; find it and re-select. A move
         // cancelled at the #139 warning left the box where it was, so the selection goes back there.
+        // A page's container is rebuilt whenever its slot is replaced (DocumentView.Keyboard.cs's
+        // OnPagesChangedForFocus says so in so many words), which the Pages[] replace above just
+        // did — forcing the layout pass now, the same way that handler's own UpdateLayout() does,
+        // is what makes the fresh container findable immediately rather than racing it.
+        PagesItems.UpdateLayout();
         if (newBounds != selection.Bounds
             && selection.Page.Index < ViewModel.Pages.Count
             && FindPageCanvas(selection.Page.Index) is { } canvas)
@@ -885,7 +1056,7 @@ public sealed partial class DocumentView : UserControl
             var run = isTextBox && selection.Run is { } before
                 ? ViewModel.FindTextBox(selection.Page.Index, before.TextBoxId, before.ObjectIndex) ?? before
                 : null;
-            SelectStamp(canvas, ViewModel.Pages[selection.Page.Index], selection.Id, moved ? newBounds : selection.Bounds,
+            SelectStamp(canvas, ViewModel.Pages[selection.Page.Index], selectId, moved ? newBounds : selection.Bounds,
                         resizable: !isTextBox, run: run);
         }
     }
@@ -1603,4 +1774,93 @@ public sealed partial class DocumentView : UserControl
         }
         return ok;
     }
+
+    // --- For the `whiteout-text` self-test (#3, #4) ---
+
+    /// <summary>The same route a tap, Enter or Space takes (<see cref="RoutePageActivationAsync"/>),
+    /// at a raw page point rather than through a real pointer press — WinUI cannot synthesize its
+    /// own, the same limit <see cref="ClickFirstRegionsForTest"/> already documents.</summary>
+    internal async Task<bool> ActivatePageForTest(int pageIndex, PdfPoint point)
+    {
+        if (pageIndex < 0 || pageIndex >= ViewModel.Pages.Count || FindPageCanvas(pageIndex) is not { } canvas)
+            return false;
+        await RoutePageActivationAsync(canvas, ViewModel.Pages[pageIndex], point);
+        return true;
+    }
+
+    /// <summary>The same route a double-click on an existing added box takes
+    /// (<see cref="EditTextBoxAtAsync"/>), for the self-test (#4).</summary>
+    internal async Task<bool> EditTextBoxForTest(int pageIndex, PdfPoint point)
+    {
+        if (pageIndex < 0 || pageIndex >= ViewModel.Pages.Count || FindPageCanvas(pageIndex) is not { } canvas)
+            return false;
+        return await EditTextBoxAtAsync(canvas, ViewModel.Pages[pageIndex], point);
+    }
+
+    /// <summary>The current selection's bounds, or null with nothing selected.</summary>
+    internal PdfRect? SelectionBoundsForTest => _selection?.Bounds;
+
+    /// <summary>Whether the current selection offers move — a whiteout used to be remove-only (#3).</summary>
+    internal bool SelectionIsMovableForTest => _selection is { Movable: true };
+
+    /// <summary>Whether the current selection offers a resize handle (#3).</summary>
+    internal bool SelectionIsResizableForTest => _selection is { Resizable: true };
+
+    /// <summary>
+    /// Moves/resizes the current selection to <paramref name="newBounds"/> and commits, as a
+    /// completed drag would have — WinUI cannot synthesize a manipulation gesture any more than
+    /// it can synthesize a pointer press (the same honest limit <c>DropPageForTest</c> documents
+    /// for a page reorder's drag). This proves the gesture lands, persists and undoes; it does
+    /// NOT exercise the resize handle's own live aspect-lock math
+    /// (<see cref="SelectStamp"/>'s <c>handle.ManipulationDelta</c>), which only runs mid-gesture
+    /// against a real manipulation event — a by-hand gate.
+    /// </summary>
+    internal async Task<bool> DragSelectionForTest(PdfRect newBounds)
+    {
+        if (_selection is not { Movable: true } selection || _selectionChrome is not { } chrome)
+            return false;
+        var toDip = 96.0 / 72 * ViewModel.ZoomFactor;
+        var pad = selection.Pad;
+        chrome.Margin = new Thickness((newBounds.X * toDip) - pad, (newBounds.Y * toDip) - pad, 0, 0);
+        chrome.Width = (newBounds.Width * toDip) + (2 * pad);
+        chrome.Height = (newBounds.Height * toDip) + (2 * pad);
+        await CommitChromeAsync();
+        return true;
+    }
+
+    /// <summary>The ✕ chip / Delete key on the current selection, without a real click or key press.</summary>
+    internal async Task<bool> RemoveSelectionForTest()
+    {
+        if (_selection is not { } selection)
+            return false;
+        Deselect();
+        await RemoveSelectedAsync(selection);
+        return true;
+    }
+
+    /// <summary>The open inline editor's text, for the self-test — null with none open.</summary>
+    internal string? ActiveEditorTextForTest
+    {
+        get => _activeEditor?.Text;
+        set { if (_activeEditor is { } editor) editor.Text = value ?? ""; }
+    }
+
+    /// <summary>Whether an inline editor is open at all, for the self-test.</summary>
+    internal bool HasActiveEditorForTest => _activeEditor is not null;
+
+    /// <summary>Whether the open editor's persona-simple S/M/L size chips are showing (#4).</summary>
+    internal bool SizeChipsShownForTest => _activeSizeChipPick is not null;
+
+    /// <summary>Picks a size chip on the open editor, for the self-test — runs the exact
+    /// delegate a real click on the S/M/L row runs, not a synthesized pointer event.</summary>
+    internal async Task<bool> ClickSizeChipForTest(double size)
+    {
+        if (_activeSizeChipPick is not { } pick)
+            return false;
+        await pick(size);
+        return true;
+    }
+
+    /// <summary>Commits the open editor exactly as Enter would, for the self-test.</summary>
+    internal Task CommitActiveEditorForTest() => _activeEditorCommit?.Invoke() ?? Task.CompletedTask;
 }

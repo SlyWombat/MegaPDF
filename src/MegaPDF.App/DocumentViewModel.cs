@@ -1054,6 +1054,16 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
         return page.GetTextBoxes().LastOrDefault();
     }
 
+    /// <summary>Every added text box on a page, for the `whiteout-text` self-test (#4): a
+    /// multi-line note is more than one of these, each meant to stay individually selectable.</summary>
+    public IReadOnlyList<PdfTextRun> TextBoxesOn(int pageIndex)
+    {
+        if (_document is null || pageIndex < 0 || pageIndex >= Pages.Count)
+            return [];
+        using var page = _document.GetPage(pageIndex);
+        return page.GetTextBoxes();
+    }
+
     [RelayCommand(CanExecute = nameof(CanZoomIn))]
     private async Task ZoomInAsync() => await SetZoomAsync(ZoomPercent + ZoomStep);
 
@@ -1457,6 +1467,26 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
         await DoEditAsync(new RemoveWhiteoutOperation(_document, pageIndex, objectIndex, bounds));
     }
 
+    /// <summary>
+    /// Moves or resizes a whiteout (drag or corner handle, #3) — the same gesture as a
+    /// signature. Unlike a signature or an added text box, a whiteout has no native "move
+    /// in place": it is page content, not an annotation, so <see cref="MoveWhiteoutOperation"/>
+    /// detaches the rectangle that is there and appends a fresh one, the same two primitives
+    /// <see cref="AddWhiteoutOperation"/> and <see cref="RemoveWhiteoutOperation"/> already
+    /// use — byte for byte the "redraw it by hand" workaround the old remove-only chrome
+    /// forced. That means the object index the caller passed in is only good until this
+    /// returns: the caller re-selects on <c>NewObjectIndex</c>, never the one it started with.
+    /// </summary>
+    public async Task<(bool Moved, int NewObjectIndex)> MoveWhiteoutAsync(
+        int pageIndex, int objectIndex, PdfRect oldBounds, PdfRect newBounds)
+    {
+        if (_document is null || oldBounds == newBounds)
+            return (false, objectIndex);
+        var op = new MoveWhiteoutOperation(_document, pageIndex, objectIndex, oldBounds, newBounds);
+        var moved = await DoEditAsync(op);
+        return (moved, op.CurrentObjectIndex);
+    }
+
     // --- Redaction (SDD §3.8 / F7, #173) ---
 
     /// <summary>
@@ -1552,6 +1582,22 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
     public static IReadOnlyList<double> TextSizes { get; } = [8, 10, 12, 14, 18, 24];
 
     /// <summary>
+    /// The persona-simple S/M/L choice the inline editor's own chips offer (#4), alongside
+    /// <see cref="TextSizes"/>' full point-size list on the toolbar — someone adding a quick
+    /// note should not have to think in points. All three are already values on
+    /// <see cref="TextSizes"/>, which is what keeps a chip's choice and the toolbar's
+    /// SizePicker showing the same thing afterwards. Not 8/12/18 or the Avalonia leg's own
+    /// 9/12/18: this app's own list has no 9, and a chip choosing a size the SizePicker
+    /// cannot show would desync the two controls the chips exist to keep in step.
+    /// </summary>
+    public const double TextSizeSmall = 10;
+
+    /// <summary>The size added text already defaults to.</summary>
+    public const double TextSizeMedium = 12;
+
+    public const double TextSizeLarge = 18;
+
+    /// <summary>
     /// The size and face the last added box was given. Sticky for the session, so
     /// filling six fields on one form is not six trips through the pickers. Not
     /// persisted — a new document is usually a new job.
@@ -1559,6 +1605,14 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
     public TextStyleChoice LastTextStyle { get; private set; } =
         new(12, StandardTextBoxFonts.Default);
 
+    /// <summary>
+    /// Adds a text box with the given face and size (SDD §3.1). A Shift+Enter note (#4)
+    /// arrives here as one string with embedded newlines — the view is where the key is
+    /// caught, this is where it becomes objects. More than one line becomes that many text
+    /// boxes, one per line (<see cref="AddTextBoxesOperation"/>), because there is no
+    /// multi-line text object in the format this app writes; a single line takes the older,
+    /// simpler operation unchanged. Either way it is one undo step.
+    /// </summary>
     public async Task AddTextBoxAsync(int pageIndex, PdfPoint topLeft, string text,
                                       string fontName = StandardTextBoxFonts.Default,
                                       double fontSize = 12)
@@ -1566,8 +1620,16 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
         if (_document is null || string.IsNullOrWhiteSpace(text))
             return;
         LastTextStyle = new TextStyleChoice(fontSize, fontName);
-        await DoEditAsync(new AddTextBoxOperation(
-            _document, pageIndex, text.Trim(), fontSize, topLeft, fontName));
+        // WinUI's TextBox hands back a lone "\r" for a line break rather than "\n" or
+        // "\r\n" (the Win32 EDIT control's own convention) — normalize all three before
+        // splitting, or a Shift+Enter note silently stays one text box with an embedded
+        // control character instead of becoming two (caught by the self-test's own
+        // "a two-line note becomes two objects" check).
+        var lines = text.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
+        IPageEditOperation op = lines.Length > 1
+            ? new AddTextBoxesOperation(_document, pageIndex, lines, fontSize, topLeft, fontName)
+            : new AddTextBoxOperation(_document, pageIndex, text.Trim(), fontSize, topLeft, fontName);
+        await DoEditAsync(op);
     }
 
     /// <summary>

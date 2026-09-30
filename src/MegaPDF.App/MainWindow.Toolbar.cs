@@ -476,4 +476,8 @@ public sealed partial class MainWindow
         UpdateTextPickers();
         return FontPickerItem.Visibility == Visibility.Visible;
     }
+
+    /// <summary>The toolbar's own SizePicker value, for the `whiteout-text` self-test (#4):
+    /// what a size chip on the open editor is supposed to keep in step with.</summary>
+    internal double? SizePickerValueForTest => (SizePicker.SelectedItem as ComboBoxItem)?.Tag as double?;
 }

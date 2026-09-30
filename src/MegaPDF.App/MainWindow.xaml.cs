@@ -96,6 +96,7 @@ public sealed partial class MainWindow : Window
             old.FocusIsInToolbar = null;
             old.IsFocusMovingToPickers = null;
             old.RequestPickerFocusCallback = null;
+            old.SizeChipPickedCallback = null;
         }
 
         // A background tab's bitmaps are freed the moment it stops being active, and the
@@ -134,6 +135,11 @@ public sealed partial class MainWindow : Window
                 FontPicker.Focus(FocusState.Keyboard);
                 return true;
             };
+            // A size chip on the open editor was picked (#4): the toolbar's own SizePicker
+            // shows the same value, so the persona-simple chips and the full point-size
+            // list can never disagree about what an added box's size is.
+            view.SizeChipPickedCallback = size =>
+                ShowStyleInPickers(new TextStyleChoice(size, PickedTextStyle(DefaultTextStyle).FontName));
         }
         UpdateTextPickers();
         if (Shell.Active is { } active)

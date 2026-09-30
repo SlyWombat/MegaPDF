@@ -424,6 +424,18 @@ Enregistrée sous {2}, prête pour l'e-mail.</value>
   <data name="EditTextName" xml:space="preserve">
     <value>Modifier le texte</value>
   </data>
+  <data name="TypeThenEnterMultiline" xml:space="preserve">
+    <value>Tapez, Maj+Entrée pour une nouvelle ligne, Entrée pour terminer</value>
+  </data>
+  <data name="TextSizeSmallName" xml:space="preserve">
+    <value>Petit</value>
+  </data>
+  <data name="TextSizeMediumName" xml:space="preserve">
+    <value>Moyen</value>
+  </data>
+  <data name="TextSizeLargeName" xml:space="preserve">
+    <value>Grand</value>
+  </data>
   <data name="RestoreTitle" xml:space="preserve">
     <value>Restaurer les modifications non enregistrées ?</value>
   </data>
