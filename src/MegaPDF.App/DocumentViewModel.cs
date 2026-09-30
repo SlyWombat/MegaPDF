@@ -1170,7 +1170,17 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
 
     public event Action<SearchScrollTarget>? SearchScrollRequested;
 
-    /// <summary>Whole-document search (as-you-type; the view debounces the calls).</summary>
+    /// <summary>
+    /// Whole-document search (as-you-type; the view debounces the calls).
+    ///
+    /// Measured at 1.27 s over 2,000 text-heavy pages (#145) — the one long operation with both
+    /// an honest denominator and nothing at stake in abandoning it, so it carries the full
+    /// progress-and-Stop treatment: it counts the page it is on against the page count, and it
+    /// can be stopped mid-walk. A search that is stopped keeps the matches it already had rather
+    /// than clearing them — stopping is asking for the work to end, not for the find to be
+    /// thrown away; a *superseded* search (a newer term) still does clear them below, because the
+    /// newer search owns the result from then on.
+    /// </summary>
     public async Task SearchAsync(string term)
     {
         _searchTerm = term;
@@ -1187,10 +1197,13 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
         // Page by page off the UI thread, abandoning as soon as a newer search
         // (or document) supersedes this one — same idea as viewport rendering.
         // "Searching…" shows on a long document; typing on is never blocked (#145).
+        var operation = Busy.Begin(Strings.BusySearching, blocksEditing: false, cancellable: true,
+                                   progressFormat: (done, total) => Strings.BusyPageOfPages(done, total));
+        var token = operation.CancellationToken;
         List<(int PageIndex, IReadOnlyList<PdfRect> Rects)>? found;
         try
         {
-            using (Busy.Begin(Strings.BusySearching, blocksEditing: false))
+            using (operation)
             {
                 found = await Task.Run(() =>
                 {
@@ -1199,13 +1212,23 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
                     {
                         if (generation != _searchGeneration || openGeneration != _openGeneration)
                             return null;
+                        token.ThrowIfCancellationRequested();
                         using var page = doc.GetPage(i);
                         foreach (var match in page.FindText(term))
                             list.Add((i, match.Rects));
+                        // After the page, not before it: "page 1 of N" while page 1 is still
+                        // being read would be a bar that finishes before the work does.
+                        operation.Report(i + 1, doc.PageCount);
                     }
                     return list;
                 });
             }
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        {
+            if (generation == _searchGeneration)
+                Announced?.Invoke(Strings.SearchCancelled);
+            return; // the matches from before the search stay as they were
         }
         catch (Exception ex)
         {
@@ -1859,11 +1882,18 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
         if (Busy.IsBusy || _document is not { } document)
             return false;
 
-        // A page operation has no one page to put the spinner on — the page it names is about
-        // to move, or to stop existing — so it gets the page-scoped busy state with no page,
-        // the same way a redaction mark does (#174).
-        using (var busy = Busy.Begin(Strings.BusyApplying, scope: BusyScope.Page,
-                                     pageIndex: op is IPageStructureOperation ? -1 : op.PageIndex))
+        // A structure operation (#174) is about the document, not about one page: the index it
+        // carries is only the first page it touched (a combine's is the insertion point, usually
+        // off-screen; a delete's is a page ApplyPageShifts is about to dispose), which is why
+        // AfterEdit is handed -1 for it rather than that index. Reporting it with
+        // scope: BusyScope.Page and pageIndex: -1, as this used to, put the busy state on a page
+        // spinner that DocumentView.UpdatePageBusyIndicator refuses to draw for a negative index
+        // (busy.PageIndex < 0) — so it reported nowhere at all, the same defect #563 found and
+        // fixed on the Mac and Linux leg (#145). It now reports in the strip under the toolbar,
+        // named for what it is doing rather than the generic "Applying…".
+        using (var busy = op is IPageStructureOperation structureOp
+            ? Busy.Begin(StructureBusyLabel(structureOp), scope: BusyScope.Document)
+            : Busy.Begin(Strings.BusyApplying, scope: BusyScope.Page, pageIndex: op.PageIndex))
         {
             try
             {
@@ -2424,6 +2454,68 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
     /// <summary>Shrinking rewrites the document's images, which is modify (#131).</summary>
     private bool CanShrink() => IsDocumentOpen && Capabilities.CanShrink && !Busy.IsBusy;
 
+    /// <summary>
+    /// Re-encodes <paramref name="copy"/>'s oversized images in place, cancellable and reporting
+    /// progress (#145): the longest operation either desktop has, measured 7.1 s over a 280 MB
+    /// scan's 100 images, 12.5 s over 400 and <b>39.7 s over the 1,000 images of a 2.5 GB
+    /// document</b>. Forty seconds behind an indeterminate bar with no way out is
+    /// indistinguishable from a hung app.
+    ///
+    /// Counts images considered, not images replaced: most of the loop's cost is the render and
+    /// the encode, but the cheap skips still have to be walked, and a bar that only moved for a
+    /// replacement would stall on a document full of pictures not worth touching.
+    ///
+    /// Cancelling is free of consequence: every caller runs this on a copy opened for the
+    /// purpose and throws the copy away on that path, so nothing of the person's is half-done.
+    /// A caller that ever ran this on a document someone is editing must not offer Cancel.
+    ///
+    /// Split out from <see cref="ShrinkForEmailAsync"/> so the self-test can drive the loop on a
+    /// copy of its own, watch what the busy state reports, and stop it — without a file picker
+    /// in the way, which cannot be driven headless.
+    /// </summary>
+    internal async Task<int> ReplaceOversizedImagesAsync(IPdfDocument copy)
+    {
+        using var busy = Busy.Begin(Strings.BusyShrinking, cancellable: true,
+                                    progressFormat: (done, total) => Strings.BusyPictureOfPictures(done, total));
+        var token = busy.CancellationToken;
+        var images = await Task.Run(copy.GetImages);
+        busy.Report(0, images.Count);
+        var replaced = 0;
+        var considered = 0;
+        foreach (var image in images)
+        {
+            token.ThrowIfCancellationRequested();
+            considered++;
+            try
+            {
+                var targetWidth = (int)Math.Round(image.DisplayWidthPoints / 72 * EmailTargetDpi);
+                var targetHeight = (int)Math.Round(image.DisplayHeightPoints / 72 * EmailTargetDpi);
+                var oversized = image.PixelWidth > targetWidth * 1.2;
+                if ((!oversized && image.StoredByteLength < 100_000) || image.StoredByteLength < 8_000)
+                    continue;
+                targetWidth = Math.Clamp(targetWidth, 8, image.PixelWidth);
+                targetHeight = Math.Clamp(targetHeight, 8, image.PixelHeight);
+
+                var img = image;
+                var pixels = await Task.Run(() => copy.RenderImageAt(img, targetWidth, targetHeight));
+                var jpeg = await SignatureImageProcessor.EncodeJpegAsync(
+                    new SignatureImage(pixels.Bgra, pixels.PixelWidth, pixels.PixelHeight), JpegQuality);
+                if (jpeg.Length >= image.StoredByteLength * 0.9)
+                    continue; // not worth it
+
+                await Task.Run(() => copy.ReplaceImageWithJpeg(img, jpeg));
+                replaced++;
+            }
+            finally
+            {
+                // However the loop body leaves — replaced, skipped, or about to throw for the
+                // next image — one more image has been considered.
+                busy.Report(considered, images.Count);
+            }
+        }
+        return replaced;
+    }
+
     [RelayCommand(CanExecute = nameof(CanShrink))]
     private async Task ShrinkForEmailAsync()
     {
@@ -2457,30 +2549,17 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
 
         try
         {
-            var replaced = 0;
-            // "Making a smaller copy…", with editing and file commands waiting (#145).
-            using (Busy.Begin(Strings.BusyShrinking))
+            int replaced;
+            try
             {
-                foreach (var image in await Task.Run(copy.GetImages))
-                {
-                    var targetWidth = (int)Math.Round(image.DisplayWidthPoints / 72 * EmailTargetDpi);
-                    var targetHeight = (int)Math.Round(image.DisplayHeightPoints / 72 * EmailTargetDpi);
-                    var oversized = image.PixelWidth > targetWidth * 1.2;
-                    if ((!oversized && image.StoredByteLength < 100_000) || image.StoredByteLength < 8_000)
-                        continue;
-                    targetWidth = Math.Clamp(targetWidth, 8, image.PixelWidth);
-                    targetHeight = Math.Clamp(targetHeight, 8, image.PixelHeight);
-
-                    var img = image;
-                    var pixels = await Task.Run(() => copy.RenderImageAt(img, targetWidth, targetHeight));
-                    var jpeg = await SignatureImageProcessor.EncodeJpegAsync(
-                        new SignatureImage(pixels.Bgra, pixels.PixelWidth, pixels.PixelHeight), JpegQuality);
-                    if (jpeg.Length >= image.StoredByteLength * 0.9)
-                        continue; // not worth it
-
-                    await Task.Run(() => copy.ReplaceImageWithJpeg(img, jpeg));
-                    replaced++;
-                }
+                replaced = await ReplaceOversizedImagesAsync(copy);
+            }
+            catch (OperationCanceledException)
+            {
+                // Free of consequence: the work happens on `copy`, a second open of the file made
+                // for this purpose, so a cancel here has touched nothing the person has open (#145).
+                Announced?.Invoke(Strings.WorkStopped);
+                return;
             }
 
             if (replaced == 0)

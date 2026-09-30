@@ -559,6 +559,42 @@ public static partial class Strings
     /// <summary>Restoring your edits…</summary>
     public static string BusyRestoring => Get("BusyRestoring");
 
+    /// <summary>Page {0} of {1}</summary>
+    public static string BusyPageOfPages(object? arg0, object? arg1) => string.Format(CultureInfo.CurrentCulture, Get("BusyPageOfPages"), arg0, arg1);
+
+    /// <summary>Stopping…</summary>
+    public static string BusyCancelling => Get("BusyCancelling");
+
+    /// <summary>Stop</summary>
+    public static string CancelThisWork => Get("CancelThisWork");
+
+    /// <summary>Search stopped.</summary>
+    public static string SearchCancelled => Get("SearchCancelled");
+
+    /// <summary>Combining pages…</summary>
+    public static string BusyCombiningPages => Get("BusyCombiningPages");
+
+    /// <summary>Deleting pages…</summary>
+    public static string BusyDeletingPages => Get("BusyDeletingPages");
+
+    /// <summary>Turning pages…</summary>
+    public static string BusyTurningPages => Get("BusyTurningPages");
+
+    /// <summary>Moving the page…</summary>
+    public static string BusyMovingPage => Get("BusyMovingPage");
+
+    /// <summary>Inserting a page…</summary>
+    public static string BusyInsertingPage => Get("BusyInsertingPage");
+
+    /// <summary>Saving the pages…</summary>
+    public static string BusyExtractingPages => Get("BusyExtractingPages");
+
+    /// <summary>Picture {0} of {1}</summary>
+    public static string BusyPictureOfPictures(object? arg0, object? arg1) => string.Format(CultureInfo.CurrentCulture, Get("BusyPictureOfPictures"), arg0, arg1);
+
+    /// <summary>Stopped.</summary>
+    public static string WorkStopped => Get("WorkStopped");
+
     /// <summary>Couldn't print</summary>
     public static string CouldNotPrintTitle => Get("CouldNotPrintTitle");
 

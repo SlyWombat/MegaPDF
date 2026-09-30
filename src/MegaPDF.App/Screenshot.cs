@@ -3,6 +3,7 @@ using MegaPDF.Core.Editing;
 using MegaPDF.Core.Engine;
 using MegaPDF.Core.Engine.Pdfium;
 using MegaPDF.Core.Recovery;
+using MegaPDF.Core.Services;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media.Imaging;
@@ -186,6 +187,13 @@ internal static class Screenshot
             // the same reason `pages` needs one. Needs a document; the exit code is the test.
             case "whiteout-text":
                 return await CheckWhiteoutAndTextAsync(window);
+
+            // #145: progress and Stop on the operations measured slow enough to deserve them —
+            // search and shrink, both cancellable and counting themselves — and extract, which
+            // gets a Stop with no honest count to give. Needs a document; the exit code is the
+            // test.
+            case "progress":
+                return await CheckProgressAndCancelAsync(window);
 
             default:
                 Console.Error.WriteLine($"unknown --screenshot-state '{state}'");
@@ -834,6 +842,44 @@ internal static class Screenshot
     /// Everything this writes lives in its own scratch directory and in extra tabs, and both are
     /// gone before it returns: the tab the fixture was opened in is left exactly as found.
     /// </summary>
+    /// <summary>
+    /// Everything a document's <see cref="BusyState"/> published while it was watched (#145):
+    /// used to prove a page operation reports where it says it does, and not on a page that may
+    /// not be there by the time anything could draw on it.
+    ///
+    /// Windows' own <see cref="MainWindow"/> and every page command run on the UI thread until
+    /// their one background hop, and <see cref="BusyState.Begin"/>/<c>End</c> publish immediately
+    /// when called from the thread that built the state — so a frame recorded here is not a race:
+    /// by the time an awaited command has returned, every frame it published has already arrived.
+    /// </summary>
+    private sealed class BusyRecorder : IDisposable
+    {
+        private readonly BusyState _busy;
+        private readonly List<Frame> _frames = [];
+
+        internal readonly record struct Frame(BusyScope Scope, string Label, int PageIndex, bool HasProgress,
+                                              int Done, int Total, string Text, bool CanCancel, bool IsCancelling);
+
+        internal BusyRecorder(BusyState busy)
+        {
+            _busy = busy;
+            _busy.PropertyChanged += OnChanged;
+        }
+
+        internal IReadOnlyList<Frame> Frames => _frames;
+
+        private void OnChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e) =>
+            _frames.Add(new Frame(_busy.Scope, _busy.Label, _busy.PageIndex, _busy.HasProgress,
+                                  _busy.ProgressDone, _busy.ProgressTotal, _busy.ProgressText,
+                                  _busy.CanCancel, _busy.IsCancelling));
+
+        internal void Clear() => _frames.Clear();
+
+        internal bool Saw(Func<Frame, bool> predicate) => _frames.Any(predicate);
+
+        public void Dispose() => _busy.PropertyChanged -= OnChanged;
+    }
+
     private static async Task<bool> CheckPageToolsAsync(MainWindow window)
     {
         if (window.Shell.Active is not { IsDocumentOpen: true } fixtureTab
@@ -1380,6 +1426,78 @@ internal static class Screenshot
                   tab.Thumbnails.Count == tab.Pages.Count
                   && tab.Thumbnails.Select(t => t.Index).SequenceEqual(Enumerable.Range(0, tab.Pages.Count)));
         }
+
+        // --- 15. A structure operation reports in the strip, not on a page (#145) ----
+        //
+        // DoEditAsync used to report every page operation with a page-scoped spinner. A structure
+        // operation's own PageIndex is only the first page it touched — this method already knows
+        // that, which is why it hands ApplyPageShiftsAsync's renumbering -1 rather than that index
+        // — so the spinner sat where a combine's insertion point usually is (off-screen) or, for a
+        // delete, on the very PageViewModel ApplyPageShifts is about to dispose. It reported
+        // nowhere at all: the same defect #563 found and fixed on the Mac and Linux leg. It now
+        // reports in the strip under the toolbar, named for what it is doing.
+        {
+            await StartOverAsync(work);
+            using var recorder = new BusyRecorder(tab.Busy);
+
+            tab.SelectedPageIndices = [1];
+            await tab.RotatePagesRightCommand.ExecuteAsync(null);
+            Check("a rotate reports in the strip, named for turning pages",
+                  recorder.Saw(f => f.Scope == BusyScope.Document && f.Label == Strings.BusyTurningPages));
+            Check("  and never as a spinner on a page",
+                  !recorder.Saw(f => f.Scope == BusyScope.Page));
+            await tab.UndoCommand.ExecuteAsync(null);
+
+            recorder.Clear();
+            tab.SelectedPageIndices = [1];
+            await tab.MovePageEarlierCommand.ExecuteAsync(null);
+            Check("a move reports in the strip, named for moving the page",
+                  recorder.Saw(f => f.Scope == BusyScope.Document && f.Label == Strings.BusyMovingPage));
+            await tab.UndoCommand.ExecuteAsync(null);
+
+            recorder.Clear();
+            tab.SelectedPageIndices = [0];
+            await tab.InsertBlankPageCommand.ExecuteAsync(null);
+            Check("an insert reports in the strip, named for inserting a page",
+                  recorder.Saw(f => f.Scope == BusyScope.Document && f.Label == Strings.BusyInsertingPage));
+            await tab.UndoCommand.ExecuteAsync(null);
+
+            // The one that reported nowhere at all, rather than merely out of sight: a delete's
+            // own page index is a page the delete removes, so the old page-scoped spinner would
+            // have sat on a tile that is gone by the time anything could draw it.
+            recorder.Clear();
+            tab.SelectedPageIndices = [1];
+            await tab.DeletePagesCommand.ExecuteAsync(null);
+            Check("a delete reports in the strip, named for deleting pages",
+                  recorder.Saw(f => f.Scope == BusyScope.Document && f.Label == Strings.BusyDeletingPages));
+            Check("  and not on the page it is deleting",
+                  !recorder.Saw(f => f.Scope == BusyScope.Page && f.PageIndex == 1));
+            await tab.UndoCommand.ExecuteAsync(null);
+
+            recorder.Clear();
+            await tab.ImportPagesAsync(other);
+            Check("a combine reports in the strip, named for combining pages",
+                  recorder.Saw(f => f.Scope == BusyScope.Document && f.Label == Strings.BusyCombiningPages));
+            await tab.UndoCommand.ExecuteAsync(null);
+
+            // The contrast that keeps the fix honest: an ordinary field edit changes one page and
+            // still reports on that page, exactly as before.
+            var centre = new PdfPoint(200, 792 - 610);
+            await StartOverAsync(form);
+            using var recorderOnForm = new BusyRecorder(tab.Busy);
+            var field = FieldAt(tab, 0, centre);
+            Check("the form field this contrast needs is there", field is not null);
+            if (field is { } textField)
+            {
+                await tab.ApplyFormTextAsync(0, textField, "Changed");
+                Check("while an ordinary field edit still reports on that page",
+                      recorderOnForm.Saw(f => f.Scope == BusyScope.Page && f.PageIndex == 0));
+                Check("  and never in the document strip",
+                      !recorderOnForm.Saw(f => f.Scope == BusyScope.Document));
+                await tab.UndoCommand.ExecuteAsync(null);
+            }
+            await StartOverAsync(work);
+        }
     }
 
     /// <summary>
@@ -1627,6 +1745,317 @@ internal static class Screenshot
         while (tab.UndoCommand.CanExecute(null))
             await tab.UndoCommand.ExecuteAsync(null);
         await Task.Delay(300);
+    }
+
+    /// <summary>
+    /// Progress, Stop, and the busy strip's own controls, in a real window (#145 P2).
+    ///
+    /// Which operation gets which was measured, not reasoned about, against the synthetic large
+    /// fixtures <c>tools/gen_large_fixtures.py</c> builds (no corpus document is involved; see
+    /// <c>ImageShrinker.Shrink</c>'s and <c>DocumentViewModel.SearchAsync</c>'s own remarks for
+    /// the numbers). Shrink and search count themselves and can be stopped, because both are
+    /// per-item loops and nothing is at stake in abandoning them. Extract gets a Stop only — the
+    /// engine takes a token but there is one call, so no honest count. Save gets neither: there
+    /// is no honest denominator and a half-saved file is not a thing to leave behind. Combine is
+    /// covered by the `pages` state's own reporting-defect section, because it is one engine call
+    /// with no interior to check a flag in — there is nothing here for it to stop.
+    ///
+    /// Cancelling from the outside, not from inside a progress callback: <c>Busy.Begin</c> runs
+    /// synchronously before each operation's first <c>await</c>, so the newest operation is
+    /// already on the busy state by the time the call that started it returns control here, and
+    /// <c>RequestCancel</c> reaches it deterministically — no wait, no margin, no dependence on
+    /// how many pages or pictures a loop gets through before the flag is read.
+    /// </summary>
+    private static async Task<bool> CheckProgressAndCancelAsync(MainWindow window)
+    {
+        if (window.Shell.Active is not { IsDocumentOpen: true } fixtureTab
+            || fixtureTab.DocumentPath is not { } fixturePath)
+        {
+            Console.Error.WriteLine("--screenshot-state progress needs a document.");
+            return false;
+        }
+
+        var passed = 0;
+        var failed = 0;
+        void Check(string what, bool ok)
+        {
+            Console.Error.WriteLine($"{(ok ? "PASS" : "FAIL")}: {what}");
+            if (ok)
+                passed++;
+            else
+                failed++;
+        }
+
+        var scratch = Path.Combine(Path.GetTempPath(), "megapdf-selftest-progress");
+        Directory.CreateDirectory(scratch);
+        try
+        {
+            await RunProgressChecksAsync(window, fixtureTab, fixturePath, scratch, Check);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"FAIL: the progress-and-cancel check threw: {ex}");
+            failed++;
+        }
+        finally
+        {
+            foreach (var tab in window.Shell.Documents.Where(t => !ReferenceEquals(t, fixtureTab)).ToList())
+            {
+                tab.HasUnsavedChanges = false;   // never ask about scratch (#145 D5's dialog)
+                await window.CloseTabAsync(tab);
+            }
+            fixtureTab.SelectedPageIndices = [];
+            try { Directory.Delete(scratch, recursive: true); } catch { /* best-effort scratch cleanup */ }
+        }
+
+        Console.Error.WriteLine($"progress: {passed} passed, {failed} failed ({passed + failed} checks)");
+        return failed == 0;
+    }
+
+    private static async Task RunProgressChecksAsync(
+        MainWindow window, DocumentViewModel fixtureTab, string fixturePath, string scratch,
+        Action<string, bool> Check)
+    {
+        var work = Path.Combine(scratch, "work.pdf");
+        File.Copy(fixturePath, work, overwrite: true);
+        var tab = await window.Shell.OpenInTabAsync(work);
+        await Task.Delay(1500);
+        Check("a working tab opened", tab.IsDocumentOpen && tab.Pages.Count == 2);
+        if (!tab.IsDocumentOpen)
+            return;
+
+        // --- search counts the pages it has walked, and can be stopped -------------------
+        {
+            using var recorder = new BusyRecorder(tab.Busy);
+            await tab.SearchAsync("Page 2");
+            var baseline = tab.SearchMatchCount;
+            Check($"a search found something to begin with ({baseline} hit(s))", baseline > 0);
+            Check("it counts itself against the page count",
+                  recorder.Saw(f => f.HasProgress && f.Total == tab.Pages.Count));
+            Check("it reaches the last page",
+                  recorder.Saw(f => f.Done == tab.Pages.Count && f.Total == tab.Pages.Count));
+            Check($"and says where it is in words (\"{Strings.BusyPageOfPages(1, tab.Pages.Count)}\")",
+                  recorder.Saw(f => f.Text == Strings.BusyPageOfPages(1, tab.Pages.Count)));
+            Check("a search offers Stop while it runs",
+                  recorder.Saw(f => f.CanCancel && f.Label == Strings.BusySearching));
+            Check("and offers nothing once it is over", !tab.Busy.CanCancel);
+
+            // Cancelled from the outside, the instant it can be: SearchAsync's Busy.Begin runs
+            // before its first await, so by this line the search is already the newest
+            // operation and RequestCancel reaches it — deterministic, not a race against how
+            // many of the document's two pages it gets through first.
+            recorder.Clear();
+            string? announced = null;
+            void OnAnnounced(string said) => announced = said;
+            tab.Announced += OnAnnounced;
+            var searchTask = tab.SearchAsync("Page 2");
+            var offeredCancel = tab.Busy.CanCancel;
+            tab.Busy.RequestCancel();
+            await searchTask;
+            tab.Announced -= OnAnnounced;
+            Check("Stop is offered the instant a search begins", offeredCancel);
+            Check($"a search stopped part-way says so (\"{announced}\")", announced == Strings.SearchCancelled);
+            Check("the matches it already had are still there", tab.SearchMatchCount == baseline);
+            Check("nothing is left running once it is stopped", !tab.Busy.IsWorking && !tab.Busy.CanCancel);
+
+            // A *superseded* search (a newer term) is a different thing from a stopped one: the
+            // newer term owns the result from then on, so it does clear the matches.
+            await tab.SearchAsync("thereisnosuchwordinthisdocument");
+            Check("while a search for something absent does empty the matches", tab.SearchMatchCount == 0);
+            tab.ClearSearch();
+        }
+
+        // --- extract can be stopped, and leaves nothing behind when it is -----------------
+        {
+            var extracted = Path.Combine(scratch, "extracted.pdf");
+            string? announced = null;
+            void OnAnnounced(string said) => announced = said;
+            tab.Announced += OnAnnounced;
+            tab.SelectedPageIndices = [0];
+            var extractTask = tab.ExtractPagesToPathAsync(extracted);
+            var offeredCancel = tab.Busy.CanCancel;
+            tab.Busy.RequestCancel();
+            var saved = await extractTask;
+            tab.Announced -= OnAnnounced;
+            Check("extract offers Stop the instant it begins", offeredCancel);
+            Check("an extract that was stopped does not claim to have saved", !saved);
+            Check($"it says it was stopped (\"{announced}\")", announced == Strings.WorkStopped);
+            // The one that matters: the engine's contract is nothing left at the destination, and
+            // this is the check that holds it to it. A stopped extract that left a truncated or
+            // half-written file where the pages were going would be worse than no Stop at all.
+            Check("and leaves no file where the pages were going", !File.Exists(extracted));
+            Check("the document itself is untouched", tab.Pages.Count == 2 && !tab.HasUnsavedChanges);
+
+            // And the same extract, unstopped, still works — so Stop did not break the path it
+            // was added to.
+            saved = await tab.ExtractPagesToPathAsync(extracted);
+            Check("while an extract nobody stops writes its file", saved && File.Exists(extracted));
+            tab.SelectedPageIndices = [];
+        }
+
+        // --- shrink counts the images it has considered, and can be stopped --------------
+        //
+        // ReplaceOversizedImagesAsync is exercised directly, on a copy of its own, the way
+        // ShrinkForEmailAsync itself calls it: what is under test is the loop and the busy state
+        // it drives, and a file picker cannot be driven headless.
+        {
+            var imagesPdf = Path.Combine(scratch, "two-images.pdf");
+            File.WriteAllBytes(imagesPdf, TwoImagesPdf());
+            using var engine = new PdfiumEngine();
+
+            using (var copy = engine.Open(imagesPdf))
+            {
+                using var recorder = new BusyRecorder(tab.Busy);
+                Check($"there are pictures to walk ({copy.GetImages().Count})", copy.GetImages().Count == 2);
+                await tab.ReplaceOversizedImagesAsync(copy);
+                Check("it counts itself against the picture count",
+                      recorder.Saw(f => f.HasProgress && f.Total == 2));
+                Check("it reaches the last picture",
+                      recorder.Saw(f => f.Done == 2 && f.Total == 2));
+                Check($"and says where it is in words (\"{Strings.BusyPictureOfPictures(2, 2)}\")",
+                      recorder.Saw(f => f.Text == Strings.BusyPictureOfPictures(2, 2)));
+                Check("shrink offers Stop while it runs",
+                      recorder.Saw(f => f.CanCancel && f.Label == Strings.BusyShrinking));
+                Check("and offers nothing once it is over", !tab.Busy.CanCancel);
+            }
+
+            using (var copy = engine.Open(imagesPdf))
+            {
+                var task = tab.ReplaceOversizedImagesAsync(copy);
+                var offeredCancel = tab.Busy.CanCancel;
+                tab.Busy.RequestCancel();
+                Exception? thrown = null;
+                try { await task; }
+                catch (Exception ex) { thrown = ex; }
+                Check("Stop is offered the instant a shrink begins", offeredCancel);
+                Check("a stopped shrink throws rather than pretending to finish",
+                      thrown is OperationCanceledException);
+                Check("and nothing is left running", !tab.Busy.IsWorking && !tab.Busy.CanCancel);
+            }
+            // Shrink works on its own copy, opened separately above: stopping it cannot have
+            // touched the document this tab has open. Asserted rather than assumed, because the
+            // day that stops being true is the day Stop starts destroying pictures.
+            Check("the open document is unaffected by a shrink running on an unrelated copy",
+                  tab.Pages.Count == 2 && !tab.HasUnsavedChanges);
+        }
+
+        // --- Stop is offered only where it can be honoured -------------------------------
+        {
+            using (tab.Busy.Begin(Strings.BusySaving))
+            {
+                Check("a save offers no Stop", !tab.Busy.CanCancel);
+                tab.Busy.RequestCancel();
+                Check("and asking anyway changes nothing", !tab.Busy.IsCancelling && tab.Busy.IsBusy);
+            }
+            Check("with nothing running there is nothing to stop", !tab.Busy.CanCancel);
+            tab.Busy.RequestCancel();
+            Check("and asking then is a no-op too", !tab.Busy.IsCancelling);
+        }
+
+        // --- the strip's bar, count and Stop, on the real controls in a real window -------
+        //
+        // The checks above prove the view model and the busy state; this proves the bindings
+        // between them and the window, which is the half that can be silently wrong while every
+        // view-model check still passes. The operation is begun by hand rather than by running a
+        // real shrink: what is under test is the strip, and a two-picture fixture would report
+        // nothing slow enough to draw it from.
+        {
+            Check("the strip is not up before any work", !window.BusyStripIsVisibleForTest);
+
+            using (var held = tab.Busy.Begin(Strings.BusyShrinking, cancellable: true,
+                                             progressFormat: (done, total) => Strings.BusyPictureOfPictures(done, total)))
+            {
+                held.Report(250, 1000);
+                // Waited for by its own condition, not by a margin: the 0.5 s before the
+                // indicator appears is BusyState's documented rule, and is the thing this relies
+                // on.
+                var shown = await PumpUntilAsync(() => window.BusyStripIsVisibleForTest, TimeSpan.FromSeconds(5));
+                Check("work that lasts brings the strip up", shown);
+                Check($"under its own label (\"{window.BusyLabelTextForTest}\")",
+                      window.BusyLabelTextForTest == Strings.BusyShrinking);
+                Check("the bar is determinate, not a barber's pole", !window.BusyBarIsIndeterminateForTest);
+                Check($"and stands a quarter of the way along ({window.BusyBarValueForTest:0.##})",
+                      Math.Abs(window.BusyBarValueForTest - 0.25) < 0.001);
+                Check($"the count says where it is (\"{window.BusyProgressTextForTest}\")",
+                      window.BusyProgressTextIsVisibleForTest
+                      && window.BusyProgressTextForTest == Strings.BusyPictureOfPictures(250, 1000));
+                Check("Stop is on the strip", window.BusyCancelButtonIsVisibleForTest);
+                Check("with nothing yet saying it is stopping", !window.BusyCancellingLabelIsVisibleForTest);
+
+                window.ClickBusyCancelButtonForTest();
+                Check("pressing Stop asks the work to stop", held.IsCancellationRequested && tab.Busy.IsCancelling);
+                Check("the button goes, so it cannot be pressed twice", !window.BusyCancelButtonIsVisibleForTest);
+                Check("and \"Stopping…\" takes its place", window.BusyCancellingLabelIsVisibleForTest);
+            }
+
+            // The work has ended; the indicator lives out its minimum with nothing left to stop.
+            Check("once the work has ended there is nothing to stop",
+                  !window.BusyCancelButtonIsVisibleForTest && !tab.Busy.CanCancel);
+            var hidden = await PumpUntilAsync(() => !window.BusyStripIsVisibleForTest, TimeSpan.FromSeconds(5));
+            Check("and the strip goes", hidden);
+
+            // Work that cannot count itself gets the indeterminate bar and no count line — the
+            // save's shape, and the one every other operation has.
+            using (tab.Busy.Begin(Strings.BusySaving))
+            {
+                var shown = await PumpUntilAsync(() => window.BusyStripIsVisibleForTest, TimeSpan.FromSeconds(5));
+                Check("work that cannot count itself gets an indeterminate bar",
+                      shown && window.BusyBarIsIndeterminateForTest);
+                Check("no count line", !window.BusyProgressTextIsVisibleForTest);
+                Check("and no Stop", !window.BusyCancelButtonIsVisibleForTest);
+            }
+            await PumpUntilAsync(() => !window.BusyStripIsVisibleForTest, TimeSpan.FromSeconds(5));
+        }
+    }
+
+    /// <summary>Polls <paramref name="condition"/> rather than sleeping a margin: used only for
+    /// BusyState's own documented 0.5 s show-delay and 0.3 s minimum-visible window (#145).</summary>
+    private static async Task<bool> PumpUntilAsync(Func<bool> condition, TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            if (condition())
+                return true;
+            await Task.Delay(25);
+        }
+        return condition();
+    }
+
+    /// <summary>
+    /// One page with two small raster images (#145): enough for
+    /// <see cref="DocumentViewModel.ReplaceOversizedImagesAsync"/> to have something to walk and
+    /// count, without either one needing to be worth re-encoding — the loop reports on every
+    /// picture it *considers*, not only the ones it replaces. Built here rather than added to the
+    /// fixtures directory, so this check needs no change to CI.
+    /// </summary>
+    private static byte[] TwoImagesPdf()
+    {
+        var pdf = new System.Text.StringBuilder("%PDF-1.4\n");
+        var offsets = new List<int>();
+        void Add(string body)
+        {
+            offsets.Add(pdf.Length);
+            pdf.Append(CultureInfo.InvariantCulture, $"{offsets.Count} 0 obj\n{body}\nendobj\n");
+        }
+        // Plain ASCII letters only: Finish() below writes the whole buffer out with
+        // Encoding.ASCII, which would mangle a raw byte above 0x7F.
+        static string ImageData(char fill) => new(fill, 20 * 20 * 3);
+
+        var content = "q 20 0 0 20 20 20 cm /Im1 Do Q\nq 20 0 0 20 60 20 cm /Im2 Do Q\n";
+        var image1 = ImageData('A');
+        var image2 = ImageData('Z');
+        Add("<< /Type /Catalog /Pages 2 0 R >>");
+        Add("<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+        Add("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] "
+            + "/Contents 4 0 R /Resources << /XObject << /Im1 5 0 R /Im2 6 0 R >> >> >>");
+        Add($"<< /Length {content.Length} >>\nstream\n{content}endstream");
+        Add($"<< /Type /XObject /Subtype /Image /Width 20 /Height 20 /ColorSpace /DeviceRGB "
+            + $"/BitsPerComponent 8 /Length {image1.Length} >>\nstream\n{image1}endstream");
+        Add($"<< /Type /XObject /Subtype /Image /Width 20 /Height 20 /ColorSpace /DeviceRGB "
+            + $"/BitsPerComponent 8 /Length {image2.Length} >>\nstream\n{image2}endstream");
+
+        return Finish(pdf, offsets);
     }
 
     /// <summary>A notice or an announcement cut down to a log line's worth, whatever its length.</summary>
