@@ -80,16 +80,22 @@ boxes and family names are the Windows substitutes').
 Everything written to `--out` contains file names and stays private (the corpus is
 the owner's own documents). The report prints indices and numbers only.
 
-## Page tools battery (#174)
+## Page tools battery (#174, #567)
 
 `pages-battery.sh <megapdf-cli> <corpus> <out-dir> [--limit N] [--jobs N]` drives the
 shipped `megapdf-cli pages` command over every document, one process per operation:
 rotate every page, delete page 1, move the last page to the front, extract the first and
-last pages. Each output is checked by `qpdf --check` and for the page count expected, then
-deleted. The gate is 0 crashes, 0 hangs, 0 qpdf failures, 0 page-count mismatches and no
-refusal but the two contract 10 documents (a restricted document, and an extract of pages
-whose form fields sit in a `/Parent` hierarchy). The log keys each document by a hash of
-its path; the summary is counts and timings only.
+last pages, append a blank page sized like the last one, and two imports -- every page of
+the document into a fresh copy of itself, and every page of a second document (the one
+standing half the corpus's length further along the same sorted listing, wrapping around --
+one pairing per document, not a full pairwise sweep). Each output is checked by `qpdf
+--check` and for the page count expected, then deleted. The gate is 0 crashes, 0 hangs, 0
+qpdf failures, 0 page-count mismatches and no refusal but the two contract 10 documents (a
+restricted document, and a copy of pages whose form fields sit in a `/Parent` hierarchy --
+reachable from extract on an older PDFium, and from import's own field-name collision check
+on this one; see the script's own header comment). The log keys each document by a hash of
+its path; the summary is counts and timings only, plus, for the cross-document import, the
+other document's own page count (a number, never its path).
 
 ## The shared engine core
 
