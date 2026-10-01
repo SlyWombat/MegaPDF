@@ -938,6 +938,50 @@ enum {
 MEGAPDF_API int megapdf_render(const megapdf_page* page, void* buffer, int width, int height, int stride,
                                unsigned int flags);
 
+/**
+ * The longest side the full page would have to be rastered at for a clip render to
+ * fill its buffer. A clip is a window onto a page drawn at a scale the window sets, so
+ * a 2 pt window filling a 1,024 px buffer asks PDFium for a page drawn 512x larger than
+ * itself; past this the implied matrix stops being worth trusting and the request is a
+ * caller bug (a degenerate rectangle, or crop space confused with device pixels), not a
+ * picture anyone wants. Nothing of this size is ever allocated: PDFium rasterises the
+ * caller's buffer and no more -- see megapdf_render_clip.
+ */
+#define MEGAPDF_RENDER_CLIP_MAX_IMPLIED_SIDE 1000000LL
+
+/**
+ * Renders one region of the page -- `crop_space_rect`, in the crop space every contract
+ * here reports (points, bottom-left origin, /UserUnit applied, turned with the page's
+ * /Rotate) -- into the caller's width x height buffer, scaled to fill it. Everything
+ * else is megapdf_render's recipe exactly: white ground, page content with annotations
+ * and LCD text, live form-field values, then the tint. Same flags, same byte order,
+ * same clamp on the buffer, same errors, and the same "never crashes on a refusal".
+ *
+ * Why it exists (#514, docs/reading-mode-plan.md section 3 item 2): a reflow view shows a
+ * block, a figure or a form region "as the page" inside otherwise reflowed text. Without
+ * this, that costs a whole-page raster per region -- on a phone, for a region that is often
+ * a twentieth of the page. PDFium clips natively, no patch and no second bitmap needed: a
+ * negative start_x/start_y with an oversize size_x/size_y places the page's full raster so
+ * that only the wanted region lands inside the bitmap, and PDFium rasterises the bitmap,
+ * not the page, so cost follows the buffer rather than the implied page.
+ *
+ * The aspect ratio is the caller's business: the rectangle is mapped onto the whole buffer,
+ * so a buffer shaped unlike the rectangle stretches it. Ask for a buffer shaped like the
+ * rectangle (megapdf_render_size over the rectangle's own points) when that matters.
+ *
+ * MEGAPDF_ERR_ARGUMENT for a null page, buffer or rectangle, a non-positive size, a stride
+ * under width x 4, a size past the clamp, both tints at once, an empty or inverted
+ * rectangle (right <= left or top <= bottom), or an implied full-page side past
+ * MEGAPDF_RENDER_CLIP_MAX_IMPLIED_SIDE. MEGAPDF_ERR_PDFIUM when PDFium refuses the bitmap.
+ *
+ * A rectangle reaching outside the page is legal and is not clamped: the part of the buffer
+ * no page covers stays the white ground, which is what a block whose bounds touch the page
+ * edge should look like. The rectangle is NOT snapped to whole pixels either -- it is used
+ * as given, so a caller can scroll a clip smoothly.
+ */
+MEGAPDF_API int megapdf_render_clip(const megapdf_page* page, const megapdf_rect* crop_space_rect, void* buffer,
+                                    int width, int height, int stride, unsigned int flags);
+
 /* --------------------------------------------------------------------------
  * Phase 3: body-text editing, written once (#112, SDD §3.1). The tiers:
  *   1. the run's own font covers the new text → edit in place;
@@ -1449,6 +1493,34 @@ MEGAPDF_API int megapdf_block_span_get(const megapdf_structure* s, size_t index,
 /** UTF-16 code units, no terminator, count-then-fill. 0 for a bad handle, block index or span index. */
 MEGAPDF_API size_t megapdf_block_span_string(const megapdf_structure* s, size_t index, size_t span,
                                              unsigned short* out, size_t capacity);
+
+/**
+ * The span's font family name as the document names it (#514, docs/reading-mode-plan.md
+ * section 3 item 3), UTF-16 code units, no terminator, count-then-fill like every other
+ * string accessor here. 0 for a bad handle, block index or span index, and 0 for a span
+ * whose font PDFium cannot name -- a font with no /BaseFont, or a span of nothing but
+ * synthetic separators. A subset-embedded font's name usually arrives with its six-letter
+ * tag still on it ("ABCDEF+Minion-Regular"): the tag is PDF 32000-1 9.6.4's, it is part of
+ * the name in the file, and it is handed over as the document wrote it rather than stripped
+ * here, because a consumer matching installed faces wants to try both and only the consumer
+ * knows what it has installed.
+ *
+ * This is a name, not a face. A subset or symbolic font will match nothing installed, and
+ * the plan's own risk note says what to do then: fall back to the platform serif or sans by
+ * the span's MEGAPDF_SPAN_BOLD/ITALIC/MONOSPACE flags. Embedded-font extraction
+ * (FPDFFont_GetFontData) is deliberately not here -- it is its own problem, with its own
+ * licensing-flag question.
+ *
+ * A span is a same-style run, and since #514 the family is part of "same style": a run that
+ * changes family mid-way is two spans even when weight, slant, pitch and size all stay put,
+ * so this name describes every character of the span and not just its first. (Before #514 a
+ * family change could hide inside one span, because only the page object, the three style
+ * flags, the link flag and the size were compared. The split can only refine spans, never
+ * merge them, so a block's text is unchanged -- it is still exactly the concatenation of its
+ * spans.)
+ */
+MEGAPDF_API size_t megapdf_block_span_font(const megapdf_structure* s, size_t index, size_t span,
+                                           unsigned short* out, size_t capacity);
 
 /* --------------------------------------------------------------------------
  * Text and Markdown writers (#142, #355, #357), over contract 9's blocks. `format` picks the
