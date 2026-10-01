@@ -10,12 +10,16 @@ Written from the pull requests merged against milestone 2.2 (opened 2026-09-27,
 Android / #540 iPhone and iPad); the page tools (#174, behind #560 / #556 / #554 /
 #570, over the core contract #430); zoom anchored on the point you're looking at
 (#528, #527, #530, behind #546 / #534 / #529 / #553); progress and the ability to
-Stop a long job (#145, behind #568 / #563 / #580); whiteout's move/resize chrome and
-text that takes more than one line (#3, #4, behind #564 / #535 / #565); a withheld
-page permission that explains itself instead of only refusing (#558, #581); a warning
-before saving destroys a document's own digital signature (#476, #481, behind #486 /
-#491 / #492 / #497); the iPad's own toolbar (#172, #435); and the vocabulary fix that
-keeps the two meanings of "signature" apart (#602, #606).
+Stop a long job, now on every platform (#145, behind #568 / #563 / #580 / #591);
+whiteout's move/resize chrome and text that takes more than one line, also now on
+every platform (#3, #4, behind #564 / #535 / #565 / #591); a withheld page
+permission that explains itself instead of only refusing (#558, #581); a warning
+before saving destroys a document's own digital signature, with an option to strip
+one a save is about to break, so far on the Mac and Linux (#476, #481, #576, #610,
+behind #486 / #491 / #492 / #497); the iPad's own toolbar (#172, #435); the
+vocabulary fix that keeps the two meanings of "signature" apart (#602, #606); and a
+fix to the Windows empty state, which had offered document commands with no
+document open (#617, #629).
 
 **Tabs, Save As Markdown and `megapdf-cli` are not in this release.** They shipped in
 2.1.1 (2026-09-21) and are unchanged here; see
@@ -92,26 +96,30 @@ the wheel.
 
 Opening a large document, searching it, saving it, making a smaller copy, and
 saving pages out each now say what they're working on and how far they've got,
-instead of looking like a hang. Searching, shrinking for email and saving pages out
-can be stopped partway on the desktops; search and saving pages out can be stopped
-on Android. Stopping never leaves a half-written file behind. iPhone and iPad do
-not have this yet — see "What isn't here" below.
+instead of looking like a hang, on every platform. Searching, shrinking for email
+and saving pages out can be stopped partway on the desktops; search and saving
+pages out can be stopped on Android and on iPhone and iPad too, which have no
+shrink feature to stop. Stopping never leaves a half-written file behind, and
+saving itself is never stoppable anywhere, on purpose — there's no safe partial
+save to leave.
 
-(#145, behind #568 Windows, #563 Mac and Linux, #580 Android.)
+(#145, behind #568 Windows, #563 Mac and Linux, #580 Android, #591 iPhone and
+iPad.)
 
 ### Whiteout you can move, and text on more than one line
 
 Draw a whiteout and it stays selected: drag it to move it, take a corner to resize
 it, Delete to remove it. That's new chrome on a tool Windows, the Mac and Linux
-already had. **On Android, whiteout itself is new** — the app had no cover-the-page
-tool at all before 2.2, only Redact, which removes rather than covers; it now has
-both, with the same move/resize chrome as the desktops. Added text can now take
-more than one line — Return starts the next one, and the box grows to fit what you
-type, on the desktops and Android.
+already had. **On Android and on iPhone and iPad, whiteout itself is new** —
+neither had a cover-the-page tool before 2.2, only Redact, which removes rather
+than covers; both now have whiteout too, with the same move/resize chrome as the
+desktops. Added text can now take more than one line everywhere: Return starts
+the next one, and the box grows to fit what you type — on the phones, a longer
+note becomes that many separately-selectable text boxes, stacked under one undo
+step, since the file format has no single multi-line text object.
 
-iPhone and iPad have neither of these — see below.
-
-(#3, #4, behind #564 Windows, #535 Mac and Linux, #565 Android.)
+(#3, #4, behind #564 Windows, #535 Mac and Linux, #565 Android, #591 iPhone and
+iPad.)
 
 ### A withheld page permission explains itself
 
@@ -122,8 +130,8 @@ consult that bit (found while building #554), so it's the one platform where thi
 now says so rather than only refusing: *the author of this document asked that its
 pages not be reordered, removed or added to*, and leaves the choice to you, the same
 pattern MegaPDF already uses for a document whose owner restricted editing. The
-desktops and iOS don't consult this permission bit for page operations yet, so
-nothing changes there (#558, landed on Android alone as #581).
+desktops and iOS don't consult this permission bit for page operations yet
+(#558, landed on Android alone as #581).
 
 ### Before a document's own signature is lost
 
@@ -136,6 +144,14 @@ kind of document doesn't merely stop verifying — its author said it should not
 changed at all. Either way, the warning appears once, at the point of Save, on
 every platform (#476, #481, behind #486 core / #491 desktop / #492 iOS / #497
 Android).
+
+**On the Mac and Linux, that warning now also offers to remove the signature
+it's about to break** — a checkbox, unchecked by default, so whether an
+already-broken signature still travels with the saved file is the person's
+choice, not the app's. The three buttons the warning already had are untouched;
+overwriting and keeping the original signature bytes exactly as they are is
+still one click. Windows, Android and iOS still only warn, as before — this is
+the Mac and Linux half of a change that isn't finished (#576, #610).
 
 **This is not a new way to sign.** The signature you draw, type or photograph and
 place on a page — what the app has always called *Signatures*, *sign*, *your
@@ -150,6 +166,11 @@ instead of leaving a blank slot (#402, #428).
 
 ### Fixed along the way
 
+- **Windows: a freshly launched window, with no document open, no longer offers
+  to Save, Print, Redact, set a password, Shrink or use the Pages menu.** With
+  no tab, those commands' bindings fell back to their properties' own
+  defaults — `Visibility` defaults to visible, `IsEnabled` to true — so 28
+  commands painted as available with nothing to act on (#617, #629).
 - **A form built for Adobe Reader explains itself instead of looking blank.**
   Some PDF forms (dynamic XFA) cannot be filled in by any app but Adobe Reader's;
   MegaPDF used to leave their fields looking like nothing was there. It now says
@@ -170,16 +191,13 @@ instead of leaving a blank slot (#402, #428).
 
 ### What isn't here
 
-- **No whiteout tool, no multi-line added text, and no progress-with-Stop on
-  iPhone or iPad.** That work is PR #591, which is still **open**, not merged.
-  (A second pull request, #592, is merged — but into a working branch, not `main`,
-  so it never shipped.) iOS keeps the indeterminate busy spinner it had before
-  2.1.1 for everything but the page tools above.
-- **The informed page-permission choice is Android only.** Windows, macOS, Linux
-  and iOS still refuse outright when a document's owner restricted page assembly,
-  the same as before.
+- **The informed page-permission choice is Android only.** Windows, macOS,
+  Linux and iOS still refuse outright when a document's owner restricted page
+  assembly.
+- **Stripping a signature a save is about to break is Mac and Linux only**
+  (above). Windows, Android and iOS still warn without that option.
 - **Reflow — a document laid out to fit the screen — is not in 2.2**, on any
-  platform, and nothing here claims it.
+  platform.
 
 ### Windows
 
@@ -196,8 +214,10 @@ instead of leaving a blank slot (#402, #428).
   reload says which images are missing (#402, #428).
 - Fix: a tab opened from File Explorer or a second launch now reliably gets its
   toolbar wired up (#427).
-- No change: a withheld page permission still refuses outright, and `megapdf-cli`
-  is not part of the Store package (unchanged from 2.1.1).
+- Fix: a freshly launched window with no document open no longer offers Save,
+  Print, Redact, Password, Shrink or the Pages menu (#617, #629).
+- No change: a withheld page permission still refuses outright, and
+  `megapdf-cli` is not part of the Store package.
 
 ### Mac
 
@@ -212,6 +232,8 @@ instead of leaving a blank slot (#402, #428).
   can be stopped (#563).
 - Whiteout stays selected to move, resize or delete; added text takes more than
   one line (#535).
+- The save warning before overwriting a signed document now offers a checkbox to
+  also strip the signature it's about to break (#576, #610).
 - Fix: a file opened from the Finder, the Dock or a second launch lands as its own
   tab however it arrives, and the window's title follows the active tab (#398,
   #399).
@@ -230,8 +252,10 @@ instead of leaving a blank slot (#402, #428).
   can be stopped (#563).
 - Whiteout stays selected to move, resize or delete; added text takes more than
   one line (#535).
+- The save warning before overwriting a signed document now offers a checkbox to
+  also strip the signature it's about to break (#576, #610).
 - No change: a withheld page permission still refuses outright, and `megapdf-cli`
-  is unchanged from 2.1.1, in every package.
+  is unchanged, in every package.
 
 ### Android
 
@@ -257,11 +281,15 @@ instead of leaving a blank slot (#402, #428).
   the navigation bar, with popovers and keyboard commands, replacing the stretched
   iPhone layout it silently ran before (#172, #435).
 - Pinch-to-zoom anchors on the point between your fingers (#553, #530).
+- **Whiteout, new**: drag to cover an area, move it, resize it or remove it, the
+  same as the other platforms (#591).
+- Added text takes more than one line: a longer note becomes several
+  separately-selectable text boxes under one undo step (#591).
+- Long work shows progress; searching and extracting pages can be stopped.
+  There is no shrink feature on iOS to stop (#591).
 - Fix: Save a copy lets you keep working with the file it just wrote (#572, #589,
   #597).
 - Fix: a redaction mark keeps its identity when an undo brings it back (#441).
-- **Does not have:** a whiteout tool of any kind, added text on more than one
-  line, or progress with Stop on long work — see "What isn't here" above.
 
 ---
 
@@ -336,29 +364,34 @@ clavier, un pincement ou la molette.
 
 Ouvrir un gros document, y chercher, l'enregistrer, en faire une copie réduite et
 en extraire des pages disent maintenant chacun sur quoi ils travaillent et où ils
-en sont, au lieu d'avoir l'air figés. La recherche, la copie réduite pour courriel
-et l'extraction de pages peuvent être arrêtées en cours de route sur les
-ordinateurs de bureau; la recherche et l'extraction de pages peuvent l'être sur
-Android. Un arrêt ne laisse jamais de fichier à moitié écrit. L'iPhone et l'iPad
-n'ont pas encore cela — voir « Ce qui n'y est pas » plus bas.
+en sont, au lieu d'avoir l'air figés, sur toutes les plateformes. La recherche, la
+copie réduite pour courriel et l'extraction de pages peuvent être arrêtées en
+cours de route sur les ordinateurs de bureau; la recherche et l'extraction de
+pages peuvent l'être sur Android et sur l'iPhone et l'iPad aussi, qui n'ont pas de
+fonction de copie réduite à arrêter. Un arrêt ne laisse jamais de fichier à moitié
+écrit, et l'enregistrement lui-même ne peut jamais être arrêté nulle part, de
+façon voulue — il n'y a pas d'enregistrement partiel sûr à laisser derrière.
 
-(#145, derrière #568 Windows, #563 Mac et Linux, #580 Android.)
+(#145, derrière #568 Windows, #563 Mac et Linux, #580 Android, #591 iPhone et
+iPad.)
 
 ### Un correcteur qui se déplace, et du texte sur plus d'une ligne
 
 Tracez du correcteur et il reste sélectionné : glissez-le pour le déplacer,
 prenez un coin pour le redimensionner, Supprimer pour l'enlever. C'est une
 nouvelle façon d'utiliser un outil que Windows, le Mac et Linux avaient déjà.
-**Sur Android, le correcteur lui-même est nouveau** — l'application n'avait
-aucun outil pour masquer la page avant 2.2, seulement Caviarder, qui retire
-plutôt que masquer; elle a maintenant les deux, avec le même déplacement et
-redimensionnement que les ordinateurs de bureau. Le texte ajouté peut maintenant
-tenir sur plus d'une ligne — Retour commence la suivante, et la zone grandit
-pour contenir ce que vous tapez, sur les ordinateurs de bureau et Android.
+**Sur Android et sur l'iPhone et l'iPad, le correcteur lui-même est nouveau** —
+aucun des deux n'avait d'outil pour masquer la page avant 2.2, seulement
+Caviarder, qui retire plutôt que masquer; les deux ont maintenant aussi le
+correcteur, avec le même déplacement et redimensionnement que les ordinateurs de
+bureau. Le texte ajouté peut maintenant tenir sur plus d'une ligne partout :
+Retour commence la suivante, et la zone grandit pour contenir ce que vous tapez —
+sur les téléphones, une note plus longue devient autant de zones de texte
+sélectionnables séparément, empilées sous une seule annulation, puisque le format
+de fichier n'a pas d'objet de texte à lignes multiples.
 
-L'iPhone et l'iPad n'ont ni l'un ni l'autre — voir plus bas.
-
-(#3, #4, derrière #564 Windows, #535 Mac et Linux, #565 Android.)
+(#3, #4, derrière #564 Windows, #535 Mac et Linux, #565 Android, #591 iPhone et
+iPad.)
 
 ### Une permission de page refusée s'explique
 
@@ -371,14 +404,14 @@ plutôt que de seulement refuser : *l'auteur de ce document a demandé que ses
 pages ne soient pas réordonnées, retirées ni complétées*, et vous laisse
 choisir, le même principe que MegaPDF applique déjà à un document dont le
 propriétaire a restreint les modifications. Les ordinateurs de bureau et iOS ne
-consultent pas encore cette permission pour les opérations de page, donc rien
-n'y change (#558, arrivé sur Android seul sous #581).
+consultent pas encore cette permission pour les opérations de page (#558, arrivé
+sur Android seul sous #581).
 
 ### Avant que la signature du document ne soit perdue
 
-Certains documents arrivent avec une **signature numérique** — celle du
-chiffrement, appuyée sur un certificat, qui cesse d'être vérifiable dès que les
-octets du fichier changent. Enregistrer par-dessus un tel document le dit
+Certains documents arrivent avec une **signature numérique** — la signature
+cryptographique, appuyée sur un certificat, qui cesse d'être vérifiable dès que
+les octets du fichier changent. Enregistrer par-dessus un tel document le dit
 maintenant d'abord et propose d'enregistrer une copie, pour que l'original signé
 reste intact. Un document certifié fermé à toute modification (une certification
 `/DocMDP`) a son propre message, plus ferme, parce que ce genre de document ne
@@ -386,6 +419,15 @@ fait pas que cesser d'être vérifiable — son auteur a déclaré qu'il ne deva
 subir aucune modification. Dans les deux cas, l'avertissement apparaît une fois,
 au moment d'enregistrer, sur toutes les plateformes (#476, #481, derrière #486
 pour le moteur, #491 ordinateurs de bureau, #492 iOS, #497 Android).
+
+**Sur le Mac et Linux, cet avertissement propose maintenant aussi de retirer la
+signature qu'il s'apprête à briser** — une case à cocher, décochée par défaut,
+pour que ce soit la personne, et non l'application, qui décide si une signature
+déjà brisée continue de voyager avec le fichier enregistré. Les trois boutons que
+l'avertissement avait déjà ne changent pas; écraser l'original en conservant les
+octets de la signature tels quels reste possible en un clic. Windows, Android et
+iOS ne font encore qu'avertir, comme avant — c'est la moitié Mac et Linux d'un
+changement qui n'est pas terminé (#576, #610).
 
 **Ce n'est pas une nouvelle façon de signer.** La signature que vous dessinez,
 tapez ou photographiez pour la poser sur une page — ce que l'application a
@@ -402,6 +444,12 @@ images manquent plutôt que de laisser un espace vide (#402, #428).
 
 ### Corrigé en chemin
 
+- **Windows : une fenêtre tout juste lancée, sans document ouvert, n'offre
+  plus Enregistrer, Imprimer, Caviarder, définir un mot de passe, Réduire ni le
+  menu Pages.** Sans onglet, les liaisons de ces commandes retombaient sur les
+  valeurs par défaut de leurs propriétés — `Visibility` vaut visible par défaut,
+  `IsEnabled` vaut vrai par défaut — si bien que 28 commandes apparaissaient
+  offertes sans rien sur quoi agir (#617, #629).
 - **Un formulaire conçu pour Adobe Reader s'explique au lieu d'avoir l'air
   vide.** Certains formulaires PDF (XFA dynamique) ne peuvent être remplis par
   aucune application sauf Adobe Reader; MegaPDF laissait leurs champs avoir l'air
@@ -425,18 +473,14 @@ images manquent plutôt que de laisser un espace vide (#402, #428).
 
 ### Ce qui n'y est pas
 
-- **Aucun outil de correcteur, aucun texte ajouté sur plus d'une ligne, et aucune
-  progression avec Arrêter sur iPhone ou iPad.** Ce travail est la demande
-  d'intégration #591, qui est encore **ouverte**, non fusionnée. (Une seconde
-  demande, #592, est fusionnée — mais dans une branche de travail, pas `main`,
-  donc elle n'a jamais été livrée.) iOS garde l'indicateur d'activité
-  indéterminé qu'il avait avant 2.1.1 pour tout sauf les outils de page
-  ci-dessus.
 - **Le choix éclairé pour une permission de page est réservé à Android.**
   Windows, macOS, Linux et iOS refusent toujours carrément quand le propriétaire
-  d'un document a restreint l'assemblage des pages, comme avant.
+  d'un document a restreint l'assemblage des pages.
+- **Retirer une signature qu'un enregistrement s'apprête à briser est réservé au
+  Mac et à Linux** (voir plus haut). Windows, Android et iOS ne font encore
+  qu'avertir, sans cette option.
 - **La reformulation — un document mis en page pour s'ajuster à l'écran — n'est
-  pas dans 2.2**, sur aucune plateforme, et rien ici ne le prétend.
+  pas dans 2.2**, sur aucune plateforme.
 
 ### Windows
 
@@ -456,8 +500,11 @@ images manquent plutôt que de laisser un espace vide (#402, #428).
   #428).
 - Correction : un onglet ouvert depuis l'Explorateur de fichiers ou un second
   lancement obtient maintenant sa barre d'outils de façon fiable (#427).
+- Correction : une fenêtre tout juste lancée sans document ouvert n'offre plus
+  Enregistrer, Imprimer, Caviarder, Mot de passe, Réduire ni le menu Pages
+  (#617, #629).
 - Sans changement : une permission de page refusée refuse toujours carrément, et
-  `megapdf-cli` ne fait pas partie du paquet du Store (inchangé depuis 2.1.1).
+  `megapdf-cli` ne fait pas partie du paquet du Store.
 
 ### Mac
 
@@ -473,6 +520,8 @@ images manquent plutôt que de laisser un espace vide (#402, #428).
   réduite pour courriel et l'extraction de pages peuvent être arrêtées (#563).
 - Le correcteur reste sélectionné pour le déplacer, le redimensionner ou le
   supprimer; le texte ajouté tient sur plus d'une ligne (#535).
+- L'avertissement avant d'écraser un document signé propose maintenant une case
+  à cocher pour retirer aussi la signature qu'il s'apprête à briser (#576, #610).
 - Correction : un fichier ouvert depuis le Finder, le Dock ou un second
   lancement arrive dans son propre onglet quel que soit son chemin, et le titre
   de la fenêtre suit l'onglet actif (#398, #399).
@@ -493,8 +542,10 @@ images manquent plutôt que de laisser un espace vide (#402, #428).
   réduite pour courriel et l'extraction de pages peuvent être arrêtées (#563).
 - Le correcteur reste sélectionné pour le déplacer, le redimensionner ou le
   supprimer; le texte ajouté tient sur plus d'une ligne (#535).
+- L'avertissement avant d'écraser un document signé propose maintenant une case
+  à cocher pour retirer aussi la signature qu'il s'apprête à briser (#576, #610).
 - Sans changement : une permission de page refusée refuse toujours carrément, et
-  `megapdf-cli` est inchangé depuis 2.1.1, dans chaque paquet.
+  `megapdf-cli` est inchangé, dans chaque paquet.
 
 ### Android
 
@@ -524,13 +575,18 @@ images manquent plutôt que de laisser un espace vide (#402, #428).
   fenêtres contextuelles et des commandes au clavier, remplaçant la disposition
   étirée de l'iPhone qu'il faisait tourner en silence avant (#172, #435).
 - Le pincement pour zoomer s'ancre sur le point entre vos doigts (#553, #530).
+- **Correcteur, nouveau** : glissez pour couvrir une zone, déplacez-la,
+  redimensionnez-la ou supprimez-la, comme sur les autres plateformes (#591).
+- Le texte ajouté tient sur plus d'une ligne : une note plus longue devient
+  plusieurs zones de texte sélectionnables séparément, sous une seule
+  annulation (#591).
+- Les longues opérations montrent leur progression; la recherche et
+  l'extraction de pages peuvent être arrêtées. Il n'y a pas de fonction de
+  copie réduite sur iOS à arrêter (#591).
 - Correction : Enregistrer une copie vous laisse continuer à travailler avec le
   fichier qu'elle vient d'écrire (#572, #589, #597).
 - Correction : une marque de caviardage garde son identité quand une annulation
   la ramène (#441).
-- **N'a pas :** d'outil de correcteur d'aucune sorte, de texte ajouté sur plus
-  d'une ligne, ni de progression avec Arrêter sur les longues opérations — voir
-  « Ce qui n'y est pas » plus haut.
 
 ---
 
@@ -612,29 +668,34 @@ clavier, un pincement ou la molette.
 
 Ouvrir un gros document, y chercher, l'enregistrer, en faire une copie réduite et
 en extraire des pages disent maintenant chacun sur quoi ils travaillent et où ils
-en sont, au lieu d'avoir l'air figés. La recherche, la copie réduite pour l'e-mail
-et l'extraction de pages peuvent être arrêtées en cours de route sur les
-ordinateurs de bureau ; la recherche et l'extraction de pages peuvent l'être sur
-Android. Un arrêt ne laisse jamais de fichier à moitié écrit. L'iPhone et l'iPad
-n'ont pas encore cela — voir « Ce qui n'y est pas » plus bas.
+en sont, au lieu d'avoir l'air figés, sur toutes les plateformes. La recherche, la
+copie réduite pour l'e-mail et l'extraction de pages peuvent être arrêtées en
+cours de route sur les ordinateurs de bureau ; la recherche et l'extraction de
+pages peuvent l'être sur Android et sur l'iPhone et l'iPad aussi, qui n'ont pas de
+fonction de copie réduite à arrêter. Un arrêt ne laisse jamais de fichier à moitié
+écrit, et l'enregistrement lui-même ne peut jamais être arrêté nulle part, de
+façon voulue — il n'y a pas d'enregistrement partiel sûr à laisser derrière.
 
-(#145, derrière #568 Windows, #563 Mac et Linux, #580 Android.)
+(#145, derrière #568 Windows, #563 Mac et Linux, #580 Android, #591 iPhone et
+iPad.)
 
 ### Un correcteur qui se déplace, et du texte sur plus d'une ligne
 
 Tracez du correcteur et il reste sélectionné : glissez-le pour le déplacer,
 prenez un coin pour le redimensionner, Supprimer pour l'enlever. C'est une
 nouvelle façon d'utiliser un outil que Windows, le Mac et Linux avaient déjà.
-**Sur Android, le correcteur lui-même est nouveau** — l'application n'avait
-aucun outil pour masquer la page avant 2.2, seulement Caviarder, qui retire
-plutôt que masquer ; elle a maintenant les deux, avec le même déplacement et
-redimensionnement que les ordinateurs de bureau. Le texte ajouté peut maintenant
-tenir sur plus d'une ligne — Retour commence la suivante, et la zone grandit
-pour contenir ce que vous tapez, sur les ordinateurs de bureau et Android.
+**Sur Android et sur l'iPhone et l'iPad, le correcteur lui-même est nouveau** —
+aucun des deux n'avait d'outil pour masquer la page avant 2.2, seulement
+Caviarder, qui retire plutôt que masquer ; les deux ont maintenant aussi le
+correcteur, avec le même déplacement et redimensionnement que les ordinateurs de
+bureau. Le texte ajouté peut maintenant tenir sur plus d'une ligne partout :
+Retour commence la suivante, et la zone grandit pour contenir ce que vous tapez —
+sur les téléphones, une note plus longue devient autant de zones de texte
+sélectionnables séparément, empilées sous une seule annulation, puisque le format
+de fichier n'a pas d'objet de texte à lignes multiples.
 
-L'iPhone et l'iPad n'ont ni l'un ni l'autre — voir plus bas.
-
-(#3, #4, derrière #564 Windows, #535 Mac et Linux, #565 Android.)
+(#3, #4, derrière #564 Windows, #535 Mac et Linux, #565 Android, #591 iPhone et
+iPad.)
 
 ### Une permission de page refusée s'explique
 
@@ -647,14 +708,14 @@ plutôt que de seulement refuser : *l'auteur de ce document a demandé que ses
 pages ne soient pas réordonnées, retirées ni complétées*, et vous laisse
 choisir, le même principe que MegaPDF applique déjà à un document dont le
 propriétaire a restreint les modifications. Les ordinateurs de bureau et iOS ne
-consultent pas encore cette permission pour les opérations de page, donc rien
-n'y change (#558, arrivé sur Android seul sous #581).
+consultent pas encore cette permission pour les opérations de page (#558, arrivé
+sur Android seul sous #581).
 
 ### Avant que la signature du document ne soit perdue
 
-Certains documents arrivent avec une **signature numérique** — celle du
-chiffrement, appuyée sur un certificat, qui cesse d'être vérifiable dès que les
-octets du fichier changent. Enregistrer par-dessus un tel document le dit
+Certains documents arrivent avec une **signature numérique** — la signature
+cryptographique, appuyée sur un certificat, qui cesse d'être vérifiable dès que
+les octets du fichier changent. Enregistrer par-dessus un tel document le dit
 maintenant d'abord et propose d'enregistrer une copie, pour que l'original signé
 reste intact. Un document certifié fermé à toute modification (une certification
 `/DocMDP`) a son propre message, plus ferme, parce que ce genre de document ne
@@ -662,6 +723,15 @@ fait pas que cesser d'être vérifiable — son auteur a déclaré qu'il ne deva
 subir aucune modification. Dans les deux cas, l'avertissement apparaît une fois,
 au moment d'enregistrer, sur toutes les plateformes (#476, #481, derrière #486
 pour le moteur, #491 ordinateurs de bureau, #492 iOS, #497 Android).
+
+**Sur le Mac et Linux, cet avertissement propose maintenant aussi de retirer la
+signature qu'il s'apprête à briser** — une case à cocher, décochée par défaut,
+pour que ce soit la personne, et non l'application, qui décide si une signature
+déjà brisée continue de voyager avec le fichier enregistré. Les trois boutons que
+l'avertissement avait déjà ne changent pas ; écraser l'original en conservant les
+octets de la signature tels quels reste possible en un clic. Windows, Android et
+iOS ne font encore qu'avertir, comme avant — c'est la moitié Mac et Linux d'un
+changement qui n'est pas terminé (#576, #610).
 
 **Ce n'est pas une nouvelle façon de signer.** La signature que vous dessinez,
 tapez ou photographiez pour la poser sur une page — ce que l'application a
@@ -678,6 +748,12 @@ images manquent plutôt que de laisser un espace vide (#402, #428).
 
 ### Corrigé en chemin
 
+- **Windows : une fenêtre tout juste lancée, sans document ouvert, n'offre
+  plus Enregistrer, Imprimer, Caviarder, définir un mot de passe, Réduire ni le
+  menu Pages.** Sans onglet, les liaisons de ces commandes retombaient sur les
+  valeurs par défaut de leurs propriétés — `Visibility` vaut visible par défaut,
+  `IsEnabled` vaut vrai par défaut — si bien que 28 commandes apparaissaient
+  offertes sans rien sur quoi agir (#617, #629).
 - **Un formulaire conçu pour Adobe Reader s'explique au lieu d'avoir l'air
   vide.** Certains formulaires PDF (XFA dynamique) ne peuvent être remplis par
   aucune application sauf Adobe Reader ; MegaPDF laissait leurs champs avoir l'air
@@ -701,18 +777,14 @@ images manquent plutôt que de laisser un espace vide (#402, #428).
 
 ### Ce qui n'y est pas
 
-- **Aucun outil de correcteur, aucun texte ajouté sur plus d'une ligne, et aucune
-  progression avec Arrêter sur iPhone ou iPad.** Ce travail est la demande
-  d'intégration #591, qui est encore **ouverte**, non fusionnée. (Une seconde
-  demande, #592, est fusionnée — mais dans une branche de travail, pas `main`,
-  donc elle n'a jamais été livrée.) iOS garde l'indicateur d'activité
-  indéterminé qu'il avait avant 2.1.1 pour tout sauf les outils de page
-  ci-dessus.
 - **Le choix éclairé pour une permission de page est réservé à Android.**
   Windows, macOS, Linux et iOS refusent toujours carrément quand le propriétaire
-  d'un document a restreint l'assemblage des pages, comme avant.
+  d'un document a restreint l'assemblage des pages.
+- **Retirer une signature qu'un enregistrement s'apprête à briser est réservé au
+  Mac et à Linux** (voir plus haut). Windows, Android et iOS ne font encore
+  qu'avertir, sans cette option.
 - **La reformulation — un document mis en page pour s'ajuster à l'écran — n'est
-  pas dans 2.2**, sur aucune plateforme, et rien ici ne le prétend.
+  pas dans 2.2**, sur aucune plateforme.
 
 ### Windows
 
@@ -732,8 +804,11 @@ images manquent plutôt que de laisser un espace vide (#402, #428).
   #428).
 - Correction : un onglet ouvert depuis l'Explorateur de fichiers ou un second
   lancement obtient maintenant sa barre d'outils de façon fiable (#427).
+- Correction : une fenêtre tout juste lancée sans document ouvert n'offre plus
+  Enregistrer, Imprimer, Caviarder, Mot de passe, Réduire ni le menu Pages
+  (#617, #629).
 - Sans changement : une permission de page refusée refuse toujours carrément, et
-  `megapdf-cli` ne fait pas partie du paquet du Store (inchangé depuis 2.1.1).
+  `megapdf-cli` ne fait pas partie du paquet du Store.
 
 ### Mac
 
@@ -749,6 +824,8 @@ images manquent plutôt que de laisser un espace vide (#402, #428).
   réduite pour l'e-mail et l'extraction de pages peuvent être arrêtées (#563).
 - Le correcteur reste sélectionné pour le déplacer, le redimensionner ou le
   supprimer ; le texte ajouté tient sur plus d'une ligne (#535).
+- L'avertissement avant d'écraser un document signé propose maintenant une case
+  à cocher pour retirer aussi la signature qu'il s'apprête à briser (#576, #610).
 - Correction : un fichier ouvert depuis le Finder, le Dock ou un second
   lancement arrive dans son propre onglet quel que soit son chemin, et le titre
   de la fenêtre suit l'onglet actif (#398, #399).
@@ -769,8 +846,10 @@ images manquent plutôt que de laisser un espace vide (#402, #428).
   réduite pour l'e-mail et l'extraction de pages peuvent être arrêtées (#563).
 - Le correcteur reste sélectionné pour le déplacer, le redimensionner ou le
   supprimer ; le texte ajouté tient sur plus d'une ligne (#535).
+- L'avertissement avant d'écraser un document signé propose maintenant une case
+  à cocher pour retirer aussi la signature qu'il s'apprête à briser (#576, #610).
 - Sans changement : une permission de page refusée refuse toujours carrément, et
-  `megapdf-cli` est inchangé depuis 2.1.1, dans chaque paquet.
+  `megapdf-cli` est inchangé, dans chaque paquet.
 
 ### Android
 
@@ -800,12 +879,17 @@ images manquent plutôt que de laisser un espace vide (#402, #428).
   fenêtres contextuelles et des commandes au clavier, remplaçant la disposition
   étirée de l'iPhone qu'il faisait tourner en silence avant (#172, #435).
 - Le pincement pour zoomer s'ancre sur le point entre vos doigts (#553, #530).
+- **Correcteur, nouveau** : glissez pour couvrir une zone, déplacez-la,
+  redimensionnez-la ou supprimez-la, comme sur les autres plateformes (#591).
+- Le texte ajouté tient sur plus d'une ligne : une note plus longue devient
+  plusieurs zones de texte sélectionnables séparément, sous une seule
+  annulation (#591).
+- Les longues opérations montrent leur progression ; la recherche et
+  l'extraction de pages peuvent être arrêtées. Il n'y a pas de fonction de
+  copie réduite sur iOS à arrêter (#591).
 - Correction : Enregistrer une copie vous laisse continuer à travailler avec le
   fichier qu'elle vient d'écrire (#572, #589, #597).
 - Correction : une marque de caviardage garde son identité quand une annulation
   la ramène (#441).
-- **N'a pas :** d'outil de correcteur d'aucune sorte, de texte ajouté sur plus
-  d'une ligne, ni de progression avec Arrêter sur les longues opérations — voir
-  « Ce qui n'y est pas » plus haut.
 
 ---
