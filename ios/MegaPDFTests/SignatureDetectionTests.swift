@@ -62,9 +62,12 @@ final class SignatureDetectionEngineTests: XCTestCase {
         let doc = try await engine.open(try fixture("signed-approval"))
         defer { Task { await engine.close(doc) } }
 
-        XCTAssertTrue(await engine.documentFlags(doc).contains(.signed))
-        XCTAssertTrue(await engine.removeDigitalSignatures(doc))
-        XCTAssertFalse(await engine.documentFlags(doc).contains(.signed))
+        let before = await engine.documentFlags(doc)
+        XCTAssertTrue(before.contains(.signed))
+        let removed = await engine.removeDigitalSignatures(doc)
+        XCTAssertTrue(removed)
+        let after = await engine.documentFlags(doc)
+        XCTAssertFalse(after.contains(.signed))
     }
 
     func testTheSavedFileGenuinelyCarriesNoSignatureOnceRemoved() async throws {
@@ -76,7 +79,8 @@ final class SignatureDetectionEngineTests: XCTestCase {
 
         let reopened = try await engine.open(bytes)
         defer { Task { await engine.close(reopened) } }
-        XCTAssertFalse(await engine.documentFlags(reopened).contains(.signed),
+        let flags = await engine.documentFlags(reopened)
+        XCTAssertFalse(flags.contains(.signed),
                         "a save nobody asked to keep the signature must not still report one")
     }
 
@@ -91,7 +95,8 @@ final class SignatureDetectionEngineTests: XCTestCase {
 
         let reopened = try await engine.open(bytes)
         defer { Task { await engine.close(reopened) } }
-        XCTAssertTrue(await engine.documentFlags(reopened).contains(.signed),
+        let flags = await engine.documentFlags(reopened)
+        XCTAssertTrue(flags.contains(.signed),
                        "a save nobody asked to remove the signature from must still report one (now invalid)")
     }
 
@@ -100,7 +105,8 @@ final class SignatureDetectionEngineTests: XCTestCase {
         let doc = try await engine.open(try fixture("fixture"))
         defer { Task { await engine.close(doc) } }
 
-        XCTAssertFalse(await engine.removeDigitalSignatures(doc))
+        let removed = await engine.removeDigitalSignatures(doc)
+        XCTAssertFalse(removed)
     }
 }
 
