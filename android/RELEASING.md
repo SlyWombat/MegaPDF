@@ -69,7 +69,7 @@ MegaPDF: Fill & Sign PDFs
 Fill, check and sign a PDF. No account, no cloud.
 ```
 
-**Full description** [4000] (2945)
+**Full description** [4000] (3249)
 ```
 Open. Fix. Save. Done.
 
@@ -88,30 +88,38 @@ Redact, and it really is gone
 Mark what has to come out — a name, an address, a picture — and MegaPDF takes it out of the file rather than covering it over. What was underneath is gone: no other app can copy it or search for it.
 
 Sign like you mean it
-Draw your signature with a finger, type your name, or use a photo of the one on paper — the white background disappears automatically. Your signatures stay in a private library on your device; drop one onto any document, move and resize it until it sits right on the line.
+Draw your signature with a finger, type your name, or use a photo of the one on paper — the white background disappears automatically. Your signatures stay in a private library on your device; drop one on a document and move and resize it until it sits right on the line.
 
 Save without fear
-Save writes back to the original file — safely. MegaPDF checks every save before it touches your original, so a failed save can never corrupt the file someone sent you. Or keep the original and save a copy. Export as Markdown writes the document's text — headings, lists, the values you filled in — as a Markdown file, and leaves the PDF as it was. You can also protect a document with a password, or remove one you know.
+Save writes back to the original file — safely. MegaPDF checks every save first, so a failed one can never corrupt the file someone sent you. Or keep the original and save a copy. Export as Markdown writes the document's text — headings, lists, the values you filled in — as a Markdown file, and leaves the PDF as it was. You can also put a password on a document, or take one off.
 
 Find any word
-Search the whole document as you type. Every match lights up and the counter tells you how many there are, so the one clause you need in a forty-page lease is a few taps away.
+Search the whole document as you type: every match lights up and the counter says how many, so the one clause you need in a forty-page lease is a few taps away.
+
+Read it, not the app
+Reading mode takes the toolbars off the screen and leaves the page. Page colours come with it: Sepia for a long read, Night for a dark room — and Night inverts pictures too, deliberately. MegaPDF can open every document that way.
+
+Put the pages in order
+Rotate a page that came in sideways, delete one, drag pages into the right order, insert a blank page, add the pages of another PDF, or save a few pages out as their own file. Each is a single step, and one Undo puts it back.
 
 Private by design
 MegaPDF asks you for no permissions and makes no network connections. Your documents and your signature never leave your device — there is no server for them to go to. The app is open source, so anyone can verify that.
 
 Works with everything
-Open a PDF from Files, Google Drive, Gmail or any app that hands one over — MegaPDF is in their Open with list — or through MegaPDF's own file picker, and send it back with Share. Documents you fill and sign here open perfectly in Adobe Acrobat, desktop PDF apps, and MegaPDF for Windows, Mac and iOS — same engine, same result, on every platform.
+Open a PDF from Files, Google Drive, Gmail or any app that hands one over — MegaPDF is in their Open with list — and send it back with Share. Documents you fill and sign here open perfectly in Adobe Acrobat and in any desktop PDF app.
 
-MegaPDF is deliberately simple. It doesn't rearrange pages, run OCR, or bury you in toolbars. It opens, it fixes, it saves. Done.
+MegaPDF is deliberately simple: it doesn't bury you in toolbars. It opens, it fixes, it saves. Done.
 ```
 
-**Release notes** [500] (479) — 2.1.1, from `docs/release-notes/2.1.1/google-play.md`
+**Release notes** [500] (489) — 2.2, from `docs/release-notes/2.2/google-play.md`
 ```
-Open with: MegaPDF is now offered when you open a PDF from Files, Drive, Gmail or any app that hands one over.
+Reading mode hides everything but the page. Sepia for a long read, Night for a dark room — Night inverts pictures too, on purpose, and says so.
 
-Share, in the More menu, sends the document through the share sheet. If it has unsaved changes it offers Save, Share without saving, or Cancel.
+Pages: rotate, delete, reorder, insert a blank page, add another PDF's pages, or save a selection as its own file. Each is one Undo.
 
-Export as Markdown, in the More menu, writes the document's text, headings, lists and filled-in values as a file you can paste anywhere. An export, not a save — the PDF is untouched, and a scanned page says it has no text.
+Whiteout arrives: cover anything on the page, then move and resize it. Added text takes more than one line.
+
+Where a document's author asked that it not be changed, MegaPDF says so and leaves the choice to you.
 ```
 
 ### Français (Canada) — `fr-CA`
@@ -126,7 +134,7 @@ MegaPDF : remplir et signer
 Remplir, cocher et signer un PDF. Pas de compte, pas d'infonuagique.
 ```
 
-**Full description** [4000] (3690)
+**Full description** [4000] (3982)
 ```
 Ouvrir. Corriger. Enregistrer. Terminé.
 
@@ -145,30 +153,38 @@ Caviardez, et c'est parti pour de bon
 Marquez ce qui doit disparaître — un nom, une adresse, une image — et MegaPDF le retire du fichier au lieu de le recouvrir. Ce qui était dessous n'y est plus : aucune autre application ne peut le copier ni le retrouver par une recherche.
 
 Signez pour de vrai
-Dessinez votre signature du doigt, tapez votre nom ou utilisez une photo de celle sur papier : le fond blanc disparaît automatiquement. Vos signatures restent dans une bibliothèque privée sur votre appareil; déposez-en une sur n'importe quel document, déplacez-la et redimensionnez-la jusqu'à ce qu'elle soit bien sur la ligne.
+Dessinez votre signature du doigt, tapez votre nom ou utilisez une photo de celle sur papier : le fond blanc disparaît automatiquement. Vos signatures restent dans une bibliothèque privée sur votre appareil; déposez-en une sur un document, puis déplacez-la et redimensionnez-la jusqu'à ce qu'elle soit bien sur la ligne.
 
 Enregistrez sans crainte
-Enregistrer écrit dans le fichier original, en toute sécurité. MegaPDF vérifie chaque enregistrement avant de toucher à votre original : un enregistrement raté ne peut jamais corrompre le fichier qu'on vous a envoyé. Ou gardez l'original et enregistrez une copie. Exporter en Markdown écrit le texte du document (titres, listes, les valeurs que vous avez remplies) dans un fichier Markdown, et laisse le PDF tel quel. Vous pouvez aussi protéger un document par un mot de passe, ou retirer un mot de passe que vous connaissez.
+Enregistrer écrit dans le fichier original, en toute sécurité. MegaPDF vérifie chaque enregistrement d'abord : un enregistrement raté ne peut jamais corrompre le fichier qu'on vous a envoyé. Ou gardez l'original et enregistrez une copie. Exporter en Markdown écrit le texte du document (titres, listes, les valeurs remplies) dans un fichier Markdown, et laisse le PDF tel quel. Vous pouvez aussi mettre un mot de passe sur un document, ou en retirer un.
 
 Trouvez n'importe quel mot
-Cherchez dans tout le document à mesure que vous tapez. Chaque résultat s'allume et le compteur vous dit combien il y en a, pour que la seule clause dont vous avez besoin dans un bail de quarante pages soit à quelques touches.
+Cherchez dans tout le document à mesure que vous tapez : chaque résultat s'allume et le compteur dit combien il y en a, pour que la seule clause utile dans un bail de quarante pages soit à quelques touches.
+
+Lisez le document, pas l'application
+Le mode lecture retire les barres d'outils de l'écran et laisse la page. Les couleurs de la page viennent avec : Sépia pour une longue lecture, Nuit pour une pièce sombre — et le mode nuit inverse aussi les images, à dessein. MegaPDF peut ouvrir chaque document ainsi.
+
+Mettez les pages en ordre
+Faites pivoter une page arrivée de travers, supprimez-en une, glissez les pages dans le bon ordre, insérez une page vierge, ajoutez les pages d'un autre PDF, ou extrayez quelques pages dans un fichier à part. Chaque geste est une seule étape, et une annulation le reprend.
 
 Confidentiel par conception
 MegaPDF ne vous demande aucune permission et n'établit aucune connexion réseau. Vos documents et votre signature ne quittent jamais votre appareil : il n'y a aucun serveur où ils pourraient aller. L'application est un logiciel libre; n'importe qui peut le vérifier.
 
 Compatible avec tout
-Ouvrez un PDF depuis Fichiers, Google Drive, Gmail ou toute application qui en remet un (MegaPDF est dans leur liste Ouvrir avec), ou avec le sélecteur de fichiers de MegaPDF, et renvoyez-le avec Partager. Les documents remplis et signés ici s'ouvrent parfaitement dans Adobe Acrobat, dans les applications PDF de bureau, et dans MegaPDF pour Windows, Mac et iOS : même moteur, même résultat, sur toutes les plateformes.
+Ouvrez un PDF depuis Fichiers, Google Drive, Gmail ou toute application qui en remet un (MegaPDF est dans leur liste Ouvrir avec), et renvoyez-le avec Partager. Les documents remplis et signés ici s'ouvrent parfaitement dans Adobe Acrobat et dans toute application PDF de bureau.
 
-MegaPDF est volontairement simple. Il ne réorganise pas les pages, ne fait pas de reconnaissance de caractères et ne vous noie pas sous les barres d'outils. Il ouvre, il corrige, il enregistre. Terminé.
+MegaPDF est volontairement simple : il ne vous noie pas sous les barres d'outils. Il ouvre, il corrige, il enregistre. Terminé.
 ```
 
-**Release notes** [500] (479) — 2.1.1, from `docs/release-notes/2.1.1/google-play.md`
+**Release notes** [500] (470) — 2.2, from `docs/release-notes/2.2/google-play.md`
 ```
-Ouvrir avec : MegaPDF est proposé quand vous ouvrez un PDF depuis Fichiers, Drive, Gmail ou une autre application.
+Le mode lecture ne laisse que la page. Sépia pour lire longtemps, Nuit pour une pièce sombre — le mode nuit inverse aussi les images, et le dit.
 
-Partager, dans le menu Plus, envoie le document par la feuille de partage. Avec des modifications non enregistrées : Enregistrer, Partager sans enregistrer ou Annuler.
+Pages : pivoter, supprimer, réordonner, insérer une page vierge, ajouter celles d'un autre PDF, extraire une sélection. Une annulation suffit.
 
-Exporter en Markdown, dans le menu Plus, écrit le texte du document : titres, listes et valeurs remplies, à coller n'importe où. Une exportation, pas un enregistrement : le PDF n'est pas touché.
+Le correcteur arrive : masquez une zone, puis déplacez-la et redimensionnez-la.
+
+Quand l'auteur a demandé qu'un document ne soit pas modifié, MegaPDF le dit et vous laisse choisir.
 ```
 
 ### Français (France) — `fr-FR`
@@ -183,7 +199,7 @@ MegaPDF : remplir et signer
 Remplir, cocher et signer un PDF. Pas de compte, pas de cloud.
 ```
 
-**Full description** [4000] (3688)
+**Full description** [4000] (3980)
 ```
 Ouvrir. Corriger. Enregistrer. Terminé.
 
@@ -202,30 +218,38 @@ Caviardez, et c'est parti pour de bon
 Marquez ce qui doit disparaître — un nom, une adresse, une image — et MegaPDF le retire du fichier au lieu de le recouvrir. Ce qui était dessous n'y est plus : aucune autre application ne peut le copier ni le retrouver par une recherche.
 
 Signez pour de vrai
-Dessinez votre signature du doigt, tapez votre nom ou utilisez une photo de celle sur papier : le fond blanc disparaît automatiquement. Vos signatures restent dans une bibliothèque privée sur votre appareil ; déposez-en une sur n'importe quel document, déplacez-la et redimensionnez-la jusqu'à ce qu'elle soit bien sur la ligne.
+Dessinez votre signature du doigt, tapez votre nom ou utilisez une photo de celle sur papier : le fond blanc disparaît automatiquement. Vos signatures restent dans une bibliothèque privée sur votre appareil ; déposez-en une sur un document, puis déplacez-la et redimensionnez-la jusqu'à ce qu'elle soit bien sur la ligne.
 
 Enregistrez sans crainte
-Enregistrer écrit dans le fichier original, en toute sécurité. MegaPDF vérifie chaque enregistrement avant de toucher à votre original : un enregistrement raté ne peut jamais corrompre le fichier qu'on vous a envoyé. Ou gardez l'original et enregistrez une copie. Exporter en Markdown écrit le texte du document (titres, listes, les valeurs que vous avez remplies) dans un fichier Markdown, et laisse le PDF tel quel. Vous pouvez aussi protéger un document par un mot de passe, ou retirer un mot de passe que vous connaissez.
+Enregistrer écrit dans le fichier original, en toute sécurité. MegaPDF vérifie chaque enregistrement d'abord : un enregistrement raté ne peut jamais corrompre le fichier qu'on vous a envoyé. Ou gardez l'original et enregistrez une copie. Exporter en Markdown écrit le texte du document (titres, listes, les valeurs remplies) dans un fichier Markdown, et laisse le PDF tel quel. Vous pouvez aussi mettre un mot de passe sur un document, ou en retirer un.
 
 Trouvez n'importe quel mot
-Cherchez dans tout le document à mesure que vous tapez. Chaque résultat s'allume et le compteur vous dit combien il y en a, pour que la seule clause dont vous avez besoin dans un bail de quarante pages soit à quelques touches.
+Cherchez dans tout le document à mesure que vous tapez : chaque résultat s'allume et le compteur dit combien il y en a, pour que la seule clause utile dans un bail de quarante pages soit à quelques touches.
+
+Lisez le document, pas l'application
+Le mode lecture retire les barres d'outils de l'écran et laisse la page. Les couleurs de la page viennent avec : Sépia pour une longue lecture, Nuit pour une pièce sombre — et le mode nuit inverse aussi les images, à dessein. MegaPDF peut ouvrir chaque document ainsi.
+
+Mettez les pages en ordre
+Faites pivoter une page arrivée de travers, supprimez-en une, glissez les pages dans le bon ordre, insérez une page vierge, ajoutez les pages d'un autre PDF, ou extrayez quelques pages dans un fichier à part. Chaque geste est une seule étape, et une annulation le reprend.
 
 Confidentiel par conception
 MegaPDF ne vous demande aucune permission et n'établit aucune connexion réseau. Vos documents et votre signature ne quittent jamais votre appareil : il n'y a aucun serveur où ils pourraient aller. L'application est un logiciel libre ; n'importe qui peut le vérifier.
 
 Compatible avec tout
-Ouvrez un PDF depuis Fichiers, Google Drive, Gmail ou toute application qui en remet un (MegaPDF est dans leur liste Ouvrir avec), ou avec le sélecteur de fichiers de MegaPDF, et renvoyez-le avec Partager. Les documents remplis et signés ici s'ouvrent parfaitement dans Adobe Acrobat, dans les applications PDF de bureau, et dans MegaPDF pour Windows, Mac et iOS : même moteur, même résultat, sur toutes les plateformes.
+Ouvrez un PDF depuis Fichiers, Google Drive, Gmail ou toute application qui en remet un (MegaPDF est dans leur liste Ouvrir avec), et renvoyez-le avec Partager. Les documents remplis et signés ici s'ouvrent parfaitement dans Adobe Acrobat et dans toute application PDF de bureau.
 
-MegaPDF est volontairement simple. Il ne réorganise pas les pages, ne fait pas de reconnaissance de caractères et ne vous noie pas sous les barres d'outils. Il ouvre, il corrige, il enregistre. Terminé.
+MegaPDF est volontairement simple : il ne vous noie pas sous les barres d'outils. Il ouvre, il corrige, il enregistre. Terminé.
 ```
 
-**Release notes** [500] (479) — 2.1.1, from `docs/release-notes/2.1.1/google-play.md`
+**Release notes** [500] (470) — 2.2, from `docs/release-notes/2.2/google-play.md`
 ```
-Ouvrir avec : MegaPDF est proposé quand vous ouvrez un PDF depuis Fichiers, Drive, Gmail ou une autre application.
+Le mode lecture ne laisse que la page. Sépia pour lire longtemps, Nuit pour une pièce sombre — le mode nuit inverse aussi les images, et le dit.
 
-Partager, dans le menu Plus, envoie le document par la feuille de partage. Avec des modifications non enregistrées : Enregistrer, Partager sans enregistrer ou Annuler.
+Pages : pivoter, supprimer, réordonner, insérer une page vierge, ajouter celles d'un autre PDF, extraire une sélection. Une annulation suffit.
 
-Exporter en Markdown, dans le menu Plus, écrit le texte du document : titres, listes et valeurs remplies, à coller n'importe où. Une exportation, pas un enregistrement : le PDF n'est pas touché.
+Le correcteur arrive : masquez une zone, puis déplacez-la et redimensionnez-la.
+
+Quand l'auteur a demandé qu'un document ne soit pas modifié, MegaPDF le dit et vous laisse choisir.
 ```
 
 <!-- /copy-by-language -->

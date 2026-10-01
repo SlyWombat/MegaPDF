@@ -57,7 +57,7 @@ Fill, check & sign PDFs
 Someone emailed you a PDF to sign? Open it, tap the boxes, drop in your signature, save. Done in under a minute — no account, no subscription.
 ```
 
-**Description** [4000] (2757)
+**Description** [4000] (3214)
 ```
 Open. Fix. Save. Done.
 
@@ -76,13 +76,19 @@ Redact, and it really is gone
 Mark what has to come out — a name, an address, a picture — and MegaPDF takes it out of the file rather than covering it over. What was underneath is gone: no other app can copy it or search for it.
 
 Sign like you mean it
-Draw your signature with a finger, or photograph the one on paper — the white background disappears automatically. Your signatures stay in a private library on your device; drop one onto any document, move and resize it until it sits right on the line.
+Draw your signature with a finger, or photograph the one on paper — the white background disappears automatically. Your signatures stay in a private library on your device; drop one on a document and move and resize it until it sits right on the line.
 
 Save without fear
 Save writes back to the original file — safely. MegaPDF verifies every document before it touches your original, so a failed save can never corrupt the file someone sent you. Or keep the original and save a copy. Export as Markdown writes the document's text — headings, lists, the values you filled in — as a Markdown file, and leaves the PDF as it was.
 
 Find any word
-Search the whole document as you type. Every match lights up and the counter tells you how many there are, so the one clause you need in a forty-page lease is a few taps away.
+Search the whole document as you type: every match lights up and the counter says how many, so the one clause you need in a forty-page lease is a few taps away.
+
+Read it, not the app
+Reading mode takes the toolbars off the screen and leaves the page. Page colours come with it: Sepia for a long read, Night for a dark room — and Night inverts pictures too, deliberately. MegaPDF can open every document that way.
+
+Put the pages in order
+Rotate a page that came in sideways, delete one, drag pages into the right order, insert a blank page, add the pages of another PDF, or save a few pages out as their own file. Each is a single step, and one Undo puts it back.
 
 Private by design
 MegaPDF requests zero permissions and makes zero network connections. Your documents and your signature never leave your device — there is no server for them to go to. The app is open source, so anyone can verify that.
@@ -90,27 +96,35 @@ MegaPDF requests zero permissions and makes zero network connections. Your docum
 Works with everything
 Open a PDF from Mail, Files, iCloud Drive or any app that shares one — MegaPDF is among the apps they offer to open it in — and send it back with Share. Documents you fill and sign here are standard PDFs: they open perfectly in any other PDF app.
 
-MegaPDF is deliberately simple. It doesn't rearrange pages, run OCR, or bury you in toolbars. It opens, it fixes, it saves. Done.
+MegaPDF is deliberately simple: it doesn't bury you in toolbars. It opens, it fixes, it saves. Done.
 ```
 
-**Keywords** [100] (89)
+**Keywords** [100] (96)
 ```
-pdf,sign,signature,fill,form,checkbox,esign,editor,search,document,annotate,fill and sign
+pdf,sign,signature,fill,form,checkbox,esign,editor,search,document,annotate,fill and sign,reader
 ```
 
-**What's new** [4000] (1043) — 2.1.1, from `docs/release-notes/2.1.1/app-store.md`
+**What's new** [4000] (1975) — 2.2, from `docs/release-notes/2.2/app-store.md`
 ```
-Open with MegaPDF
+Reading mode
 
-MegaPDF is now a PDF viewer as far as your iPhone and iPad are concerned. A PDF in Files, an attachment in Mail, or a document in any app's share sheet can be opened in MegaPDF from right there, instead of only through Open PDF on MegaPDF's own first screen. If a document with unsaved changes is already open, it asks before switching.
+MegaPDF can get out of the way. Reading mode takes the toolbars off the screen and leaves the page. A tap brings a small bar back, and the page number on it opens a box to go anywhere in the document; a tap takes the bar away again. Page colours are in Settings, under Reading: Normal, Sepia for a long read, and Night for a dark room. Night inverts the page, pictures included — that is deliberate, and the setting says so, because a photograph read at night is a photograph in negative. If reading is mostly what you do with a PDF, Open documents in reading mode starts every one of them that way.
 
-Share
+Page tools
 
-Share, in the More menu, hands the document to the share sheet: Mail, Messages, AirDrop, Save to Files, whatever you have. If the document has unsaved changes it says so first and offers Save, Share without saving — the last saved copy goes out and your edits stay open — or Cancel.
+Tap Pages and the document's pages are in front of you: a sheet on an iPhone, a sidebar beside the page on an iPad. Rotate a page that was scanned sideways, delete one, drag pages into a different order, insert a blank page, add the pages of another PDF, or save the pages you picked as a file of their own. Each of those is one step in the undo history, so one Undo puts the document back the way it was.
 
-Export as Markdown
+A toolbar made for the iPad
 
-Export as Markdown, beside Save a copy in the More menu, writes the document's text — headings, paragraphs, lists and the values you filled in — as a Markdown file, saved wherever you choose in Files. It is an export, not a save: the PDF is untouched, and it still asks to be saved if you had changed it. A scanned page has no text to give, and the file says so in its place.
+On an iPad the everyday tools now sit in a wide row of their own under the navigation bar, each with its title beside its icon instead of an icon you have to guess at, and each tool's picker opens as a popover next to the tool it belongs to. The keyboard commands are there too.
+
+Zoom where you are looking
+
+A pinch now zooms on the point between your fingers rather than the corner of the page, so the line you were reading stays under them.
+
+Before a document's own signature is lost
+
+Some documents arrive carrying a digital signature — the cryptographic kind, which stops verifying the moment the file changes at all. Saving over one of those now says so first and offers to save a copy instead, so the signed original stays intact. That is about a signature already in the document; the signature you draw, type or photograph and place on the page is a picture of your name, and placing one has not changed.
 ```
 
 **Screenshot captions** (optional overlay text), iPhone 6.9" and iPad 13" in this order
@@ -142,7 +156,7 @@ Remplir, cocher, signer
 On vous a envoyé un PDF à signer? Ouvrez-le, cochez les cases, apposez votre signature, enregistrez. Fait en moins d'une minute, sans compte ni abonnement.
 ```
 
-**Description** [4000] (3438)
+**Description** [4000] (3943)
 ```
 Ouvrir. Corriger. Enregistrer. Terminé.
 
@@ -161,13 +175,19 @@ Caviardez, et c'est parti pour de bon
 Marquez ce qui doit disparaître — un nom, une adresse, une image — et MegaPDF le retire du fichier au lieu de le recouvrir. Ce qui était dessous n'y est plus : aucune autre application ne peut le copier ni le retrouver par une recherche.
 
 Signez pour de vrai
-Dessinez votre signature du doigt, ou photographiez celle sur papier : le fond blanc disparaît automatiquement. Vos signatures restent dans une bibliothèque privée sur votre appareil; déposez-en une sur n'importe quel document, déplacez-la et redimensionnez-la jusqu'à ce qu'elle soit bien sur la ligne.
+Dessinez votre signature du doigt, ou photographiez celle sur papier : le fond blanc disparaît automatiquement. Vos signatures restent dans une bibliothèque privée sur votre appareil; déposez-en une sur un document, puis déplacez-la et redimensionnez-la jusqu'à ce qu'elle soit bien sur la ligne.
 
 Enregistrez sans crainte
 Enregistrer écrit dans le fichier original, en toute sécurité. MegaPDF vérifie chaque document avant de toucher à votre original : un enregistrement raté ne peut jamais corrompre le fichier qu'on vous a envoyé. Ou gardez l'original et enregistrez une copie. Exporter en Markdown écrit le texte du document (titres, listes, les valeurs que vous avez remplies) dans un fichier Markdown, et laisse le PDF tel quel.
 
 Trouvez n'importe quel mot
-Cherchez dans tout le document à mesure que vous tapez. Chaque résultat s'allume et le compteur vous dit combien il y en a, pour que la seule clause dont vous avez besoin dans un bail de quarante pages soit à quelques touches.
+Cherchez dans tout le document à mesure que vous tapez : chaque résultat s'allume et le compteur dit combien il y en a, pour que la seule clause utile dans un bail de quarante pages soit à quelques touches.
+
+Lisez le document, pas l'application
+Le mode lecture retire les barres d'outils de l'écran et laisse la page. Les couleurs de la page viennent avec : Sépia pour une longue lecture, Nuit pour une pièce sombre — et le mode nuit inverse aussi les images, à dessein. MegaPDF peut ouvrir chaque document ainsi.
+
+Mettez les pages en ordre
+Faites pivoter une page arrivée de travers, supprimez-en une, glissez les pages dans le bon ordre, insérez une page vierge, ajoutez les pages d'un autre PDF, ou extrayez quelques pages dans un fichier à part. Chaque geste est une seule étape, et une annulation le reprend.
 
 Confidentiel par conception
 MegaPDF ne demande aucune permission et n'établit aucune connexion réseau. Vos documents et votre signature ne quittent jamais votre appareil : il n'y a aucun serveur où ils pourraient aller. L'application est un logiciel libre; n'importe qui peut le vérifier.
@@ -175,27 +195,35 @@ MegaPDF ne demande aucune permission et n'établit aucune connexion réseau. Vos
 Compatible avec tout
 Ouvrez un PDF depuis Mail, Fichiers, iCloud Drive ou toute application qui en partage un (MegaPDF fait partie des applications qu'elles proposent pour l'ouvrir) et renvoyez-le avec Partager. Les documents remplis et signés ici sont des PDF standard : ils s'ouvrent parfaitement dans toute autre application PDF.
 
-MegaPDF est volontairement simple. Il ne réorganise pas les pages, ne fait pas de reconnaissance de caractères et ne vous noie pas sous les barres d'outils. Il ouvre, il corrige, il enregistre. Terminé.
+MegaPDF est volontairement simple : il ne vous noie pas sous les barres d'outils. Il ouvre, il corrige, il enregistre. Terminé.
 ```
 
-**Keywords** [100] (86)
+**Keywords** [100] (94)
 ```
-pdf,signer,signature,remplir,formulaire,case,cocher,éditeur,recherche,document,annoter
+pdf,signer,signature,remplir,formulaire,case,cocher,éditeur,recherche,document,annoter,lecture
 ```
 
-**What's new** [4000] (1289) — 2.1.1, from `docs/release-notes/2.1.1/app-store.md`
+**What's new** [4000] (2210) — 2.2, from `docs/release-notes/2.2/app-store.md`
 ```
-Ouvrir avec MegaPDF
+Mode lecture
 
-Pour votre iPhone et votre iPad, MegaPDF est maintenant un lecteur de PDF. Un PDF dans Fichiers, une pièce jointe dans Mail ou un document dans la feuille de partage de n'importe quelle application peut s'ouvrir dans MegaPDF directement à partir de là, et non plus seulement par Ouvrir un PDF à l'accueil. Si un document avec des modifications non enregistrées est déjà ouvert, il demande avant de changer de document.
+MegaPDF sait s'effacer. Le mode lecture retire les barres d'outils de l'écran et laisse la page. Une touche ramène une petite barre, et le numéro de page qu'elle porte ouvre une case pour aller n'importe où dans le document; une autre touche la fait repartir. Les couleurs de la page sont dans les Paramètres, sous Lecture : Normales, Sépia pour une longue lecture et Nuit pour une pièce sombre. Le mode nuit inverse la page, images comprises : c'est voulu, et le réglage le dit, parce qu'une photo lue la nuit est une photo en négatif. Si vous lisez un PDF plus souvent que vous ne le remplissez, Ouvrir les documents en mode lecture les ouvre tous ainsi.
 
-Partager
+Outils de page
 
-Partager, dans le menu Plus, remet le document à la feuille de partage : Mail, Messages, AirDrop, Enregistrer dans Fichiers, tout ce que vous avez. Si le document a des modifications non enregistrées, il le dit d'abord et propose Enregistrer, Partager sans enregistrer (la dernière copie enregistrée est envoyée, et vos modifications restent ouvertes) ou Annuler.
+Touchez Pages et les pages du document sont devant vous : une feuille sur l'iPhone, un panneau à côté de la page sur l'iPad. Faites pivoter une page numérisée de travers, supprimez-en une, glissez les pages dans un autre ordre, insérez une page vierge, ajoutez les pages d'un autre PDF, ou enregistrez les pages choisies dans un fichier à part. Chacun de ces gestes est une seule étape de l'historique, et une seule annulation remet le document comme il était.
 
-Exporter en Markdown
+Une barre d'outils faite pour l'iPad
 
-Exporter en Markdown, à côté d'Enregistrer une copie dans le menu Plus, écrit le texte du document (titres, paragraphes, listes et les valeurs que vous avez remplies) dans un fichier Markdown, enregistré où vous voulez dans Fichiers. C'est une exportation, pas un enregistrement : le PDF n'est pas touché, et il demande toujours à être enregistré si vous l'aviez modifié. Une page numérisée n'a aucun texte à extraire, et le fichier le dit à sa place.
+Sur l'iPad, les outils de tous les jours occupent maintenant une rangée large qui leur appartient, sous la barre de navigation, chacun avec son titre à côté de son icône plutôt qu'une icône à deviner, et le sélecteur de chaque outil s'ouvre juste à côté de l'outil auquel il appartient. Les commandes au clavier y sont aussi.
+
+Le zoom là où vous regardez
+
+Un pincement zoome maintenant sur le point entre vos doigts plutôt que sur le coin de la page : la ligne que vous lisiez reste sous vos doigts.
+
+Avant que la signature du document ne soit perdue
+
+Certains documents arrivent avec une signature numérique, celle du chiffrement, qui cesse d'être vérifiable dès que le fichier change. Enregistrer par-dessus un tel document le dit maintenant d'abord et propose d'enregistrer une copie, pour que l'original signé reste intact. Il s'agit d'une signature déjà présente dans le document; la signature que vous dessinez, tapez ou photographiez pour la poser sur la page est une image de votre nom, et la poser n'a pas changé.
 ```
 
 **Screenshot captions** (optional overlay text), iPhone 6.9" and iPad 13" in this order
@@ -227,7 +255,7 @@ Remplir, cocher, signer
 On vous a envoyé un PDF à signer ? Ouvrez-le, cochez les cases, apposez votre signature, enregistrez. Fait en moins d'une minute, sans compte ni abonnement.
 ```
 
-**Description** [4000] (3436)
+**Description** [4000] (3941)
 ```
 Ouvrir. Corriger. Enregistrer. Terminé.
 
@@ -246,13 +274,19 @@ Caviardez, et c'est parti pour de bon
 Marquez ce qui doit disparaître — un nom, une adresse, une image — et MegaPDF le retire du fichier au lieu de le recouvrir. Ce qui était dessous n'y est plus : aucune autre application ne peut le copier ni le retrouver par une recherche.
 
 Signez pour de vrai
-Dessinez votre signature du doigt, ou photographiez celle sur papier : le fond blanc disparaît automatiquement. Vos signatures restent dans une bibliothèque privée sur votre appareil ; déposez-en une sur n'importe quel document, déplacez-la et redimensionnez-la jusqu'à ce qu'elle soit bien sur la ligne.
+Dessinez votre signature du doigt, ou photographiez celle sur papier : le fond blanc disparaît automatiquement. Vos signatures restent dans une bibliothèque privée sur votre appareil ; déposez-en une sur un document, puis déplacez-la et redimensionnez-la jusqu'à ce qu'elle soit bien sur la ligne.
 
 Enregistrez sans crainte
 Enregistrer écrit dans le fichier original, en toute sécurité. MegaPDF vérifie chaque document avant de toucher à votre original : un enregistrement raté ne peut jamais corrompre le fichier qu'on vous a envoyé. Ou gardez l'original et enregistrez une copie. Exporter en Markdown écrit le texte du document (titres, listes, les valeurs que vous avez remplies) dans un fichier Markdown, et laisse le PDF tel quel.
 
 Trouvez n'importe quel mot
-Cherchez dans tout le document à mesure que vous tapez. Chaque résultat s'allume et le compteur vous dit combien il y en a, pour que la seule clause dont vous avez besoin dans un bail de quarante pages soit à quelques touches.
+Cherchez dans tout le document à mesure que vous tapez : chaque résultat s'allume et le compteur dit combien il y en a, pour que la seule clause utile dans un bail de quarante pages soit à quelques touches.
+
+Lisez le document, pas l'application
+Le mode lecture retire les barres d'outils de l'écran et laisse la page. Les couleurs de la page viennent avec : Sépia pour une longue lecture, Nuit pour une pièce sombre — et le mode nuit inverse aussi les images, à dessein. MegaPDF peut ouvrir chaque document ainsi.
+
+Mettez les pages en ordre
+Faites pivoter une page arrivée de travers, supprimez-en une, glissez les pages dans le bon ordre, insérez une page vierge, ajoutez les pages d'un autre PDF, ou extrayez quelques pages dans un fichier à part. Chaque geste est une seule étape, et une annulation le reprend.
 
 Confidentiel par conception
 MegaPDF ne demande aucune permission et n'établit aucune connexion réseau. Vos documents et votre signature ne quittent jamais votre appareil : il n'y a aucun serveur où ils pourraient aller. L'application est un logiciel libre ; n'importe qui peut le vérifier.
@@ -260,27 +294,35 @@ MegaPDF ne demande aucune permission et n'établit aucune connexion réseau. Vos
 Compatible avec tout
 Ouvrez un PDF depuis Mail, Fichiers, iCloud Drive ou toute application qui en partage un (MegaPDF fait partie des applications qu'elles proposent pour l'ouvrir) et renvoyez-le avec Partager. Les documents remplis et signés ici sont des PDF standard : ils s'ouvrent parfaitement dans toute autre application PDF.
 
-MegaPDF est volontairement simple. Il ne réorganise pas les pages, ne fait pas de reconnaissance de caractères et ne vous noie pas sous les barres d'outils. Il ouvre, il corrige, il enregistre. Terminé.
+MegaPDF est volontairement simple : il ne vous noie pas sous les barres d'outils. Il ouvre, il corrige, il enregistre. Terminé.
 ```
 
-**Keywords** [100] (86)
+**Keywords** [100] (94)
 ```
-pdf,signer,signature,remplir,formulaire,case,cocher,éditeur,recherche,document,annoter
+pdf,signer,signature,remplir,formulaire,case,cocher,éditeur,recherche,document,annoter,lecture
 ```
 
-**What's new** [4000] (1289) — 2.1.1, from `docs/release-notes/2.1.1/app-store.md`
+**What's new** [4000] (2212) — 2.2, from `docs/release-notes/2.2/app-store.md`
 ```
-Ouvrir avec MegaPDF
+Mode lecture
 
-Pour votre iPhone et votre iPad, MegaPDF est maintenant un lecteur de PDF. Un PDF dans Fichiers, une pièce jointe dans Mail ou un document dans la feuille de partage de n'importe quelle application peut s'ouvrir dans MegaPDF directement à partir de là, et non plus seulement par Ouvrir un PDF à l'accueil. Si un document avec des modifications non enregistrées est déjà ouvert, il demande avant de changer de document.
+MegaPDF sait s'effacer. Le mode lecture retire les barres d'outils de l'écran et laisse la page. Une touche ramène une petite barre, et le numéro de page qu'elle porte ouvre une case pour aller n'importe où dans le document ; une autre touche la fait repartir. Les couleurs de la page sont dans les Paramètres, sous Lecture : Normales, Sépia pour une longue lecture et Nuit pour une pièce sombre. Le mode nuit inverse la page, images comprises : c'est voulu, et le réglage le dit, parce qu'une photo lue la nuit est une photo en négatif. Si vous lisez un PDF plus souvent que vous ne le remplissez, Ouvrir les documents en mode lecture les ouvre tous ainsi.
 
-Partager
+Outils de page
 
-Partager, dans le menu Plus, remet le document à la feuille de partage : Mail, Messages, AirDrop, Enregistrer dans Fichiers, tout ce que vous avez. Si le document a des modifications non enregistrées, il le dit d'abord et propose Enregistrer, Partager sans enregistrer (la dernière copie enregistrée est envoyée, et vos modifications restent ouvertes) ou Annuler.
+Touchez Pages et les pages du document sont devant vous : une feuille sur l'iPhone, un panneau à côté de la page sur l'iPad. Faites pivoter une page numérisée de travers, supprimez-en une, glissez les pages dans un autre ordre, insérez une page vierge, ajoutez les pages d'un autre PDF, ou enregistrez les pages choisies dans un fichier à part. Chacun de ces gestes est une seule étape de l'historique, et une seule annulation remet le document comme il était.
 
-Exporter en Markdown
+Une barre d'outils faite pour l'iPad
 
-Exporter en Markdown, à côté d'Enregistrer une copie dans le menu Plus, écrit le texte du document (titres, paragraphes, listes et les valeurs que vous avez remplies) dans un fichier Markdown, enregistré où vous voulez dans Fichiers. C'est une exportation, pas un enregistrement : le PDF n'est pas touché, et il demande toujours à être enregistré si vous l'aviez modifié. Une page numérisée n'a aucun texte à extraire, et le fichier le dit à sa place.
+Sur l'iPad, les outils de tous les jours occupent maintenant une rangée large qui leur appartient, sous la barre de navigation, chacun avec son titre à côté de son icône plutôt qu'une icône à deviner, et le sélecteur de chaque outil s'ouvre juste à côté de l'outil auquel il appartient. Les commandes au clavier y sont aussi.
+
+Le zoom là où vous regardez
+
+Un pincement zoome maintenant sur le point entre vos doigts plutôt que sur le coin de la page : la ligne que vous lisiez reste sous vos doigts.
+
+Avant que la signature du document ne soit perdue
+
+Certains documents arrivent avec une signature numérique, celle du chiffrement, qui cesse d'être vérifiable dès que le fichier change. Enregistrer par-dessus un tel document le dit maintenant d'abord et propose d'enregistrer une copie, pour que l'original signé reste intact. Il s'agit d'une signature déjà présente dans le document ; la signature que vous dessinez, tapez ou photographiez pour la poser sur la page est une image de votre nom, et la poser n'a pas changé.
 ```
 
 **Screenshot captions** (optional overlay text), iPhone 6.9" and iPad 13" in this order
@@ -304,43 +346,46 @@ home: Pas de compte. Pas de cloud. Pas de suivi.
 Someone emailed you a PDF to sign? Open it, click the boxes, drop in your signature, save. Done in under a minute — no account, no subscription.
 ```
 
-**Description** [4000] (3223)
+**Description** [4000] (3279)
 ```
 Open. Fix. Save. Done.
 
-MegaPDF does the one job most people actually have with a PDF: someone sent you a form, and you need to send it back filled in, checked off, and signed. No account. No subscription. No cloud. Everything happens on your Mac.
+MegaPDF does the one job most people actually have with a PDF: someone sent you a form, and you need to send it back filled in, checked off and signed, on your own Mac.
 
 Check any box
-Click a checkbox and it's checked — real interactive form fields and plain printed squares alike. MegaPDF recognizes drawn checkboxes that other apps treat as decoration.
+Click a checkbox and it's checked — real form fields and plain printed squares alike. MegaPDF recognizes drawn checkboxes that other apps treat as decoration.
 
 Type on any line
-Click where the answer goes and type it. Choose the size and the face — sans, serif or monospace — so what you add matches the form you are filling in. Drag it into place, or double-click it to fix a typo. Everything you add is real, searchable text, not a sticker on top of the page.
+Click where the answer goes and type it, in the size and face — sans, serif or monospace — that matches the form. Drag it into place, or double-click it to fix a typo. Everything you add is real, searchable text, not a sticker on top of the page.
 
 Fix the document's own text
-Wrong date? Misspelled name? Click the line and retype it. MegaPDF keeps the document's own font where it can and tells you when it had to use a similar one. If a change would disturb the rest of the page, it says so instead of quietly moving things. Undo puts the original back exactly.
+Wrong date? Misspelled name? Click the line and retype it. MegaPDF keeps the document's own font where it can, and says so when it had to use a similar one. If a change would disturb the page it says so instead of quietly moving things, and Undo puts the original back exactly.
 
 Redact, and it really is gone
-Mark what has to come out — a name, an address, a picture — and MegaPDF takes it out of the file rather than covering it over. What was underneath is gone: no other app can copy it or search for it. Cover is there too, for when hiding it on the page is enough, and it says that it only covers.
+Mark what has to come out — a name, an address, a picture — and MegaPDF takes it out of the file rather than covering it over. What was underneath is gone: no other app can copy it or search for it. Cover is there too, and says it only covers.
 
 Sign like you mean it
-Draw your signature with the trackpad or mouse, type it, or use a photo of the one on paper — the white background disappears automatically. Your signatures stay in a private library on your Mac; drop one onto any document, move and resize it until it sits right on the line.
+Draw your signature with the trackpad or mouse, type it, or photograph the one on paper — the white background disappears automatically. Your signatures stay in a private library on your Mac; drop one on a document and move and resize it until it sits right on the line.
 
 Save without fear
-Double-click a PDF in the Finder and Save writes back to that file — safely. MegaPDF verifies every document before it touches your original, so a failed save can never corrupt the file someone sent you. Or keep the original and save a copy — or, from the same Save As panel, a Markdown file of the document's text, with the PDF left as it was. Closing or quitting with unsaved changes always asks first.
+Save writes back to the file you opened — safely. MegaPDF verifies every document first, so a failed save can never corrupt the file someone sent you. Or save a copy instead, or a Markdown file of the document's text, with the PDF left as it was. Closing or quitting with unsaved changes always asks first.
 
 Find any word
-Search the whole document as you type. Every match lights up and the counter tells you how many there are, so the one clause you need in a forty-page lease is a keystroke away.
+Search the whole document as you type: every match lights up and the counter says how many, so the one clause you need in a forty-page lease is a keystroke away.
 
-Protect, shrink, print
-Set, change or remove a document's password. Save a smaller copy to send by email. Print through the standard macOS print panel.
+Read it, not the app
+Reading mode (Shift-Command-R) takes the toolbar and the sidebar away and leaves the page; Escape brings the window back. Page colours sit beside it in Options: Sepia for a long read, Night for a dark room — and Night inverts pictures too, deliberately.
+
+Put the pages in order
+The Thumbnails sidebar is somewhere to work now: rotate a page that came in sideways, delete one, drag pages into the right order, insert a blank page, insert the pages of another PDF, or save a selection as its own file. Each is one step, and one Undo puts it back.
 
 Private by design
 MegaPDF makes zero network connections — its sandbox does not even allow them — and opens only the files you choose. Your documents and your signature never leave your Mac. The app is open source, so anyone can verify that.
 
 At home on the Mac
-Every command is in the menu bar with the keyboard shortcut you expect. Documents open as tabs in one window, and a PDF opened from the Finder joins the window you already have. VoiceOver reads the toolbar and the page, and the app follows your Mac's light or dark appearance. Documents you fill and sign here are standard PDFs: they open perfectly in Preview and any other PDF app.
+Every command is in the menu bar with the shortcut you expect, documents open as tabs in one window, and a PDF opened from the Finder joins the one you already have. VoiceOver reads the toolbar and the page, the app follows your light or dark appearance, and what you sign here is a standard PDF that opens in Preview and anywhere else.
 
-MegaPDF is deliberately simple. It doesn't rearrange pages, run OCR, or bury you in toolbars. It opens, it fixes, it saves. Done.
+MegaPDF is deliberately simple: it doesn't bury you in toolbars. It opens, it fixes, it saves. Done.
 ```
 
 ### Mac App Store — Français (Canada) — `mac-fr-CA`
@@ -352,43 +397,46 @@ MegaPDF is deliberately simple. It doesn't rearrange pages, run OCR, or bury you
 On vous a envoyé un PDF à signer? Ouvrez-le, cliquez sur les cases, apposez votre signature, enregistrez. Fait en moins d'une minute, sans compte ni abonnement.
 ```
 
-**Description** [4000] (3978)
+**Description** [4000] (3975)
 ```
 Ouvrir. Corriger. Enregistrer. Terminé.
 
-MegaPDF fait la seule chose que la plupart des gens ont vraiment à faire avec un PDF : quelqu'un vous a envoyé un formulaire, et vous devez le renvoyer rempli, coché et signé. Pas de compte. Pas d'abonnement. Pas d'infonuagique. Tout se passe sur votre Mac.
+MegaPDF fait la seule chose que la plupart des gens ont vraiment à faire avec un PDF : quelqu'un vous a envoyé un formulaire, et vous devez le renvoyer rempli, coché et signé, sur votre propre Mac.
 
 Cochez n'importe quelle case
-Cliquez sur une case et elle est cochée : les vrais champs de formulaire interactifs comme les simples carrés imprimés. MegaPDF reconnaît les cases dessinées que d'autres applications prennent pour de la décoration.
+Cliquez sur une case et elle est cochée : les vrais champs de formulaire comme les simples carrés imprimés. MegaPDF reconnaît les cases dessinées que d'autres applications prennent pour de la décoration.
 
 Écrivez sur n'importe quelle ligne
-Cliquez à l'endroit où va la réponse et tapez-la. Choisissez la taille et la police (sans empattement, avec empattement ou à chasse fixe) pour que votre ajout s'accorde au formulaire. Glissez-le en place, ou double-cliquez dessus pour corriger une coquille. Tout ce que vous ajoutez est du vrai texte, dans lequel on peut chercher, pas un autocollant posé sur la page.
+Cliquez à l'endroit où va la réponse et tapez-la, dans la taille et la police (sans empattement, avec empattement ou à chasse fixe) qui s'accordent au formulaire. Glissez-le en place, ou double-cliquez dessus pour corriger une coquille. Tout ce que vous ajoutez est du vrai texte, où l'on peut chercher, pas un autocollant posé sur la page.
 
 Corrigez le texte du document
-Mauvaise date? Nom mal orthographié? Cliquez sur la ligne et retapez-la. MegaPDF garde la police du document quand il le peut et vous prévient quand il a dû en utiliser une semblable. Si une modification devait perturber le reste de la page, il vous le dit plutôt que de déplacer les choses en silence. Annuler remet l'original exactement.
+Mauvaise date? Nom mal orthographié? Cliquez sur la ligne et retapez-la. MegaPDF garde la police du document quand il le peut et le dit quand il a dû en utiliser une semblable. Si une modification devait perturber la page, il le dit plutôt que de déplacer en silence; Annuler remet l'original exactement.
 
 Caviardez, et c'est parti pour de bon
-Marquez ce qui doit disparaître — un nom, une adresse, une image — et MegaPDF le retire du fichier au lieu de le recouvrir. Ce qui était dessous n'y est plus : aucune autre application ne peut le copier ni le retrouver par une recherche. Masquer est là aussi, quand il suffit de cacher quelque chose sur la page, et il précise qu'il ne fait que recouvrir.
+Marquez ce qui doit disparaître — un nom, une adresse, une image — et MegaPDF le retire du fichier au lieu de le recouvrir. Ce qui était dessous n'y est plus : aucune autre application ne peut le copier ni le retrouver par une recherche. Masquer est là aussi, et précise qu'il ne fait que recouvrir.
 
 Signez pour de vrai
-Dessinez votre signature au pavé tactile ou à la souris, tapez-la, ou utilisez une photo de celle sur papier : le fond blanc disparaît automatiquement. Vos signatures restent dans une bibliothèque privée sur votre Mac; déposez-en une sur n'importe quel document, déplacez-la et redimensionnez-la jusqu'à ce qu'elle soit bien sur la ligne.
+Dessinez votre signature au pavé tactile ou à la souris, tapez-la, ou photographiez celle sur papier : le fond blanc disparaît automatiquement. Vos signatures restent dans une bibliothèque privée sur votre Mac; déposez-en une sur un document, puis déplacez-la et redimensionnez-la jusqu'à ce qu'elle soit bien sur la ligne.
 
 Enregistrez sans crainte
-Double-cliquez sur un PDF dans le Finder, et Enregistrer écrit dans ce fichier, en toute sécurité. MegaPDF vérifie chaque document avant de toucher à votre original : un enregistrement raté ne peut jamais corrompre le fichier qu'on vous a envoyé. Ou gardez l'original et enregistrez une copie, ou un fichier Markdown de son texte, le PDF restant tel quel. Fermer ou quitter avec des modifications non enregistrées demande toujours d'abord.
+Enregistrer écrit dans le fichier ouvert, en toute sécurité. MegaPDF vérifie d'abord chaque document : un enregistrement raté ne peut jamais corrompre le fichier qu'on vous a envoyé. Ou enregistrez plutôt une copie, ou un fichier Markdown de son texte, le PDF restant tel quel. Fermer ou quitter avec des modifications non enregistrées demande toujours d'abord.
 
 Trouvez n'importe quel mot
-Cherchez dans tout le document à mesure que vous tapez. Chaque résultat s'allume et le compteur vous dit combien il y en a, pour que la seule clause dont vous avez besoin dans un bail de quarante pages soit à une touche près.
+Cherchez dans tout le document à mesure que vous tapez : chaque résultat s'allume et le compteur dit combien il y en a, pour que la seule clause utile dans un bail de quarante pages soit à une touche près.
 
-Protéger, réduire, imprimer
-Ajoutez, changez ou retirez le mot de passe d'un document. Enregistrez une copie réduite à envoyer par courriel. Imprimez avec la zone de dialogue d'impression standard de macOS.
+Lisez le document, pas l'application
+Le mode lecture (Maj-Commande-R) retire la barre d'outils et le panneau latéral, et laisse la page; Échap ramène la fenêtre. Les couleurs de la page sont à côté, dans les Options : Sépia pour une longue lecture, Nuit pour une pièce sombre — et le mode nuit inverse aussi les images, à dessein.
+
+Mettez les pages en ordre
+Le panneau Vignettes est maintenant un endroit où travailler : faites pivoter une page arrivée de travers, supprimez-en une, glissez les pages dans le bon ordre, insérez une page vierge, insérez celles d'un autre PDF, ou extrayez une sélection. Chaque geste est une étape, et une annulation le reprend.
 
 Confidentiel par conception
 MegaPDF n'établit aucune connexion réseau (son bac à sable ne le lui permet même pas) et n'ouvre que les fichiers que vous choisissez. Vos documents et votre signature ne quittent jamais votre Mac. L'application est un logiciel libre; n'importe qui peut le vérifier.
 
 Chez lui sur le Mac
-Chaque commande est dans la barre des menus, avec le raccourci clavier attendu. Les documents s'ouvrent dans les onglets d'une même fenêtre, et un PDF ouvert depuis le Finder rejoint celle que vous avez déjà. VoiceOver lit la barre d'outils et la page, et l'application suit l'apparence claire ou sombre de votre Mac. Les documents remplis et signés ici sont des PDF standard : ils s'ouvrent parfaitement dans Aperçu et dans toute autre application PDF.
+Chaque commande est dans la barre des menus avec le raccourci attendu, les documents s'ouvrent en onglets dans une même fenêtre, et un PDF ouvert depuis le Finder rejoint celle que vous avez déjà. VoiceOver lit la barre d'outils et la page, l'application suit l'apparence claire ou sombre, et ce que vous signez ici est un PDF standard qui s'ouvre dans Aperçu comme ailleurs.
 
-MegaPDF est volontairement simple. Il ne réorganise pas les pages, ne fait pas de reconnaissance de caractères et ne vous noie pas sous les barres d'outils. Il ouvre, il corrige, il enregistre. Terminé.
+MegaPDF est volontairement simple : il ne vous noie pas sous les barres d'outils. Il ouvre, il corrige, il enregistre. Terminé.
 ```
 
 ### Mac App Store — Français — `mac-fr`
@@ -400,43 +448,46 @@ MegaPDF est volontairement simple. Il ne réorganise pas les pages, ne fait pas 
 On vous a envoyé un PDF à signer ? Ouvrez-le, cliquez sur les cases, apposez votre signature, enregistrez. Fait en moins d'une minute, sans compte ni abonnement.
 ```
 
-**Description** [4000] (3974)
+**Description** [4000] (3981)
 ```
 Ouvrir. Corriger. Enregistrer. Terminé.
 
-MegaPDF fait la seule chose que la plupart des gens ont vraiment à faire avec un PDF : quelqu'un vous a envoyé un formulaire, et vous devez le renvoyer rempli, coché et signé. Pas de compte. Pas d'abonnement. Pas de cloud. Tout se passe sur votre Mac.
+MegaPDF fait la seule chose que la plupart des gens ont vraiment à faire avec un PDF : quelqu'un vous a envoyé un formulaire, et vous devez le renvoyer rempli, coché et signé, sur votre propre Mac.
 
 Cochez n'importe quelle case
-Cliquez sur une case et elle est cochée : les vrais champs de formulaire interactifs comme les simples carrés imprimés. MegaPDF reconnaît les cases dessinées que d'autres applications prennent pour de la décoration.
+Cliquez sur une case et elle est cochée : les vrais champs de formulaire comme les simples carrés imprimés. MegaPDF reconnaît les cases dessinées que d'autres applications prennent pour de la décoration.
 
 Écrivez sur n'importe quelle ligne
-Cliquez à l'endroit où va la réponse et tapez-la. Choisissez la taille et la police (sans empattement, avec empattement ou à chasse fixe) pour que votre ajout s'accorde au formulaire. Glissez-le en place, ou double-cliquez dessus pour corriger une coquille. Tout ce que vous ajoutez est du vrai texte, dans lequel on peut chercher, pas un autocollant posé sur la page.
+Cliquez à l'endroit où va la réponse et tapez-la, dans la taille et la police (sans empattement, avec empattement ou à chasse fixe) qui s'accordent au formulaire. Glissez-le en place, ou double-cliquez dessus pour corriger une coquille. Tout ce que vous ajoutez est du vrai texte, où l'on peut chercher, pas un autocollant posé sur la page.
 
 Corrigez le texte du document
-Mauvaise date ? Nom mal orthographié ? Cliquez sur la ligne et retapez-la. MegaPDF garde la police du document quand il le peut et vous prévient quand il a dû en utiliser une semblable. Si une modification devait perturber le reste de la page, il vous le dit plutôt que de déplacer les choses en silence. Annuler remet l'original exactement.
+Mauvaise date ? Nom mal orthographié ? Cliquez sur la ligne et retapez-la. MegaPDF garde la police du document quand il le peut et le dit quand il a dû en utiliser une semblable. Si une modification devait perturber la page, il le dit plutôt que de déplacer en silence ; Annuler remet l'original exactement.
 
 Caviardez, et c'est parti pour de bon
-Marquez ce qui doit disparaître — un nom, une adresse, une image — et MegaPDF le retire du fichier au lieu de le recouvrir. Ce qui était dessous n'y est plus : aucune autre application ne peut le copier ni le retrouver par une recherche. Masquer est là aussi, quand il suffit de cacher quelque chose sur la page, et il précise qu'il ne fait que recouvrir.
+Marquez ce qui doit disparaître — un nom, une adresse, une image — et MegaPDF le retire du fichier au lieu de le recouvrir. Ce qui était dessous n'y est plus : aucune autre application ne peut le copier ni le retrouver par une recherche. Masquer est là aussi, et précise qu'il ne fait que recouvrir.
 
 Signez pour de vrai
-Dessinez votre signature au pavé tactile ou à la souris, tapez-la, ou utilisez une photo de celle sur papier : le fond blanc disparaît automatiquement. Vos signatures restent dans une bibliothèque privée sur votre Mac ; déposez-en une sur n'importe quel document, déplacez-la et redimensionnez-la jusqu'à ce qu'elle soit bien sur la ligne.
+Dessinez votre signature au pavé tactile ou à la souris, tapez-la, ou photographiez celle sur papier : le fond blanc disparaît automatiquement. Vos signatures restent dans une bibliothèque privée sur votre Mac ; déposez-en une sur un document, puis déplacez-la et redimensionnez-la jusqu'à ce qu'elle soit bien sur la ligne.
 
 Enregistrez sans crainte
-Double-cliquez sur un PDF dans le Finder, et Enregistrer écrit dans ce fichier, en toute sécurité. MegaPDF vérifie chaque document avant de toucher à votre original : un enregistrement raté ne peut jamais corrompre le fichier qu'on vous a envoyé. Ou gardez l'original et enregistrez une copie, ou un fichier Markdown de son texte, le PDF restant tel quel. Fermer ou quitter avec des modifications non enregistrées demande toujours d'abord.
+Enregistrer écrit dans le fichier ouvert, en toute sécurité. MegaPDF vérifie d'abord chaque document : un enregistrement raté ne peut jamais corrompre le fichier qu'on vous a envoyé. Ou enregistrez plutôt une copie, ou un fichier Markdown de son texte, le PDF restant tel quel. Fermer ou quitter avec des modifications non enregistrées demande toujours d'abord.
 
 Trouvez n'importe quel mot
-Cherchez dans tout le document à mesure que vous tapez. Chaque résultat s'allume et le compteur vous dit combien il y en a, pour que la seule clause dont vous avez besoin dans un bail de quarante pages soit à une touche près.
+Cherchez dans tout le document à mesure que vous tapez : chaque résultat s'allume et le compteur dit combien il y en a, pour que la seule clause utile dans un bail de quarante pages soit à une touche près.
 
-Protéger, réduire, imprimer
-Ajoutez, changez ou retirez le mot de passe d'un document. Enregistrez une copie réduite à envoyer par e-mail. Imprimez avec la zone de dialogue d'impression standard de macOS.
+Lisez le document, pas l'application
+Le mode lecture (Maj-Commande-R) retire la barre d'outils et le panneau latéral, et laisse la page ; Échap ramène la fenêtre. Les couleurs de la page sont à côté, dans les Options : Sépia pour une longue lecture, Nuit pour une pièce sombre — et le mode nuit inverse aussi les images, à dessein.
+
+Mettez les pages en ordre
+Le panneau Vignettes est maintenant un endroit où travailler : faites pivoter une page arrivée de travers, supprimez-en une, glissez les pages dans le bon ordre, insérez une page vierge, insérez celles d'un autre PDF, ou extrayez une sélection. Chaque geste est une étape, et une annulation le reprend.
 
 Confidentiel par conception
 MegaPDF n'établit aucune connexion réseau (son bac à sable ne le lui permet même pas) et n'ouvre que les fichiers que vous choisissez. Vos documents et votre signature ne quittent jamais votre Mac. L'application est un logiciel libre ; n'importe qui peut le vérifier.
 
 Chez lui sur le Mac
-Chaque commande est dans la barre des menus, avec le raccourci clavier attendu. Les documents s'ouvrent dans les onglets d'une même fenêtre, et un PDF ouvert depuis le Finder rejoint celle que vous avez déjà. VoiceOver lit la barre d'outils et la page, et l'application suit l'apparence claire ou sombre de votre Mac. Les documents remplis et signés ici sont des PDF standard : ils s'ouvrent parfaitement dans Aperçu et dans toute autre application PDF.
+Chaque commande est dans la barre des menus avec le raccourci attendu, les documents s'ouvrent en onglets dans une même fenêtre, et un PDF ouvert depuis le Finder rejoint celle que vous avez déjà. VoiceOver lit la barre d'outils et la page, l'application suit l'apparence claire ou sombre, et ce que vous signez ici est un PDF standard qui s'ouvre dans Aperçu comme ailleurs.
 
-MegaPDF est volontairement simple. Il ne réorganise pas les pages, ne fait pas de reconnaissance de caractères et ne vous noie pas sous les barres d'outils. Il ouvre, il corrige, il enregistre. Terminé.
+MegaPDF est volontairement simple : il ne vous noie pas sous les barres d'outils. Il ouvre, il corrige, il enregistre. Terminé.
 ```
 
 <!-- /copy-by-language -->

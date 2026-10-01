@@ -27,7 +27,9 @@ The lightweight PDF editor for Windows. Open. Fix. Save. Done.
 
 **Description** (plain text; the blank lines are paragraph breaks)
 ```
-MegaPDF is a free, lightweight PDF editor built for people who find the big PDF suites too bloated and complex. It does six things exceptionally well — and deliberately nothing else.
+MegaPDF is a free, lightweight PDF editor built for people who find the big PDF suites too bloated and complex. It does eight things exceptionally well — and deliberately nothing else.
+
+READ — Press Ctrl+H and the tools come off the screen, leaving the page. A small floating bar keeps the page number; Escape brings everything back. Page colours are in Settings: normal, sepia for a long read, night for a dark room — night inverts the page, pictures included, which is deliberate and said so in the setting. Every document can open in reading mode if that is mostly what you do with one.
 
 EDIT TEXT — Click text in the document and type, like editing a Word file. Fix a typo, change a date, update a number. MegaPDF keeps the document's own font where it can, and if a change would shift the rest of the page it tells you rather than quietly moving things.
 
@@ -41,6 +43,8 @@ APPLY SIGNATURES — Keep a small personal library of signature images. Pick one
 
 SAVE — Save overwrites, Save As creates a copy. No export wizards, no "flatten" dialogs, no surprises. Save As can also write the document's text — headings, lists, the values you filled in — as a Markdown file, leaving the PDF untouched.
 
+PAGES — The Pages pane is somewhere to work, not only somewhere to look. Rotate a page that was scanned sideways, delete one, drag pages into another order, insert a blank page, add the pages of another PDF, or save the pages you picked as a file of their own. Each is one step, and one Undo puts the document back.
+
 Also included, because real documents need them: find any word with Ctrl+F (every match highlighted, Enter to step through them), print your PDF, and shrink oversized scans for email with one click (image downsampling and JPEG recompression). Documents open as tabs in one window, and a PDF double-clicked in File Explorer joins the window you already have.
 
 PRIVATE BY DESIGN — No account. No cloud. No subscription. No telemetry. Every document is processed entirely on your device and never uploaded anywhere. Ideal for contracts, medical forms, and anything else you'd rather not hand to someone else's server.
@@ -48,8 +52,10 @@ PRIVATE BY DESIGN — No account. No cloud. No subscription. No telemetry. Every
 MegaPDF is open source (Apache-2.0): github.com/SlyWombat/MegaPDF
 ```
 
-**App features** — one line per box, 12 boxes
+**App features** — one line per box, 14 boxes
 ```
+Reading mode (Ctrl+H) hides the tools and leaves the page, with normal, sepia and night page colours
+Rotate, delete and reorder pages, insert a blank page, add another PDF's pages, or save a selection out — each one undo step
 Edit the document's own text by clicking and typing — like a Word document
 Redact names, addresses and pictures: taken out of the file, not just covered over
 Add text on any blank line, in the size and face that matches the form
@@ -101,7 +107,9 @@ The lightweight PDF editor for Windows. Open. Fix. Save. Done.
 
 **Description** (plain text; the blank lines are paragraph breaks)
 ```
-MegaPDF is a free, lightweight PDF editor built for people who find the big PDF suites too bloated and complex. It does six things exceptionally well — and deliberately nothing else.
+MegaPDF is a free, lightweight PDF editor built for people who find the big PDF suites too bloated and complex. It does eight things exceptionally well — and deliberately nothing else.
+
+READ — Press Ctrl+H and the tools come off the screen, leaving the page. A small floating bar keeps the page number; Escape brings everything back. Page colours are in Settings: normal, sepia for a long read, night for a dark room — night inverts the page, pictures included, which is deliberate and said so in the setting. Every document can open in reading mode if that is mostly what you do with one.
 
 EDIT TEXT — Click text in the document and type, like editing a Word file. Fix a typo, change a date, update a number. MegaPDF keeps the document's own font where it can, and if a change would shift the rest of the page it tells you rather than quietly moving things.
 
@@ -115,6 +123,8 @@ APPLY SIGNATURES — Keep a small personal library of signature images. Pick one
 
 SAVE — Save overwrites, Save As creates a copy. No export wizards, no "flatten" dialogs, no surprises. Save As can also write the document's text — headings, lists, the values you filled in — as a Markdown file, leaving the PDF untouched.
 
+PAGES — The Pages pane is somewhere to work, not only somewhere to look. Rotate a page that was scanned sideways, delete one, drag pages into another order, insert a blank page, add the pages of another PDF, or save the pages you picked as a file of their own. Each is one step, and one Undo puts the document back.
+
 Also included, because real documents need them: find any word with Ctrl+F (every match highlighted, Enter to step through them), print your PDF, and shrink oversized scans for email with one click (image downsampling and JPEG recompression). Documents open as tabs in one window, and a PDF double-clicked in File Explorer joins the window you already have.
 
 PRIVATE BY DESIGN — No account. No cloud. No subscription. No telemetry. Every document is processed entirely on your device and never uploaded anywhere. Ideal for contracts, medical forms, and anything else you'd rather not hand to someone else's server.
@@ -122,8 +132,10 @@ PRIVATE BY DESIGN — No account. No cloud. No subscription. No telemetry. Every
 MegaPDF is open source (Apache-2.0): github.com/SlyWombat/MegaPDF
 ```
 
-**App features** — one line per box, 12 boxes
+**App features** — one line per box, 14 boxes
 ```
+Reading mode (Ctrl+H) hides the tools and leaves the page, with normal, sepia and night page colours
+Rotate, delete and reorder pages, insert a blank page, add another PDF's pages, or save a selection out — each one undo step
 Edit the document's own text by clicking and typing — like a Word document
 Redact names, addresses and pictures: taken out of the file, not just covered over
 Add text on any blank line, in the size and face that matches the form
@@ -173,7 +185,9 @@ L'éditeur PDF léger pour Windows. Ouvrir. Corriger. Enregistrer. Terminé.
 
 **Description** (plain text; the blank lines are paragraph breaks)
 ```
-MegaPDF est un éditeur PDF gratuit et léger, conçu pour ceux qui trouvent les grandes suites PDF trop lourdes et trop compliquées. Il fait six choses exceptionnellement bien, et volontairement rien d'autre.
+MegaPDF est un éditeur PDF gratuit et léger, conçu pour ceux qui trouvent les grandes suites PDF trop lourdes et trop compliquées. Il fait huit choses exceptionnellement bien, et volontairement rien d'autre.
+
+LIRE — Appuyez sur Ctrl+H et les outils quittent l'écran, laissant la page. Une petite barre flottante garde le numéro de page; Échap ramène tout. Les couleurs de la page sont dans les Paramètres : normales, sépia pour une longue lecture, nuit pour une pièce sombre — le mode nuit inverse la page, images comprises, ce qui est voulu et dit dans le paramètre. Chaque document peut s'ouvrir en mode lecture si c'est surtout ce que vous en faites.
 
 MODIFIER LE TEXTE — Cliquez sur le texte du document et tapez, comme dans un document Word. Corrigez une coquille, changez une date, mettez un montant à jour. MegaPDF garde la police du document quand il le peut, et si une modification devait déplacer le reste de la page, il vous le dit plutôt que de déplacer les choses en silence.
 
@@ -187,6 +201,8 @@ APPOSER DES SIGNATURES — Gardez une petite bibliothèque personnelle d'images 
 
 ENREGISTRER — Enregistrer remplace le fichier, Enregistrer sous en crée une copie. Pas d'assistant d'exportation, pas de boîte de dialogue d'« aplatissement », pas de surprise. Enregistrer sous peut aussi écrire le texte du document (titres, listes, les valeurs que vous avez remplies) dans un fichier Markdown, sans toucher au PDF.
 
+PAGES — Le volet Pages est un endroit où travailler, et non seulement où regarder. Faites pivoter une page numérisée de travers, supprimez-en une, glissez les pages dans un autre ordre, insérez une page vierge, ajoutez les pages d'un autre PDF, ou enregistrez les pages choisies dans un fichier à part. Chaque geste est une seule étape, et une seule annulation remet le document comme il était.
+
 Aussi inclus, parce que les vrais documents en ont besoin : rechercher un mot avec Ctrl+F (chaque résultat surligné, Entrée pour passer au suivant), imprimer le PDF, et réduire les numérisations trop lourdes pour le courriel en un clic (sous-échantillonnage des images et recompression JPEG). Les documents s'ouvrent dans des onglets d'une même fenêtre, et un PDF double-cliqué dans l'Explorateur de fichiers rejoint la fenêtre que vous avez déjà.
 
 CONFIDENTIEL PAR CONCEPTION — Pas de compte. Pas d'infonuagique. Pas d'abonnement. Pas de télémétrie. Chaque document est traité entièrement sur votre appareil et n'est jamais téléversé nulle part. Idéal pour les contrats, les formulaires médicaux et tout ce que vous préférez ne pas confier au serveur de quelqu'un d'autre.
@@ -194,8 +210,10 @@ CONFIDENTIEL PAR CONCEPTION — Pas de compte. Pas d'infonuagique. Pas d'abonnem
 MegaPDF est un logiciel libre (Apache-2.0) : github.com/SlyWombat/MegaPDF
 ```
 
-**App features** — one line per box, 12 boxes
+**App features** — one line per box, 14 boxes
 ```
+Le mode lecture (Ctrl+H) masque les outils et laisse la page, avec les couleurs normales, sépia et nuit
+Pivoter, supprimer et réordonner les pages, insérer une page vierge, ajouter celles d'un autre PDF ou extraire une sélection — chaque geste est une annulation
 Modifiez le texte du document lui-même en cliquant et en tapant, comme dans un document Word
 Caviardez noms, adresses et images : retirés du fichier, pas seulement recouverts
 Ajoutez du texte sur une ligne vide, dans la taille et la police du formulaire
@@ -245,7 +263,9 @@ L'éditeur PDF léger pour Windows. Ouvrir. Corriger. Enregistrer. Terminé.
 
 **Description** (plain text; the blank lines are paragraph breaks)
 ```
-MegaPDF est un éditeur PDF gratuit et léger, conçu pour ceux qui trouvent les grandes suites PDF trop lourdes et trop compliquées. Il fait six choses exceptionnellement bien, et volontairement rien d'autre.
+MegaPDF est un éditeur PDF gratuit et léger, conçu pour ceux qui trouvent les grandes suites PDF trop lourdes et trop compliquées. Il fait huit choses exceptionnellement bien, et volontairement rien d'autre.
+
+LIRE — Appuyez sur Ctrl+H et les outils quittent l'écran, laissant la page. Une petite barre flottante garde le numéro de page ; Échap ramène tout. Les couleurs de la page sont dans les Paramètres : normales, sépia pour une longue lecture, nuit pour une pièce sombre — le mode nuit inverse la page, images comprises, ce qui est voulu et dit dans le paramètre. Chaque document peut s'ouvrir en mode lecture si c'est surtout ce que vous en faites.
 
 MODIFIER LE TEXTE — Cliquez sur le texte du document et tapez, comme dans un document Word. Corrigez une coquille, changez une date, mettez un montant à jour. MegaPDF garde la police du document quand il le peut, et si une modification devait déplacer le reste de la page, il vous le dit plutôt que de déplacer les choses en silence.
 
@@ -259,6 +279,8 @@ APPOSER DES SIGNATURES — Gardez une petite bibliothèque personnelle d'images 
 
 ENREGISTRER — Enregistrer remplace le fichier, Enregistrer sous en crée une copie. Pas d'assistant d'exportation, pas de boîte de dialogue d'« aplatissement », pas de surprise. Enregistrer sous peut aussi écrire le texte du document (titres, listes, les valeurs que vous avez remplies) dans un fichier Markdown, sans toucher au PDF.
 
+PAGES — Le volet Pages est un endroit où travailler, et non seulement où regarder. Faites pivoter une page numérisée de travers, supprimez-en une, glissez les pages dans un autre ordre, insérez une page vierge, ajoutez les pages d'un autre PDF, ou enregistrez les pages choisies dans un fichier à part. Chaque geste est une seule étape, et une seule annulation remet le document comme il était.
+
 Aussi inclus, parce que les vrais documents en ont besoin : rechercher un mot avec Ctrl+F (chaque résultat surligné, Entrée pour passer au suivant), imprimer le PDF, et réduire les numérisations trop lourdes pour l'e-mail en un clic (sous-échantillonnage des images et recompression JPEG). Les documents s'ouvrent dans des onglets d'une même fenêtre, et un PDF double-cliqué dans l'Explorateur de fichiers rejoint la fenêtre que vous avez déjà.
 
 CONFIDENTIEL PAR CONCEPTION — Pas de compte. Pas de cloud. Pas d'abonnement. Pas de télémétrie. Chaque document est traité entièrement sur votre appareil et n'est jamais envoyé nulle part. Idéal pour les contrats, les formulaires médicaux et tout ce que vous préférez ne pas confier au serveur de quelqu'un d'autre.
@@ -266,8 +288,10 @@ CONFIDENTIEL PAR CONCEPTION — Pas de compte. Pas de cloud. Pas d'abonnement. P
 MegaPDF est un logiciel libre (Apache-2.0) : github.com/SlyWombat/MegaPDF
 ```
 
-**App features** — one line per box, 12 boxes
+**App features** — one line per box, 14 boxes
 ```
+Le mode lecture (Ctrl+H) masque les outils et laisse la page, avec les couleurs normales, sépia et nuit
+Pivoter, supprimer et réordonner les pages, insérer une page vierge, ajouter celles d'un autre PDF ou extraire une sélection — chaque geste est une annulation
 Modifiez le texte du document lui-même en cliquant et en tapant, comme dans un document Word
 Caviardez noms, adresses et images : retirés du fichier, pas seulement recouverts
 Ajoutez du texte sur une ligne vide, dans la taille et la police du formulaire
