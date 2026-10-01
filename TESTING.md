@@ -356,16 +356,26 @@ a mismatch by accident — the same protection the private corpus has had all al
 the manifest's 1,777 rows and every battery summary reported the figure as "the public
 corpus" with nothing saying what it was 1,381 *of*. It now holds **1,494 rows**: the 108 UK
 OGL forms and the 7 very large `govinfo-large` documents were staged on Dave's decision
-(#609) — 112 of the 115 landed; three `uk-hmrc` rows no longer hash to the manifest and are
-#625. The **280 `wiki-*` non-Latin rows are excluded by decision, not by accident**, and the
-decision is recorded in `~/pdf-public/EXCLUDED-FROM-THIS-CORPUS.tsv` where
-`tools/stress/corpus_coverage.sh` reads it, so every battery summary now prints the
-exclusion by name instead of leaving a silent hole. One further row is on disk but outside
-every number any battery prints: the qpdf fixture whose extension is `.Pdf`, which
+(#609) — 112 of the 115 landed. The remaining 283 rows are **stated exclusions**, not a
+silent hole: the **280 `wiki-*` non-Latin rows are excluded by decision**, and **3
+`uk-hmrc` rows are excluded because HMRC has made them permanently unfetchable** (#625 —
+P53_0622.pdf and P55_2025.pdf were retired for an online-only claim service, and VAT2.pdf's
+asset URL now redirects to guidance instead of serving a PDF; re-pinning the manifest to
+"whatever HMRC serves now" isn't available because nothing at those URLs is a PDF to pin
+to). Both decisions are recorded the same way, in `EXCLUDED-FROM-THIS-CORPUS.tsv` inside the
+corpus directory (`~/pdf-public` on k3), where `tools/stress/corpus_coverage.sh` reads it, so
+every battery summary prints each exclusion by name instead of leaving a silent hole — see
+`tools/stress/public-corpus/README.md` for the exact lines. One further row is on disk but
+outside every number any battery prints: the qpdf fixture whose extension is `.Pdf`, which
 `find -name '*.pdf'` does not match — long footnoted as "assumed / not verified", now
 counted and named in the coverage block. Staging those 115 documents costs about 25 minutes
 and 4.2 GB, nearly all of it the two multi-gigabyte rows, so it is a thing to do once per
 machine and leave alone.
+
+**The corpus arithmetic (#625), all 1,777 manifest rows:** 1,493 reachable (staged and
+matched by a battery's own `*.pdf` walk) + 1 staged-but-unreached (the `.Pdf` case-mismatch
+fixture) + 280 stated exclusion (`wiki-*`, non-Latin, deferred by decision) + 3 stated
+exclusion (`uk-hmrc`, #625, permanently unfetchable) + 0 unexplained = 1,777.
 
 **Scratch is disposable; corpora persist.** Every agent brief says "leave the machine as
 you found it" and "clean up after yourself" — that means your own build directories,
