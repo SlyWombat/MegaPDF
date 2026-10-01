@@ -177,6 +177,21 @@ def toolbar(shot, profile) -> list[Finding]:
     if not _is_frame(shot, profile):
         return [_skip("toolbar", "not a full window — a crop has no toolbar to "
                                  "measure")]
+    # Some poses are *supposed* to have no chrome at all: reading mode (#505)
+    # hides the toolbar, the tab strip and the status bar, and the page host it
+    # leaves behind reaches the top of the window. Measuring a toolbar there
+    # reports the whole search depth as a 200 px bar, which is how the #613
+    # reading slot came back flagged. Turned around instead: in a pose named
+    # here, finding a band is the defect, because a band means the mode did not
+    # turn on and the capture is an ordinary viewer shot in the reading slot.
+    if shot.pose in spec.get("chromeless_poses", ()):
+        depth = spec["depth"]
+        if shot.toolbar_end is not None and shot.toolbar_end < depth:
+            return [_flag("toolbar", f"a {shot.toolbar_end} px band of chrome at "
+                                     f"the top of a pose that should have none — "
+                                     f"did reading mode turn on?")]
+        return [_ok("toolbar", f"no chrome band in the top {depth} px, which is "
+                               f"what this pose is")]
     raster = im.gray(shot.path)
     end = shot.toolbar_end
     # A title bar of its own (Windows) sits above the commands and is not a

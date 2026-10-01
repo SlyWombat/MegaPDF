@@ -280,7 +280,14 @@ STORES: dict[str, dict] = {
                     # put a banner there.
                     "rows_by_pose": {"find": 2, "search": 2, "mode": 2,
                                      "redact": 2, "busy": 2, "busy-line": 2,
-                                     "busy-page": 2, "more": 2}},
+                                     "busy-page": 2, "more": 2},
+                    # Reading mode (#505) hides the toolbar, the tab strip, the
+                    # status bar and the Pages sidebar, so the page host runs to
+                    # the top of the window and there is no band to measure. The
+                    # check is inverted for this pose rather than stood down:
+                    # chrome *appearing* here would mean the mode did not turn
+                    # on and the reading slot is wearing a viewer shot (#613).
+                    "chromeless_poses": ("reading",)},
         "zoom": "100",
         # The tab strip (#348): every document pose draws the active tab's
         # title underlined in the accent — the same rule Mac's profile has
@@ -296,6 +303,16 @@ STORES: dict[str, dict] = {
         # banner and its marks, the busy strip (a progress bar is accent by
         # definition) and the licence links in About.
         "accent_poses": {"redact": ("banner", "mark"), "mode": ("banner",),
+                         # The Pages sidebar (#174, #613): the toolbar's Pages
+                         # button is a toggle and is filled with the accent
+                         # while the strip is open, and the strip's selected
+                         # rows are painted in a tint of it. Measured on the
+                         # 2026-10-01 set: 1,633 px for the toggled button
+                         # beside the 472 px of tab underline, and the
+                         # selection's own tint is light enough that the exact
+                         # colour mask never sees it.
+                         "pages": ("the toggled Pages button",
+                                   "the selected rows in the strip"),
                          "busy": ("progress",), "busy-line": ("progress",),
                          "busy-page": ("progress",), "about": ("links",),
                          "about-dialog": ("links",), "notices": ("links",),

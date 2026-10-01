@@ -17,6 +17,12 @@ Writes:
                 appearance stream. Used by the iOS PDFKit spike (ADR-001)
                 and future cross-platform interop tests.
 
+  demo-pages.pdf, demo-fr-pages.pdf, demo-fr-FR-pages.pdf
+              - the same filled agreement as page 1, followed by the four sections
+                it refers to and a landscape rate schedule: six pages, per
+                language. For the listing shots that need a document with more
+                than one page in it — reading mode's page number and the Pages
+                sidebar (#613). Page 1 is identical to demo*.pdf's.
   secure-source.pdf - the document tools/gen_security_fixtures.sh encrypts eight
                 ways for #241: two pages of text, a filled text field "fullname"
                 and a checked checkbox "agree", and a red square and a sticky note
@@ -241,6 +247,48 @@ DEMO_TEXT = {
         "box3": "Extended weekend rate",
         "sig": "Customer signature",
         "line": "Sign above the line",
+        "sections": [
+            {"title": "Section 1 \u2014 The equipment",
+             "lines": ["The customer confirms receiving the equipment listed below in good",
+                       "working order, and agrees to return it in the same condition.",
+                       "",
+                       "10 in. mitre saw, with blade and fence",
+                       "6 gallon portable compressor",
+                       "Rolling scaffold, two sections",
+                       "3,500 W petrol generator",
+                       "",
+                       "Anything missing on return is billed at the replacement rate."]},
+            {"title": "Section 2 \u2014 Delivery and pickup",
+             "lines": ["Delivery and pickup are included within 15 miles of the counter.",
+                       "Beyond that, a mileage charge applies.",
+                       "",
+                       "The customer provides a clear 6 ft approach and somebody on site",
+                       "at the agreed hour."],
+             "note": ["Unattended pickup is refused: the equipment stays the",
+                      "customer's responsibility until it is collected."]},
+            {"title": "Section 3 \u2014 The insurance",
+             "lines": ["Damage insurance covers accidental breakage up to $5,000 per",
+                       "agreement, with a $250 deductible.",
+                       "",
+                       "It does not cover theft without evidence of forced entry, use",
+                       "beyond the load limits on the machine's own plate, or any loss",
+                       "caused by freezing.",
+                       "",
+                       "A customer who declines the insurance stays liable for the full",
+                       "replacement value."]},
+            {"title": "Section 4 \u2014 The payment",
+             "lines": ["The rate runs from the hour of delivery to the hour of pickup,",
+                       "weekends included.",
+                       "",
+                       "A $500 deposit is held on the card when the equipment leaves,",
+                       "and released within five business days of its return."]},
+            {"title": "Rate schedule",
+             "table": [("Item", "Day", "Weekend", "Week"),
+                       ("10 in. mitre saw", "$32", "$58", "$128"),
+                       ("6 gallon compressor", "$28", "$49", "$110"),
+                       ("Scaffold, 2 sections", "$45", "$80", "$175"),
+                       ("3,500 W generator", "$60", "$108", "$240")]},
+        ],
     },
     "fr": {
         "title": "Contrat de location d'\u00e9quipement",
@@ -253,6 +301,48 @@ DEMO_TEXT = {
         "box3": "Tarif fin de semaine prolong\u00e9e",
         "sig": "Signature du client",
         "line": "Signez au-dessus de la ligne",
+        "sections": [
+            {"title": "Section 1 \u2014 L'\u00e9quipement",
+             "lines": ["Le locataire reconna\u00eet avoir re\u00e7u l'\u00e9quipement d\u00e9crit ci-dessous en bon",
+                       "\u00e9tat de marche et s'engage \u00e0 le rendre dans le m\u00eame \u00e9tat.",
+                       "",
+                       "Scie \u00e0 onglets 10 po, avec lame et guide",
+                       "Compresseur portatif 6 gallons",
+                       "\u00c9chafaudage roulant, deux sections",
+                       "G\u00e9n\u00e9ratrice 3 500 W, essence",
+                       "",
+                       "Tout manque constat\u00e9 au retour est factur\u00e9 au tarif de remplacement."]},
+            {"title": "Section 2 \u2014 Livraison et ramassage",
+             "lines": ["La livraison et le ramassage sont inclus dans un rayon de 25 km du",
+                       "comptoir. Au-del\u00e0, des frais de kilom\u00e9trage s'appliquent.",
+                       "",
+                       "Le locataire doit pr\u00e9voir un acc\u00e8s d\u00e9gag\u00e9 de 6 pi de largeur et",
+                       "une personne sur place \u00e0 l'heure convenue."],
+             "note": ["Le ramassage non assist\u00e9 est refus\u00e9 : l'\u00e9quipement reste sous",
+                      "la responsabilit\u00e9 du locataire jusqu'\u00e0 sa reprise."]},
+            {"title": "Section 3 \u2014 L'assurance",
+             "lines": ["L'assurance dommages couvre la casse accidentelle jusqu'\u00e0 5 000 $",
+                       "par contrat, franchise de 250 $.",
+                       "",
+                       "Elle ne couvre pas le vol sans effraction constat\u00e9e, l'usage hors",
+                       "des limites de charge indiqu\u00e9es sur la plaque de l'appareil, ni",
+                       "les pertes attribuables au gel.",
+                       "",
+                       "Le locataire qui refuse l'assurance demeure responsable de la",
+                       "valeur de remplacement int\u00e9grale."]},
+            {"title": "Section 4 \u2014 Le paiement",
+             "lines": ["Le tarif court du moment de la livraison au moment du ramassage,",
+                       "fins de semaine comprises.",
+                       "",
+                       "Un d\u00e9p\u00f4t de 500 $ est port\u00e9 \u00e0 la carte au d\u00e9part de l'\u00e9quipement",
+                       "et remis dans les cinq jours ouvrables suivant le retour."]},
+            {"title": "Tarifs \u2014 annexe",
+             "table": [("Article", "Jour", "Fin de semaine", "Semaine"),
+                       ("Scie \u00e0 onglets 10 po", "32 $", "58 $", "128 $"),
+                       ("Compresseur 6 gallons", "28 $", "49 $", "110 $"),
+                       ("\u00c9chafaudage, 2 sections", "45 $", "80 $", "175 $"),
+                       ("G\u00e9n\u00e9ratrice 3 500 W", "60 $", "108 $", "240 $")]},
+        ],
     },
     "fr-FR": {
         "title": "Contrat de location d'\u00e9quipement",
@@ -265,6 +355,48 @@ DEMO_TEXT = {
         "box3": "Tarif week-end prolong\u00e9",
         "sig": "Signature du client",
         "line": "Signez au-dessus de la ligne",
+        "sections": [
+            {"title": "Section 1 \u2014 Le mat\u00e9riel",
+             "lines": ["Le locataire reconna\u00eet avoir re\u00e7u le mat\u00e9riel d\u00e9crit ci-dessous en",
+                       "bon \u00e9tat de marche et s'engage \u00e0 le rendre dans le m\u00eame \u00e9tat.",
+                       "",
+                       "Scie \u00e0 onglets 250 mm, avec lame et guide",
+                       "Compresseur portatif 24 litres",
+                       "\u00c9chafaudage roulant, deux sections",
+                       "Groupe \u00e9lectrog\u00e8ne 3 500 W, essence",
+                       "",
+                       "Tout manque constat\u00e9 au retour est factur\u00e9 au tarif de remplacement."]},
+            {"title": "Section 2 \u2014 Livraison et enl\u00e8vement",
+             "lines": ["La livraison et l'enl\u00e8vement sont inclus dans un rayon de 25 km du",
+                       "comptoir. Au-del\u00e0, des frais kilom\u00e9triques s'appliquent.",
+                       "",
+                       "Le locataire doit pr\u00e9voir un acc\u00e8s d\u00e9gag\u00e9 de 2 m de largeur et",
+                       "une personne sur place \u00e0 l'heure convenue."],
+             "note": ["L'enl\u00e8vement non assist\u00e9 est refus\u00e9 : le mat\u00e9riel reste sous",
+                      "la responsabilit\u00e9 du locataire jusqu'\u00e0 sa reprise."]},
+            {"title": "Section 3 \u2014 L'assurance",
+             "lines": ["L'assurance dommages couvre la casse accidentelle jusqu'\u00e0 5 000 \u20ac",
+                       "par contrat, franchise de 250 \u20ac.",
+                       "",
+                       "Elle ne couvre pas le vol sans effraction constat\u00e9e, l'usage hors",
+                       "des limites de charge indiqu\u00e9es sur la plaque de l'appareil, ni",
+                       "les pertes attribuables au gel.",
+                       "",
+                       "Le locataire qui refuse l'assurance demeure responsable de la",
+                       "valeur de remplacement int\u00e9grale."]},
+            {"title": "Section 4 \u2014 Le paiement",
+             "lines": ["Le tarif court de l'heure de livraison \u00e0 l'heure de l'enl\u00e8vement,",
+                       "week-ends compris.",
+                       "",
+                       "Un d\u00e9p\u00f4t de 500 \u20ac est bloqu\u00e9 sur la carte au d\u00e9part du mat\u00e9riel",
+                       "et lib\u00e9r\u00e9 dans les cinq jours ouvr\u00e9s suivant le retour."]},
+            {"title": "Tarifs \u2014 annexe",
+             "table": [("Article", "Jour", "Week-end", "Semaine"),
+                       ("Scie \u00e0 onglets 250 mm", "32 \u20ac", "58 \u20ac", "128 \u20ac"),
+                       ("Compresseur 24 litres", "28 \u20ac", "49 \u20ac", "110 \u20ac"),
+                       ("\u00c9chafaudage, 2 sections", "45 \u20ac", "80 \u20ac", "175 \u20ac"),
+                       ("Groupe \u00e9lectrog\u00e8ne", "60 \u20ac", "108 \u20ac", "240 \u20ac")]},
+        ],
     },
 }
 
@@ -275,12 +407,70 @@ def _winansi(text):
     return raw.replace(b"\\", b"\\\\").replace(b"(", b"\\(").replace(b")", b"\\)")
 
 
-def gen_demo(lang="en", filled=True):
+def _section_ops(section, helv, bold):
+    """One continuation page of the demo agreement, as content-stream operators.
+
+    Three shapes, because the point of these pages is to be told apart as
+    *thumbnails*: a heading over body lines, the same with a framed note under
+    it, and a ruled table on a landscape page. At 104 px wide — the width of a
+    row in the Pages sidebar (PageViewModel.ThumbnailBoxWidth) — the words are
+    long gone and the shape is all that is left, so a strip of five pages that
+    were laid out identically would read as one page copied five times.
+
+    Returns (operators, width, height) in points.
+    """
+    if "table" in section:
+        # Landscape, and that is the second thing the strip says: a page can
+        # arrive the other way up, which is what Rotate is for.
+        width, height = 792.0, 612.0
+        ops = [b"BT /F2 20 Tf 72 520 Td (%s) Tj ET" % _winansi(section["title"])]
+        rows = section["table"]
+        columns = (72, 360, 480, 600)
+        top = 480
+        for r, row in enumerate(rows):
+            y = top - r * 26
+            face = b"/F2 11" if r == 0 else b"/F1 11"
+            for x, cell in zip(columns, row):
+                ops.append(b"BT %s Tf %d %d Td (%s) Tj ET" % (face, x, y, _winansi(cell)))
+            # A rule under the heading row and under each line of the body.
+            ops.append(b"%.1f w 0.6 0.6 0.6 RG 72 %d m 720 %d l S"
+                       % (1.2 if r == 0 else 0.4, y - 8, y - 8))
+        return ops, width, height
+
+    width, height = 612.0, 792.0
+    ops = [b"BT /F2 20 Tf 72 700 Td (%s) Tj ET" % _winansi(section["title"]),
+           b"1.2 w 0.6 0.6 0.6 RG 72 688 m 540 688 l S"]
+    y = 652
+    for line in section["lines"]:
+        if line:
+            ops.append(b"BT /F1 11 Tf 72 %d Td (%s) Tj ET" % (y, _winansi(line)))
+        y -= 18
+    if "note" in section:
+        note_top = y - 18
+        depth = 18 * len(section["note"]) + 20
+        ops.append(b"0.8 w 0.4 0.4 0.4 RG 72 %.0f 468 %d re S"
+                   % (note_top - depth, depth))
+        for i, line in enumerate(section["note"]):
+            ops.append(b"BT /F1 11 Tf 88 %.0f Td (%s) Tj ET"
+                       % (note_top - 28 - i * 18, _winansi(line)))
+    return ops, width, height
+
+
+def gen_demo(lang="en", filled=True, sections=False):
     """One-page 'filled agreement' used for App Store screenshots: real
     MegaPDF-style artifacts (mark:/sig: annots tagged MegaPDF_Id).
     `lang` picks the page's language (DEMO_TEXT); the layout is identical.
     `filled=False` writes the same page with nothing on it — no ticks, no
-    signature — for the preview video, which fills it in on camera."""
+    signature — for the preview video, which fills it in on camera.
+
+    `sections=True` keeps that same filled page as page 1 and adds the four
+    sections it refers to ("sections 1 through 4") plus a landscape rate
+    schedule — six pages. Page 1 is byte-for-byte the page `sections=False`
+    writes, which is the point: the reading-mode and page-tools listing shots
+    photograph the same agreement every other shot in the set does, in a
+    document that has enough pages for a thumbnail strip and a page number to
+    mean anything (#613). Only with `filled`: the blank variant is the preview
+    video's, and the video fills in one page."""
     objs = []
     add = lambda b: (objs.append(b), len(objs))[1]
     t = DEMO_TEXT[lang]
@@ -346,7 +536,14 @@ def gen_demo(lang="en", filled=True):
             b"/Type /XObject /Subtype /Form /BBox [0 0 233 70]",
             b"0.10 0.12 0.35 RG 2.0 w " + _squiggle_ops(8, 8, 210, 52) + b"\n"))
 
-    pages_num = len(objs) + 5
+    # The continuation pages' content streams first, so the page objects that
+    # point at them are numbered together with page 1 — the arithmetic below is
+    # the only thing holding this file's object numbers together.
+    extra = [(add(stream(b"", b"\n".join(ops) + b"\n")), w, h)
+             for ops, w, h in (_section_ops(s, helv, bold)
+                               for s in (t["sections"] if sections else []))]
+
+    pages_num = len(objs) + 5 + len(extra)
     a1, a2, a3 = len(objs) + 2, len(objs) + 3, len(objs) + 4
     page = add(b"<< /Type /Page /Parent %d 0 R /MediaBox [0 0 612 792] "
                b"/Resources << /Font << /F1 %d 0 R /F2 %d 0 R >> >> /Contents %d 0 R "
@@ -359,7 +556,13 @@ def gen_demo(lang="en", filled=True):
     sg = add(b"<< /Type /Annot /Subtype /Stamp /Rect [80 402 313 472] /F 4 "
              b"/MegaPDF_Id (sig:demo-1) /AP << /N %d 0 R >> >>" % sig_ap)
     assert (m1, m2, sg) == (a1, a2, a3)
-    pages = add(b"<< /Type /Pages /Kids [%d 0 R] /Count 1 >>" % page)
+    kids = [page]
+    for body, w, h in extra:
+        kids.append(add(b"<< /Type /Page /Parent %d 0 R /MediaBox [0 0 %.0f %.0f] "
+                        b"/Resources << /Font << /F1 %d 0 R /F2 %d 0 R >> >> /Contents %d 0 R >>"
+                        % (pages_num, w, h, helv, bold, body)))
+    pages = add(b"<< /Type /Pages /Kids [%s] /Count %d >>"
+                % (b" ".join(b"%d 0 R" % k for k in kids), len(kids)))
     assert pages == pages_num
     add(b"<< /Type /Catalog /Pages %d 0 R >>" % pages)
     return build(objs)
@@ -842,6 +1045,9 @@ def main():
                        ("stamped.pdf", gen_stamped()), ("demo.pdf", gen_demo()),
                        ("demo-fr.pdf", gen_demo("fr")),
                        ("demo-fr-FR.pdf", gen_demo("fr-FR")),
+                       ("demo-pages.pdf", gen_demo(sections=True)),
+                       ("demo-fr-pages.pdf", gen_demo("fr", sections=True)),
+                       ("demo-fr-FR-pages.pdf", gen_demo("fr-FR", sections=True)),
                        ("demo-blank.pdf", gen_demo(filled=False)),
                        ("demo-fr-blank.pdf", gen_demo("fr", filled=False)),
                        ("demo-fr-FR-blank.pdf", gen_demo("fr-FR", filled=False)),

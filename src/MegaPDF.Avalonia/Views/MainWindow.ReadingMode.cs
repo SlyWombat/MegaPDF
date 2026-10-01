@@ -339,6 +339,26 @@ public partial class MainWindow
         RestartPillTimer();
     }
 
+    /// <summary>
+    /// Up, and staying up: the idle countdown is stopped rather than restarted.
+    ///
+    /// For <c>--screenshot-state reading</c> only. The pill is the one thing in a
+    /// reading-mode capture that identifies the application, and its own two-second
+    /// fade expires at the moment the window is rendered, so a capture that just
+    /// called <see cref="ShowReadingPill"/> would be a coin toss between the picture
+    /// the listing wants and a bare page. Nothing a person does reaches this: the
+    /// production rules — fade on idle, never while the pill holds focus, never while
+    /// a screen reader is running — are untouched, and the next
+    /// <see cref="ShowReadingPill"/> starts the clock again as usual.
+    /// </summary>
+    internal void PinReadingPillForCapture()
+    {
+        if (!IsReadingMode)
+            return;
+        ReadingPill.IsVisible = true;
+        _pillTimer?.Stop();
+    }
+
     private void HideReadingPill()
     {
         _pillTimer?.Stop();

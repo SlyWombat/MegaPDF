@@ -163,7 +163,9 @@ class LinuxTabUnderline(unittest.TestCase):
     rows the way Mac's did (#400), so the 2026-10-01 re-shoot's viewer, text,
     search and sign slots — whose only accent pixels are this underline —
     came back from the gate flagged as a stray selection. Same fixture shape
-    as MacTabUnderline, at the Linux listing set's own size and file names."""
+    as MacTabUnderline, at the Linux listing set's own size and file names
+    (`01-viewer` was dropped as a slot by #613; `03-sign` has the same
+    underline and nothing else in the accent)."""
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -176,7 +178,7 @@ class LinuxTabUnderline(unittest.TestCase):
         underline = f"rectangle 13,{rows[0]} 247,{rows[1] - 1}"
         subprocess.run(["convert", "-size", "1280x800", "xc:white",
                         "-fill", stores.ACCENT, "-draw", underline,
-                        os.path.join(self.shots, "01-viewer.png")],
+                        os.path.join(self.shots, "03-sign.png")],
                        check=True, capture_output=True)
         # The same, plus a selection border around a word on the page.
         subprocess.run(["convert", "-size", "1280x800", "xc:white",
@@ -194,7 +196,7 @@ class LinuxTabUnderline(unittest.TestCase):
         return next(f for f in image["findings"] if f["check"] == "accent")
 
     def test_the_underline_alone_passes_by_name(self):
-        finding = self._accent("01-viewer.png")
+        finding = self._accent("03-sign.png")
         self.assertEqual(finding["status"], "pass", finding["note"])
         self.assertIn("active tab's underline", finding["note"])
         self.assertNotIn("elsewhere", finding["note"])
@@ -203,6 +205,71 @@ class LinuxTabUnderline(unittest.TestCase):
         finding = self._accent("02-text.png")
         self.assertEqual(finding["status"], "flag", finding["note"])
         self.assertIn("elsewhere", finding["note"])
+
+
+@unittest.skipUnless(shutil.which("convert"), "ImageMagick is not installed")
+class LinuxReadingPose(unittest.TestCase):
+    """#613: reading mode (#505) is a listing slot now, and it is the first
+    pose the gate has met that has no chrome at all — no toolbar, no tab
+    strip, no status bar. The toolbar check measured the whole 200 px search
+    depth as the band and flagged it ("the toolbar band is 200 px; expected
+    32-90"). The profile names the pose instead, and the check is inverted
+    there: a band found in this pose means reading mode did not turn on and
+    the slot is wearing an ordinary viewer shot."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        # Two sets of one image, because both are the *same* slot — the pose a
+        # file name parses to is what the profile keys on, so the good and the
+        # bad reading shot cannot share a folder without becoming each other's
+        # siblings.
+        self.good = os.path.join(self.tmp.name, "good", "en")
+        self.bad = os.path.join(self.tmp.name, "bad", "en")
+        os.makedirs(self.good)
+        os.makedirs(self.bad)
+        # The mode as it is: the page host to the top of the window, with the
+        # page's own ink on it and nothing above it.
+        subprocess.run(["convert", "-size", "1280x800", "xc:white",
+                        "-fill", "black", "-draw", "rectangle 320,120 740,150",
+                        os.path.join(self.good, "01-reading.png")],
+                       check=True, capture_output=True)
+        # The failure it has to catch: the same slot with the toolbar still on
+        # screen — a band of chrome across the top, as every other pose has.
+        subprocess.run(["convert", "-size", "1280x800", "xc:white",
+                        "-fill", "#cccccc", "-draw", "rectangle 0,0 1279,99",
+                        "-fill", "black", "-draw", "rectangle 320,300 740,330",
+                        os.path.join(self.bad, "01-reading.png")],
+                       check=True, capture_output=True)
+
+    def _toolbar(self, root):
+        with tempfile.TemporaryDirectory() as out:
+            result = gate.run(root, "linux", out, thumb_width=32)
+        image = next(i for i in result["images"]
+                     if os.path.basename(i["path"]) == "01-reading.png")
+        return next(f for f in image["findings"] if f["check"] == "toolbar")
+
+    def test_no_chrome_is_what_this_pose_is(self):
+        finding = self._toolbar(self.good)
+        self.assertEqual(finding["status"], "pass", finding["note"])
+        self.assertIn("no chrome band", finding["note"])
+
+    def test_chrome_left_on_is_flagged(self):
+        """The pose is named in the profile, so the check still has teeth: it
+        is the presence of a band that is the defect here, not its height."""
+        finding = self._toolbar(self.bad)
+        self.assertEqual(finding["status"], "flag", finding["note"])
+        self.assertIn("should have none", finding["note"])
+
+    def test_the_pose_name_is_the_one_the_rig_writes(self):
+        """tools/linux/store-captures.sh writes 01-reading.png, and the
+        profile's exemption is keyed on the parsed pose, not the file name."""
+        parsed = stores.STORES["linux"]["parse"]("01-reading.png")
+        self.assertIsNotNone(parsed)
+        self.assertEqual(parsed[1], "reading")
+        self.assertIn(
+            "reading",
+            stores.STORES["linux"]["toolbar"].get("chromeless_poses", ()))
 
 
 if __name__ == "__main__":
