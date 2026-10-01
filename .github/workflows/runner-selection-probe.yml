@@ -1,0 +1,113 @@
+name: Runner selection probe
+
+# Temporary (#614). This workflow exists to *prove* the runner-selection
+# expression that ios-ci.yml uses, rather than to assume it.
+#
+# This repository is public, so a self-hosted runner must never execute a pull
+# request from a fork: a fork's pull request can put anything in a workflow
+# step and it would run on our Mac, as the account the runner runs under. The
+# expression below picks the Mac only when the pull request's head repository is
+# this repository, and only when the kill switch variable says the Mac is on.
+#
+# Every job here runs on GitHub's hosted Ubuntu. Nothing in it touches the Mac;
+# it only prints what the expression evaluates to, so the branches can be read
+# off a real GitHub expression evaluation in every event shape. Delete this file
+# once the result is recorded on #614.
+
+on:
+  push:
+    branches: ['wip/614-**']
+  pull_request:
+    paths: ['.github/workflows/runner-selection-probe.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  evaluate:
+    name: What the expression evaluates to
+    runs-on: ubuntu-latest
+    steps:
+      - name: The contexts the expression reads
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          THIS_REPO: ${{ github.repository }}
+          PR_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          KILL_SWITCH: ${{ vars.MAC_SELF_HOSTED }}
+        run: |
+          echo "github.event_name                            = [$EVENT_NAME]"
+          echo "github.repository                            = [$THIS_REPO]"
+          echo "github.event.pull_request.head.repo.full_name= [$PR_HEAD_REPO]"
+          echo "vars.MAC_SELF_HOSTED                         = [$KILL_SWITCH]"
+
+      # Exactly the expression ios-ci.yml uses, minus the fromJSON() wrapper so
+      # the result is a printable string. fromJSON of the same two literals is
+      # proved separately by the array-in-runs-on job below.
+      - name: 1. The real expression, as it stands right now
+        env:
+          SELECTED: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.runner == 'self-hosted') && '["self-hosted","macOS","ARM64","megapdf-ios"]' || (github.event_name == 'workflow_dispatch' && github.event.inputs.runner == 'hosted') && '["macos-latest"]' || (vars.MAC_SELF_HOSTED == 'on' && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.repo.fork == false))) && '["self-hosted","macOS","ARM64","megapdf-ios"]' || '["macos-latest"]' }}
+        run: echo "PROBE 1 real                 -> $SELECTED"
+
+      # The fork branch of the same expression. The head-repository comparison is
+      # made against a name that is not this repository, which is precisely what a
+      # fork's pull request would produce. Must print macos-latest, and must do so
+      # even with the switch held on.
+      - name: 2. As if this pull request came from a fork
+        env:
+          SELECTED: ${{ ('on' == 'on' && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == 'someone-else/MegaPDF-fork' && github.event.pull_request.head.repo.fork == true))) && '["self-hosted","macOS","ARM64","megapdf-ios"]' || '["macos-latest"]' }}
+        run: echo "PROBE 2 fork simulation      -> $SELECTED"
+
+      # The kill switch, with everything else held in the Mac's favour.
+      - name: 3. As if the kill switch were off
+        env:
+          SELECTED: ${{ ('off' == 'on' && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.repo.fork == false))) && '["self-hosted","macOS","ARM64","megapdf-ios"]' || '["macos-latest"]' }}
+        run: echo "PROBE 3 switch off           -> $SELECTED"
+
+      # The switch on and the head repository matching: the only combination that
+      # may print the self-hosted label set.
+      - name: 4. As if the kill switch were on, same-repository branch
+        env:
+          SELECTED: ${{ ('on' == 'on' && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.repo.fork == false))) && '["self-hosted","macOS","ARM64","megapdf-ios"]' || '["macos-latest"]' }}
+        run: echo "PROBE 4 switch on, ours      -> $SELECTED"
+
+      # The trap, and the reason the guard is written the way it is rather than the
+      # tidier way. `github.event.foo.bar` is null for a path that does not exist,
+      # which is also what head.repo is for a fork DELETED after its pull request was
+      # opened. GitHub casts null and false both to 0, so `null == false` is TRUE:
+      # step 5 shows a guard written only as `fork == false` resolving to the Mac on
+      # a null head repository, i.e. failing OPEN. Step 6 shows the real guard, with
+      # the full_name comparison ANDed in, refusing the same null. 5 must print
+      # self-hosted and 6 must print macos-latest; if 6 ever prints self-hosted the
+      # guard is broken.
+      - name: 5. The naive guard on a null head repository (fails OPEN - do not use)
+        env:
+          SELECTED: ${{ ('on' == 'on' && ('pull_request' != 'pull_request' || github.event.no_such_key.fork == false)) && '["self-hosted","macOS","ARM64","megapdf-ios"]' || '["macos-latest"]' }}
+        run: echo "PROBE 5 naive, null head     -> $SELECTED"
+
+      - name: 6. The real guard on a null head repository
+        env:
+          SELECTED: ${{ ('on' == 'on' && ('pull_request' != 'pull_request' || (github.event.no_such_key.full_name == github.repository && github.event.no_such_key.fork == false))) && '["self-hosted","macOS","ARM64","megapdf-ios"]' || '["macos-latest"]' }}
+        run: echo "PROBE 6 real guard, null head-> $SELECTED"
+
+      # The manual override is gated on event_name == 'workflow_dispatch'. This holds
+      # the override at 'self-hosted' and everything else as it really is: on a
+      # pull_request it must still print macos-latest, because the override term can
+      # never be true there. On a workflow_dispatch it may print the self-hosted set,
+      # which is the point of the override.
+      - name: 7. The override term, with the override held at self-hosted
+        env:
+          SELECTED: ${{ (github.event_name == 'workflow_dispatch' && 'self-hosted' == 'self-hosted') && '["self-hosted","macOS","ARM64","megapdf-ios"]' || (github.event_name == 'workflow_dispatch' && 'self-hosted' == 'hosted') && '["macos-latest"]' || (vars.MAC_SELF_HOSTED == 'on' && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.repo.fork == false))) && '["self-hosted","macOS","ARM64","megapdf-ios"]' || '["macos-latest"]' }}
+        run: echo "PROBE 7 override=self-hosted -> $SELECTED"
+
+  # Proves the shape rather than the condition: a runs-on fed by
+  # fromJSON() of a JSON array literal chosen by a ternary really does resolve to
+  # a runner. If this job runs at all, the mechanism ios-ci.yml relies on works.
+  array-form:
+    name: fromJSON() in runs-on resolves to a runner
+    runs-on: ${{ fromJSON(github.event_name != 'this-is-never-an-event-name' && '["ubuntu-latest"]' || '["ubuntu-22.04"]') }}
+    steps:
+      - name: Which runner picked this up
+        run: |
+          echo "PROBE runner picked up the job: $RUNNER_OS / $ImageOS"
+          echo "PROBE expected the true branch: ubuntu-latest"

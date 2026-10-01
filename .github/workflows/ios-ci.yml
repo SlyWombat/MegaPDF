@@ -1,10 +1,19 @@
 name: iOS CI
 
-# Development is Mac-less: this runner is the build machine (#20).
+# Development is Mac-less: this runner is the build machine (#20). Since #614 the
+# `build` job prefers our own Mac mini over GitHub's hosted macOS when a repository
+# variable says so and the pull request is not from a fork — see the long comment on
+# `runs-on` below, and tools/mac-mini.md for the two commands that turn it on and off.
 on:
   # Development is Mac-less, so this is the only way to compile-check an iOS change
   # without opening a PR.
   workflow_dispatch:
+    inputs:
+      runner:
+        description: Which runner to use (auto = the usual rules)
+        type: choice
+        default: auto
+        options: [auto, self-hosted, hosted]
   push:
     branches: [main]
     paths: ['ios/**', 'core/**', 'libs/pdfium/**', 'tools/gen_test_fixtures.py', '.github/workflows/ios-ci.yml']
@@ -14,11 +23,89 @@ on:
 
 jobs:
   build:
-    runs-on: macos-latest
+    # Our own Mac mini when it is switched on and the pull request is ours;
+    # GitHub's hosted macOS otherwise (#614). Read this right to left:
+    #
+    #   vars.MAC_SELF_HOSTED == 'on'      the switch. A repository variable, not a
+    #                                     setting on the machine, so Dave can turn the
+    #                                     Mac out of the loop from anywhere and the
+    #                                     queued jobs go back to GitHub instead of
+    #                                     waiting 24 hours for a runner that is off.
+    #                                     Unset means hosted, so this file changes
+    #                                     nothing until the variable is set.
+    #   head.repo.full_name == repository THE fork guard, and the reason any of this is
+    #                                     safe. THIS REPOSITORY IS PUBLIC, and the runner
+    #                                     runs as `claude`, the account that holds the
+    #                                     read-write deploy key and the working clones
+    #                                     (Dave's call, 2026-10-01). So a job that gets
+    #                                     here can read all of that, and the only thing
+    #                                     standing between a stranger and it is this
+    #                                     comparison. A pull request opened from a fork
+    #                                     is still checked — on GitHub's disposable
+    #                                     runner, which is what that is for. There are no
+    #                                     forks today; that is the moment to write this,
+    #                                     not the moment after.
+    #                                     It is in the workflow and not left to the
+    #                                     repository's "require approval for fork pull
+    #                                     requests" setting on purpose: a setting is one
+    #                                     click from being loosened, and this guard has
+    #                                     to survive that click.
+    #   head.repo.fork == false           a second, independent term, ANDed. On its own
+    #                                     it would be WORSE than nothing: when head.repo
+    #                                     is null — a fork deleted after the pull request
+    #                                     was opened — GitHub casts null and false both
+    #                                     to 0 and `null == false` is TRUE, so a guard
+    #                                     written only this way fails OPEN. The
+    #                                     full_name comparison is what catches null, and
+    #                                     is the load-bearing half. Both are proved,
+    #                                     including that null case, by the probe below.
+    #   event_name != 'pull_request'      a push to main, or a workflow_dispatch: the
+    #                                     code is already in the repository, so there is
+    #                                     no untrusted author to guard against.
+    #   inputs.runner                     a manual override, and ONLY on
+    #                                     workflow_dispatch, which cannot be fired by
+    #                                     anyone without push access and is never a
+    #                                     fork. It is how the same commit was timed on
+    #                                     both runners for #614, and it is the thing to
+    #                                     reach for when one runner has to be used for a
+    #                                     single run without changing the variable for
+    #                                     everyone:
+    #                                       gh workflow run ios-ci.yml -f runner=hosted
+    #                                     `auto` means the rules above.
+    #
+    # Verified rather than assumed: .github/workflows/runner-selection-probe.yml
+    # evaluated this expression and three held-constant variants on a hosted runner in
+    # both event shapes. The one that matters is a pull_request whose head repository is
+    # not this one with the switch forced on: it resolves to macos-latest. Recorded on
+    # #614.
+    runs-on: ${{ fromJSON((github.event_name == 'workflow_dispatch' && github.event.inputs.runner == 'self-hosted') && '["self-hosted","macOS","ARM64","megapdf-ios"]' || (github.event_name == 'workflow_dispatch' && github.event.inputs.runner == 'hosted') && '["macos-latest"]' || (vars.MAC_SELF_HOSTED == 'on' && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.repo.fork == false))) && '["self-hosted","macOS","ARM64","megapdf-ios"]' || '["macos-latest"]') }}
     defaults:
       run:
         working-directory: ios
     steps:
+      # A hosted runner is a fresh machine every time and ours is a desktop. #569 was a
+      # flake caused entirely by state surviving between runs on a machine that was not
+      # clean, so everything a job could inherit is removed here rather than hoped about:
+      # the whole workspace (ios/Vendor is gitignored and scripts/fetch-pdfium.sh SKIPS
+      # the fetch when the folder is already there, which on this machine means a
+      # fortnight-old xcframework — see tools/mac-mini.md), and any simulator left behind
+      # by a cancelled job of ours. Derived data goes under RUNNER_TEMP further down for
+      # the same reason.
+      #
+      # Only devices named megapdf-ci-* are touched. The Mac mini is shared with people
+      # and agents who have their own simulators booted, and deleting one of those would
+      # break a run in flight.
+      - name: Start from nothing (self-hosted only)
+        if: runner.environment == 'self-hosted'
+        working-directory: ${{ github.workspace }}
+        run: |
+          echo "/opt/homebrew/bin" >> "$GITHUB_PATH"
+          find "$GITHUB_WORKSPACE" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+          ls -A "$GITHUB_WORKSPACE" || true
+          /usr/bin/xcrun simctl list devices -j \
+            | python3 -c "import json,sys;[print(d['udid']) for ds in json.load(sys.stdin)['devices'].values() for d in ds if d['name'].startswith('megapdf-ci-')]" \
+            | while read -r u; do echo "deleting leftover simulator $u"; /usr/bin/xcrun simctl delete "$u" || true; done
+
       - uses: actions/checkout@v4
 
       - name: Cache PDFium xcframework
@@ -31,31 +118,66 @@ jobs:
         run: bash scripts/fetch-pdfium.sh
 
       - name: Install XcodeGen
-        run: brew install xcodegen
+        # Already installed on the Mac mini, and `brew install` on an installed
+        # formula is a slow no-op that can decide to update Homebrew first.
+        run: command -v xcodegen >/dev/null || brew install xcodegen
 
       - name: Generate Xcode project
         run: xcodegen generate
 
-      - name: Pick a simulator
+      # Two simulators are CREATED for this job and deleted again when it ends, rather
+      # than a long-lived device being picked by name. On a hosted runner that is a
+      # formality; on ours it is the difference between a reproducible verdict and
+      # inheriting whatever the last nineteen days left in a device's data container.
+      # Doing it the same way on both runners is the point: the machine stops being
+      # the variable.
+      #
+      # #465: the zoom test runs on one of each width class. A compact-width iPhone has
+      # a bottom toolbar exactly where a synthesised pinch puts its lower finger; a
+      # regular-width iPad has its tools along the top instead. That difference made the
+      # same test pass on one and measure a no-op on the other for a fortnight, so both
+      # are run. Which models exist is left to whatever the Xcode install offers, as
+      # before — only the devices themselves are now ours.
+      - name: Create a simulator of our own for this job
         run: |
-          DEVICE=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print(next(dev['name'] for devs in d.values() for dev in devs if dev['name'].startswith('iPhone')))")
-          echo "SIM_DEVICE=$DEVICE" >> "$GITHUB_ENV"
-          echo "using simulator: $DEVICE"
-          # #465: the zoom test runs on one of each width class. A compact-width
-          # iPhone has a bottom toolbar exactly where a synthesised pinch puts its
-          # lower finger; a regular-width iPad has its tools along the top instead.
-          # That difference made the same test pass on one and measure a no-op on
-          # the other for a fortnight, so both are run.
-          IPAD=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print(next(dev['name'] for devs in d.values() for dev in devs if dev['name'].startswith('iPad')))")
-          echo "IPAD_DEVICE=$IPAD" >> "$GITHUB_ENV"
-          echo "using iPad simulator: $IPAD"
+          python3 - "$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" <<'PY' >> "$GITHUB_ENV"
+          import json, subprocess, sys
+          tag = sys.argv[1]
+          cat = json.loads(subprocess.run(
+              ['xcrun', 'simctl', 'list', 'devices', 'available', '-j'],
+              capture_output=True, text=True, check=True).stdout)['devices']
+          def pick(prefix):
+              for runtime, devices in cat.items():
+                  for d in devices:
+                      if d['name'].startswith(prefix):
+                          return d['deviceTypeIdentifier'], runtime, d['name']
+              sys.exit(f'no available {prefix} simulator in this Xcode')
+          for prefix, var in (('iPhone', 'SIM'), ('iPad', 'IPAD')):
+              dtype, runtime, model = pick(prefix)
+              name = f'megapdf-ci-{var.lower()}-{tag}'
+              udid = subprocess.run(['xcrun', 'simctl', 'create', name, dtype, runtime],
+                                    capture_output=True, text=True, check=True).stdout.strip()
+              print(f'{var}_UDID={udid}')
+              print(f'{var}_MODEL={model}')
+              print(f'created {name}: {model} on {runtime} -> {udid}', file=sys.stderr)
+          PY
+          # Derived data per job, under a directory the runner wipes between jobs. The
+          # default is ~/Library/Developer/Xcode/DerivedData, which on a desktop is
+          # shared with every other build on the machine.
+          echo "DD=$RUNNER_TEMP/dd" >> "$GITHUB_ENV"
+
+      - name: Which simulators this job is using
+        run: |
+          echo "iPhone: $SIM_MODEL  ($SIM_UDID)"
+          echo "iPad:   $IPAD_MODEL ($IPAD_UDID)"
 
       - name: Build and test (simulator, unsigned)
         run: |
           xcodebuild test \
             -project MegaPDF.xcodeproj \
             -scheme MegaPDF \
-            -destination "platform=iOS Simulator,name=$SIM_DEVICE" \
+            -destination "id=$SIM_UDID" \
+            -derivedDataPath "$DD" \
             CODE_SIGNING_ALLOWED=NO
 
       # The same suite under the French (Canada) localisation (#91). No test
@@ -66,7 +188,8 @@ jobs:
           xcodebuild test-without-building \
             -project MegaPDF.xcodeproj \
             -scheme MegaPDF \
-            -destination "platform=iOS Simulator,name=$SIM_DEVICE" \
+            -destination "id=$SIM_UDID" \
+            -derivedDataPath "$DD" \
             -testLanguage fr -testRegion CA \
             CODE_SIGNING_ALLOWED=NO
 
@@ -112,7 +235,8 @@ jobs:
           xcodebuild build-for-testing \
             -project MegaPDF.xcodeproj \
             -scheme MegaPDFDemo \
-            -destination "platform=iOS Simulator,name=$SIM_DEVICE" \
+            -destination "id=$SIM_UDID" \
+            -derivedDataPath "$DD" \
             CODE_SIGNING_ALLOWED=NO
 
       # Booted here rather than by xcodebuild, so the boot is its own timing and
@@ -121,11 +245,9 @@ jobs:
       # first keyboard would have left (#406).
       - name: Boot the simulator
         run: |
-          UDID=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print(next(dev['udid'] for devs in d.values() for dev in devs if dev['name'] == '$SIM_DEVICE'))")
-          echo "SIM_UDID=$UDID" >> "$GITHUB_ENV"
-          xcrun simctl boot "$UDID" || true
-          xcrun simctl bootstatus "$UDID" -b
-          xcrun simctl spawn "$UDID" defaults write com.apple.keyboard.preferences \
+          xcrun simctl boot "$SIM_UDID" || true
+          xcrun simctl bootstatus "$SIM_UDID" -b
+          xcrun simctl spawn "$SIM_UDID" defaults write com.apple.keyboard.preferences \
             DidShowContinuousPathIntroduction -bool true
 
       - name: Run the UI tests
@@ -134,6 +256,7 @@ jobs:
             -project MegaPDF.xcodeproj \
             -scheme MegaPDFDemo \
             -destination "id=$SIM_UDID" \
+            -derivedDataPath "$DD" \
             -resultBundlePath "$RUNNER_TEMP/ui-tests.xcresult" \
             -only-testing:MegaPDFUITests/ViewerZoomUITests \
             -only-testing:MegaPDFUITests/ReadingModeUITests \
@@ -166,7 +289,8 @@ jobs:
           xcodebuild test-without-building \
             -project MegaPDF.xcodeproj \
             -scheme MegaPDFDemo \
-            -destination "platform=iOS Simulator,name=$IPAD_DEVICE" \
+            -destination "id=$IPAD_UDID" \
+            -derivedDataPath "$DD" \
             -resultBundlePath "$RUNNER_TEMP/ui-tests-ipad.xcresult" \
             -only-testing:MegaPDFUITests/ViewerZoomUITests \
             -only-testing:MegaPDFUITests/ReadingModeUITests \
@@ -188,8 +312,29 @@ jobs:
           name: ui-tests-ipad-xcresult
           path: ${{ runner.temp }}/ui-tests-ipad.xcresult
 
+      # Always, including after a cancellation, and only the two devices this job
+      # created — their UDIDs, not a name pattern, so there is no way for this to
+      # reach a simulator belonging to somebody else on the machine. On a hosted
+      # runner it is wasted breath; on ours it is what stops #569 happening again
+      # in iOS form.
+      - name: Give the simulators back
+        if: always()
+        working-directory: ${{ github.workspace }}
+        run: |
+          for u in "$SIM_UDID" "$IPAD_UDID"; do
+            [ -n "${u:-}" ] || continue
+            xcrun simctl shutdown "$u" 2>/dev/null || true
+            xcrun simctl delete "$u" 2>/dev/null || true
+            echo "deleted $u"
+          done
+
   # ADR-001 evidence: PDFKit vs the MegaPDF_Id interop contract (macOS PDFKit
   # is the same framework family as iOS). Read the SPIKE: lines in the log.
+  #
+  # Deliberately left on GitHub's macOS (#614): it is a one-file `swift` run of
+  # about a minute, so it gains nothing from our hardware, and keeping one macOS
+  # job hosted means the hosted path stays exercised on every pull request
+  # instead of rotting until the day the Mac mini is unavailable.
   pdfkit-spike:
     runs-on: macos-latest
     steps:
