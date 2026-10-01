@@ -98,10 +98,11 @@ class PageToolsProgressTest {
         // to carry its content — so a content-light fixture lets the one call finish before the
         // busy indicator's 0.5 s threshold however many pages it has (found running this on CI:
         // 5,000 content-light pages opened and extracted in well under a second put together).
-        // multiPageBulky's padding inflates the second cost without inflating the first.
-        val file = Fixtures.written(
-            "pages-progress-extract-145.pdf", TestPdfs.multiPageBulky(EXTRACT_PAGE_COUNT, EXTRACT_PAGE_BYTES),
-        )
+        // multiPageBulky's padding inflates the second cost without inflating the first. Written
+        // straight to the file (rather than built as a ByteArray and handed to Fixtures.written,
+        // as every other fixture here is) because this one is tens of megabytes.
+        val file = Fixtures.empty("pages-progress-extract-145.pdf")
+        TestPdfs.multiPageBulky(file, EXTRACT_PAGE_COUNT, EXTRACT_PAGE_BYTES)
         rule.open(file)
         val out = Fixtures.empty("pages-progress-extract-145-out.pdf")
 
