@@ -153,7 +153,7 @@
     <string name="signed_overwrite_remove_offer">Left in, it travels with the file being saved and goes on claiming to describe a file it no longer describes, so MegaPDF and other readers report that file as signed. The document you opened is not changed either way — this reaches only the file being written. And a digital signature says a file has not changed since it was signed: it has never kept anyone from opening this document, so a file saved without it is readable by exactly the same people.</string>
     <!-- Shown once, quietly, after Save a copy of a signed document that kept the signature
          (#481, #576). It used to say the signature "doesn't carry over to a copy", which is
-         untrue -- FPDF_SaveAsCopy re-serialises the signature dictionary into the copy, and the
+         untrue: FPDF_SaveAsCopy re-serialises the signature dictionary into the copy, and the
          copy reports as signed when it is reopened. Only its validity does not carry over. -->
     <string name="signed_copy_notice">Saved. The copy carries the document\'s digital signature, and it is no longer valid.</string>
     <!-- #576: shown once, quietly, after a Save a copy that removed the signature instead. -->
