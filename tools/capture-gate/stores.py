@@ -282,6 +282,16 @@ STORES: dict[str, dict] = {
                                      "redact": 2, "busy": 2, "busy-line": 2,
                                      "busy-page": 2, "more": 2}},
         "zoom": "100",
+        # The tab strip (#348): every document pose draws the active tab's
+        # title underlined in the accent — the same rule Mac's profile has
+        # carried since #400, and measured the same way here: two rows, 93
+        # and 94, x=13 to as wide as the title, on the 1280x800 listing set.
+        # Never added when tabs landed on Linux, so the viewer/text/search/
+        # sign slots of the 2026-10-01 re-shoot (#310) came back from the
+        # gate flagged "no accent is expected in this pose" — the underline
+        # was the only accent pixel on them, and with no rows named for it
+        # every row fell to the stray count instead.
+        "tab_underline": {"rows": (93, 95)},
         # Where the brand accent belongs on this platform, per pose: the armed
         # banner and its marks, the busy strip (a progress bar is accent by
         # definition) and the licence links in About.
