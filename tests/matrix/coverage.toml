@@ -1372,10 +1372,13 @@ presence = "present"
 entry = "ios/MegaPDF/ViewerView.swift::Save a copy"
 coverage = "ui"
 tests = [
+  "ios/MegaPDFUITests/SaveACopyExportUITests.swift::testSaveACopyPresentsTheExportSheet",
+  "ios/MegaPDFUITests/SaveACopyExportUITests.swift::testBothExportsPresentTheirSheetInOneSession",
+  ".github/workflows/ios-ci.yml::-only-testing:MegaPDFUITests/SaveACopyExportUITests",
   "ios/MegaPDFTests/SaveACopyAdoptionTests.swift::class",
   "ios/MegaPDFTests/SignatureDetectionTests.swift::copy",
 ]
-note = "#572: that the copy becomes the open document is tested in CI. The live export sheet is only in FilesEndToEndUITests, which is excluded from CI and, as of #589, does not present at all."
+note = "#589: a CI UI test now taps Save a copy and fails unless the system export sheet really appears \u2014 the half that was silently broken on every document while this cell already claimed `ui`. The lane citation is both lanes at once: the suite is named in the iPhone and the iPad -only-testing lists (#598's rule reads the one text). Where the copy lands, and that the app can still write to it afterwards (#572's adoption), needs a real file behind the document and is still only in FilesEndToEndUITests, which CI excludes."
 [feature.android]
 presence = "present"
 entry = "android/app/src/main/java/com/megapdf/android/ViewerScreen.kt::R.string.save_a_copy"
@@ -1423,8 +1426,11 @@ coverage = "ui"
 tests = [
   "ios/MegaPDFUITests/MarkdownExportUITests.swift::class",
   ".github/workflows/ios-ci.yml::-only-testing:MegaPDFUITests/MarkdownExportUITests",
+  "ios/MegaPDFUITests/SaveACopyExportUITests.swift::testBothExportsPresentTheirSheetInOneSession",
+  ".github/workflows/ios-ci.yml::-only-testing:MegaPDFUITests/SaveACopyExportUITests",
   "ios/MegaPDFTests/StructureExportTests.swift::class",
 ]
+note = "#589: iOS exports Markdown through the same single file exporter Save a copy uses, so the test that drives both in one session is cited by both cells \u2014 one exporter serving the wrong kind would send this result to the wrong completion, and the alert would read \"Saved\" rather than \"Exported\"."
 [feature.android]
 presence = "present"
 entry = "android/app/src/main/java/com/megapdf/android/ViewerScreen.kt::R.string.export_markdown"

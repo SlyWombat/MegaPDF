@@ -802,6 +802,10 @@ struct ViewerView: View {
                     if model.redactionMarkCount > 0 { redactConfirm = .copy } else { onSaveCopy() }
                 }
                     .disabled(model.isSaving || model.fileCommandsBlocked)
+                    // #589: named, like its Markdown neighbour, so the CI test that taps it
+                    // finds this row rather than one of the other "Save a copy" buttons the
+                    // save questions put on screen.
+                    .accessibilityIdentifier("viewerSaveCopy")
                 // #386: a Markdown export, alongside Save a copy rather than a variant of
                 // it -- it is a one-way, lossy text export (contract 9 drops layout, field
                 // interactivity, everything Markdown can't model), and MegaPDF has no
