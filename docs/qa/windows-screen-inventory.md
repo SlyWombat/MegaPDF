@@ -103,10 +103,10 @@ Check every surface in en, fr-CA and fr-FR, light and dark, at effective widths 
 
 ## Store captures taken of these surfaces
 
-The Microsoft Store set is seven of the surfaces above, shot by
+The Microsoft Store set is eight of the surfaces above, shot by
 `tools/screenshots-windows/Shoot-Set.ps1` on a real desktop (#613): reading mode,
-the inline text editor, a placed signature, the Pages pane with a selection, the
-find bar, a selected redaction mark, and the empty state. Keeping this list in step
+the inline text editor, ticked check boxes, a placed signature, the Pages pane with
+a selection, the find bar, a selected redaction mark, and the empty state. Keeping this list in step
 matters in both directions — a surface that goes into the listing is a surface whose
 defects are published.
 

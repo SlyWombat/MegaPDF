@@ -13,7 +13,7 @@
 # F4 toggles the pane (MainWindow.Pages.cs). The tile coordinates are read off a
 # probe shot like every other coordinate in this harness -- they move with the page
 # count, because the pane sizes its thumbnails to the document's aspect ratio.
-param([int]$X1 = 0, [int]$Y1 = 0, [int]$X2 = 0, [int]$Y2 = 0, [string]$Name = "04-pages")
+param([int]$X1 = 0, [int]$Y1 = 0, [int]$X2 = 0, [int]$Y2 = 0, [string]$Name = "05-pages")
 . (Join-Path $PSScriptRoot "lib.ps1")
 
 $h = (Get-Process -Name MegaPDF | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1).MainWindowHandle

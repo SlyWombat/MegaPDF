@@ -1,7 +1,7 @@
 # Windows Store screenshots — capture harness
 
 Drives the installed MegaPDF package from WSL (via `powershell.exe`) with UI
-Automation and synthetic input, and captures the seven screenshots the Microsoft
+Automation and synthetic input, and captures the eight screenshots the Microsoft
 Store listing uses. The iOS and Android equivalents run in CI
 (`.github/workflows/ios-screenshots.yml`, `android/scripts/capture-screenshots.sh`);
 this one needs a real Windows desktop, so it runs locally.
@@ -26,7 +26,7 @@ PowerShell, but `Click-InShot`, `^o` and the pickers work (2026-09-13).
 `Shoot-Set.ps1 -Lang <en-US|fr-CA|fr-FR> -Dir <en|fr-CA|fr-FR>` runs the whole
 sequence for one language: it refuses unless the installed package is the version
 to be shot, and afterwards it moves the probe and in-between frames into `work/`,
-so the language folder holds only the seven listing images `tools/capture-gate`
+so the language folder holds only the eight listing images `tools/capture-gate`
 reads (`gate.py --store microsoft artifacts/store/screenshots`).
 
 **The seven slots, re-cut for 2.2 (#613):** reading, text, sign, pages, search,
@@ -44,7 +44,7 @@ coordinates are being read off the probes:
   agreement, in the order the story happens on it.
 - **`terms`** — slots 4 (pages), 5 (search) and 1 (reading), on `rental-terms.pdf`.
   Reading is last because it is the one state that takes the whole window.
-- **`home`** — slot 7, a fresh launch with no document and a posed recents list.
+- **`home`** — slot 8, a fresh launch with no document and a posed recents list.
 
     # 0. the display at 150 %, in its OWN powershell process
     .\Set-Scale.ps1 150
@@ -71,7 +71,7 @@ aside and `-Restore` puts it back.
 
 `blank-agreement.pdf` and `scanned-agreement.pdf` are as they were.
 **`rental-terms.pdf` is new (#613):** twelve pages of the same company's terms,
-because three of the seven slots cannot be shot on a one-page form — reading mode's
+because three of the eight slots cannot be shot on a one-page form — reading mode's
 floating bar reads "1 / 1", the Pages pane shows a single tile instead of the grid
 Windows draws, and Find highlights one hit.
 
@@ -323,7 +323,7 @@ Screenshots must contain no real user data:
 - The **signature library holds the user's real signature.** Place the
   `megawoman-sig` demo instead, and don't put the library flyout on camera.
 - The **file picker shows the user's folder tree.** Never call `Shot` with one open.
-- Delete every intermediate frame that catches any of the above; ship only the seven.
+- Delete every intermediate frame that catches any of the above; ship only the eight.
 
 What a session leaves behind, all under `%LOCALAPPDATA%\MegaPDF\`: `recent.json`
 (write `[]` to clear), `Signatures\` (including anything added for the shoot), and

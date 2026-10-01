@@ -532,8 +532,63 @@ def against_reference(shot, reference: str | None) -> list[Finding]:
                                f"shot posed differently?")]
 
 
+def focus_ring(shot, profile) -> list[Finding]:
+    """A keyboard-focus ring left on the page.
+
+    `accent` already looks for selection chrome, and it did not catch this: on
+    Windows the ring a click leaves on a page region is drawn in a *lighter* blue
+    than the brand accent — #4a93e2 against the brand's #0e6fd8 — so the accent
+    mask does not match a pixel of it. The 2.2 checkbox capture went through the
+    whole gate with a ring round the last box it ticked and came back clean
+    (#613).
+
+    Measured rather than named: the ring is a thin rounded rectangle, so what is
+    looked for is *any* of that colour at all. Nothing in either desktop app
+    paints with it on purpose, which is what makes "none" the right threshold and
+    this a different question from `accent`'s "how much, and in what shape".
+    """
+    colour = profile.get("focus_ring")
+    if not colour:
+        return [_skip("focus ring", "this platform's focus ring colour is not in "
+                                    "the profile, so there is nothing to look for")]
+    mask = im.colour_mask(shot.path, colour)
+    # The same regions `accent` takes out before it counts: the app's own icon in
+    # the title bar is blue, and at this fuzz about a hundred of its antialiased
+    # pixels fall inside the ring colour too.
+    ignore = profile.get("accent_ignore", ())
+    found = 0
+    for y in range(mask.h):
+        row = mask.row(y)
+        hits = row.count(0)
+        for x0, y0, bw, bh in ignore:
+            if y0 <= y < y0 + bh:
+                hits -= row[x0:x0 + bw].count(0)
+        found += hits
+    # Poses whose own chrome is drawn in this blue rather than in the brand
+    # accent: the redaction mark's selection handles, and the find bar's current
+    # match. Both are what their slot exists to show.
+    allowed = profile.get("focus_ring_poses", ())
+    if found and shot.pose in allowed:
+        return [_ok("focus ring", f"{found} px, which in the {shot.pose} pose is "
+                                  f"the chrome this slot exists to show")]
+    # A ring is a rectangle around a control: the one this check was written for
+    # measured 341 px. Below the tolerance is antialiasing — a few pixels of the
+    # window's own furniture fall inside the fuzz — and calling that a ring would
+    # flag every image in every set, which is how a check stops being read.
+    tolerance = profile.get("focus_ring_tolerance", 0)
+    if 0 < found <= tolerance:
+        return [_ok("focus ring", f"{found} px, under the {tolerance} px a ring "
+                                  f"would draw — antialiasing, not chrome")]
+    if found:
+        return [_flag("focus ring", f"{found} px of the focus-ring colour "
+                                    f"({colour}) — a click or a Tab left a ring on "
+                                    f"the page. It is not the brand accent, so "
+                                    f"`accent` cannot see it (#613)")]
+    return [_ok("focus ring", "none")]
+
+
 PER_IMAGE = (size, edges, toolbar, accent, squiggle, person, zoom, privacy,
-             language_purity)
+             language_purity, focus_ring)
 
 
 # ------------------------------------------------------------ set-wide work

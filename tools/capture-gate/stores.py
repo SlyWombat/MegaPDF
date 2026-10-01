@@ -89,11 +89,15 @@ STORES: dict[str, dict] = {
         # the poses are the file names with the number taken off. Re-cut for 2.2
         # (#613, Dave 2026-10-01): reading and the page tools are what the listing
         # copy now opens with, redaction moves back, and reading replaces the old
-        # front slot rather than joining it. On Windows that retired `checkbox`,
-        # `shrink` and `add-text` as well, which the approved list did not say,
-        # because it was drawn up against the Mac set — see Shoot-Set.ps1. The
-        # three retired poses are still shot, into the set's work\ folder.
-        "order": ["reading", "text", "sign", "pages", "search", "redact", "home"],
+        # front slot rather than joining it. Applying that to Windows would have
+        # retired `checkbox`, `shrink` and `add-text` too, which the approved list
+        # did not say because it was drawn up against the Mac set; Dave settled it
+        # the same day at **eight** slots — checkbox back, between fixing the
+        # document and signing it, shrink and add-text retired, and the ninth slot
+        # the Store allows deliberately left empty. See Shoot-Set.ps1. The two
+        # retired poses are still shot, into the set's work\ folder.
+        "order": ["reading", "text", "checkbox", "sign", "pages", "search",
+                  "redact", "home"],
         "parse": _pose(r"(?:\d+[-_])?(?P<pose>[a-z][a-z0-9-]*)\.png$"),
         # Shoot-Set.ps1 files every probe and in-between frame here at the end of
         # a run. They are the record of the run, not the set, and are not uploaded.
@@ -155,6 +159,22 @@ STORES: dict[str, dict] = {
         # in every shot). Measured on the 2.0 set: a 24 px square at (13, 10).
         "accent_ignore": [(0, 0, 60, 45)],
         "accent_strict": True,
+        # The ring a click or a Tab leaves on a page region, measured off the 2.2
+        # checkbox capture (#613). It is a *lighter* blue than the brand accent,
+        # so `accent` matches not one pixel of it — which is how the ring reached
+        # the **shipped** Store screenshot: `02-checkbox.png` has carried it since
+        # 2.0, at an identical 341 px in all three languages, through every gate
+        # run. Escape is what takes it off; Shot-Checkboxes.ps1 does that now.
+        "focus_ring": "#4a93e2",
+        # Two poses draw in this blue on purpose, and both were found by adding
+        # the check rather than by being known about: a redaction mark's selection
+        # handles, and the find bar's *current* match — which the accent rule
+        # above calls "the current match" and had assumed was the brand accent.
+        "focus_ring_poses": ("redact", "search"),
+        # Measured: the ring this check exists for is 341 px. Every capture in
+        # every language carries 2–34 px of window furniture that falls inside the
+        # fuzz, and flagging that would make the check unreadable.
+        "focus_ring_tolerance": 60,
         # The DWM bounds include Windows 11's 1 px border, and the capture
         # reads the screen, so the outer two pixels on every side are border
         # over whatever wallpaper is behind the window — measured on the 2.0

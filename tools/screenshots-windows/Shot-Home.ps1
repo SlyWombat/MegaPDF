@@ -20,7 +20,7 @@
 # profile or OneDrive.
 param(
     [string[]]$Paths = @(),
-    [string]$Name = "07-home",
+    [string]$Name = "08-home",
     [int]$W = 2500, [int]$T = 1550,
     [switch]$Restore
 )
@@ -71,3 +71,65 @@ Start-Sleep -Seconds 2
 Park $h
 Start-Sleep -Milliseconds 800
 Shot $h $Name
+
+# --------------------------------------------------------------------------------
+# What the empty state must look like, asserted rather than eyeballed (#617).
+#
+# The first capture of this screen found the busy strip up with no work running, Stop
+# and "Stopping…" painted over each other, and Undo and Redo enabled. One cause: with
+# no tab `Shell.Active` is null, so every `x:Bind` through it falls back to its
+# target property's default — `Visibility`'s is Visible and `Control.IsEnabled`'s is
+# **true**. Three of those were visible in the image; the fix (#629) found 28
+# commands enabled altogether, most of them in flyouts that no screenshot shows.
+#
+# So this reads the window rather than the picture. It is cheap, it runs on every
+# home capture from now on, and it is the only thing standing between a regression in
+# that binding and a listing image of an app that looks like it has a document open.
+$root = $AE::FromHandle($h)
+$enabled = @()
+$checked = 0
+function Test-Command($id) {
+    $script:checked++
+    $e = ById $root $id $global:CT::Button
+    if (-not $e) { $e = ById $root $id $global:CT::MenuItem }
+    if (-not $e) { $e = ById $root $id $global:CT::SplitButton }
+    if (-not $e) { return }                       # not in the tree: nothing to assert
+    if ($e.Current.IsEnabled) { $script:enabled += $id }
+}
+
+# The toolbar row, and the commands the "…" overflow holds. Open is the one command
+# that is meant to work with no document open, so it is not in this list.
+foreach ($id in 'SaveButton', 'SaveAsButton', 'PrintButton', 'SecurityButton',
+                'ShrinkButton', 'SignaturesButton', 'AddTextButton', 'WhiteoutButton',
+                'RedactButton', 'UndoButton', 'RedoButton', 'ZoomInButton',
+                'ZoomOutButton', 'ZoomMenuButton', 'FindButton', 'PagesPaneButton',
+                'PagesMenuButton', 'ClearMarksButton', 'ReadingModeButton') {
+    Test-Command $id
+}
+# The flyouts are separate popup HWNDs, so their items are only in the tree while the
+# flyout is open; both are searched from RootElement for that reason.
+foreach ($opener in 'MoreButton', 'PagesMenuButton') {
+    $b = BtnById $root $opener
+    if (-not $b -or -not $b.Current.IsEnabled) { continue }
+    $b.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+    Start-Sleep -Milliseconds 900
+    $popup = $global:AE::RootElement
+    foreach ($id in 'PagesPaneItem', 'RotateLeftItem', 'RotateRightItem', 'DeletePagesItem',
+                    'InsertBlankPageItem', 'InsertPagesFromFileItem', 'ExtractPagesItem',
+                    'MovePagesUpItem', 'MovePagesDownItem', 'ReadingModeItem',
+                    'ClearMarksItem') {
+        $script:checked++
+        $item = ById $popup $id $global:CT::MenuItem
+        if ($item -and $item.Current.IsEnabled) { $script:enabled += $id }
+    }
+    [System.Windows.Forms.SendKeys]::SendWait("{ESC}")
+    Start-Sleep -Milliseconds 500
+}
+
+Write-Host ("  empty state: $checked commands checked, " + $enabled.Count + " enabled")
+if ($enabled.Count) {
+    Write-Host ("!! these are enabled with no document open (#617): " + ($enabled -join ', '))
+    Write-Host "!! the capture is of a window that looks like it has a document in it"
+    exit 1
+}
+Write-Host "  empty state: every command disabled but Open, as it should be (#617)"

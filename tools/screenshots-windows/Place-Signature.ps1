@@ -1,7 +1,7 @@
 # -DeselectX/-DeselectY is a blank spot on the page: a tap outside a selected
 # signature is what lets go of it. Read it off the probe like the other coordinates.
 param([int]$X = 876, [int]$Y = 950, [int]$DeselectX = 1700, [int]$DeselectY = 1150,
-      [string]$Name = "03-sign")
+      [string]$Name = "04-sign")
 . (Join-Path $PSScriptRoot "lib.ps1")
 $h = (Get-Process -Name MegaPDF | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1).MainWindowHandle
 Click-InShot $h $X $Y

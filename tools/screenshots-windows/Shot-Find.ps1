@@ -14,7 +14,7 @@
 #
 # This is the one slot whose capture legitimately shows a second row under the
 # toolbar; the gate knows it by pose (tools/capture-gate/stores.py, rows_by_pose).
-param([string]$Term = "equipment", [string]$Name = "05-search")
+param([string]$Term = "equipment", [string]$Name = "06-search")
 . (Join-Path $PSScriptRoot "lib.ps1")
 
 $h = (Get-Process -Name MegaPDF | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1).MainWindowHandle

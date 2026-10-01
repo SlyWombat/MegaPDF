@@ -12,7 +12,7 @@
 # tab strip (#348) sits between the toolbar and the page, so every page coordinate is 60 px
 # lower than on the 2.0/2.1.0 frame (page top at 213, not 153); the flyout row is where it was.
 #
-# The seven listing images land in artifacts\store\screenshots\<Dir>\; the probe
+# The eight listing images land in artifacts\store\screenshots\<Dir>\; the probe
 # and in-between frames go to its work\ folder, so the gate sees only the set.
 #
 # -------------------------------------------------------------------- the slot set
@@ -21,14 +21,24 @@
 # is seven slots -- reading, text, sign, pages, search, redact, home -- and reading
 # replaces the old viewer slot at the front rather than joining it.
 #
-# **On Windows that is more than a reorder, and the difference is worth knowing before
-# anybody compares this file with its history.** The approved list was drawn up against
-# the Mac set (viewer, text, search, sign, redact, home); the Windows set was never
-# those six. It was edit-text, checkbox, signature, shrink, add-text, redact. So this
-# cut adds four captures rather than two (reading, pages, search and home) and retires
-# three (checkbox, shrink, add-text). The retired three are still shot, into work\,
-# because the Microsoft Store takes nine images and Dave may want one or two of them
-# back; nothing has to be re-shot if he does.
+# **On Windows that was more than a reorder**, and the difference was put to him rather
+# than guessed at. The approved list was drawn up against the Mac set (viewer, text,
+# search, sign, redact, home); the Windows set was never those six. It was edit-text,
+# checkbox, signature, shrink, add-text, redact.
+#
+# **Dave ruled the same day: eight slots.** `checkbox` comes back, `shrink` and
+# `add-text` stay retired, and the ninth slot the Store would allow is deliberately
+# left empty. His reasoning places the slot as well as restoring it: form filling is
+# the one real capability the approved seven never demonstrates, and the Linux
+# reading-mode caption already leans on a filled-in form, so the feature was part of
+# the story on another platform while being invisible on ours. Shrink and add-text are
+# feature demos rather than user outcomes.
+#
+# So the order is reading, text, **checkbox**, sign, pages, search, redact, home. The
+# checkbox slot sits between fixing the document and signing it, which is both where it
+# belongs in the argument the captions make -- fix it, fill it, sign it -- and where it
+# happens on the document itself: the name is corrected, the options are ticked, and
+# then it is signed. `shrink` and `add-text` are still shot, into work\.
 #
 # ------------------------------------------------------------------ the documents
 # Three slots need a document the one-page agreement cannot be: reading mode's bar
@@ -107,25 +117,26 @@ Reset-App
 & "$H\Set-Language.ps1" -Lang $Lang -Theme Light
 & "$H\Reset-SignatureLibrary.ps1"
 
-# ------------------------------------------------- slots 2, 3 and 6: the agreement
+# --------------------------------------------- slots 2, 3, 4 and 7: the agreement
 # One launch, one document, in the order the story happens on it: the name is
-# corrected, the signature goes on the line, the file is saved, and then the
-# corrected name is redacted out of it.
+# corrected, the options are ticked, the signature goes on the line, the file is
+# saved, and then the corrected name is redacted out of it.
 if ($Step -in 'all', 'agreement') {
     Reset-App
     & "$H\Setup-Frame.ps1" -W 2500 -T 1550 -Pdf $doc -Fit "ActualSizeItem" -ZoomIn 0 -Name probe-frame
     & "$H\Shot-TextEdit.ps1" -X 880 -Y 598 -Text $Name -Name "02-text"
-    # Retired from the listing set (#613) but still shot: it commits the inline edit,
-    # which the slots after it need, and the Store takes nine images.
-    & "$H\Shot-Checkboxes.ps1" -X 787 -Y1 767 -Y2 819 -Name "s-checkbox"
+    # Slot 3 (Dave, #613). It also commits the inline edit, which every slot after it
+    # needs — which is why it stayed in the run even while it was retired.
+    & "$H\Shot-Checkboxes.ps1" -X 787 -Y1 767 -Y2 819 -Name "03-checkbox"
     & "$H\Open-SignatureFlyout.ps1"
     & "$H\Arm-Signature.ps1" -Notches 0 -X 510 -Y 248
-    & "$H\Place-Signature.ps1" -X 1022 -Y 1460 -Name "03-sign"
+    & "$H\Place-Signature.ps1" -X 1022 -Y 1460 -Name "04-sign"
+    # Retired from the listing set (#613), still shot, into work\.
     & "$H\Shot-AddText.ps1" -X 1390 -Y 1420 -Text $Date -Name "s-add-text"
-    & "$H\Shot-Redact.ps1" -Lang $Lang -Save -Y1 580 -Y2 616
+    & "$H\Shot-Redact.ps1" -Lang $Lang -Save -Y1 580 -Y2 616 -Name "07-redact"
 }
 
-# -------------------------------------------- slots 1, 4 and 5: the twelve-page terms
+# -------------------------------------------- slots 1, 5 and 6: the twelve-page terms
 # Shot in the order that leaves the window cleanest for the next step: the pane opens
 # and closes, the find bar opens and closes, and reading mode is last because it is the
 # one state that takes the whole window.
@@ -141,7 +152,7 @@ if ($Step -in 'all', 'terms') {
     & "$H\Shot-Reading.ps1" -Pages 3
 }
 
-# ------------------------------------------------------------------ slot 7: home
+# ------------------------------------------------------------------ slot 8: home
 # The posed recents list -- see Shot-Home.ps1, which is the privacy control for this
 # slot rather than a convenience.
 if ($Step -in 'all', 'home') {
@@ -151,6 +162,6 @@ if ($Step -in 'all', 'home') {
 if ($Step -eq 'all') {
     $work = Join-Path $shots 'work'
     New-Item -ItemType Directory -Force $work | Out-Null
-    Get-ChildItem $shots -Filter *.png | Where-Object { $_.Name -notmatch '^0[1-7]-' } | Move-Item -Destination $work -Force
+    Get-ChildItem $shots -Filter *.png | Where-Object { $_.Name -notmatch '^0[1-8]-' } | Move-Item -Destination $work -Force
     Get-ChildItem $shots -Filter *.png | Select-Object Name, Length | Format-Table | Out-String
 }

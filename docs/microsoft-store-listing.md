@@ -86,15 +86,16 @@ lightweight PDF
 © 2026 Electric RV. Licensed under Apache-2.0.
 ```
 
-**Screenshot captions** — same 7 files, same order
+**Screenshot captions** — same 8 files, same order
 ```
 01-reading.png: Press Ctrl+H and the tools come off the screen, leaving the page. A small floating bar keeps your place; Escape brings it all back.
 02-text.png: Click the document's own text and type — fixing a PDF the way you would fix a Word file.
-03-sign.png: Pick a signature from your library, click where it goes, then nudge it until it sits right on the line.
-04-pages.png: The Pages pane is somewhere to work: rotate a sideways scan, drop a page, reorder them, or save the ones you picked as a file of their own.
-05-search.png: Ctrl+F highlights every match at once and counts them, so the one clause you need is a couple of keys away.
-06-redact.png: Mark what has to come out. Saving takes it out of the file rather than covering it over — and says how much it removed.
-07-home.png: No account, no cloud, no subscription, no telemetry. Every document is opened and handled on your own PC.
+03-checkbox.png: Click an empty square and it is ticked — printed boxes that were never meant to be filled on screen, filled on screen.
+04-sign.png: Pick a signature from your library, click where it goes, then nudge it until it sits right on the line.
+05-pages.png: The Pages pane is somewhere to work: rotate a sideways scan, drop a page, reorder them, or save the ones you picked as a file of their own.
+06-search.png: Ctrl+F highlights every match at once and counts them, so the one clause you need is a couple of keys away.
+07-redact.png: Mark what has to come out. Saving takes it out of the file rather than covering it over — and says how much it removed.
+08-home.png: No account, no cloud, no subscription, no telemetry. Every document is opened and handled on your own PC.
 ```
 
 ### English (Canada) — `en-CA`
@@ -167,15 +168,16 @@ lightweight PDF
 © 2026 Electric RV. Licensed under Apache-2.0.
 ```
 
-**Screenshot captions** — same 7 files, same order
+**Screenshot captions** — same 8 files, same order
 ```
 01-reading.png: Press Ctrl+H and the tools come off the screen, leaving the page. A small floating bar keeps your place; Escape brings it all back.
 02-text.png: Click the document's own text and type — fixing a PDF the way you would fix a Word file.
-03-sign.png: Pick a signature from your library, click where it goes, then nudge it until it sits right on the line.
-04-pages.png: The Pages pane is somewhere to work: rotate a sideways scan, drop a page, reorder them, or save the ones you picked as a file of their own.
-05-search.png: Ctrl+F highlights every match at once and counts them, so the one clause you need is a couple of keys away.
-06-redact.png: Mark what has to come out. Saving takes it out of the file rather than covering it over — and says how much it removed.
-07-home.png: No account, no cloud, no subscription, no telemetry. Every document is opened and handled on your own PC.
+03-checkbox.png: Click an empty square and it is ticked — printed boxes that were never meant to be filled on screen, filled on screen.
+04-sign.png: Pick a signature from your library, click where it goes, then nudge it until it sits right on the line.
+05-pages.png: The Pages pane is somewhere to work: rotate a sideways scan, drop a page, reorder them, or save the ones you picked as a file of their own.
+06-search.png: Ctrl+F highlights every match at once and counts them, so the one clause you need is a couple of keys away.
+07-redact.png: Mark what has to come out. Saving takes it out of the file rather than covering it over — and says how much it removed.
+08-home.png: No account, no cloud, no subscription, no telemetry. Every document is opened and handled on your own PC.
 ```
 
 ### Français (Canada) — `fr-CA`
@@ -246,15 +248,16 @@ PDF léger
 © 2026 Electric RV. Sous licence Apache-2.0.
 ```
 
-**Screenshot captions** — same 7 files, same order
+**Screenshot captions** — same 8 files, same order
 ```
 01-reading.png: Appuyez sur Ctrl+H : les outils quittent l'écran et laissent la page. Une petite barre flottante garde votre place; Échap ramène tout.
 02-text.png: Cliquez sur le texte du document et tapez : corriger un PDF comme on corrige un document Word.
-03-sign.png: Choisissez une signature dans votre bibliothèque, cliquez à l'endroit voulu, puis ajustez-la jusqu'à ce qu'elle soit bien sur la ligne.
-04-pages.png: Le volet Pages est un endroit où travailler : faites pivoter une page de travers, supprimez-en une, réordonnez-les ou extrayez celles que vous avez choisies.
-05-search.png: Ctrl+F surligne tous les résultats d'un coup et les compte : la seule clause utile est à deux touches.
-06-redact.png: Marquez ce qui doit disparaître. L'enregistrement le retire du fichier au lieu de le recouvrir, et dit ce qu'il a retiré.
-07-home.png: Pas de compte, pas d'infonuagique, pas d'abonnement, pas de télémétrie. Chaque document est ouvert et traité sur votre propre PC.
+03-checkbox.png: Cliquez sur un carré vide et il est coché : des cases imprimées, jamais conçues pour être remplies à l'écran, remplies à l'écran.
+04-sign.png: Choisissez une signature dans votre bibliothèque, cliquez à l'endroit voulu, puis ajustez-la jusqu'à ce qu'elle soit bien sur la ligne.
+05-pages.png: Le volet Pages est un endroit où travailler : faites pivoter une page de travers, supprimez-en une, réordonnez-les ou extrayez celles que vous avez choisies.
+06-search.png: Ctrl+F surligne tous les résultats d'un coup et les compte : la seule clause utile est à deux touches.
+07-redact.png: Marquez ce qui doit disparaître. L'enregistrement le retire du fichier au lieu de le recouvrir, et dit ce qu'il a retiré.
+08-home.png: Pas de compte, pas d'infonuagique, pas d'abonnement, pas de télémétrie. Chaque document est ouvert et traité sur votre propre PC.
 ```
 
 ### Français (France) — `fr-FR`
@@ -325,15 +328,16 @@ PDF léger
 © 2026 Electric RV. Sous licence Apache-2.0.
 ```
 
-**Screenshot captions** — same 7 files, same order
+**Screenshot captions** — same 8 files, same order
 ```
 01-reading.png: Appuyez sur Ctrl+H : les outils quittent l'écran et laissent la page. Une petite barre flottante garde votre place ; Échap ramène tout.
 02-text.png: Cliquez sur le texte du document et tapez : corriger un PDF comme on corrige un document Word.
-03-sign.png: Choisissez une signature dans votre bibliothèque, cliquez à l'endroit voulu, puis ajustez-la jusqu'à ce qu'elle soit bien sur la ligne.
-04-pages.png: Le volet Pages est un endroit où travailler : faites pivoter une page de travers, supprimez-en une, réordonnez-les ou extrayez celles que vous avez choisies.
-05-search.png: Ctrl+F surligne tous les résultats d'un coup et les compte : la seule clause utile est à deux touches.
-06-redact.png: Marquez ce qui doit disparaître. L'enregistrement le retire du fichier au lieu de le recouvrir, et dit ce qu'il a retiré.
-07-home.png: Pas de compte, pas de cloud, pas d'abonnement, pas de télémétrie. Chaque document est ouvert et traité sur votre propre PC.
+03-checkbox.png: Cliquez sur un carré vide et il est coché : des cases imprimées, jamais conçues pour être remplies à l'écran, remplies à l'écran.
+04-sign.png: Choisissez une signature dans votre bibliothèque, cliquez à l'endroit voulu, puis ajustez-la jusqu'à ce qu'elle soit bien sur la ligne.
+05-pages.png: Le volet Pages est un endroit où travailler : faites pivoter une page de travers, supprimez-en une, réordonnez-les ou extrayez celles que vous avez choisies.
+06-search.png: Ctrl+F surligne tous les résultats d'un coup et les compte : la seule clause utile est à deux touches.
+07-redact.png: Marquez ce qui doit disparaître. L'enregistrement le retire du fichier au lieu de le recouvrir, et dit ce qu'il a retiré.
+08-home.png: Pas de compte, pas de cloud, pas d'abonnement, pas de télémétrie. Chaque document est ouvert et traité sur votre propre PC.
 ```
 
 <!-- /copy-by-language -->
@@ -394,23 +398,24 @@ check there before assuming 300×300 is the only one.
 
 ## Screenshots
 `artifacts/store/screenshots/<lang>/` (2482×1541, well over the 1366×768 minimum; at
-least one required, up to nine allowed). Upload all seven in this order, one
-caption each:
+least one required, **up to nine allowed — and the ninth is deliberately left
+empty**, see below). Upload all eight in this order, one caption each:
 
 | File | Caption (≤ 200 chars) |
 |---|---|
 | `01-reading.png` | Press Ctrl+H and the tools come off the screen, leaving the page. A small floating bar keeps your place; Escape brings it all back. |
 | `02-text.png` | Click the document's own text and type — fixing a PDF the way you would fix a Word file. |
-| `03-sign.png` | Pick a signature from your library, click where it goes, then nudge it until it sits right on the line. |
-| `04-pages.png` | The Pages pane is somewhere to work: rotate a sideways scan, drop a page, reorder them, or save the ones you picked as a file of their own. |
-| `05-search.png` | Ctrl+F highlights every match at once and counts them, so the one clause you need is a couple of keys away. |
-| `06-redact.png` | Mark what has to come out. Saving takes it out of the file rather than covering it over — and says how much it removed. |
-| `07-home.png` | No account, no cloud, no subscription, no telemetry. Every document is opened and handled on your own PC. |
+| `03-checkbox.png` | Click an empty square and it is ticked — printed boxes that were never meant to be filled on screen, filled on screen. |
+| `04-sign.png` | Pick a signature from your library, click where it goes, then nudge it until it sits right on the line. |
+| `05-pages.png` | The Pages pane is somewhere to work: rotate a sideways scan, drop a page, reorder them, or save the ones you picked as a file of their own. |
+| `06-search.png` | Ctrl+F highlights every match at once and counts them, so the one clause you need is a couple of keys away. |
+| `07-redact.png` | Mark what has to come out. Saving takes it out of the file rather than covering it over — and says how much it removed. |
+| `08-home.png` | No account, no cloud, no subscription, no telemetry. Every document is opened and handled on your own PC. |
 
 The captions are authored in `tools/gen_listing_copy.py`, not here, and they are
-written to be read **in order, as one argument**: read it, fix it, sign it, put the
-pages in order, find anything in it, take something out of it for good, and none of
-it leaves your PC. Moving a slot without re-reading the rest breaks the run.
+written to be read **in order, as one argument**: read it, fix it, fill it, sign it,
+put the pages in order, find anything in it, take something out of it for good, and
+none of it leaves your PC. Moving a slot without re-reading the rest breaks the run.
 
 ### The 2.2 set, shot 2026-10-01 (#613)
 
@@ -419,16 +424,29 @@ move to the back, signing, editing and reading are common features."* The approv
 desktop set is **reading, text, sign, pages, search, redact, home**, with reading
 replacing the old front slot rather than joining it.
 
-**On Windows that is a bigger change than it reads, and the difference needs a
-decision before the next upload.** The approved list was drawn up against the Mac
-set — viewer, text, search, sign, redact, home — and the Windows set was never those
-six. It was `edit-text`, `checkbox`, `signature`, `shrink`, `add-text`, `redact`. So
-applying the approved list here **adds four** captures (reading, pages, search, home)
-and **retires three** (checkbox, shrink, add-text), rather than adding two and
-reordering. The Store takes nine images, so two of the three retired ones could come
-back; they are still shot on every run and land in the set's `work\` folder
-(`s-checkbox`, `s-add-text`, and Shrink's frames), so nothing has to be re-shot if
-Dave wants them.
+**On Windows that was a bigger change than it reads**, and it was put to him rather
+than guessed at. The approved list was drawn up against the Mac set — viewer, text,
+search, sign, redact, home — and the Windows set was never those six. It was
+`edit-text`, `checkbox`, `signature`, `shrink`, `add-text`, `redact`. Applying the
+approved list here would have **added four** captures (reading, pages, search, home)
+and **retired three** (checkbox, shrink, add-text), rather than adding two and
+reordering.
+
+**Dave's ruling, 2026-10-01 — this is settled, not an open question.** The Windows
+set is **eight** slots:
+
+- **`checkbox` comes back**, because form filling is the one real capability the
+  approved seven never demonstrates, and the Linux reading-mode caption already leans
+  on a filled-in form — so the feature was part of the story on another platform
+  while being invisible on ours.
+- **It sits third, between `text` and `sign`.** That is where it belongs in the
+  argument the captions make (fix it, fill it, sign it) and where it happens on the
+  document itself: the name is corrected, the options are ticked, then it is signed.
+- **`shrink` and `add-text` stay retired**, because they are feature demos rather
+  than user outcomes. They are still shot on every run into the set's `work\` folder,
+  so nothing has to be re-shot if that is ever revisited.
+- **The ninth slot the Store allows is left empty on purpose.** Eight was chosen over
+  nine; do not fill it.
 
 **Three slots run on a new staging document.** `rental-terms.pdf`, twelve pages from
 `gen_store_docs.py`. The one-page agreement cannot carry them: reading mode's
@@ -457,11 +475,11 @@ of a document and little else. Four decisions, all in `Shot-Reading.ps1`:
 - **A page in the middle of a long document**, so the bar has a position worth
   showing and the arrows either side of it have somewhere to go.
 
-**Slot 7 cannot be uploaded as it stands — see "What the home capture found" below (#617).**
+**Slot 8 cannot be uploaded as it stands — see "What the home capture found" below (#617).**
 
 ### What the home capture found
 
-`07-home.png` is the first Windows store capture ever taken of the empty state (the
+`08-home.png` is the first Windows store capture ever taken of the empty state (the
 harness README had said "never shoot it", because it lists the machine's own recent
 documents). Posing the list exposed three defects on the zero-tab window, all of them
 visible in the image:
@@ -478,8 +496,17 @@ All three have one cause: with no tab, `Shell.Active` is null, so every
 `x:Bind Shell.Active.Busy.*` falls back to its property default — and `Visibility`'s
 default is `Visible`, and an `AppBarButton` with a null `Command` is enabled. It is
 #348's null `Active` meeting #145's busy strip, on the one screen the Windows app has
-no self-test for (#462). Opened as **#617**. The capture is kept in the set as the
-evidence rather than re-shot until it looks acceptable.
+no self-test for (#462). Opened as **#617**, and fixed in #629 — which found the
+defect to be far wider than the three controls the image shows: `Control.IsEnabled`
+also defaults to **true**, so all 28 commands that bound through the null `Active`
+were live, most of them in flyouts no screenshot reaches. The capture is kept in the
+set as the evidence rather than re-shot until it looks acceptable, and it is replaced
+the moment #629 is on main.
+
+`Shot-Home.ps1` asserts the empty state from now on rather than leaving it to the
+eye: it walks the toolbar, the "…" overflow and the Pages menu and fails the step if
+anything but Open is enabled with no document open. A picture cannot show a flyout,
+and that is where most of #617 was.
 
 ### Before this set
 
@@ -514,7 +541,7 @@ in this harness — running `Shot-Pages.ps1` with none shoots the probe and stop
 
 They are 2482×1541 rather than the old 3038×1989: that machine's display tops out
 at 2560×1600, and windows are hard-clamped to the display. Still roughly 1.8× the
-Store's minimum on both axes, and all seven share one frame.
+Store's minimum on both axes, and all eight share one frame.
 
 **Display scale matters as much as resolution.** `ApplyToolbarLayout` switches on
 *effective* pixels, so at 200% scale a 2500 px window is only 1250 effective —
@@ -527,9 +554,9 @@ these captions and the description assume. Check the toolbar in the shots before
 uploading; if the labels are gone, the scale is wrong, not the resolution.
 
 **One set per language.** `artifacts/store/screenshots/en/`, `fr-CA/` and `fr-FR/`
-each hold the seven files, from the same package with the Language setting switched,
+each hold the eight files, from the same package with the Language setting switched,
 over each language's staging documents (`gen_store_docs.py --lang fr-CA|fr-FR`).
-Same frame, same seven files, same order — upload each set under its own listing
+Same frame, same eight files, same order — upload each set under its own listing
 language.
 
 The signature in the sign slot is **MegaWoman** (`tools/assets/megawoman-sig.png`),
