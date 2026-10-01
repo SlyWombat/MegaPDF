@@ -562,21 +562,51 @@ languages. The in-house simulators had shown it once and never again.
 ## Screenshots — Mac App Store
 
 The Mac is the same App Store record's other platform, so it has its own set, its
-own slots and its own captions. Six images per listing language at **1440×900**,
-from `tools/macos-store-captures.sh <lang>` on the in-house Mac (there is no
-workflow: the Mac app needs a real display and a runner has none).
+own slots and its own captions. **Seven** images per listing language at
+**1440×900** since #613, from `tools/macos-store-captures.sh <lang>` on the
+in-house Mac (there is no workflow: the Mac app needs a real display and a runner
+has none).
 
 | File | Slot | Suggested caption (optional overlay text) |
 |---|---|---|
-| `light-01-viewer.png` | Mac #1 | *Checked and signed in under a minute* |
+| `light-01-reading.png` | Mac #1 | *Reading mode leaves nothing but the page — the one you ticked and signed* |
 | `light-02-text.png` | Mac #2 | *Type on the blank line — your size, your font* |
-| `light-03-search.png` | Mac #3 | *Find any word, on every page* |
-| `light-04-sign.png` | Mac #4 | *Your signatures, saved on your Mac* |
-| `light-05-redact.png` | Mac #5 | *Redact removes it. It does not just cover it.* |
-| `light-06-home.png` | Mac #6 | *No account. No cloud. No tracking.* |
+| `light-03-sign.png` | Mac #3 | *Your signatures, saved on your Mac* |
+| `light-04-pages.png` | Mac #4 | *Rotate, reorder, delete — and one Undo puts the document back* |
+| `light-05-search.png` | Mac #5 | *Find any word, on every page* |
+| `light-06-redact.png` | Mac #6 | *Redact removes it. It does not just cover it.* |
+| `light-07-home.png` | Mac #7 | *No account. No cloud. No tracking.* |
 
-Order matters here too: the filled, signed agreement leads, and Redact is in the
-set because it is what 2.0 is for.
+**The order is Dave's, 2026-10-01 (#613):** *"Redaction and whiteout are minor
+features that move to the back, signing, editing and reading are common features."*
+So what people come to the app for leads, and redaction moves behind search.
+**Reading replaces the old viewer slot** at the front rather than joining it: both
+are a picture of a page, and the reading one says something as well.
+
+Four notes on the captions, which were re-read as a sequence rather than
+transplanted:
+
+1. **Slot 1 had to keep its old job while taking a new one.** The caption it
+   replaces — *Checked and signed in under a minute* — was the only one in the set
+   that said the app fills forms, and the picture still shows that page. The new one
+   names reading mode in the app's own words (*"takes the toolbar and the sidebar off
+   the screen and leaves the page"*, from the 2.2 copy) and ends on what is on the
+   page: *the one you ticked and signed*. The speed claim goes, and nothing is left
+   promising a minute.
+2. **Slot 4 does not reuse the 2.2 copy's own line for it** (*"somewhere to work
+   now, not only somewhere to look"*), though it was the obvious one. Slot 6 already
+   argues in that shape — *removes it, does not just cover it* — and the strong
+   instance should be the only one. The caption names the three commands the picture
+   shows and ends on Undo, which is the reassurance this feature needs: a page tool
+   changes the document, and the one thing a reader wants to know is that it is one
+   step back.
+3. **Search and redact now sit next to each other**, which is a better pair than
+   either had before — find the clause, then take it out — and they read as that
+   without a connective. (The Linux set adds a *"Then"* to its redact caption for the
+   same adjacency; that set's captions are narrative sentences and this one's are
+   fragments, so the same word would not sit in this voice.)
+4. **The sequence still ends where it did.** Read it, write on it, sign it,
+   rearrange it, search it, take something out of it — and none of it left your Mac.
 
 Not 2880×1800. `--scale 2` draws every page overlay at twice its offset, so the
 capture refuses rather than write a wrong image; 1440×900 is an accepted size and

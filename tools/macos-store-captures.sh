@@ -4,7 +4,12 @@
 # The iOS set has had tools/ios-screenshots.sh since #91; the Mac set was taken by
 # hand, which is why the dry run (#146 §3) found a shot of whatever the machine had
 # last opened. Everything here is either in the repo or made by this script, so the
-# same six images come out on any Mac with the app built.
+# same seven images come out on any Mac with the app built.
+#
+# Seven slots since #613, in the order Dave settled on 2026-10-01: signing, editing and
+# reading are what people come for and lead; redaction is minor and moves back. Reading
+# replaces the old viewer shot at the front rather than joining it — both are a picture
+# of a page, and the reading one says something as well.
 #
 # Usage: tools/macos-store-captures.sh [lang] [out-dir] [app-bundle]
 #   lang        en (default), fr-CA or fr
@@ -63,6 +68,22 @@ esac
 [ -f "$FIXTURE" ] || { echo "no demo document at $FIXTURE" >&2; exit 1; }
 cp "$FIXTURE" "$DOC"
 
+# The same agreement, with the four sections it names and a landscape rate schedule
+# behind it (#613). Two slots need a document that has more than one page in it: a Pages
+# sidebar showing a single thumbnail is a picture of nothing, and reading mode's floating
+# bar would read "Page 1 of 1". Page 1 is byte-identical to the page every other slot
+# shows and the file is opened under the same name, so the set is still one document from
+# end to end.
+case "$LANG_TAG" in
+    en)    LONG_FIXTURE="$WORK/fixtures/demo-pages.pdf" ;;
+    fr-CA) LONG_FIXTURE="$WORK/fixtures/demo-fr-pages.pdf" ;;
+    fr)    LONG_FIXTURE="$WORK/fixtures/demo-fr-FR-pages.pdf" ;;
+esac
+[ -f "$LONG_FIXTURE" ] || { echo "no multi-page demo document at $LONG_FIXTURE" >&2; exit 1; }
+mkdir -p "$WORK/long"
+LONG_DOC="$WORK/long/$(basename "$DOC")"
+cp "$LONG_FIXTURE" "$LONG_DOC"
+
 # The signature the library shot shows. Named here rather than left to the app's
 # search, which walks up from the binary and so finds nothing inside a .app — and
 # passing it is also what makes the flyout show exactly one known card instead of
@@ -80,12 +101,13 @@ SIG="$ROOT/tools/assets/megawoman-sig.jpg"
     echo "taken:    $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 } | tee "$OUT/RUN.txt"
 
-# The six listing slots, in listing order. Each is its own process: a state left
-# over from the shot before is the defect the Windows set was bitten by twice.
-#   viewer  the filled, signed agreement — the shot that leads
+# The seven listing slots, in listing order (#613). Each is its own process: a state
+# left over from the shot before is the defect the Windows set was bitten by twice.
+#   reading the agreement with the chrome gone and the floating bar up
 #   text    a typed name on the blank line, nothing selected
-#   search  the find bar with a term and a hit count
 #   sign    the signature library flyout
+#   pages   the Pages sidebar beside the document, two pages picked out
+#   search  the find bar with a term and a hit count
 #   redact  a line marked and selected, with the chrome that takes it off (2.1, #329)
 #   home    the empty window with a recents list
 shoot() {
@@ -115,21 +137,23 @@ shoot() {
 }
 
 echo "capturing $LANG_TAG"
-shoot 01-viewer ""       "$DOC"
-shoot 02-text   text     "$DOC"
-shoot 03-search find     "$DOC"
-shoot 04-sign   sign     "$DOC"   "$SIG"
-shoot 05-redact redact   "$DOC"
+shoot 01-reading reading "$LONG_DOC"
+shoot 02-text    text    "$DOC"
+shoot 03-sign    sign    "$DOC"   "$SIG"
+shoot 04-pages   pages   "$LONG_DOC"
+shoot 05-search  find    "$DOC"
+shoot 06-redact  redact  "$DOC"
 # No document: the home shot is the empty window, and its recents come from
 # DemoContent rather than from whatever this machine last opened.
-shoot 06-home   home     ""
+shoot 07-home    home    ""
 
-# The gate, checked here rather than by eye: six files, all 1440x900, none empty.
+# The gate, checked here rather than by eye: seven files, all 1440x900, none empty.
 python3 - "$OUT" "$WINDOW" <<'PY'
 import sys, struct, pathlib
 out = pathlib.Path(sys.argv[1])
 want = tuple(int(n) for n in sys.argv[2].split("x"))
-slots = ["01-viewer", "02-text", "03-search", "04-sign", "05-redact", "06-home"]
+slots = ["01-reading", "02-text", "03-sign", "04-pages", "05-search", "06-redact",
+         "07-home"]
 bad = []
 for slot in slots:
     p = out / f"light-{slot}.png"

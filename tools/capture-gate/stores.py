@@ -127,14 +127,35 @@ STORES: dict[str, dict] = {
     "mac": {
         "title": "Mac App Store",
         "slots": {"desktop": [(1440, 900), (2880, 1800), (2560, 1600), (1280, 800)]},
-        "order": ["viewer", "text", "search", "sign", "redact", "home"],
+        # The seven listing slots since #613. `viewer` is behind them because it
+        # is no longer one — reading replaced it at the front — but the Mac
+        # screen inventory still shoots it, and a pose this list does not name
+        # sorts to the end of the sheet rather than beside its siblings.
+        "order": ["reading", "text", "sign", "pages", "search", "redact",
+                  "home", "viewer"],
         "parse": _pose(r"(?:light-|dark-)?(?:\d+[-_])?(?P<pose>[a-z][a-z0-9-]*)\.png$"),
         # The find bar is a legitimate second row, and only in the search pose
         # (#144 left one row of commands; Find opens its own bar under it).
         "toolbar": {"depth": 160, "rows": 1, "height": (36, 90),
-                    "rows_by_pose": {"search": 2}},
+                    "rows_by_pose": {"search": 2},
+                    # Reading mode (#505) hides the toolbar, the tab strip and
+                    # the status bar, so the page host runs to the top of the
+                    # window and there is no band to measure — the whole 160 px
+                    # search depth reads as one bar. The same rule the Linux
+                    # profile took for the same slot (#613), and inverted for
+                    # the same reason: chrome appearing here would mean the mode
+                    # did not turn on and the lead slot is wearing a viewer shot.
+                    "chromeless_poses": ("reading",)},
         "zoom": "100",
-        "accent_poses": {"redact": ("banner", "mark")},
+        "accent_poses": {"redact": ("banner", "mark"),
+                         # The Pages sidebar (#174, #613): the toolbar's Pages
+                         # button is a toggle and is filled with the accent
+                         # while the strip is open, and the strip's selected
+                         # rows are painted in a tint of it too light for the
+                         # exact-colour mask to see. Measured on the Linux set
+                         # of the same app at 1,633 px for the toggled button.
+                         "pages": ("the toggled Pages button",
+                                   "the selected rows in the strip")},
         "accent_strict": True,
         # Since 2.1.1 the tab strip (#348) sits under the toolbar, and the
         # active tab's title is underlined in the accent: a 2 px rule, rows
