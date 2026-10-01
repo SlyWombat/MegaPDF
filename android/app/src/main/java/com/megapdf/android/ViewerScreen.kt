@@ -271,10 +271,12 @@ fun ViewerScreen(
     onClose: () -> Unit,
     // Busy feedback (#145): the strip and the page spinner, and what they disable.
     busy: BusyState? = null,
-    /** A change is still going in or a save runs: commits wait, drags are off. */
+    /**
+     * A change is still going in or a save runs: commits wait, drags are off, and every editing
+     * control shows disabled. One predicate for all of it (#145, reversed for 2.2) — see
+     * [ViewerViewModel.editingBlocked] for why the tools used to dim on a different one.
+     */
     editingBlocked: Boolean = false,
-    /** The editing tools show disabled: a save runs, or page work has shown its spinner. */
-    toolsDisabled: Boolean = false,
     onCurrentPageChange: (pageIndex: Int) -> Unit = {},
     /** Save from the unsaved-changes prompt, closing once saved. */
     onSaveAndClose: () -> Unit = onSave,
@@ -824,7 +826,13 @@ fun ViewerScreen(
                                 )
                                 DropdownMenuItem(
                                     text = { Text(stringResource(R.string.security_password_menu)) },
-                                    enabled = hasDocumentFile && !isSaving && !documentLocked,
+                                    // Not `documentLocked` like the rows above it: Password is
+                                    // the one file command whose own guard
+                                    // ([ViewerViewModel.startPasswordCommand]) refuses on
+                                    // `editingBlocked`, so that is what it has to show. The
+                                    // others guard on `isSaving || locksDocument`, which is
+                                    // exactly what they already dim on.
+                                    enabled = hasDocumentFile && !isSaving && !editingBlocked,
                                     onClick = { menuOpen = false; onStartPasswordCommand() },
                                 )
                                 if (capabilities.isRestricted) {
@@ -888,7 +896,7 @@ fun ViewerScreen(
                                     // A greyed-out row is the wall this replaced, and it cannot
                                     // say what the author asked — the view model does, when the
                                     // first mark is placed.
-                                    enabled = !toolsDisabled,
+                                    enabled = !editingBlocked,
                                     onClick = { menuOpen = false; onToggleRedact() },
                                 )
                                 // Clearing is one action and one undo step (#329), and it only
@@ -896,7 +904,7 @@ fun ViewerScreen(
                                 if (hasMarks) {
                                     DropdownMenuItem(
                                         text = { Text(stringResource(R.string.redact_clear_marks)) },
-                                        enabled = !toolsDisabled,
+                                        enabled = !editingBlocked,
                                         onClick = { menuOpen = false; onClearRedactionMarks() },
                                     )
                                 }
@@ -918,7 +926,7 @@ fun ViewerScreen(
                                         stateDescription =
                                             if (whiteoutMode) toolOn else toolOff
                                     },
-                                    enabled = !toolsDisabled,
+                                    enabled = !editingBlocked,
                                     onClick = { menuOpen = false; onToggleWhiteout() },
                                 )
                                 HorizontalDivider()
@@ -964,13 +972,13 @@ fun ViewerScreen(
                         label = stringResource(R.string.sign),
                         // #558: armable whatever the document's permissions say — arming is
                         // not changing, and the view model asks before it changes anything.
-                        enabled = !toolsDisabled,
+                        enabled = !editingBlocked,
                         onClick = { signDialogOpen = true },
                     )
                     ToolbarAction(
                         icon = ToolbarIcons.AddText,
                         label = stringResource(R.string.add_text),
-                        enabled = !toolsDisabled,
+                        enabled = !editingBlocked,
                         onClick = onStartTextPlacement,
                     )
                     // Redact is not here (#328). It moved into the ⋮ menu, where it says its
@@ -985,13 +993,13 @@ fun ViewerScreen(
                     ToolbarAction(
                         icon = ToolbarIcons.Undo,
                         label = stringResource(R.string.undo),
-                        enabled = canUndo && !toolsDisabled,
+                        enabled = canUndo && !editingBlocked,
                         onClick = onUndo,
                     )
                     ToolbarAction(
                         icon = ToolbarIcons.Redo,
                         label = stringResource(R.string.redo),
-                        enabled = canRedo && !toolsDisabled,
+                        enabled = canRedo && !editingBlocked,
                         onClick = onRedo,
                     )
                 },
@@ -1407,7 +1415,7 @@ fun ViewerScreen(
                                 // removing one asks, through the view model.
                                 selectable = !redactMode
                                     && !readingMode
-                                    && !toolsDisabled,
+                                    && !editingBlocked,
                                 onSelect = { onSelectRedactionMark(index, it) },
                                 onRemove = { onRemoveRedactionMark(index, it) },
                             )

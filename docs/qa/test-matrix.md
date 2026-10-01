@@ -533,7 +533,13 @@ that undo past the start and redo after a new edit are only checked in the share
 - **macOS** — UI. coverage: UI/VM. reachable from `src/MegaPDF.Avalonia/Views/MainWindow.MenuBar.cs::Strings.Undo`. tests: `tests/MegaPDF.Core.Tests/UndoStackTests.cs::Undo`, `src/MegaPDF.Avalonia/Program.cs::CheckPageTools`.
 - **Linux** — UI. coverage: UI/VM. reachable from `src/MegaPDF.Avalonia/Views/MainWindow.MenuBar.cs::Strings.Undo`. tests: `tests/MegaPDF.Core.Tests/UndoStackTests.cs::Undo`, `src/MegaPDF.Avalonia/Program.cs::CheckPageTools`.
 - **iOS/iPadOS** — eng. coverage: engine only. reachable from `ios/MegaPDF/ViewerView.swift::Label("Undo"`. tests: `ios/MegaPDFTests/UndoTests.swift::class`. cross-feature undo is unit-tested; no UI test presses the Undo button.
-- **Android** — UI. coverage: UI/VM. reachable from `android/app/src/main/java/com/megapdf/android/PagesScreen.kt::R.string.undo`. tests: `android/app/src/androidTest/java/com/megapdf/android/PageToolsTest.kt::undo`, `android/app/src/test/java/com/megapdf/android/PageHistoryTest.kt::undo`.
+- **Android** — UI. coverage: UI/VM. reachable from `android/app/src/main/java/com/megapdf/android/PagesScreen.kt::R.string.undo`. tests: `android/app/src/androidTest/java/com/megapdf/android/PageToolsTest.kt::undo`, `android/app/src/test/java/com/megapdf/android/PageHistoryTest.kt::undo`, `android/app/src/androidTest/java/com/megapdf/android/ToolbarGateTest.kt::theToolbarNeverOffersACommandTheViewModelWouldRefuse`. [ToolbarGateTest] is about whether the Undo the toolbar *offers* is one the app will act on,
+rather than about any one operation undoing correctly. Through 2.1 it was not: the controls
+greyed out on `toolsDisabled` while the actions were refused on `editingBlocked`, two
+predicates that agreed except for the few hundred milliseconds after every edit, in which a
+tap was discarded in silence. Dave reversed #145's trade-off for 2.2 — a discarded tap is
+reported as lost work, a brief grey-out is not — and this row now has a test for the
+invariant across all eleven controls, not only Undo and Redo.
 
 ### Closing with unsaved changes (`unsaved-prompt`)
 

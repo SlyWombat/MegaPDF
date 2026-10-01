@@ -803,7 +803,10 @@ each was diagnosed from the test's name twice before anybody measured anything.
    after it, so a test pressing Undo as soon as the previous change shows up is pressing
    into that gap. Every test presses Undo and Redo through `clickUndo()` / `clickRedo()`,
    which wait on `editingBlocked` — the question the view model actually answers. Do not
-   click the button directly.
+   click the button directly. (The product asymmetry this worked around is itself fixed
+   now, see below, so the wait is belt and braces — but it is also what covers
+   `pageRewriteDeciding`, and a test that asks the view model rather than the screen is the
+   right habit regardless.)
 3. **A one-shot status cannot be asserted on.** `ViewerViewModel.statusMessage` used to be
    erased by the toast that showed it, so "did the app say Stopped.?" was a race against a
    recomposition the test cannot see. It is kept now, and the toast de-duplicates on
@@ -816,10 +819,58 @@ told all three apart. And `.github/scripts/run-instrumented-tests.sh` runs `adb 
 connection it was serving, which is why four of the six original #611 failures uploaded a
 0-byte `instrumented-logcat.txt` — #545's diagnostics were missing exactly when needed.
 
-One thing #611 did **not** change, and is Dave's call rather than a flake: the toolbar
-genuinely does offer an Undo that the view model will discard, for the few hundred
-milliseconds after an edit that are too quick to show a spinner. #145 chose that over a
-flickering toolbar. A person who taps in that window sees nothing happen.
+#### The asymmetry behind trap 2 is fixed, and what the flicker actually costs
+
+#611 left the product half of trap 2 alone and flagged it: the toolbar genuinely offered an
+Undo the view model would discard, for the few hundred milliseconds after an edit too quick
+to show a spinner. **Dave reversed the #145 trade-off for 2.2** — a person who taps Undo and
+sees nothing happen reports it as lost work, which is worse than a blink — so there is now
+one predicate instead of two. `ViewerViewModel.toolsDisabled` is gone;
+`editingBlocked` is both what the actions refuse on and what the controls grey out on, and
+`ToolbarGateTest` holds the invariant: *a command the toolbar offers is one the view model
+will act on.* It fails 3 runs in 3 without the fix and passes 3 in 3 with it.
+
+Two things worth keeping from that change. The swap was safe to make in one step because the
+old condition was a strict **subset** of the new one — every `busy.page` spinner is started
+inside a `launchEdit`/`launchPageEdit` block, so `page.isVisible` implies
+`editsInFlight > 0` — which means unifying them could only ever disable something earlier,
+never offer something new. And the blink #145 traded this away for was finally **measured**,
+64 times over 16 full-suite runs on the CI emulator:
+
+| edit | blocked, min–median–max |
+|------|-------------------------|
+| checkbox tap | 5.5 – 7.2 – 7.7 ms |
+| rotate one page | 0 – 21.6 – 118.8 ms |
+| undo a checkbox | 0 – 21.9 – 119.6 ms |
+| undo a rotation | 0 – 30.5 – 122.8 ms |
+
+A frame is 16.7 ms, so a checkbox tap's grey-out does not survive to be drawn at all, and
+the worst case seen is about seven frames. Every single measurement showed **one** blocked
+period or none — never two — so the toolbar dims once per edit and cannot strobe. Anything
+long enough to be properly visible was already disabling the toolbar before this change, via
+the page spinner.
+
+**That is the whole justification for overriding #145, and it is worth being explicit about
+why.** #145 did not weigh a 7 ms grey-out against a discarded tap and choose the tap; it
+reasoned about "a flicker on every checkbox" without ever timing one, and traded away a real
+correctness property for a cost that turns out not to exist at 60 Hz. The structural half of
+the measurement is what settles it rather than taste: *one blocked period per edit, never
+two* means there is no mechanism by which the toolbar can strobe, whatever the hardware — a
+slower phone makes the single dim longer, not repeated. Opinion could have argued either way
+about whether a blink is worse than losing a tap; the numbers mean nobody has to.
+
+This is the same failure mode as trap 1 above, in the same file, found the same week: a
+constant or a trade-off chosen by reasoning about a quantity instead of measuring it, and
+wrong by enough to matter. The extract fixture was sized for a write that was assumed to take
+"a real amount of wall time" and took 373 ms; this flicker was avoided as if it were visible
+and it is 7 ms. **When a decision here turns on a duration, measure the duration.**
+
+Measuring it needed three attempts, which is worth knowing before anyone tries to watch a
+Compose state over time again: a thread calling `runOnMainSync` in a loop starves the looper
+and times its own test out, and a `Runnable` reposting itself on the looper stops Espresso
+ever seeing the app idle (`AppNotIdleException`). What works is a passive
+`Snapshot.registerApplyObserver`, which timestamps every point the value can change and is
+invisible to the idling policy.
 
 ### megapdf-cli (#142, #355, #357)
 
