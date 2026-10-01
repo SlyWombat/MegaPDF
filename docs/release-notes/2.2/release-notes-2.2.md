@@ -19,8 +19,10 @@ one a save is about to break, so far on the Mac and Linux (#476, #481, #576, #61
 behind #486 / #491 / #492 / #497); the iPad's own toolbar (#172, #435); the
 vocabulary fix that keeps the two meanings of "signature" apart (#602, #606); a
 fix to the Windows empty state, which had offered document commands with no
-document open (#617, #629); and a fix to the Android toolbar, which briefly
-offered commands it was about to silently refuse (#611, #636).
+document open (#617, #629); a fix to the Android toolbar, which briefly
+offered commands it was about to silently refuse (#611, #636); and a scroll
+position indicator added to Android, closing the one gap among platforms that
+already had one (#637).
 
 **Tabs, Save As Markdown and `megapdf-cli` are not in this release.** They shipped in
 2.1.1 (2026-09-21) and are unchanged here; see
@@ -92,6 +94,17 @@ the wheel.
   touches on iOS — instead of the corner of the page.
 
 (#528, #527, #530, behind #546, #534, #529, #553.)
+
+### A scroll position indicator, now on every platform
+
+Windows, the Mac, Linux and iPhone/iPad already showed where you are in a long
+document — each platform's own scrollbar, kept visible on purpose even in
+reading mode on the desktops, since it's the one thing left once the rest of
+the chrome is gone. Android was the one gap: its page list drew no scrollbar
+at all, and the only position readout lived inside reading mode's own bar. It
+now has a thin, translucent indicator on the trailing edge that appears while
+you scroll and fades a moment after you stop, in reading mode and the ordinary
+viewer alike (#637).
 
 ### Long work says what it's doing, and some of it you can stop
 
@@ -270,6 +283,8 @@ instead of leaving a blank slot (#402, #428).
   undo step each (#554).
 - Pinch-to-zoom now anchors on the gesture's centroid instead of the corner of
   the page (#529, #527).
+- **A new scroll position indicator** — the one platform that had none at all,
+  since the page list drew no scrollbar (#637).
 - Long work shows progress; searching and saving pages out can be stopped (#580).
 - **Whiteout is new** — Android had only Redact before. It has the same
   move/resize chrome as the desktops, and added text now takes more than one
@@ -311,10 +326,11 @@ petite barre porte le numéro de page et le chemin du retour : sur les téléph
 une touche l'amène et une autre la fait repartir; sur le Mac, elle flotte et Échap
 ramène la fenêtre à la normale, le plein écran étant offert une fois que vous y
 êtes; sur Windows et Linux, elle s'ouvre depuis le menu Présentation ou Ctrl+H. Le
-numéro de page ouvre une case pour aller n'importe où dans le document.
+numéro de page ouvre un champ où taper la page voulue.
 
 Les couleurs de la page sont juste à côté du mode lecture, dans les Paramètres sur
-Windows et les téléphones, dans les Options sur le Mac : Normales, Sépia pour une
+Windows et Android, dans les Réglages sur l'iPhone et l'iPad, dans les Options sur
+le Mac : Normales, Sépia pour une
 longue lecture et Nuit pour une pièce sombre. Le mode nuit inverse la page, images
 comprises — c'est une décision, pas un défaut, et le réglage le dit, parce qu'une
 photo lue la nuit est une photo en négatif. Si vous lisez un PDF plus souvent que
@@ -345,7 +361,7 @@ demandait ne s'affichaient jamais, et il faisait tourner en silence la dispositi
 de l'iPhone étirée. Les outils de tous les jours occupent maintenant une rangée
 large sous la barre de navigation, chacun avec son titre à côté de son icône
 plutôt qu'une icône à deviner, et le sélecteur de chaque outil s'ouvre juste à
-côté de l'outil auquel il appartient. Les commandes au clavier y sont aussi
+côté de l'outil auquel il appartient. Les raccourcis clavier y sont aussi
 (#172, #435).
 
 ### Le zoom là où vous regardez
@@ -368,9 +384,21 @@ clavier, un pincement ou la molette.
 
 (#528, #527, #530, derrière #546, #534, #529, #553.)
 
+### Un indicateur de position de défilement, maintenant sur toutes les plateformes
+
+Windows, le Mac, Linux et l'iPhone/iPad montraient déjà où vous en êtes dans un
+long document — la barre de défilement propre à chaque plateforme, gardée
+visible exprès sur les ordinateurs de bureau même en mode lecture, puisque
+c'est la seule chose qui reste une fois le reste des outils disparu. Android
+était le seul à ne rien avoir : sa liste de pages ne dessinait aucune barre de
+défilement, et le seul repère de position se trouvait dans la barre du mode
+lecture elle-même. Il a maintenant un indicateur fin et translucide sur le
+bord, qui apparaît pendant le défilement et s'efface peu après l'arrêt, en
+mode lecture comme dans la visionneuse ordinaire (#637).
+
 ### Les longues opérations disent ce qu'elles font, et certaines peuvent être arrêtées
 
-Ouvrir un gros document, y chercher, l'enregistrer, en faire une copie réduite et
+Ouvrir un document volumineux, y chercher, l'enregistrer, en faire une copie réduite et
 en extraire des pages disent maintenant chacun sur quoi ils travaillent et où ils
 en sont, au lieu d'avoir l'air figés, sur toutes les plateformes. La recherche, la
 copie réduite pour courriel et l'extraction de pages peuvent être arrêtées en
@@ -385,7 +413,7 @@ iPad.)
 
 ### Un correcteur qui se déplace, et du texte sur plus d'une ligne
 
-Tracez du correcteur et il reste sélectionné : glissez-le pour le déplacer,
+Posez du correcteur et il reste sélectionné : glissez-le pour le déplacer,
 prenez un coin pour le redimensionner, Supprimer pour l'enlever. C'est une
 nouvelle façon d'utiliser un outil que Windows, le Mac et Linux avaient déjà.
 **Sur Android et sur l'iPhone et l'iPad, le correcteur lui-même est nouveau** —
@@ -487,7 +515,8 @@ images manquent plutôt que de laisser un espace vide (#402, #428).
 - **Retirer une signature qu'un enregistrement s'apprête à briser est réservé au
   Mac et à Linux** (voir plus haut). Windows, Android et iOS ne font encore
   qu'avertir, sans cette option.
-- **La reformulation — un document mis en page pour s'ajuster à l'écran — n'est
+- **La redistribution du texte — un document remis en page pour s'ajuster à
+  l'écran — n'est
   pas dans 2.2**, sur aucune plateforme.
 
 ### Windows
@@ -562,6 +591,9 @@ images manquent plutôt que de laisser un espace vide (#402, #428).
   extraire. Une seule étape d'annulation par geste (#554).
 - Le pincement pour zoomer s'ancre maintenant sur le centre du geste plutôt que
   sur le coin de la page (#529, #527).
+- **Un nouvel indicateur de position de défilement** — la seule plateforme qui
+  n'en avait aucun, puisque la liste de pages ne dessinait aucune barre de
+  défilement (#637).
 - Les longues opérations montrent leur progression; la recherche et
   l'extraction de pages peuvent être arrêtées (#580).
 - **Le correcteur est nouveau** — Android n'avait que Caviarder avant. Il a le
@@ -582,7 +614,7 @@ images manquent plutôt que de laisser un espace vide (#402, #428).
   d'annulation par geste (#570).
 - **L'iPad a maintenant sa propre barre d'outils** : les outils de tous les
   jours dans une rangée large et titrée sous la barre de navigation, avec des
-  fenêtres contextuelles et des commandes au clavier, remplaçant la disposition
+  fenêtres contextuelles et des raccourcis clavier, remplaçant la disposition
   étirée de l'iPhone qu'il faisait tourner en silence avant (#172, #435).
 - Le pincement pour zoomer s'ancre sur le point entre vos doigts (#553, #530).
 - **Correcteur, nouveau** : glissez pour couvrir une zone, déplacez-la,
@@ -617,10 +649,11 @@ petite barre porte le numéro de page et le chemin du retour : sur les téléph
 une touche l'amène et une autre la fait repartir ; sur le Mac, elle flotte et Échap
 ramène la fenêtre à la normale, le plein écran étant offert une fois que vous y
 êtes ; sur Windows et Linux, elle s'ouvre depuis le menu Présentation ou Ctrl+H. Le
-numéro de page ouvre une case pour aller n'importe où dans le document.
+numéro de page ouvre un champ où taper la page voulue.
 
 Les couleurs de la page sont juste à côté du mode lecture, dans les Paramètres sur
-Windows et les téléphones, dans les Options sur le Mac : Normales, Sépia pour une
+Windows et Android, dans les Réglages sur l'iPhone et l'iPad, dans les Options sur
+le Mac : Normales, Sépia pour une
 longue lecture et Nuit pour une pièce sombre. Le mode nuit inverse la page, images
 comprises — c'est une décision, pas un défaut, et le réglage le dit, parce qu'une
 photo lue la nuit est une photo en négatif. Si vous lisez un PDF plus souvent que
@@ -651,7 +684,7 @@ demandait ne s'affichaient jamais, et il faisait tourner en silence la dispositi
 de l'iPhone étirée. Les outils de tous les jours occupent maintenant une rangée
 large sous la barre de navigation, chacun avec son titre à côté de son icône
 plutôt qu'une icône à deviner, et le sélecteur de chaque outil s'ouvre juste à
-côté de l'outil auquel il appartient. Les commandes au clavier y sont aussi
+côté de l'outil auquel il appartient. Les raccourcis clavier y sont aussi
 (#172, #435).
 
 ### Le zoom là où vous regardez
@@ -674,9 +707,21 @@ clavier, un pincement ou la molette.
 
 (#528, #527, #530, derrière #546, #534, #529, #553.)
 
+### Un indicateur de position de défilement, maintenant sur toutes les plateformes
+
+Windows, le Mac, Linux et l'iPhone/iPad montraient déjà où vous en êtes dans un
+long document — la barre de défilement propre à chaque plateforme, gardée
+visible exprès sur les ordinateurs de bureau même en mode lecture, puisque
+c'est la seule chose qui reste une fois le reste des outils disparu. Android
+était le seul à ne rien avoir : sa liste de pages ne dessinait aucune barre de
+défilement, et le seul repère de position se trouvait dans la barre du mode
+lecture elle-même. Il a maintenant un indicateur fin et translucide sur le
+bord, qui apparaît pendant le défilement et s'efface peu après l'arrêt, en
+mode lecture comme dans la visionneuse ordinaire (#637).
+
 ### Les longues opérations disent ce qu'elles font, et certaines peuvent être arrêtées
 
-Ouvrir un gros document, y chercher, l'enregistrer, en faire une copie réduite et
+Ouvrir un document volumineux, y chercher, l'enregistrer, en faire une copie réduite et
 en extraire des pages disent maintenant chacun sur quoi ils travaillent et où ils
 en sont, au lieu d'avoir l'air figés, sur toutes les plateformes. La recherche, la
 copie réduite pour l'e-mail et l'extraction de pages peuvent être arrêtées en
@@ -691,7 +736,7 @@ iPad.)
 
 ### Un correcteur qui se déplace, et du texte sur plus d'une ligne
 
-Tracez du correcteur et il reste sélectionné : glissez-le pour le déplacer,
+Posez du correcteur et il reste sélectionné : glissez-le pour le déplacer,
 prenez un coin pour le redimensionner, Supprimer pour l'enlever. C'est une
 nouvelle façon d'utiliser un outil que Windows, le Mac et Linux avaient déjà.
 **Sur Android et sur l'iPhone et l'iPad, le correcteur lui-même est nouveau** —
@@ -793,7 +838,8 @@ images manquent plutôt que de laisser un espace vide (#402, #428).
 - **Retirer une signature qu'un enregistrement s'apprête à briser est réservé au
   Mac et à Linux** (voir plus haut). Windows, Android et iOS ne font encore
   qu'avertir, sans cette option.
-- **La reformulation — un document mis en page pour s'ajuster à l'écran — n'est
+- **La redistribution du texte — un document remis en page pour s'ajuster à
+  l'écran — n'est
   pas dans 2.2**, sur aucune plateforme.
 
 ### Windows
@@ -868,6 +914,9 @@ images manquent plutôt que de laisser un espace vide (#402, #428).
   extraire. Une seule étape d'annulation par geste (#554).
 - Le pincement pour zoomer s'ancre maintenant sur le centre du geste plutôt que
   sur le coin de la page (#529, #527).
+- **Un nouvel indicateur de position de défilement** — la seule plateforme qui
+  n'en avait aucun, puisque la liste de pages ne dessinait aucune barre de
+  défilement (#637).
 - Les longues opérations montrent leur progression ; la recherche et
   l'extraction de pages peuvent être arrêtées (#580).
 - **Le correcteur est nouveau** — Android n'avait que Caviarder avant. Il a le
@@ -888,7 +937,7 @@ images manquent plutôt que de laisser un espace vide (#402, #428).
   d'annulation par geste (#570).
 - **L'iPad a maintenant sa propre barre d'outils** : les outils de tous les
   jours dans une rangée large et titrée sous la barre de navigation, avec des
-  fenêtres contextuelles et des commandes au clavier, remplaçant la disposition
+  fenêtres contextuelles et des raccourcis clavier, remplaçant la disposition
   étirée de l'iPhone qu'il faisait tourner en silence avant (#172, #435).
 - Le pincement pour zoomer s'ancre sur le point entre vos doigts (#553, #530).
 - **Correcteur, nouveau** : glissez pour couvrir une zone, déplacez-la,
