@@ -404,6 +404,12 @@ struct Char {
     bool artifact = false;
     // #358: set by the tagged path on characters under a /Link element (MEGAPDF_SPAN_LINK).
     bool link = false;
+    // #514: the family name PDFium reports for this character's font, interned into the owning
+    // PageWork's `fonts` set so this is 8 bytes per character and not a string per character --
+    // a 190-page corpus document has over 400,000 of these, and contract 9's own memory budget
+    // (the #514 spike's criterion 3) is measured. nullptr when PDFium names no font. Interning
+    // also makes "same family" a pointer comparison, which is what SliceIntoSpans needs.
+    const std::string* font = nullptr;
 };
 
 // A run of consecutive (PDFium's own character order) real characters joined while the
@@ -622,12 +628,26 @@ struct PageWork {
     int total_real_chars = 0;
     int rotated_chars = 0;
     PageFrame frame;                  // #472: the frame this page's layout ran in
+    // #514: the distinct font family names on this page, interned so Char::font can be a
+    // pointer. std::unordered_set, not vector, because its nodes have stable addresses: a
+    // vector would rehome every string on a grow and leave every Char::font dangling.
+    std::unordered_set<std::string> fonts;
+
+    // Interns `name`, or returns nullptr for the empty name (a font PDFium cannot name).
+    const std::string* InternFont(const std::string& name) {
+        if (name.empty()) return nullptr;
+        return &*fonts.insert(name).first;
+    }
 };
 
 double Em(double font_size) { return font_size > 0 ? font_size : 1.0; }
 
-void ClassifyStyle(FPDF_TEXTPAGE tp, int i, bool* bold, bool* italic, bool* mono) {
+// #514: `out_name` receives the family name as the document writes it -- the /BaseFont name,
+// subset tag and all. ClassifyStyle already read it to decide bold/italic/mono from the name,
+// so handing it back costs nothing beyond the copy.
+void ClassifyStyle(FPDF_TEXTPAGE tp, int i, bool* bold, bool* italic, bool* mono, std::string* out_name) {
     *bold = *italic = *mono = false;
+    if (out_name != nullptr) out_name->clear();
     const int weight = FPDFText_GetFontWeight(tp, i);
     if (weight >= kBoldWeightThreshold) *bold = true;
     char name_buf[256] = {0};
@@ -646,6 +666,38 @@ void ClassifyStyle(FPDF_TEXTPAGE tp, int i, bool* bold, bool* italic, bool* mono
     if (!*bold && lower.find("bold") != std::string::npos) *bold = true;
     if (!*italic && (lower.find("italic") != std::string::npos || lower.find("oblique") != std::string::npos)) *italic = true;
     if (!*mono && (lower.find("mono") != std::string::npos || lower.find("courier") != std::string::npos)) *mono = true;
+    if (out_name != nullptr) *out_name = name;
+}
+
+// #514: a font name as PDFium hands it over (bytes) into the UTF-16 every string accessor in
+// this header returns. A /BaseFont name is ASCII in all but pathological files; a byte above
+// 0x7F is read as UTF-8 when it starts a well-formed sequence and as Latin-1 otherwise, so a
+// name is never silently truncated or turned into replacement characters.
+U16 EncodeFontName(const std::string& name) {
+    std::vector<unsigned int> cps;
+    cps.reserve(name.size());
+    const unsigned char* p = reinterpret_cast<const unsigned char*>(name.data());
+    const size_t n = name.size();
+    for (size_t i = 0; i < n;) {
+        const unsigned char b = p[i];
+        size_t extra = 0;
+        unsigned int cp = b;
+        if (b < 0x80) { extra = 0; }
+        else if ((b & 0xE0) == 0xC0) { extra = 1; cp = b & 0x1Fu; }
+        else if ((b & 0xF0) == 0xE0) { extra = 2; cp = b & 0x0Fu; }
+        else if ((b & 0xF8) == 0xF0) { extra = 3; cp = b & 0x07u; }
+        else { cps.push_back(b); i++; continue; }          // not a UTF-8 lead: Latin-1
+        if (extra > 0 && i + extra >= n) { cps.push_back(b); i++; continue; }   // truncated: Latin-1
+        bool ok = true;
+        for (size_t k = 1; k <= extra; k++) {
+            if ((p[i + k] & 0xC0) != 0x80) { ok = false; break; }
+            cp = (cp << 6) | (p[i + k] & 0x3Fu);
+        }
+        if (!ok) { cps.push_back(b); i++; continue; }       // bad continuation: Latin-1
+        cps.push_back(cp);
+        i += extra + 1;
+    }
+    return EncodeUtf16(cps);
 }
 
 // The page-level object a character's text object is, or -1 for a form-XObject run (design
@@ -752,7 +804,9 @@ void ReadChars(const megapdf_page* page, PageWork* out) {
             c.mcid = mit->second.mcid;
             c.artifact = mit->second.artifact;
         }
-        ClassifyStyle(tp, i, &c.bold, &c.italic, &c.mono);
+        std::string font_name;
+        ClassifyStyle(tp, i, &c.bold, &c.italic, &c.mono, &font_name);
+        c.font = out->InternFont(font_name);   // #514
         c.preceded_by_break = pending_break;
         pending_break = false;
         c.is_hyphen = FPDFText_IsHyphen(tp, i) == 1;
@@ -1335,6 +1389,7 @@ std::vector<int> OrderLines(const std::vector<Line>& lines, bool* too_many_colum
 struct SpanImpl {
     megapdf_span info{};
     U16 text;
+    U16 font;   // #514: megapdf_block_span_font's answer; empty when no font was named
 };
 
 struct BlockImpl {
@@ -1363,6 +1418,10 @@ struct Piece {
     bool bold = false, italic = false, mono = false;
     bool link = false;   // #358: under a /Link element (tagged pages only)
     double font_size = 0;
+    // #514: the interned Char::font this piece came from (a separator inherits the previous
+    // piece's, like every other style field here). Pointer identity IS family identity, because
+    // the whole page interns into one set -- see PageWork::InternFont.
+    const std::string* font = nullptr;
 };
 
 // The three parallel tables a block is built from: a page's characters, a word list over them
@@ -1389,6 +1448,7 @@ void AppendWordPieces(std::vector<Piece>* out, const TextView& v, const Word& w)
         p.bold = c.bold; p.italic = c.italic; p.mono = c.mono;
         p.link = c.link;
         p.font_size = c.font_size;
+        p.font = c.font;
         out->push_back(p);
     }
 }
@@ -1403,6 +1463,7 @@ void AppendSeparator(std::vector<Piece>* out, unsigned int cp) {
         p.bold = prev.bold; p.italic = prev.italic; p.mono = prev.mono;
         p.link = prev.link;
         p.font_size = prev.font_size;
+        p.font = prev.font;
     }
     out->push_back(p);
 }
@@ -1468,6 +1529,12 @@ std::vector<Piece> BuildPieces(const TextView& v, const std::vector<int>& line_i
 // page-level object, weight/italic/monospace flags and font size (within
 // kFontSizeSpanToleranceRatio of the run's first real character) — a break the design leaves
 // to the implementation (it specifies spans' *fields*, not their segmentation).
+//
+// #514 adds the font FAMILY to that test, so megapdf_block_span_font can describe every
+// character of the span it is asked about rather than only its first. Two families that share
+// weight, slant, pitch and size inside one page object used to collapse into one span; they are
+// now two. This can only split a span, never merge two, so the block's text -- "exactly the
+// concatenation of its spans", SDD §6.2 contract 6 -- is the same string either way.
 std::vector<SpanImpl> SliceIntoSpans(const std::vector<Piece>& pieces) {
     std::vector<SpanImpl> spans;
     size_t i = 0;
@@ -1482,6 +1549,7 @@ std::vector<SpanImpl> SliceIntoSpans(const std::vector<Piece>& pieces) {
             if (p.has_bounds) {
                 const bool same_style = p.object_index == anchor.object_index && p.bold == anchor.bold &&
                     p.italic == anchor.italic && p.mono == anchor.mono && p.link == anchor.link &&
+                    p.font == anchor.font &&   // #514: interned, so this is family equality
                     std::fabs(p.font_size - anchor.font_size) <= kFontSizeSpanToleranceRatio * (std::max)(1.0, anchor.font_size);
                 if (!same_style) break;
                 l = (std::min)(l, p.l); b = (std::min)(b, p.b); r = (std::max)(r, p.r); t = (std::max)(t, p.t);
@@ -1497,6 +1565,7 @@ std::vector<SpanImpl> SliceIntoSpans(const std::vector<Piece>& pieces) {
         span.info.size_ratio = 0;   // filled in once the range's body size is known (needs a second pass)
         span.info.bounds = any_bounds ? megapdf_rect{l, b, r, t} : megapdf_rect{0, 0, 0, 0};
         span.info.object_index = anchor.object_index;
+        span.font = anchor.font != nullptr ? EncodeFontName(*anchor.font) : U16{};   // #514
         span.text = EncodeUtf16(cps);
         spans.push_back(std::move(span));
         i = j;
@@ -2917,6 +2986,19 @@ MEGAPDF_API size_t megapdf_block_span_string(const megapdf_structure* s, size_t 
     const auto& spans = s->blocks[index].spans;
     if (span >= spans.size()) return 0;
     const U16& str = spans[span].text;
+    if (out != nullptr) {
+        const size_t n = (std::min)(str.size(), capacity);
+        for (size_t i = 0; i < n; i++) out[i] = str[i];
+    }
+    return str.size();
+}
+
+MEGAPDF_API size_t megapdf_block_span_font(const megapdf_structure* s, size_t index, size_t span,
+                                           unsigned short* out, size_t capacity) {
+    if (s == nullptr || index >= s->blocks.size()) return 0;
+    const auto& spans = s->blocks[index].spans;
+    if (span >= spans.size()) return 0;
+    const U16& str = spans[span].font;
     if (out != nullptr) {
         const size_t n = (std::min)(str.size(), capacity);
         for (size_t i = 0; i < n; i++) out[i] = str[i];

@@ -1859,6 +1859,116 @@ void test_render_tint_over_form_fields(const std::string& fixtures) {
           "(FPDF_FFLDraw runs before the post-pass)", tinted.str());
 }
 
+// Contract 7 (#514, docs/reading-mode-plan.md section 3 item 2): megapdf_render_clip renders ONE
+// REGION of a page, scaled to fill the caller's buffer.
+//
+// pagecolours.pdf again, for the same reason the tint tests use it: at 612x792 it is 1 pt to 1 px
+// and every region is a flat known colour at a known place, so a clip can be checked against the
+// colour it must contain AND against the whole-page render's own pixels. Pixel assertions, not a
+// golden: what this call promises is a mapping from a crop-space rectangle to a buffer, and the
+// two ways that mapping goes wrong are a wrong offset (the clip shows the wrong part of the page)
+// and a wrong scale (it shows the right part at the wrong magnification). Both are visible in a
+// flat-colour fixture and neither would be named by a golden raster.
+//
+// What these catch if the placement arithmetic is wrong: the y flip is the one to worry about,
+// because crop space counts up from the bottom and PDFium places the page's raster from the top.
+// Getting it backwards puts the black bar's clip 648 px away from the bar, over bare page -- the
+// "the bar's own clip is black" assertion fails outright rather than drifting.
+void test_render_clip(const std::string& fixtures) {
+    Doc d(fixtures + "/pagecolours.pdf");
+    Page p(d.doc, 0);
+    if (!p.page) { check(false, "pagecolours.pdf page loads for the clip test"); return; }
+
+    const size_t whole_bytes = static_cast<size_t>(kTintW) * kTintH * 4;
+    std::vector<unsigned char> whole(whole_bytes, 0);
+    check(megapdf_render(p.page, whole.data(), kTintW, kTintH, kTintW * 4, MEGAPDF_RENDER_BGRA) == MEGAPDF_OK,
+          "clip: the whole page renders first, to compare against");
+
+    // The fixture's black bar: pdf (72,700)-(272,740), 200 x 40 pt. At 1:1 the clip's buffer is
+    // 200 x 40 px and its top-left pixel is the whole render's (72, 792-740) = (72, 52).
+    const megapdf_rect bar{72, 700, 272, 740};
+    const int cw = 200, ch = 40;
+    std::vector<unsigned char> clip(static_cast<size_t>(cw) * ch * 4, 0);
+    check(megapdf_render_clip(p.page, &bar, clip.data(), cw, ch, cw * 4, MEGAPDF_RENDER_BGRA) == MEGAPDF_OK,
+          "clip: a 200x40 pt window renders into a 200x40 buffer");
+    auto clip_px = [&](const std::vector<unsigned char>& px, int w, int x, int y) {
+        const unsigned char* q = &px[(static_cast<size_t>(y) * w + x) * 4];
+        return Rgb{q[2], q[1], q[0]};
+    };
+    check(clip_px(clip, cw, cw / 2, ch / 2) == (Rgb{0, 0, 0}),
+          "clip: the bar's own clip is black, so the window is where the rectangle said",
+          clip_px(clip, cw, cw / 2, ch / 2).str());
+
+    // And the same pixels the whole render has there. An integer translation of the device space,
+    // so this is byte-for-byte, not approximate -- but judged as a worst-channel difference so a
+    // failure says how far off it is rather than only that it differs.
+    int worst = 0;
+    for (int y = 0; y < ch; y++) {
+        for (int x = 0; x < cw; x++) {
+            const Rgb a = clip_px(clip, cw, x, y);
+            const Rgb b = pixel_at(whole, 72 + x, 52 + y);
+            worst = (std::max)(worst, (std::max)({std::abs(a.r - b.r), std::abs(a.g - b.g), std::abs(a.b - b.b)}));
+        }
+    }
+    check(worst <= 1, "clip: at 1:1 the window is the whole render's own pixels for that rectangle",
+          "worst channel difference " + std::to_string(worst));
+
+    // Scale: the same 1 x 1 px blue image (pdf (72,300)-(272,420)) through a 20x zoom. A clip that
+    // ignored the scale would fill the buffer with the page's top-left corner instead.
+    const megapdf_rect blue{100, 340, 110, 350};
+    const int zw = 200, zh = 200;
+    std::vector<unsigned char> zoom(static_cast<size_t>(zw) * zh * 4, 0);
+    check(megapdf_render_clip(p.page, &blue, zoom.data(), zw, zh, zw * 4, MEGAPDF_RENDER_BGRA) == MEGAPDF_OK,
+          "clip: a 10x10 pt window renders into a 200x200 buffer (20x)");
+    check(clip_px(zoom, zw, zw / 2, zh / 2) == (Rgb{0x1E, 0x5A, 0xC8}),
+          "clip: a 20x zoom into the blue image is still the blue it carries",
+          clip_px(zoom, zw, zw / 2, zh / 2).str());
+
+    // A rectangle off the page edge is legal and is not clamped: the uncovered part stays the
+    // white ground, which is what a block whose bounds touch the edge should look like.
+    const megapdf_rect over{572, 762, 652, 842};   // 40 pt of page, 40 pt past both edges
+    const int ow = 80, oh = 80;
+    std::vector<unsigned char> off(static_cast<size_t>(ow) * oh * 4, 0);
+    check(megapdf_render_clip(p.page, &over, off.data(), ow, oh, ow * 4, MEGAPDF_RENDER_BGRA) == MEGAPDF_OK,
+          "clip: a rectangle reaching past the page edge is accepted");
+    check(clip_px(off, ow, ow - 4, 4) == (Rgb{255, 255, 255}),
+          "clip: the part no page covers is the white ground", clip_px(off, ow, ow - 4, 4).str());
+
+    // The tint is the same post-pass, over the clip's own buffer.
+    std::vector<unsigned char> night(static_cast<size_t>(cw) * ch * 4, 0);
+    check(megapdf_render_clip(p.page, &bar, night.data(), cw, ch, cw * 4,
+                              MEGAPDF_RENDER_BGRA | MEGAPDF_RENDER_NIGHT) == MEGAPDF_OK,
+          "clip: night renders");
+    check(luma(clip_px(night, cw, cw / 2, ch / 2)) > 150.0,
+          "clip: night inverts the clip the same way it inverts a whole page",
+          clip_px(night, cw, cw / 2, ch / 2).str());
+
+    // Argument errors, each its own reason.
+    std::vector<unsigned char> small(static_cast<size_t>(16) * 16 * 4, 0);
+    check(megapdf_render_clip(nullptr, &bar, small.data(), 16, 16, 64, MEGAPDF_RENDER_BGRA) == MEGAPDF_ERR_ARGUMENT,
+          "clip: a null page is refused");
+    check(megapdf_render_clip(p.page, nullptr, small.data(), 16, 16, 64, MEGAPDF_RENDER_BGRA) == MEGAPDF_ERR_ARGUMENT,
+          "clip: a null rectangle is refused");
+    check(megapdf_render_clip(p.page, &bar, nullptr, 16, 16, 64, MEGAPDF_RENDER_BGRA) == MEGAPDF_ERR_ARGUMENT,
+          "clip: a null buffer is refused");
+    check(megapdf_render_clip(p.page, &bar, small.data(), 16, 16, 32, MEGAPDF_RENDER_BGRA) == MEGAPDF_ERR_ARGUMENT,
+          "clip: a stride under width x 4 is refused");
+    const megapdf_rect empty{72, 700, 72, 740};
+    check(megapdf_render_clip(p.page, &empty, small.data(), 16, 16, 64, MEGAPDF_RENDER_BGRA) == MEGAPDF_ERR_ARGUMENT,
+          "clip: an empty rectangle is refused");
+    const megapdf_rect inverted{272, 740, 72, 700};
+    check(megapdf_render_clip(p.page, &inverted, small.data(), 16, 16, 64, MEGAPDF_RENDER_BGRA) == MEGAPDF_ERR_ARGUMENT,
+          "clip: an inverted rectangle is refused");
+    check(megapdf_render_clip(p.page, &bar, small.data(), 16, 16, 64,
+                              MEGAPDF_RENDER_SEPIA | MEGAPDF_RENDER_NIGHT) == MEGAPDF_ERR_ARGUMENT,
+          "clip: both tints at once is refused, exactly as megapdf_render refuses it");
+    // A rectangle so small that filling the buffer would need a page raster past the implied-side
+    // limit: 0.0001 pt into 16 px is 160,000x, and 612 pt of page at that scale is 97 million px.
+    const megapdf_rect hair{100, 340, 100.0001, 340.0001};
+    check(megapdf_render_clip(p.page, &hair, small.data(), 16, 16, 64, MEGAPDF_RENDER_BGRA) == MEGAPDF_ERR_ARGUMENT,
+          "clip: a rectangle asking for a page scale past the implied-side limit is refused");
+}
+
 // --------------------------------------------------------------------------
 // Phase 3 (#112): body-text editing. FontSubstitutionTests and TextEditSpikeTests
 // make the same assertions through the desktop binding.
@@ -6315,6 +6425,105 @@ long find_block(const megapdf_structure* s, int page, int kind, const std::strin
 // characters. Note that page 0's own matrix is the identity and it STILL moved: body_size is
 // computed once over the whole load (ComputeBodySize takes every page), so one mis-sized page
 // perturbs the block structure of every other page in the same document.
+// Contract 9 (#514, docs/reading-mode-plan.md section 3 item 3): megapdf_block_span_font gives a
+// span's family name as the document writes it.
+//
+// headings.pdf, because it draws both of the structure fixtures' embedded faces --
+// MegaPDFStructureFixture-Regular and MegaPDFStructureFixture-Bold (tools/gen_structure_fixtures
+// .py embeds DejaVu Sans under those /BaseFont names) -- so the test can prove the name is the
+// span's OWN font and not one constant handed to everybody. A single-font fixture could not tell
+// those two apart, and that is the failure mode worth catching: a plumbing bug that reads the
+// first font on the page, or the last, looks perfect until two fonts are present.
+void test_structure_span_font(const std::string& repo) {
+    Doc d(repo + "/structure/headings.pdf");
+    if (!d.doc) { check(false, "structure span font: headings.pdf opens"); return; }
+    megapdf_structure* s = megapdf_structure_load(d.doc, 0, megapdf_page_count(d.doc), 0, nullptr);
+    check(s != nullptr, "structure span font: loads");
+    if (s == nullptr) return;
+
+    auto font_of = [&](size_t bi, size_t si) {
+        const size_t n = megapdf_block_span_font(s, bi, si, nullptr, 0);
+        std::vector<unsigned short> buf(n);
+        if (n > 0) megapdf_block_span_font(s, bi, si, buf.data(), n);
+        std::string out;
+        for (unsigned short u : buf) out.push_back(u < 0x80 ? static_cast<char>(u) : '?');
+        return out;
+    };
+
+    // Every span of every text block, with the weight flag it carries.
+    std::vector<std::string> bold_names, plain_names;
+    size_t named = 0, spans_seen = 0;
+    for (size_t i = 0; i < megapdf_block_count(s); i++) {
+        megapdf_block b{};
+        if (megapdf_block_get(s, i, &b) != MEGAPDF_OK) continue;
+        if (b.kind != MEGAPDF_BLOCK_HEADING && b.kind != MEGAPDF_BLOCK_PARAGRAPH &&
+            b.kind != MEGAPDF_BLOCK_LIST_ITEM) {
+            continue;
+        }
+        for (size_t si = 0; si < megapdf_block_span_count(s, i); si++) {
+            megapdf_span sp{};
+            if (megapdf_block_span_get(s, i, si, &sp) != MEGAPDF_OK) continue;
+            spans_seen++;
+            const std::string name = font_of(i, si);
+            if (!name.empty()) named++;
+            ((sp.flags & MEGAPDF_SPAN_BOLD) ? bold_names : plain_names).push_back(name);
+        }
+    }
+    check(spans_seen > 0, "structure span font: the fixture has spans to ask about",
+          std::to_string(spans_seen));
+    check(named == spans_seen,
+          "structure span font: every span of a text block names a font (an embedded /BaseFont is "
+          "always nameable, so a blank here is plumbing, not the document)",
+          std::to_string(named) + " of " + std::to_string(spans_seen));
+    check(!plain_names.empty() && plain_names[0] == "MegaPDFStructureFixture-Regular",
+          "structure span font: a regular span is the document's own /BaseFont name, subset tag and "
+          "all",
+          plain_names.empty() ? "(no regular spans)" : plain_names[0]);
+    check(!bold_names.empty() && bold_names[0] == "MegaPDFStructureFixture-Bold",
+          "structure span font: a bold span names the BOLD face, so the answer follows the span and "
+          "is not one page-wide constant",
+          bold_names.empty() ? "(no bold spans)" : bold_names[0]);
+
+    // Count-then-fill, the convention every string accessor in this header follows.
+    size_t block_with_span = 0;
+    bool found = false;
+    for (size_t i = 0; i < megapdf_block_count(s) && !found; i++) {
+        if (megapdf_block_span_count(s, i) > 0 && !font_of(i, 0).empty()) { block_with_span = i; found = true; }
+    }
+    check(found, "structure span font: a block with a named span was found to test the convention on");
+    if (found) {
+        const size_t n = megapdf_block_span_font(s, block_with_span, 0, nullptr, 0);
+        check(n > 0, "structure span font: a null buffer counts rather than fills", std::to_string(n));
+        std::vector<unsigned short> part(n, 0xFFFF);
+        const size_t again = megapdf_block_span_font(s, block_with_span, 0, part.data(), 3);
+        check(again == n, "structure span font: a short buffer still returns the full length",
+              std::to_string(again) + " vs " + std::to_string(n));
+        check(part[3] == 0xFFFF, "structure span font: a short buffer is not written past its capacity");
+    }
+
+    // Bad handles and indices answer 0, like every other accessor here.
+    check(megapdf_block_span_font(nullptr, 0, 0, nullptr, 0) == 0, "structure span font: a null handle is 0");
+    check(megapdf_block_span_font(s, megapdf_block_count(s), 0, nullptr, 0) == 0,
+          "structure span font: a block index past the end is 0");
+    check(megapdf_block_span_font(s, block_with_span, 1u << 20, nullptr, 0) == 0,
+          "structure span font: a span index past the end is 0");
+
+    // The #514 span-split refinement: the family is part of "same style", so the spans of a block
+    // still concatenate to exactly its text (SDD §6.2 contract 6). Splitting more finely must not
+    // drop or duplicate a character.
+    for (size_t i = 0; i < megapdf_block_count(s); i++) {
+        megapdf_block b{};
+        if (megapdf_block_get(s, i, &b) != MEGAPDF_OK) continue;
+        if (megapdf_block_span_count(s, i) == 0) continue;
+        std::string joined;
+        for (size_t si = 0; si < megapdf_block_span_count(s, i); si++) joined += span_text_ascii(s, i, si);
+        check(joined == block_text_ascii(s, i, MEGAPDF_BLOCK_TEXT),
+              "structure span font: block " + std::to_string(i) +
+                  "'s spans still concatenate to its text after the family split");
+    }
+    megapdf_structure_free(s);
+}
+
 void test_structure_tm_scaled_size(const std::string& repo) {
     Doc d(repo + "/structure/tm-scaled-size.pdf");
     if (!d.doc) { check(false, "structure tm-scaled-size: opens"); return; }
@@ -8628,6 +8837,7 @@ int main(int argc, char** argv) {
     test_render_page(argv[1]);
     test_render_tints(argv[1]);
     test_render_tint_over_form_fields(argv[1]);
+    test_render_clip(argv[1]);
     test_text_editing(argv[1]);
     test_rewrite_fidelity();
     test_edit_scenarios();
@@ -8661,6 +8871,7 @@ int main(int argc, char** argv) {
     test_structure_cancel(argv[2]);
     test_structure_rotated_pages(std::string(MEGAPDF_REPO_FIXTURES));
     test_structure_tm_scaled_size(std::string(MEGAPDF_REPO_FIXTURES));
+    test_structure_span_font(std::string(MEGAPDF_REPO_FIXTURES));
     test_structure_tagged(std::string(MEGAPDF_REPO_FIXTURES));
     test_structure_tiny_font_size(std::string(MEGAPDF_REPO_FIXTURES));
     test_structure_tagged_mutations(std::string(MEGAPDF_REPO_FIXTURES));

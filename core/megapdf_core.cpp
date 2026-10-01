@@ -3959,19 +3959,15 @@ MEGAPDF_API int megapdf_render_is_capped(double ideal_width, double ideal_height
     return (w < ideal_w || h < ideal_h) ? 1 : 0;
 }
 
-MEGAPDF_API int megapdf_render(const megapdf_page* p, void* buffer, int width, int height, int stride, unsigned int flags) {
-    if (p == nullptr || buffer == nullptr || width <= 0 || height <= 0 || stride < width * 4) return MEGAPDF_ERR_ARGUMENT;
-    if (width > MEGAPDF_RENDER_MAX_SIDE || height > MEGAPDF_RENDER_MAX_SIDE ||
-        static_cast<long long>(width) * height > MEGAPDF_RENDER_MAX_PIXELS) {
-        SetError(0, "the requested raster is past the render clamp; ask megapdf_render_size first");
-        return MEGAPDF_ERR_ARGUMENT;
-    }
-    // Page colours are one choice of three (#509), so both tints at once is the caller
-    // having ORed two radio buttons together: say so instead of picking one for them.
-    if ((flags & MEGAPDF_RENDER_SEPIA) && (flags & MEGAPDF_RENDER_NIGHT)) {
-        SetError(0, "MEGAPDF_RENDER_SEPIA and MEGAPDF_RENDER_NIGHT are alternatives; pass at most one");
-        return MEGAPDF_ERR_ARGUMENT;
-    }
+// Everything megapdf_render and megapdf_render_clip share. The four placement numbers are
+// PDFium's own: the page's full raster is drawn at size_x x size_y with its top-left corner at
+// (start_x, start_y) of the bitmap, so a whole-page render passes (0, 0, width, height) and a
+// clip passes a negative origin with an oversize size, leaving only the wanted region inside
+// the bitmap. Written once rather than twice so the recipe -- white ground, page content with
+// annotations and LCD text, live form-field values, then the tint -- cannot drift between the
+// two: #115 is what happened the last time one render path diverged from another.
+int RenderPlaced(const megapdf_page* p, void* buffer, int width, int height, int stride, unsigned int flags,
+                 int start_x, int start_y, int size_x, int size_y) {
     {
         Guard guard(CoreLock());
         // The loud half of the contract (#551): a render on a page whose document has closed
@@ -3986,12 +3982,12 @@ MEGAPDF_API int megapdf_render(const megapdf_page* p, void* buffer, int width, i
         int render_flags = FPDF_ANNOT | FPDF_LCD_TEXT;
         if (flags & MEGAPDF_RENDER_RGBA) render_flags |= FPDF_REVERSE_BYTE_ORDER;
         FPDFBitmap_FillRect(bmp, 0, 0, width, height, 0xFFFFFFFF);
-        FPDF_RenderPageBitmap(bmp, p->page, 0, 0, width, height, 0, render_flags);
+        FPDF_RenderPageBitmap(bmp, p->page, start_x, start_y, size_x, size_y, 0, render_flags);
         // Not for a deleted page (#174): FPDF_FFLDraw would register its widgets with the form
         // environment again, and a restored copy of the page would then read their values from
         // them. FPDF_ANNOT above has drawn the widgets' appearance streams already.
         if (p->owner != nullptr && p->owner->form != nullptr && p->index >= 0) {
-            FPDF_FFLDraw(p->owner->form, bmp, p->page, 0, 0, width, height, 0, render_flags);
+            FPDF_FFLDraw(p->owner->form, bmp, p->page, start_x, start_y, size_x, size_y, 0, render_flags);
         }
         FPDFBitmap_Destroy(bmp);
     }
@@ -4011,6 +4007,81 @@ MEGAPDF_API int megapdf_render(const megapdf_page* p, void* buffer, int width, i
                   (flags & MEGAPDF_RENDER_RGBA) != 0, (flags & MEGAPDF_RENDER_NIGHT) != 0);
     }
     return MEGAPDF_OK;
+}
+
+// The argument checks both render entry points make on the buffer and the flags.
+int CheckRenderTarget(const megapdf_page* p, const void* buffer, int width, int height, int stride,
+                      unsigned int flags) {
+    if (p == nullptr || buffer == nullptr || width <= 0 || height <= 0 || stride < width * 4) return MEGAPDF_ERR_ARGUMENT;
+    if (width > MEGAPDF_RENDER_MAX_SIDE || height > MEGAPDF_RENDER_MAX_SIDE ||
+        static_cast<long long>(width) * height > MEGAPDF_RENDER_MAX_PIXELS) {
+        SetError(0, "the requested raster is past the render clamp; ask megapdf_render_size first");
+        return MEGAPDF_ERR_ARGUMENT;
+    }
+    // Page colours are one choice of three (#509), so both tints at once is the caller
+    // having ORed two radio buttons together: say so instead of picking one for them.
+    if ((flags & MEGAPDF_RENDER_SEPIA) && (flags & MEGAPDF_RENDER_NIGHT)) {
+        SetError(0, "MEGAPDF_RENDER_SEPIA and MEGAPDF_RENDER_NIGHT are alternatives; pass at most one");
+        return MEGAPDF_ERR_ARGUMENT;
+    }
+    return MEGAPDF_OK;
+}
+
+MEGAPDF_API int megapdf_render(const megapdf_page* p, void* buffer, int width, int height, int stride, unsigned int flags) {
+    const int bad = CheckRenderTarget(p, buffer, width, height, stride, flags);
+    if (bad != MEGAPDF_OK) return bad;
+    return RenderPlaced(p, buffer, width, height, stride, flags, 0, 0, width, height);
+}
+
+MEGAPDF_API int megapdf_render_clip(const megapdf_page* p, const megapdf_rect* crop_space_rect, void* buffer,
+                                    int width, int height, int stride, unsigned int flags) {
+    const int bad = CheckRenderTarget(p, buffer, width, height, stride, flags);
+    if (bad != MEGAPDF_OK) return bad;
+    if (crop_space_rect == nullptr) return MEGAPDF_ERR_ARGUMENT;
+    const megapdf_rect r = *crop_space_rect;
+    if (!(r.right > r.left) || !(r.top > r.bottom)) {
+        SetError(0, "megapdf_render_clip needs a non-empty rectangle (right > left, top > bottom)");
+        return MEGAPDF_ERR_ARGUMENT;
+    }
+    // Crop space -> PDFium's render space is the /UserUnit divided back out (#150): the render
+    // is in points of the page's own space, which crop space multiplies by the unit. Everything
+    // else about crop space -- the CropBox origin, the /Rotate turn -- is already what PDFium
+    // renders, so there is nothing further to undo (ReadPageSpace's comment, :278).
+    double page_w = 0, page_h = 0;
+    double unit = 1.0;
+    {
+        Guard guard(CoreLock());
+        page_w = static_cast<double>(FPDF_GetPageWidthF(p->page));
+        page_h = static_cast<double>(FPDF_GetPageHeightF(p->page));
+        unit = p->unit > 0 ? p->unit : 1.0;
+    }
+    if (!(page_w > 0) || !(page_h > 0)) {
+        SetError(0, "the page has no size to render a region of");
+        return MEGAPDF_ERR_ARGUMENT;
+    }
+    const double rl = r.left / unit, rb = r.bottom / unit, rr = r.right / unit, rt = r.top / unit;
+    const double rw = rr - rl, rh = rt - rb;
+    if (!(rw > 0) || !(rh > 0)) {
+        SetError(0, "megapdf_render_clip needs a non-empty rectangle (right > left, top > bottom)");
+        return MEGAPDF_ERR_ARGUMENT;
+    }
+    // The scale the window asks for, and the full-page raster that scale implies.
+    const double sx = static_cast<double>(width) / rw;
+    const double sy = static_cast<double>(height) / rh;
+    const double implied_w = page_w * sx, implied_h = page_h * sy;
+    if (!(implied_w >= 1.0) || !(implied_h >= 1.0) ||
+        implied_w > static_cast<double>(MEGAPDF_RENDER_CLIP_MAX_IMPLIED_SIDE) ||
+        implied_h > static_cast<double>(MEGAPDF_RENDER_CLIP_MAX_IMPLIED_SIDE)) {
+        SetError(0, "the rectangle asks for a page scale past MEGAPDF_RENDER_CLIP_MAX_IMPLIED_SIDE");
+        return MEGAPDF_ERR_ARGUMENT;
+    }
+    // PDFium places the page's top-left corner at (start_x, start_y) of the bitmap, y down;
+    // crop space is y up, so the rectangle's TOP edge is what the bitmap's top row shows.
+    const int size_x = static_cast<int>(std::lround(implied_w));
+    const int size_y = static_cast<int>(std::lround(implied_h));
+    const int start_x = -static_cast<int>(std::lround(rl * sx));
+    const int start_y = -static_cast<int>(std::lround((page_h - rt) * sy));
+    return RenderPlaced(p, buffer, width, height, stride, flags, start_x, start_y, size_x, size_y);
 }
 
 }  // extern "C"
