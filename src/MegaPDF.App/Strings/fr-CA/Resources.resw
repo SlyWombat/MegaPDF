@@ -1305,7 +1305,7 @@ Enregistrée sous {2}, prête pour le courriel.</value>
     <comment>MEGAPDF_ERR_FIELDS (#174, #452): the engine refuses about 0.8% of real documents rather than write a form that has quietly lost its field names. Said as what happened and what still works. #174 — new French, for francophone review</comment>
   </data>
   <data name="CannotDeleteLastPage" xml:space="preserve">
-    <value>Un PDF doit contenir au moins une page ; celle-ci ne peut donc pas être supprimée. Pour ne garder que certaines pages, utilisez plutôt Enregistrer les pages sélectionnées sous.</value>
+    <value>Un PDF doit contenir au moins une page; celle-ci ne peut donc pas être supprimée. Pour ne garder que certaines pages, utilisez plutôt Enregistrer les pages sélectionnées sous.</value>
     <comment>The engine refuses the last page (#174); said as the rule it is, with the way round it. #174 — new French, for francophone review</comment>
   </data>
   <data name="PageToolsRestricted" xml:space="preserve">
