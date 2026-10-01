@@ -272,5 +272,77 @@ class LinuxReadingPose(unittest.TestCase):
             stores.STORES["linux"]["toolbar"].get("chromeless_poses", ()))
 
 
+@unittest.skipUnless(shutil.which("convert"), "ImageMagick is not installed")
+class MacReadingPose(unittest.TestCase):
+    """#613: reading mode (#505) leads the Mac listing now, and it is the one
+    pose with no chrome at all — no toolbar, no tab strip, no status bar. The
+    toolbar check measured the whole 160 px search depth as the band. The Mac
+    profile takes the rule the Linux profile took for the same slot and the
+    same app: the pose is named, and the check is inverted there, because a
+    band found here means reading mode did not turn on and slot 1 is wearing an
+    ordinary viewer shot."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        # One image per folder: the pose a file name parses to is what the
+        # profile keys on, so the good and the bad reading shot cannot share a
+        # folder without becoming each other's siblings.
+        self.good = os.path.join(self.tmp.name, "good", "en")
+        self.bad = os.path.join(self.tmp.name, "bad", "en")
+        os.makedirs(self.good)
+        os.makedirs(self.bad)
+        # The mode as it is: the page host to the top of the window, with the
+        # page's own ink on it and nothing above it.
+        subprocess.run(["convert", "-size", "1440x900", "xc:white",
+                        "-fill", "black", "-draw", "rectangle 360,140 830,170",
+                        os.path.join(self.good, "light-01-reading.png")],
+                       check=True, capture_output=True)
+        # The failure it has to catch: the same slot with the toolbar still on
+        # screen — a band of chrome across the top, as every other pose has.
+        subprocess.run(["convert", "-size", "1440x900", "xc:white",
+                        "-fill", "#cccccc", "-draw", "rectangle 0,0 1439,79",
+                        "-fill", "black", "-draw", "rectangle 360,320 830,350",
+                        os.path.join(self.bad, "light-01-reading.png")],
+                       check=True, capture_output=True)
+
+    def _toolbar(self, root):
+        with tempfile.TemporaryDirectory() as out:
+            result = gate.run(root, "mac", out, thumb_width=32)
+        image = next(i for i in result["images"]
+                     if os.path.basename(i["path"]) == "light-01-reading.png")
+        return next(f for f in image["findings"] if f["check"] == "toolbar")
+
+    def test_no_chrome_is_what_this_pose_is(self):
+        finding = self._toolbar(self.good)
+        self.assertEqual(finding["status"], "pass", finding["note"])
+        self.assertIn("no chrome band", finding["note"])
+
+    def test_chrome_left_on_is_flagged(self):
+        finding = self._toolbar(self.bad)
+        self.assertEqual(finding["status"], "flag", finding["note"])
+        self.assertIn("should have none", finding["note"])
+
+    def test_the_slot_names_are_the_ones_the_rig_writes(self):
+        """tools/macos-store-captures.sh writes light-01-reading.png and
+        light-04-pages.png, and the profile's rules are keyed on the parsed
+        pose rather than on the file name."""
+        profile = stores.STORES["mac"]
+        for name, pose in (("light-01-reading.png", "reading"),
+                           ("light-04-pages.png", "pages")):
+            parsed = profile["parse"](name)
+            self.assertIsNotNone(parsed, name)
+            self.assertEqual(parsed[1], pose)
+        self.assertIn("reading", profile["toolbar"]["chromeless_poses"])
+        self.assertIn("pages", profile["accent_poses"])
+
+    def test_the_listing_order_is_the_order_the_rig_shoots(self):
+        """The seven slots #613 settled, in order, ahead of the pose that is no
+        longer a listing slot."""
+        self.assertEqual(
+            stores.STORES["mac"]["order"][:7],
+            ["reading", "text", "sign", "pages", "search", "redact", "home"])
+
+
 if __name__ == "__main__":
     unittest.main()

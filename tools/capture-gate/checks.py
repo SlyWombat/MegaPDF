@@ -509,10 +509,23 @@ def language_purity(shot, profile) -> list[Finding]:
     # happens to contain an English one is not an English string.
     hits = [w for w in ENGLISH_MARKERS
             if re.search(rf"\b{re.escape(w)}\b", haystack)]
+    # Words this platform's reader is known to *invent* in a named pose. A
+    # marker the OCR produced out of a French label is not a string from the
+    # wrong catalogue, and excusing it is better than excusing the whole check
+    # — but it is reported rather than dropped, so the sheet still shows what
+    # was let through and the next reader can disagree with the measurement.
+    misreads = (profile.get("ocr_misreads") or {}).get(shot.pose, {})
+    excused = [w for w in hits if w in misreads]
+    hits = [w for w in hits if w not in misreads]
     if hits:
         return [_flag("language", f"the English word {hits[0]!r} is on a "
                                   f"{shot.lang} capture — a string that did not "
                                   f"come from the catalogue?")]
+    if excused:
+        return [_ok("language", "no English UI words on a French capture — "
+                                + "; ".join(f"{w!r} is this reader's misreading "
+                                            f"of {misreads[w]}"
+                                            for w in excused))]
     return [_ok("language", "no English UI words on a French capture")]
 
 

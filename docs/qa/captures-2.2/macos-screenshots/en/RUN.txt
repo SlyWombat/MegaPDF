@@ -1,0 +1,7 @@
+app:      /Users/claude/app-613mac/MegaPDF.app
+binary:   e1090f7ae2d326e961609e90ea811ea1d97f1b301f9bd11f66053d87351aeae3
+language: en (en-CA)
+window:   1440x900
+document: Rental Agreement.pdf (from demo.pdf)
+pages doc: Rental Agreement.pdf (from demo-pages.pdf), slots 01-reading and 04-pages
+taken:    2026-10-01T16:10:53Z
