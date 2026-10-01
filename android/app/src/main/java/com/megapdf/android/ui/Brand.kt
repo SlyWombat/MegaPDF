@@ -138,6 +138,17 @@ object Brand {
         PageTint.SEPIA -> ReadingBarOnSepia
         PageTint.NIGHT -> ReadingBarOnNight
     }
+
+    /**
+     * The scroll-position indicator's thumb under [tint] — faint enough to read as a hint
+     * rather than a control, the same restraint a system scrollbar's own thumb keeps.
+     */
+    @Composable
+    fun scrollIndicator(tint: PageTint): Color = when (tint) {
+        PageTint.NORMAL -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+        PageTint.SEPIA -> ReadingBarOnSepia.copy(alpha = 0.45f)
+        PageTint.NIGHT -> ReadingBarOnNight.copy(alpha = 0.45f)
+    }
 }
 
 /**

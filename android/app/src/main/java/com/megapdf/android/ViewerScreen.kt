@@ -1488,6 +1488,19 @@ fun ViewerScreen(
                 }
             }
 
+            // A small side indicator of scroll position (Dave, 2026-10-01), in both the plain
+            // viewer and reading mode — unlike the floating bar below, nothing here is gated
+            // on `readingMode`, because the one place this answers "where am I" the loudest
+            // is the one place the rest of the chrome just went away.
+            ScrollPositionIndicator(
+                listState = listState,
+                pageSizes = pageSizes,
+                pageWidthPx = containerWidthPx * zoom,
+                tint = pageTint,
+                reducedMotion = reducedMotion,
+                modifier = Modifier.align(Alignment.CenterEnd),
+            )
+
             // Reading mode's floating bar (#507, #513), over the page, bottom centre. A
             // sibling of the LazyColumn rather than anything the Scaffold knows about: the
             // page host is untouched by this mode, and the bar is drawn on top of it.
