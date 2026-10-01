@@ -28,17 +28,31 @@ jobs:
     #                                     Unset means hosted, so this file changes
     #                                     nothing until the variable is set.
     #   head.repo.full_name == repository THE fork guard, and the reason any of this is
-    #                                     safe. THIS REPOSITORY IS PUBLIC. A self-hosted
-    #                                     runner executes whatever a workflow tells it
-    #                                     to, as the account it runs under, so a pull
-    #                                     request opened from a fork must never reach
-    #                                     our hardware. It still gets checked — on
-    #                                     GitHub's disposable runner, which is what that
-    #                                     is for. There are no forks today; that is the
-    #                                     moment to put this in, not afterwards.
-    #                                     The repository's fork-PR approval policy is
-    #                                     only "first_time_contributors", so the guard
-    #                                     cannot live in a setting.
+    #                                     safe. THIS REPOSITORY IS PUBLIC, and the runner
+    #                                     runs as `claude`, the account that holds the
+    #                                     read-write deploy key and the working clones
+    #                                     (Dave's call, 2026-10-01). So a job that gets
+    #                                     here can read all of that, and the only thing
+    #                                     standing between a stranger and it is this
+    #                                     comparison. A pull request opened from a fork
+    #                                     is still checked — on GitHub's disposable
+    #                                     runner, which is what that is for. There are no
+    #                                     forks today; that is the moment to write this,
+    #                                     not the moment after.
+    #                                     It is in the workflow and not left to the
+    #                                     repository's "require approval for fork pull
+    #                                     requests" setting on purpose: a setting is one
+    #                                     click from being loosened, and this guard has
+    #                                     to survive that click.
+    #   head.repo.fork == false           a second, independent term, ANDed. On its own
+    #                                     it would be WORSE than nothing: when head.repo
+    #                                     is null — a fork deleted after the pull request
+    #                                     was opened — GitHub casts null and false both
+    #                                     to 0 and `null == false` is TRUE, so a guard
+    #                                     written only this way fails OPEN. The
+    #                                     full_name comparison is what catches null, and
+    #                                     is the load-bearing half. Both are proved,
+    #                                     including that null case, by the probe below.
     #   event_name != 'pull_request'      a push to main, or a workflow_dispatch: the
     #                                     code is already in the repository, so there is
     #                                     no untrusted author to guard against.
@@ -48,7 +62,7 @@ jobs:
     # both event shapes. The one that matters is a pull_request whose head repository is
     # not this one with the switch forced on: it resolves to macos-latest. Recorded on
     # #614.
-    runs-on: ${{ fromJSON((vars.MAC_SELF_HOSTED == 'on' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && '["self-hosted","macOS","ARM64","megapdf-ios"]' || '["macos-latest"]') }}
+    runs-on: ${{ fromJSON((vars.MAC_SELF_HOSTED == 'on' && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.repo.fork == false))) && '["self-hosted","macOS","ARM64","megapdf-ios"]' || '["macos-latest"]') }}
     defaults:
       run:
         working-directory: ios
