@@ -1344,9 +1344,12 @@ note = "same as macOS."
 [feature.ios]
 presence = "present"
 entry = "ios/MegaPDF/ViewerView.swift::Save a copy"
-coverage = "engine"
-tests = ["ios/MegaPDFTests/SignatureDetectionTests.swift::copy"]
-note = "the live cases are in FilesEndToEndUITests, excluded from CI."
+coverage = "ui"
+tests = [
+  "ios/MegaPDFTests/SaveACopyAdoptionTests.swift::class",
+  "ios/MegaPDFTests/SignatureDetectionTests.swift::copy",
+]
+note = "#572: that the copy becomes the open document is tested in CI. The live export sheet is only in FilesEndToEndUITests, which is excluded from CI and, as of #589, does not present at all."
 [feature.android]
 presence = "present"
 entry = "android/app/src/main/java/com/megapdf/android/ViewerScreen.kt::R.string.save_a_copy"

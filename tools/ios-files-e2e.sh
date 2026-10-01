@@ -161,8 +161,12 @@ for t in $TESTS; do
         take_copy e2e-save-copy.pdf e2e-save; cp "$STORE/e2e-save.pdf" "$OUT/"
         check "save a copy wrote e2e-save-copy.pdf" test -s "$OUT/e2e-save-copy.pdf"
         check "save wrote the first text in place" sh -c "pdftotext '$OUT/e2e-save.pdf' - | grep -q 'E2E SAVED TEXT'"
-        check "save in place does not carry the later edit" sh -c "! pdftotext '$OUT/e2e-save.pdf' - | grep -q 'E2E COPY TEXT'"
+        check "save in place does not carry the later edits" sh -c "! pdftotext '$OUT/e2e-save.pdf' - | grep -qE 'E2E COPY TEXT|E2E AFTER COPY TEXT'"
         check "save a copy carries both" sh -c "pdftotext '$OUT/e2e-save-copy.pdf' - | grep -q 'E2E SAVED TEXT' && pdftotext '$OUT/e2e-save-copy.pdf' - | grep -q 'E2E COPY TEXT'"
+        # #572: the copy became the document, so the Save after it wrote there — through the
+        # URL the export sheet handed back, which is the security-scoped access a unit test
+        # never needs. The original must be the only file that lacks the third edit.
+        check "the Save after Save a copy went to the copy (#572)" sh -c "pdftotext '$OUT/e2e-save-copy.pdf' - | grep -q 'E2E AFTER COPY TEXT'"
         check "both pass qpdf --check" sh -c "qpdf --check '$OUT/e2e-save.pdf' && qpdf --check '$OUT/e2e-save-copy.pdf'" ;;
     test5_*)
         cp "$STORE/e2e-protect.pdf" "$OUT/e2e-protect-set.pdf"

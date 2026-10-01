@@ -17,7 +17,7 @@ Each cell says two things and both are checked against the code:
 | `GAP` | the feature is **missing** where it should exist — the #571 shape |
 | `+m` | a by-hand step in `TESTING.md` / `docs/RELEASING.md` covers it too |
 
-220 pairings: 118 UI, 70 eng, 13 —, 14 n/a, 5 GAP.
+220 pairings: 119 UI, 69 eng, 13 —, 14 n/a, 5 GAP.
 
 This map is about *what is covered*, not whether the covering tests pass — that is the
 other jobs' business — and it does not replace the by-hand pass in `docs/RELEASING.md`
@@ -60,7 +60,7 @@ The feature is reachable and no test in CI touches it.
 | Print (`print`) | macos | the self-test checks the command's enablement and nothing else; no print is ever performed in CI. | — |
 | Print (`print`) | windows | nothing automated touches printing on Windows: no self-test state, no core test of PdfPrinter, and tools/windows-qa's print flow is manual. | — |
 
-### Engine only — this platform's own path is untested (70)
+### Engine only — this platform's own path is untested (69)
 
 The shared core proves the operation. Nothing proves this platform reaches it correctly, which is where #401 and #412 lived.
 
@@ -124,7 +124,6 @@ The shared core proves the operation. Nothing proves this platform reaches it co
 | Password — set, change, remove, and opening a protected document (`password`) | windows | no Windows self-test state opens the security dialog; every platform's UI path to this is untested except iOS's, and iOS's is excluded from CI. | — |
 | Progress and Stop on long operations (`progress-cancel`) | android | as iOS. | — |
 | Progress and Stop on long operations (`progress-cancel`) | ios | the timing state machine only; no UI test sees a busy strip or presses Stop. | — |
-| Save a copy / Save As (`save-a-copy`) | ios | the live cases are in FilesEndToEndUITests, excluded from CI. | — |
 | Save a copy / Save As (`save-a-copy`) | windows | no self-test state drives Save As; the picker is the OS's. | — |
 | Save (overwrite in place) (`save-in-place`) | ios | FilesEndToEndUITests saves through the real picker and is excluded from CI. | — |
 | Save (overwrite in place) (`save-in-place`) | windows | the save machinery is thoroughly tested; no Windows self-test state presses Save, and a read-only or provider-backed location is never used. | — |
@@ -192,7 +191,7 @@ The shared core proves the operation. Nothing proves this platform reaches it co
 | feature | Windows | macOS | Linux | iOS/iPadOS | Android |
 |---|---|---|---|---|---|
 | **Save (overwrite in place)** | eng+m | UI+m | UI+m | eng | UI |
-| **Save a copy / Save As** | eng+m | UI+m | UI+m | eng | UI |
+| **Save a copy / Save As** | eng+m | UI+m | UI+m | UI | UI |
 | **Export as Markdown** | eng+m | UI+m | UI+m | UI | UI |
 | **Share** | n/a | n/a | n/a | eng+m | UI+m |
 | **Password — set, change, remove, and opening a protected document** | eng | eng | eng | eng | eng |
@@ -454,7 +453,7 @@ counters for two whole battery runs before #567's reporting fix.
 - **Windows** — eng+m. coverage: engine only. reachable from `src/MegaPDF.App/MainWindow.xaml::SaveAsButton`. tests: `tests/MegaPDF.Core.Tests/VerifiedSaveTests.cs::Copy`. by hand: `TESTING.md::**Saving**`. no self-test state drives Save As; the picker is the OS's.
 - **macOS** — UI+m. coverage: UI/VM. reachable from `src/MegaPDF.Avalonia/Views/MainWindow.MenuBar.cs::Strings.SaveAs`. tests: `tests/MegaPDF.Core.Tests/VerifiedSaveTests.cs::Copy`. by hand: `TESTING.md::**Saving**`. the self-test checks Save As adopts the copy as the open document (#68).
 - **Linux** — UI+m. coverage: UI/VM. reachable from `src/MegaPDF.Avalonia/Views/MainWindow.MenuBar.cs::Strings.SaveAs`. tests: `tests/MegaPDF.Core.Tests/VerifiedSaveTests.cs::Copy`. by hand: `TESTING.md::**Saving**`. same as macOS.
-- **iOS/iPadOS** — eng. coverage: engine only. reachable from `ios/MegaPDF/ViewerView.swift::Save a copy`. tests: `ios/MegaPDFTests/SignatureDetectionTests.swift::copy`. the live cases are in FilesEndToEndUITests, excluded from CI.
+- **iOS/iPadOS** — UI. coverage: UI/VM. reachable from `ios/MegaPDF/ViewerView.swift::Save a copy`. tests: `ios/MegaPDFTests/SaveACopyAdoptionTests.swift::class`, `ios/MegaPDFTests/SignatureDetectionTests.swift::copy`. #572: that the copy becomes the open document is tested in CI. The live export sheet is only in FilesEndToEndUITests, which is excluded from CI and, as of #589, does not present at all.
 - **Android** — UI. coverage: UI/VM. reachable from `android/app/src/main/java/com/megapdf/android/ViewerScreen.kt::R.string.save_a_copy`. tests: `android/app/src/androidTest/java/com/megapdf/android/FileCommandsTest.kt::copy`.
 
 ### Export as Markdown (`export-markdown`)
