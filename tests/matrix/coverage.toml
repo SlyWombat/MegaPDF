@@ -2172,7 +2172,12 @@ area = "Cross-cutting"
 about = """
 The documents that are not a happy path: permission bits that must disable tools, dynamic
 XFA that must explain itself rather than pretend, signed documents, and files that are
-simply broken. The corpus batteries are where these are met at scale (TESTING.md)."""
+simply broken. The corpus batteries are where these are met at scale (TESTING.md).
+
+Signed documents carry two separate claims here. #481's is that a save about to destroy a
+signature says so first. #576's is the other half: a signature our own save has already
+destroyed must not go on presenting itself, so the person is asked whether to leave it out
+of the file being written, and the file that is written then reports what it really is."""
 [feature.windows]
 presence = "present"
 entry = "src/MegaPDF.App/DocumentViewModel.cs::DocumentCapabilities"
@@ -2192,8 +2197,10 @@ tests = [
   "tests/MegaPDF.Core.Tests/DocumentCapabilitiesTests.cs::Capabilities",
   "tests/MegaPDF.Core.Tests/DynamicXfaTests.cs::Xfa",
   "tests/MegaPDF.Core.Tests/SignatureDetectionTests.cs::Detect",
+  "src/MegaPDF.Avalonia/Program.cs::CheckDeadSignature",
+  "src/MegaPDF.Avalonia/Program.cs::CheckSignedSaveQuestion",
 ]
-note = "the self-test opens a dynamic-XFA document and a signed one and checks what the window offers (#457, #481)."
+note = "the self-test opens a dynamic-XFA document and a signed one and checks what the window offers (#457, #481); #576 adds the signed-save question itself, driven in a real window, and asserts on the wording the person would have read rather than only on what happened next."
 [feature.linux]
 presence = "present"
 entry = "src/MegaPDF.Avalonia/ViewModels/DocumentViewModel.cs::DocumentCapabilities"
@@ -2202,6 +2209,8 @@ tests = [
   "tests/MegaPDF.Core.Tests/DocumentCapabilitiesTests.cs::Capabilities",
   "tests/MegaPDF.Core.Tests/DynamicXfaTests.cs::Xfa",
   "tests/MegaPDF.Core.Tests/SignatureDetectionTests.cs::Detect",
+  "src/MegaPDF.Avalonia/Program.cs::CheckDeadSignature",
+  "src/MegaPDF.Avalonia/Program.cs::CheckSignedSaveQuestion",
 ]
 note = "as macOS."
 [feature.ios]
@@ -2224,7 +2233,7 @@ tests = [
   "android/app/src/androidTest/java/com/megapdf/android/SignatureOverwriteTest.kt::class",
   "android/engine/src/androidTest/java/com/megapdf/engine/DocumentFlagsTest.kt::class",
 ]
-note = "the signed-document overwrite question has an instrumented test here and nowhere else."
+note = "the signed-document overwrite question has an instrumented test here; #576's choice to remove a dead signature is on the Avalonia desktops only so far, so Android, Windows and iOS still warn about a signature our own save has already destroyed."
 
 [[feature]]
 id = "packaged-install"

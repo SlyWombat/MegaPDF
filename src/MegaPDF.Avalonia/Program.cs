@@ -2384,8 +2384,355 @@ internal static class Program
             failures++;
         }
 
+        Console.WriteLine("a dead digital signature, and the choice to remove it (#576):");
+        try
+        {
+            CheckDeadSignature(dir, saveDir, state, Check);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"::error::dead signature: {ex.GetType().Name}: {ex.Message}");
+            failures++;
+        }
+
+        Console.WriteLine("the signed-save question, in a real window (#576):");
+        try
+        {
+            CheckSignedSaveQuestion(dir, state, Check);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"::error::signed-save question: {ex.GetType().Name}: {ex.Message}");
+            failures++;
+        }
+
         Console.WriteLine(failures == 0 ? "self-test: PASS" : $"::error::self-test: {failures} check(s) failed");
         return failures == 0 ? 0 : 1;
+    }
+
+    /// <summary>
+    /// #576, the view-model and engine half: what a document says about its own signature,
+    /// and what becomes of a save that was asked to leave it out.
+    ///
+    /// The defect this exists for is that MegaPDF's own saved output still reported as
+    /// signed — measured at 98 of 98 rewritten documents in #476 §5a — so reopening a file
+    /// MegaPDF wrote warned about a signature it had already destroyed. The strongest check
+    /// here is therefore not that the removal happened but that the SAVED FILE, reopened
+    /// through a fresh engine open the way the app opens any file, reports no signature.
+    /// Its twin matters as much: a save that was not asked to remove anything must behave
+    /// exactly as it did before, signature and all.
+    ///
+    /// Fixtures from tools/gen_signature_fixtures.py: signed-reason.pdf (a signing date and
+    /// a signer's reason, the shape 33 of 33 of #476's real documents have) and
+    /// signature-field-unsigned.pdf (a /FT /Sig field with no signature in it — the false
+    /// positive #476 §5b measured, where the app warned about a signature that does not
+    /// exist).
+    /// </summary>
+    private static void CheckDeadSignature(string dir, string saveDir, string state, Action<string, bool> check)
+    {
+        var reasonPath = Path.Combine(dir, "signed-reason.pdf");
+        var unsignedFieldPath = Path.Combine(dir, "signature-field-unsigned.pdf");
+        if (!File.Exists(reasonPath) || !File.Exists(unsignedFieldPath))
+        {
+            check("signed-reason.pdf and signature-field-unsigned.pdf are in the fixtures dir "
+                  + "-- run tools/gen_signature_fixtures.py against it too", false);
+            return;
+        }
+
+        // 1. The false positive: a signature field is not a signature.
+        using (var fieldOnly = new DocumentViewModel(state))
+        {
+            fieldOnly.Open(unsignedFieldPath);
+            check("a signature field with no signature in it opens", fieldOnly.IsDocumentOpen);
+            check("  and does NOT report as signed", !fieldOnly.IsSigned);
+            check("  and does NOT report as certified", !fieldOnly.IsSignedCertification);
+            check("  and names no signature", fieldOnly.DigitalSignatures.Count == 0);
+            check("  so there is nothing to remove", !fieldOnly.RemoveDigitalSignatures());
+            check("  and the attempt leaves the document alone",
+                  fieldOnly.IsDocumentOpen && !fieldOnly.IsDirty);
+        }
+
+        // 2. Naming the signature: the date it records and the reason its signer gave.
+        //    Both are present on 33 of 33 of #476's real signed documents.
+        using (var signed = new DocumentViewModel(state))
+        {
+            signed.Open(reasonPath);
+            check("a signed document names its signature", signed.DigitalSignatures.Count == 1);
+            var signature = signed.DigitalSignatures[0];
+            check($"  the signing date is the one the document records ({signature.SignedOn})",
+                  signature.SignedOn is { Year: 2026, Month: 3, Day: 4 });
+            // The signer's own stated offset, not converted: a signature says when its
+            // signer thought they signed, and -04:00 is part of that statement. A
+            // conversion to this machine's zone would move the date on a UTC runner.
+            check($"  kept at the signer's own stated offset ({signature.SignedOn?.Offset})",
+                  signature.SignedOn?.Offset == TimeSpan.FromHours(-4));
+            check("  the signer's reason is read back as written",
+                  signature.Reason?.StartsWith("Example Corporation attests", StringComparison.Ordinal) == true);
+            check($"  and it is as long as a real one ({signature.Reason?.Length} characters)",
+                  signature.Reason?.Length > 80);
+            check("  an approval signature is not a certification one", !signature.IsCertification);
+            check("  so there is something to name the signature by", signature.HasDetail);
+        }
+
+        // A certification signature, and one that records no reason: the other fixture
+        // shapes the question's wording has to cope with.
+        using (var certified = new DocumentViewModel(state))
+        {
+            certified.Open(Path.Combine(dir, "signed-certified.pdf"));
+            check("a certification signature reports itself as one",
+                  certified.DigitalSignatures is [{ IsCertification: true }]);
+        }
+        using (var approval = new DocumentViewModel(state))
+        {
+            approval.Open(Path.Combine(dir, "signed-approval.pdf"));
+            check("a signature with no reason still names its date",
+                  approval.DigitalSignatures is [{ Reason: null, SignedOn: not null }]);
+        }
+
+        // 3. The heart of #576: removing it, and the file that is then written.
+        var removedPath = Path.Combine(saveDir, $"megapdf-selftest-sig-removed-{Guid.NewGuid():N}.pdf");
+        var keptPath = Path.Combine(saveDir, $"megapdf-selftest-sig-kept-{Guid.NewGuid():N}.pdf");
+        try
+        {
+            using (var vm = new DocumentViewModel(state))
+            {
+                vm.Open(reasonPath);
+                check("removing the signature says it removed one", vm.RemoveDigitalSignatures());
+                check("  the open document no longer reports as signed", !vm.IsSigned);
+                check("  and names no signature", vm.DigitalSignatures.Count == 0);
+                // The open document now genuinely differs from its file, and saying so is
+                // worth more than the removal usually being followed straight away by a save.
+                check("  the document is marked changed, because it now differs from its file", vm.IsDirty);
+                check("  removing again removes nothing", !vm.RemoveDigitalSignatures());
+                using (var file = File.Create(removedPath))
+                    vm.SaveAsTo(file, removedPath, Path.GetFileName(removedPath));
+            }
+            check("the saved file exists", new FileInfo(removedPath).Length > 0);
+            using (var reopened = new DocumentViewModel(state))
+            {
+                reopened.Open(removedPath);
+                check("  it opens", reopened.IsDocumentOpen);
+                check("  it keeps its page", reopened.Pages.Count == 1);
+                // #576 itself: before this, our own output still counted the signature we
+                // had destroyed, so this reopen warned about it all over again.
+                check("  and it does NOT report as signed", !reopened.IsSigned);
+                check("  nor as certified", !reopened.IsSignedCertification);
+                check("  and names no signature", reopened.DigitalSignatures.Count == 0);
+            }
+
+            // The twin: a save nobody asked to remove anything keeps the signature, exactly
+            // as it did before #576. This is the check that would catch a removal creeping
+            // into the save path itself, which is the one thing #576 decided against.
+            using (var vm = new DocumentViewModel(state))
+            {
+                vm.Open(reasonPath);
+                using var file = File.Create(keptPath);
+                vm.SaveAsTo(file, keptPath, Path.GetFileName(keptPath));
+            }
+            using (var reopened = new DocumentViewModel(state))
+            {
+                reopened.Open(keptPath);
+                check("a save that was not asked to remove the signature keeps it", reopened.IsSigned);
+                check("  and the kept signature still names itself",
+                      reopened.DigitalSignatures is [{ SignedOn: not null }]);
+            }
+        }
+        finally
+        {
+            if (File.Exists(removedPath)) File.Delete(removedPath);
+            if (File.Exists(keptPath)) File.Delete(keptPath);
+        }
+    }
+
+    /// <summary>
+    /// #576, the question itself, in a real window on the headless platform — the half that
+    /// can be silently wrong while every view-model check above still passes (#412's
+    /// lesson). What is proved here is what the person would have read, not only what
+    /// happened next: a dialog whose whole job is to explain can lose its explanation
+    /// without any behaviour changing.
+    ///
+    /// Dave's shape (#576, 2026-10-01): the three buttons #481 shipped stay exactly as they
+    /// are and the removal is a tick in the body, because a button would be a different
+    /// destination competing with the two already there while a tick modifies the
+    /// destination already chosen. The tick is ticked by default — by the time it matters
+    /// the save has already ended the signature (#476, 33 of 33, with no edit at all), so
+    /// it chooses between a file that admits it is unsigned and a file that goes on
+    /// claiming a signature it cannot support.
+    /// </summary>
+    private static void CheckSignedSaveQuestion(string dir, string state, Action<string, bool> check)
+    {
+        EnsureHeadlessPlatform();
+
+        var reasonPath = Path.Combine(dir, "signed-reason.pdf");
+        var certifiedPath = Path.Combine(dir, "signed-certified.pdf");
+        var plainPath = Path.Combine(dir, "fixture.pdf");
+
+        // A window per scenario, as CheckLinuxCloseAndQuit does: closing one disposes its
+        // view model, so none can be reused.
+        (ShellViewModel Shell, DocumentViewModel Vm, Views.MainWindow Window) Open(string path)
+        {
+            var shell = new ShellViewModel(state);
+            var vm = shell.CreateDocument();
+            vm.Open(path);
+            shell.AddTab(vm);
+            var window = new Views.MainWindow { DataContext = shell, Width = 1280, Height = 800 };
+            window.SkipRecoveryOffer = true;
+            window.Show();
+            MenuProbe.Pump();
+            return (shell, vm, window);
+        }
+
+        // 1. Saving a signed document puts the question, and the question says what it has
+        //    to say. Every assertion here is on the text the person would have read.
+        {
+            var (shell, vm, window) = Open(reasonPath);
+            Views.MainWindow.SignedSaveQuestion? asked = null;
+            window.AnswerSignedSaveForTest = question =>
+            {
+                asked = question;
+                return new Views.MainWindow.SignedSaveAnswer(
+                    Views.ConfirmSignedSaveWindow.Decision.Cancel, RemoveSignature: false);
+            };
+            vm.SaveCommand.Execute(null);
+            PumpUntil(() => window.SignedSaveAsked > 0, TimeSpan.FromSeconds(5));
+            MenuProbe.Pump();
+            check($"saving a signed document puts the question ({window.SignedSaveAsked} time(s))",
+                  window.SignedSaveAsked == 1 && asked is not null);
+            var q = asked ?? new Views.MainWindow.SignedSaveQuestion("", "", "", "", "", false);
+
+            // #602: it is a *digital signature*, the PDF specification's term and Adobe's,
+            // and never the bare "signed" the app also uses for the picture someone places.
+            check($"  it calls the thing a digital signature (\"{q.Title}\")",
+                  q.Title.Contains("digital signature", StringComparison.OrdinalIgnoreCase));
+            check("  it says the save will leave the signature invalid",
+                  q.Body.Contains("invalid", StringComparison.OrdinalIgnoreCase));
+            check("  and that no way of saving can keep it valid",
+                  q.Body.Contains("no way of saving", StringComparison.OrdinalIgnoreCase));
+            check("  it still offers the copy that keeps the original intact",
+                  q.Body.Contains("Save a copy", StringComparison.OrdinalIgnoreCase));
+
+            // Naming what we can: the date the signature records and the signer's reason.
+            check($"  it names the signature's own signing date (\"{q.Signature}\")",
+                  q.Signature.Contains("2026", StringComparison.Ordinal)
+                  && q.Signature.Contains("March", StringComparison.OrdinalIgnoreCase));
+            check("  and the reason its signer gave",
+                  q.Signature.Contains("Example Corporation attests", StringComparison.Ordinal));
+
+            // The removal, and the three promises its wording has to keep.
+            check($"  the removal is offered as a tick (\"{q.RemoveLabel}\")",
+                  q.RemoveLabel.Contains("remove the signature", StringComparison.OrdinalIgnoreCase));
+            check("  ticked, because the save ends the signature either way", q.RemoveTicked);
+            check("  the wording says the document you opened is not changed",
+                  q.RemoveOffer.Contains("not changed", StringComparison.OrdinalIgnoreCase));
+            check("  and that the choice reaches only the file being written",
+                  q.RemoveOffer.Contains("only the file being written", StringComparison.OrdinalIgnoreCase));
+            // #602: a digital signature leaves the document readable to anyone, and nothing
+            // here may let someone read it as encryption or as a password being removed.
+            check("  and that the signature never kept anyone from opening the document",
+                  q.RemoveOffer.Contains("never kept anyone from opening", StringComparison.OrdinalIgnoreCase));
+            var everything = $"{q.Title} {q.Signature} {q.Body} {q.RemoveLabel} {q.RemoveOffer}";
+            var forbidden = new[] { "encrypt", "password", "protect", "secure", "lock", "unlock" };
+            var found = forbidden.Where(w => everything.Contains(w, StringComparison.OrdinalIgnoreCase)).ToList();
+            check($"  and nothing in it can be read as the document being encrypted or protected "
+                  + $"({(found.Count == 0 ? "no such word" : string.Join(", ", found))})",
+                  found.Count == 0);
+
+            // Cancel changes nothing at all: not the file, not the document, not the flag.
+            check("  Cancel leaves the document signed and unchanged",
+                  vm.IsSigned && !vm.IsDirty && vm.IsDocumentOpen);
+
+            // And it is asked again next time: a cancel is not an answer to remember, and
+            // neither is an answer (#558's grain — this is a decision about a document).
+            vm.SaveCommand.Execute(null);
+            PumpUntil(() => window.SignedSaveAsked > 1, TimeSpan.FromSeconds(5));
+            MenuProbe.Pump();
+            check($"  the next save asks again ({window.SignedSaveAsked} in all), nothing is remembered",
+                  window.SignedSaveAsked == 2);
+
+            window.SkipCloseConfirmation();
+            window.Close();
+            MenuProbe.Pump();
+            shell.Dispose();
+        }
+
+        // 2. Overwrite with the tick left ticked: the signature goes before anything is
+        //    written, so the bytes that replace the original carry none. Overwrite is the
+        //    one path that needs no file picker, which is why it is the one driven here.
+        {
+            var (shell, vm, window) = Open(reasonPath);
+            window.AnswerSignedSaveForTest = _ => new Views.MainWindow.SignedSaveAnswer(
+                Views.ConfirmSignedSaveWindow.Decision.Overwrite, RemoveSignature: true);
+            check("overwriting a signed document: it is signed to begin with", vm.IsSigned);
+            vm.SaveCommand.Execute(null);
+            PumpUntil(() => !vm.IsSigned, TimeSpan.FromSeconds(10));
+            MenuProbe.Pump();
+            check("  the tick took the signature out of what is being saved", !vm.IsSigned);
+            check("  and the document names no signature any more", vm.DigitalSignatures.Count == 0);
+            window.SkipCloseConfirmation();
+            window.Close();
+            MenuProbe.Pump();
+            shell.Dispose();
+        }
+
+        // 3. Overwrite with the tick cleared: nothing is removed. The author's bytes are
+        //    the author's until somebody says otherwise, which is the whole reason the
+        //    question exists rather than a silent strip.
+        {
+            var (shell, vm, window) = Open(reasonPath);
+            window.AnswerSignedSaveForTest = _ => new Views.MainWindow.SignedSaveAnswer(
+                Views.ConfirmSignedSaveWindow.Decision.Overwrite, RemoveSignature: false);
+            vm.SaveCommand.Execute(null);
+            PumpUntil(() => window.SignedSaveAsked > 0, TimeSpan.FromSeconds(5));
+            MenuProbe.Pump();
+            check("clearing the tick keeps the signature, dead or not", vm.IsSigned);
+            window.SkipCloseConfirmation();
+            window.Close();
+            MenuProbe.Pump();
+            shell.Dispose();
+        }
+
+        // 4. A certification signature gets its own, stronger wording — measured as the
+        //    common case on real signed documents, not the rare one (#476: 33 of 33).
+        {
+            var (shell, vm, window) = Open(certifiedPath);
+            Views.MainWindow.SignedSaveQuestion? asked = null;
+            window.AnswerSignedSaveForTest = question =>
+            {
+                asked = question;
+                return new Views.MainWindow.SignedSaveAnswer(
+                    Views.ConfirmSignedSaveWindow.Decision.Cancel, RemoveSignature: false);
+            };
+            vm.SaveCommand.Execute(null);
+            PumpUntil(() => window.SignedSaveAsked > 0, TimeSpan.FromSeconds(5));
+            MenuProbe.Pump();
+            check("a certified document says its author declared it closed to changes",
+                  asked?.Title.Contains("certifying", StringComparison.OrdinalIgnoreCase) == true
+                  && asked.Body.Contains("certifies it", StringComparison.OrdinalIgnoreCase));
+            check("  and still offers the removal, with the same promises",
+                  asked?.RemoveTicked == true
+                  && asked.RemoveOffer.Contains("not changed", StringComparison.OrdinalIgnoreCase));
+            window.SkipCloseConfirmation();
+            window.Close();
+            MenuProbe.Pump();
+            shell.Dispose();
+        }
+
+        // 5. An unsigned document is never asked — the question is not a tax on ordinary
+        //    saving, which is what #481 was careful about in the first place.
+        {
+            var (shell, vm, window) = Open(plainPath);
+            window.AnswerSignedSaveForTest = _ => new Views.MainWindow.SignedSaveAnswer(
+                Views.ConfirmSignedSaveWindow.Decision.Cancel, RemoveSignature: false);
+            vm.SaveCommand.Execute(null);
+            MenuProbe.Pump();
+            PumpFor(TimeSpan.FromMilliseconds(200));
+            check($"an unsigned document is never asked ({window.SignedSaveAsked} question(s) put)",
+                  window.SignedSaveAsked == 0);
+            window.SkipCloseConfirmation();
+            window.Close();
+            MenuProbe.Pump();
+            shell.Dispose();
+        }
     }
 
     /// <summary>

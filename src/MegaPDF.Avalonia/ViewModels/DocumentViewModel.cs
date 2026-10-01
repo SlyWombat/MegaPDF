@@ -394,6 +394,40 @@ public sealed partial class DocumentViewModel : ObservableObject, IDisposable
     private bool _isSignedCertification;
 
     /// <summary>
+    /// The document's digital signatures, so the save warning can name the one it is asking
+    /// about (#576): the signing date it records and the signer's own reason, which is all
+    /// the engine can honestly say (see <see cref="PdfDigitalSignature"/> for why the
+    /// signer's name is not among it). Empty when <see cref="IsSigned"/> is false. Read on
+    /// demand rather than at open, because nothing needs it until a save is about to leave
+    /// a signature invalid.
+    /// </summary>
+    public IReadOnlyList<PdfDigitalSignature> DigitalSignatures =>
+        _document is { } document && IsSigned ? document.DigitalSignatures : [];
+
+    /// <summary>
+    /// Removes every digital signature from the open document, in memory, on the person's
+    /// explicit say-so (#576), and answers whether any went. The file on disk is untouched;
+    /// this reaches only what a save writes next, which is what the question promised.
+    ///
+    /// <para>The document is marked dirty, and <see cref="IsSigned"/> goes false, because
+    /// the open document is now genuinely different from its file — telling the truth about
+    /// that matters more than the removal usually being followed immediately by a save.
+    /// Nothing calls this on its own: a save that was not asked to remove the signature
+    /// behaves exactly as it did before #576.</para>
+    /// </summary>
+    public bool RemoveDigitalSignatures()
+    {
+        if (_document is not { } document || !IsSigned)
+            return false;
+        if (document.RemoveDigitalSignatures() <= 0)
+            return false;
+        IsSigned = document.IsSigned;
+        IsSignedCertification = document.IsSignedCertification;
+        IsDirty = true;
+        return true;
+    }
+
+    /// <summary>
     /// The edited-marker convention macOS and Windows share: the title carries the
     /// document name, and unsaved work is a bullet rather than an asterisk.
     /// </summary>

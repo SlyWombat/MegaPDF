@@ -72,6 +72,27 @@ public interface IPdfDocument : IDisposable
     bool IsSignedCertification { get; }
 
     /// <summary>
+    /// The document's digital signatures, in the document's own order, so a question about
+    /// removing them can name which signature is meant (#576). Empty exactly when
+    /// <see cref="IsSigned"/> is false — both come from the same count, so a signature
+    /// *field* with no signature in it appears in neither (the false positive #476 §5b
+    /// measured and #576 fixed). Read on demand rather than once per open: nothing needs
+    /// it until a save is about to destroy something.
+    /// </summary>
+    IReadOnlyList<PdfDigitalSignature> DigitalSignatures { get; }
+
+    /// <summary>
+    /// Removes every digital signature from the open document, in memory, and answers how
+    /// many went (#576). Only ever on the person's explicit say-so: a save never calls it,
+    /// and a save that keeps the signature behaves exactly as it did before. The file on
+    /// disk is untouched until something saves it, so this affects only what is written
+    /// next. Afterwards <see cref="IsSigned"/> is false and the saved file reports no
+    /// signature, which is the defect #576 was opened on — before it, our own output still
+    /// counted a signature we had already destroyed, on 98 of 98 rewritten documents.
+    /// </summary>
+    int RemoveDigitalSignatures();
+
+    /// <summary>
     /// Writes a copy encrypted with AES-256 under new passwords, in place of any security
     /// the document had (#131). <paramref name="userPassword"/> opens the copy with
     /// <paramref name="permissions"/>; <paramref name="ownerPassword"/> opens it with all of

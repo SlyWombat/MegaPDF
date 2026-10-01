@@ -2563,31 +2563,87 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
+    /// For the self-test (#576): answers the signed-save question instead of putting the
+    /// window up, the same substitution <see cref="AnswerUnsavedChangesForTest"/> is. It is
+    /// handed what the question would have said, so a check can assert on the wording the
+    /// person would have read rather than only on what happened next — a dialog that
+    /// explains is the whole point of this one, and a check that never reads the
+    /// explanation would not notice it going missing.
+    /// </summary>
+    internal Func<SignedSaveQuestion, SignedSaveAnswer>? AnswerSignedSaveForTest { get; set; }
+
+    /// <summary>How many times the signed-save question has been put. For the self-test.</summary>
+    internal int SignedSaveAsked { get; private set; }
+
+    /// <summary>
+    /// What the signed-save question says, as the dialog would say it (#576), including the
+    /// tick's label and the state it is offered in — a default is part of what is being
+    /// asked, so a check that never read it could not notice the default changing.
+    /// </summary>
+    internal sealed record SignedSaveQuestion(string Title, string Signature, string Body,
+                                              string RemoveLabel, string RemoveOffer, bool RemoveTicked);
+
+    /// <summary>A button and the state of the tick beside it (#576).</summary>
+    internal sealed record SignedSaveAnswer(ConfirmSignedSaveWindow.Decision Choice, bool RemoveSignature);
+
+    /// <summary>
     /// #476, #481: the warning before Save overwrites a signed original. Explains what
     /// saving here will do, offers Save a copy as the DEFAULT choice, and requires a
     /// deliberate secondary choice to overwrite anyway. Nothing is refused — overwriting a
     /// signed document is available, it just cannot be an accident. Returns true when the
-    /// caller should go on and overwrite; false when Save a copy already handled the save
-    /// (or the user cancelled), so the caller must not save again.
+    /// caller should go on and overwrite; false when one of the copy paths already handled
+    /// the save (or the user cancelled), so the caller must not save again.
+    ///
+    /// <para>#576 adds the third choice here rather than in a second dialog: save the copy
+    /// without the signature. It is a variant of Save a copy, not of the overwrite, which
+    /// is what lets the wording promise that the document you opened is untouched whichever
+    /// of the three answers is given. The answer is not remembered — the next save of the
+    /// next document asks again, because it is a decision about that document (#558's
+    /// shape: explain, then let the person decide).</para>
     /// </summary>
     private async Task<bool> ConfirmOverwriteSignedAsync()
     {
         if (Active is not { IsSigned: true } vm)
             return true;
 
-        var dialog = new ConfirmSignedSaveWindow();
-        dialog.SetCertification(vm.IsSignedCertification);
-        await dialog.ShowDialog(this);
-        switch (dialog.Choice)
+        SignedSaveAsked++;
+        var answer = await AskAboutSignedSaveAsync(vm);
+        switch (answer.Choice)
         {
             case ConfirmSignedSaveWindow.Decision.SaveAsCopy:
-                await SaveAsAsync();
+                await SaveAsAsync(removeSignature: answer.RemoveSignature);
                 return false;   // the copy path has saved; the caller must not save again
             case ConfirmSignedSaveWindow.Decision.Overwrite:
-                return true;    // deliberate: overwrite the signed original anyway
+                // Deliberate: overwrite the signed original anyway. The tick takes effect
+                // here, before the bytes are written, and only on the open document in
+                // memory — the file on disk is replaced by the save that follows, not by
+                // this.
+                if (answer.RemoveSignature)
+                    vm.RemoveDigitalSignatures();
+                return true;
             default:
-                return false;   // cancelled: nothing saved
+                return false;   // cancelled: nothing saved, and the tick means nothing
         }
+    }
+
+    private async Task<SignedSaveAnswer> AskAboutSignedSaveAsync(DocumentViewModel vm)
+    {
+        var dialog = new ConfirmSignedSaveWindow();
+        dialog.SetCertification(vm.IsSignedCertification);
+        dialog.SetSignatures(vm.DigitalSignatures);
+        if (AnswerSignedSaveForTest is { } answer)
+        {
+            return answer(new SignedSaveQuestion(
+                dialog.PromptText.Text ?? "",
+                dialog.SignatureText.IsVisible ? dialog.SignatureText.Text ?? "" : "",
+                dialog.BodyText.Text ?? "",
+                Strings.SignedSaveRemoveSignature,
+                dialog.RemoveOfferText.Text ?? "",
+                dialog.RemoveSignature));
+        }
+
+        await dialog.ShowDialog(this);
+        return new SignedSaveAnswer(dialog.Choice, dialog.RemoveSignature);
     }
 
     /// <summary>
@@ -2600,6 +2656,10 @@ public partial class MainWindow : Window
     {
         var dialog = new ConfirmSignedSaveWindow();
         dialog.SetCertification(certified);
+        // #576: the capture shows the signature being named, which is half of what the
+        // question is for; the open document's own signatures when there are any, so the
+        // shot is of real wording rather than a placeholder.
+        dialog.SetSignatures(Active?.DigitalSignatures ?? []);
         dialog.Show(this);
         return dialog;
     }
@@ -2659,7 +2719,13 @@ public partial class MainWindow : Window
     /// re-open would need (#386). Anything else keeps the exact PDF Save As path this
     /// method has always taken.
     /// </summary>
-    private async Task SaveAsAsync(string? suggestedName = null)
+    /// <param name="removeSignature">
+    /// #576: leave the document's digital signature out of the copy, because the person
+    /// said so in the signed-save question. The removal happens after the picker and
+    /// immediately before the write, never before: a removal ahead of a picker the person
+    /// then cancels would have taken the signature out of the open document for nothing.
+    /// </param>
+    private async Task SaveAsAsync(string? suggestedName = null, bool removeSignature = false)
     {
         if (Active is not { IsIdle: true } vm)
             return;
@@ -2717,15 +2783,24 @@ public partial class MainWindow : Window
             // and DocumentPath follows the copy (#68). The file is opened — and so
             // truncated — only once the verified bytes exist (#145).
             var wasSigned = vm.IsSigned;
+            // #576: the picker is past, so this is the moment the person's answer takes
+            // effect. It reaches only the bytes about to be written — the file the document
+            // was opened from is not touched by it, which is what the question promised.
+            var removed = removeSignature && vm.RemoveDigitalSignatures();
             if (await vm.SaveAsThroughAsync(async () => await file.OpenWriteAsync(), file.TryGetLocalPath(), file.Name))
             {
                 OpenedFile = file;
                 // #476, #481: said quietly, once, then out of the way — the common,
-                // already-safe path (Dave's framing) still deserves the one fact that
-                // the signature on the original does not carry to this copy, but never
-                // a dialog to dismiss. Replaces the ordinary "Saved file" status: the
-                // save having worked is otherwise obvious (the picker closed).
-                if (wasSigned)
+                // already-safe path (Dave's framing) still deserves the one fact about
+                // what became of the signature, but never a dialog to dismiss. Replaces
+                // the ordinary "Saved file" status: the save having worked is otherwise
+                // obvious (the picker closed). #576 corrected the kept-signature wording:
+                // it used to say the signature did not carry over to the copy, and the
+                // signature dictionary does carry over — the copy reports as signed when
+                // it is reopened, which is the defect this issue was opened on.
+                if (removed)
+                    vm.Status = Strings.SignatureRemovedNotice;
+                else if (wasSigned)
                     vm.Status = Strings.SignatureNotCarriedNotice;
             }
         }
@@ -2861,10 +2936,9 @@ public partial class MainWindow : Window
         if (!vm.IsSigned)
             return (current, currentPath);
 
-        var dialog = new ConfirmSignedSaveWindow();
-        dialog.SetCertification(vm.IsSignedCertification);
-        await dialog.ShowDialog(this);
-        switch (dialog.Choice)
+        SignedSaveAsked++;
+        var answer = await AskAboutSignedSaveAsync(vm);
+        switch (answer.Choice)
         {
             case ConfirmSignedSaveWindow.Decision.SaveAsCopy:
                 var picked = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
@@ -2883,8 +2957,14 @@ public partial class MainWindow : Window
                     vm.Status = Strings.FileNotLocal;
                     return null;
                 }
+                // #576: after the picker, never before — a removal ahead of a picker the
+                // person then cancels would have taken the signature out for nothing.
+                if (answer.RemoveSignature)
+                    vm.RemoveDigitalSignatures();
                 return (picked, pickedLocal);
             case ConfirmSignedSaveWindow.Decision.Overwrite:
+                if (answer.RemoveSignature)
+                    vm.RemoveDigitalSignatures();
                 return (current, currentPath); // deliberate: overwrite the signed original anyway
             default:
                 return null; // cancelled: nothing written, security unchanged

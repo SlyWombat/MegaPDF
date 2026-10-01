@@ -61,6 +61,7 @@
 #endif
 #include "fpdf_edit.h"
 #include "fpdf_save.h"   // FPDF_INCREMENTAL: the one save shape the core does not expose (#267)
+#include "fpdf_signature.h"   // FPDF_GetSignatureCount as the oracle for #576's false positive
 #include "fpdf_text.h"
 #include "fpdfview.h"
 // The #173 leak hunt, shared with tools/leakcheck so the suite and the corpus battery
@@ -315,6 +316,191 @@ void test_signature_detection(const std::string& fixtures) {
               "forms.pdf (ordinary AcroForm, no signature) sets neither signature bit",
               std::to_string(flags));
     }
+
+    // #476 §5b/#576: a signature *field* with no /V is not a signature, and the flag must
+    // not fire on one -- otherwise the app asks whether to remove a signature the document
+    // does not have. This is the one check in this function that was red before #576:
+    // FPDF_GetSignatureCount() counts the empty field, so MEGAPDF_DOC_SIGNED was set.
+    Doc unsigned_field(fixtures + "/signature-field-unsigned.pdf");
+    check(unsigned_field.doc != nullptr, "signature-field-unsigned.pdf opens");
+    if (unsigned_field.doc) {
+        const unsigned int flags = megapdf_document_flags(unsigned_field.doc);
+        check((flags & (MEGAPDF_DOC_SIGNED | MEGAPDF_DOC_SIGNED_CERTIFICATION)) == 0,
+              "signature-field-unsigned.pdf (a /FT /Sig field with no /V) sets neither "
+              "signature bit", std::to_string(flags));
+        check(megapdf_signature_count(unsigned_field.doc) == 0,
+              "signature-field-unsigned.pdf: megapdf_signature_count() is 0",
+              std::to_string(megapdf_signature_count(unsigned_field.doc)));
+        // And PDFium still counts it, which is what makes the fixture the right fixture: if
+        // this ever stopped being true the fixture would be proving nothing. PDFium as the
+        // oracle, opened independently of the core (#149).
+        auto bytes = read_file(fixtures + "/signature-field-unsigned.pdf");
+        FPDF_DOCUMENT raw = FPDF_LoadMemDocument(bytes.data(), static_cast<int>(bytes.size()), nullptr);
+        check(raw != nullptr && FPDF_GetSignatureCount(raw) == 1,
+              "signature-field-unsigned.pdf: PDFium itself still counts the empty field "
+              "(so the fixture still exercises the false positive)",
+              raw == nullptr ? "would not open" : std::to_string(FPDF_GetSignatureCount(raw)));
+        FPDF_CloseDocument(raw);
+    }
+}
+
+// Contract 6's write sink, defined with the save tests further down: a save is needed here
+// too, and #576's tests read better beside the detection they extend than at the save tests.
+int collect(void* ctx, const void* data, size_t size);
+
+// #576: what the core can honestly say about a signature, and removing one on request.
+//
+// The naming half exists because a question about "the signature" has to name which
+// signature or the person cannot tell what they are being asked to discard. What PDFium
+// hands us is the signing time and the reason; the signer's name it does not (see the
+// header). Measured against #476's 33 genuinely signed documents for #576: 33 of 33 carry
+// both a /M and a /Reason, so this is the shape real documents have.
+void test_signature_naming_and_removal(const std::string& fixtures) {
+    // The /M of signed-reason.pdf is D:20260304152055-04'00' -- a real-world shape: a
+    // signer's own local time with a stated offset, neither UTC nor the build machine's.
+    Doc reason(fixtures + "/signed-reason.pdf");
+    check(reason.doc != nullptr, "signed-reason.pdf opens");
+    if (reason.doc) {
+        check(megapdf_signature_count(reason.doc) == 1, "signed-reason.pdf: one signature",
+              std::to_string(megapdf_signature_count(reason.doc)));
+        megapdf_signature info{};
+        check(megapdf_signature_info(reason.doc, 0, &info) == MEGAPDF_OK,
+              "signed-reason.pdf: megapdf_signature_info() succeeds");
+        check(info.year == 2026 && info.month == 3 && info.day == 4,
+              "signed-reason.pdf: /M reads back as 4 March 2026",
+              std::to_string(info.year) + "-" + std::to_string(info.month) + "-" + std::to_string(info.day));
+        check(info.hour == 15 && info.minute == 20 && info.second == 55,
+              "signed-reason.pdf: /M's time of day reads back as 15:20:55",
+              std::to_string(info.hour) + ":" + std::to_string(info.minute) + ":" + std::to_string(info.second));
+        // The signer's own stated offset, not a conversion: a signature says when its
+        // signer thought they signed, and -04'00' is part of that statement.
+        check(info.utc_offset_minutes == -240,
+              "signed-reason.pdf: /M's UTC offset is -4 hours, unconverted",
+              std::to_string(info.utc_offset_minutes));
+        check(info.docmdp_permission == 0,
+              "signed-reason.pdf: an approval signature, no /DocMDP permission",
+              std::to_string(info.docmdp_permission));
+        check(info.has_reason == 1, "signed-reason.pdf: has_reason is set");
+        const size_t n = megapdf_signature_reason(reason.doc, 0, nullptr, 0);
+        std::vector<unsigned short> text(n);
+        check(megapdf_signature_reason(reason.doc, 0, text.data(), n) == n,
+              "signed-reason.pdf: the reason fills the length it counted", std::to_string(n));
+        std::string ascii;
+        for (unsigned short u : text) ascii.push_back(u < 128 ? static_cast<char>(u) : '?');
+        check(ascii.rfind("Example Corporation attests", 0) == 0,
+              "signed-reason.pdf: the reason reads back as the signer wrote it", ascii.substr(0, 40));
+        // Long reasons are the real case, not the exception: the shortest of the two that
+        // #476's 33 documents carry is 86 characters and the other is 118. A dialog that
+        // only ever saw a short one would not show what a person actually meets.
+        check(n > 80, "signed-reason.pdf: the reason is as long as a real one",
+              std::to_string(n));
+    }
+
+    // An approval signature with no /Reason: has_reason clear, and the counted length 0,
+    // so an app can ask without a round trip that answers nothing.
+    Doc approval(fixtures + "/signed-approval.pdf");
+    if (approval.doc) {
+        megapdf_signature info{};
+        check(megapdf_signature_info(approval.doc, 0, &info) == MEGAPDF_OK,
+              "signed-approval.pdf: megapdf_signature_info() succeeds");
+        check(info.has_reason == 0, "signed-approval.pdf: no /Reason, has_reason clear");
+        check(megapdf_signature_reason(approval.doc, 0, nullptr, 0) == 0,
+              "signed-approval.pdf: the reason counts 0 code units");
+        check(info.year == 2025 && info.month == 1 && info.day == 1,
+              "signed-approval.pdf: /M reads back as 1 January 2025");
+        check(info.utc_offset_minutes == 0, "signed-approval.pdf: +00'00' is a zero offset");
+        check(megapdf_signature_info(approval.doc, 1, &info) == MEGAPDF_ERR_ARGUMENT,
+              "an index past the last signature is MEGAPDF_ERR_ARGUMENT");
+        check(megapdf_signature_info(approval.doc, -1, &info) == MEGAPDF_ERR_ARGUMENT,
+              "a negative index is MEGAPDF_ERR_ARGUMENT");
+    }
+    check(megapdf_signature_count(nullptr) == -1, "megapdf_signature_count(NULL) is -1");
+    check(megapdf_signatures_remove(nullptr) == -1, "megapdf_signatures_remove(NULL) is -1");
+    check(megapdf_signature_reason(nullptr, 0, nullptr, 0) == 0,
+          "megapdf_signature_reason(NULL) counts 0");
+    {
+        megapdf_signature info{};
+        check(megapdf_signature_info(nullptr, 0, &info) == MEGAPDF_ERR_ARGUMENT,
+              "megapdf_signature_info(NULL) is MEGAPDF_ERR_ARGUMENT");
+        Doc d(fixtures + "/signed-approval.pdf");
+        check(megapdf_signature_info(d.doc, 0, nullptr) == MEGAPDF_ERR_ARGUMENT,
+              "megapdf_signature_info() with a NULL out is MEGAPDF_ERR_ARGUMENT");
+    }
+
+    // Removal, and then the half of #576 that matters most: the SAVED file must not report
+    // as signed. Before #576 a save carried the dead signature dictionary into the output
+    // and FPDF_GetSignatureCount() still counted it on 98 of 98 rewritten documents (#476
+    // §5a), so reopening our own output warned about a signature already destroyed.
+    for (const char* name : {"signed-approval.pdf", "signed-certified.pdf", "signed-reason.pdf"}) {
+        const std::string path = fixtures + "/" + name;
+        Doc d(path);
+        if (d.doc == nullptr) { check(false, std::string("removal: ") + name + " opens"); continue; }
+        check(megapdf_signatures_remove(d.doc) == 1,
+              std::string("removal: ") + name + ": one signature removed");
+        check(megapdf_signature_count(d.doc) == 0,
+              std::string("removal: ") + name + ": no signature left in the open document");
+        const unsigned int flags = megapdf_document_flags(d.doc);
+        check((flags & (MEGAPDF_DOC_SIGNED | MEGAPDF_DOC_SIGNED_CERTIFICATION)) == 0,
+              std::string("removal: ") + name + ": neither signature bit left",
+              std::to_string(flags));
+        check(megapdf_signatures_remove(d.doc) == 0,
+              std::string("removal: ") + name + ": removing again removes nothing");
+
+        std::vector<unsigned char> out;
+        check(megapdf_save(d.doc, collect, &out) == MEGAPDF_OK,
+              std::string("removal: ") + name + ": the document still saves");
+        megapdf_document* saved = megapdf_open(out.data(), out.size(), nullptr);
+        check(saved != nullptr, std::string("removal: ") + name + ": the saved file opens");
+        if (saved != nullptr) {
+            check(megapdf_page_count(saved) == 1,
+                  std::string("removal: ") + name + ": the saved file keeps its page");
+            check(megapdf_signature_count(saved) == 0,
+                  std::string("removal: ") + name + ": the SAVED file carries no signature",
+                  std::to_string(megapdf_signature_count(saved)));
+            check((megapdf_document_flags(saved) & MEGAPDF_DOC_SIGNED) == 0,
+                  std::string("removal: ") + name + ": the saved file does not report as signed");
+            // The point of the two-call removal: FPDFPage_RemoveAnnot alone would leave the
+            // field in /AcroForm /Fields and PDFium would still count it here.
+            FPDF_DOCUMENT raw = FPDF_LoadMemDocument(out.data(), static_cast<int>(out.size()), nullptr);
+            check(raw != nullptr && FPDF_GetSignatureCount(raw) == 0,
+                  std::string("removal: ") + name + ": PDFium itself counts none in the saved file",
+                  raw == nullptr ? "would not open" : std::to_string(FPDF_GetSignatureCount(raw)));
+            FPDF_CloseDocument(raw);
+            megapdf_close(saved);
+        }
+    }
+
+    // Keeping the signature is still exactly what it was: nothing removes it by itself.
+    {
+        Doc d(fixtures + "/signed-certified.pdf");
+        std::vector<unsigned char> out;
+        check(megapdf_save(d.doc, collect, &out) == MEGAPDF_OK, "a save with the signature kept succeeds");
+        megapdf_document* saved = megapdf_open(out.data(), out.size(), nullptr);
+        check(saved != nullptr && megapdf_signature_count(saved) == 1,
+              "a save that was not asked to remove the signature keeps it (and it is still dead: #476)");
+        megapdf_close(saved);
+    }
+
+    // Nothing to remove is not a failure, and nothing else is disturbed.
+    {
+        Doc d(fixtures + "/forms.pdf");
+        check(megapdf_signatures_remove(d.doc) == 0,
+              "removing signatures from an unsigned AcroForm removes nothing");
+        Page p(d.doc, 0);
+        megapdf_form_fields* fields = megapdf_form_fields_load(p.page);
+        check(fields != nullptr && megapdf_form_field_count(fields) > 0,
+              "an unsigned document's own form fields are untouched by the attempt",
+              std::to_string(fields != nullptr ? megapdf_form_field_count(fields) : 0));
+        megapdf_form_fields_free(fields);
+    }
+    // And the empty signature field: there is no signature, so there is nothing to remove.
+    // The field itself is the author's and stays -- a document prepared for signing is still
+    // a document prepared for signing.
+    {
+        Doc d(fixtures + "/signature-field-unsigned.pdf");
+        check(megapdf_signatures_remove(d.doc) == 0,
+              "an empty signature field is not a signature, so nothing is removed");
+    }
 }
 
 // #476/#481, the real-document half of the same check: run megapdf_document_flags() over
@@ -337,6 +523,7 @@ void test_signature_detection_corpus() {
     }
     std::error_code ec;
     int total = 0, signed_count = 0, certified_count = 0, unopened = 0;
+    int with_date = 0, with_reason = 0, removed_total = 0, saved_clean = 0;   // #576
     for (const auto& entry : std::filesystem::recursive_directory_iterator(dir, ec)) {
         if (ec || !entry.is_regular_file()) continue;
         if (entry.path().extension() != ".pdf") continue;
@@ -354,6 +541,43 @@ void test_signature_detection_corpus() {
             check(false, "signature detection (real corpus): did not set MEGAPDF_DOC_SIGNED",
                   entry.path().string());
         }
+        // #576, over the same real population. Three things the fixtures cannot prove:
+        // that the date and reason the question names are actually there on real
+        // documents, that the removal reaches a real signature's widget, and that our own
+        // saved output then stops reporting as signed -- which is the defect this issue
+        // was opened on, measured at 98 of 98 before the fix.
+        megapdf_signature info{};
+        if (megapdf_signature_info(d.doc, 0, &info) == MEGAPDF_OK) {
+            if (info.year != 0) with_date++;
+            if (info.has_reason) with_reason++;
+        }
+        const int removed = megapdf_signatures_remove(d.doc);
+        if (removed < 1) {
+            check(false, "signature removal (real corpus): no signature was reachable to remove",
+                  entry.path().string());
+            continue;
+        }
+        removed_total += removed;
+        if (megapdf_signature_count(d.doc) != 0) {
+            check(false, "signature removal (real corpus): a signature survived the removal",
+                  entry.path().string());
+            continue;
+        }
+        std::vector<unsigned char> out;
+        if (megapdf_save(d.doc, collect, &out) != MEGAPDF_OK) {
+            check(false, "signature removal (real corpus): the document would not save after removal",
+                  entry.path().string());
+            continue;
+        }
+        megapdf_document* saved = megapdf_open(out.data(), out.size(), nullptr);
+        const int saved_signatures = saved != nullptr ? megapdf_signature_count(saved) : -1;
+        megapdf_close(saved);
+        if (saved_signatures == 0) {
+            saved_clean++;
+        } else {
+            check(false, "signature removal (real corpus): the SAVED file still reports as signed",
+                  entry.path().string() + " -> " + std::to_string(saved_signatures));
+        }
     }
     check(total > 0, "signature detection (real corpus): MEGAPDF_SIGNED_CORPUS held at least one .pdf", dir);
     check(unopened == 0, "signature detection (real corpus): every document opened",
@@ -361,6 +585,10 @@ void test_signature_detection_corpus() {
     std::printf("signature detection (real corpus): %d/%d set MEGAPDF_DOC_SIGNED, %d of those also "
                 "MEGAPDF_DOC_SIGNED_CERTIFICATION (%s)\n",
                 signed_count, total, certified_count, dir);
+    std::printf("signature naming (real corpus, #576): %d/%d record a signing date, %d/%d a reason\n",
+                with_date, signed_count, with_reason, signed_count);
+    std::printf("signature removal (real corpus, #576): %d removed over %d documents, %d saved files "
+                "report no signature\n", removed_total, signed_count, saved_clean);
 }
 
 // Pages still open when the document closes are closed by the core, and a page
@@ -9044,6 +9272,7 @@ int main(int argc, char** argv) {
     test_document_and_geometry(argv[1]);
     test_dynamic_xfa(argv[1]);
     test_signature_detection(argv[1]);
+    test_signature_naming_and_removal(argv[1]);
     test_signature_detection_corpus();
     test_lifecycle(argv[1]);
     test_dead_handles(argv[1]);

@@ -71,6 +71,9 @@ jobs:
           # #457: dynamic-xfa.pdf/hybrid-xfa.pdf, the self-test's "dynamic XFA" check.
           python3 tools/gen_xfa_fixtures.py "$RUNNER_TEMP/fixtures"
           # #481: signed-approval.pdf/signed-certified.pdf, the self-test's "signed document" check.
+          # #576 adds signed-reason.pdf (a signing date and a signer's reason, which the
+          # save question names) and signature-field-unsigned.pdf (a signature field with
+          # no signature in it: #476 §5b's false positive).
           python3 tools/gen_signature_fixtures.py "$RUNNER_TEMP/fixtures"
 
           "$BIN" > "$RUNNER_TEMP/first-launch.log" 2>&1 &
