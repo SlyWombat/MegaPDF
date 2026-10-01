@@ -31,6 +31,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -253,8 +254,11 @@ fun ViewerScreen(
      * only the one destructive moment asks.
      */
     isSignedOverwritePending: Boolean = false,
-    onConfirmSignedOverwrite: () -> Unit = {},
-    onCancelSignedOverwrite: () -> Unit = {},
+    /** #576: carries the removal tick's answer — true when it was checked. */
+    onConfirmSignedOverwrite: (Boolean) -> Unit = {},
+    /** #576: true when reached via the Save-a-copy button with the tick checked; false for a
+     *  plain Cancel, where the tick's state means nothing because nothing is being saved. */
+    onCancelSignedOverwrite: (Boolean) -> Unit = {},
     hasDocumentFile: Boolean = false,
     unlockPrompt: UnlockPrompt? = null,
     passwordPrompt: PasswordCommandMode? = null,
@@ -632,8 +636,19 @@ fun ViewerScreen(
         // copy is the recommended, prominent choice (Dave's framing: it is already the safe,
         // common path); overwriting is offered too — nothing here is refused — but needs the
         // second, deliberate tap.
+        //
+        // #576: the removal tick lives in this same dialog rather than a fourth button or a
+        // second dialog, parity with the choice every other platform now offers. Material's own
+        // affordance for a yes/no inside a confirm dialog is a Checkbox row, so that is what
+        // expresses it here, the same way a CheckBox does in a WinUI/Avalonia dialog -- the
+        // idiom is the control library, not the overall shape. `remember` gives it a fresh
+        // default every time this dialog re-enters composition, so it is never remembered
+        // across documents or across opens of the same one (#558): ticked by default, because
+        // the save has already ended the signature either way (#476) and this only decides
+        // whether the written file still claims one it cannot support.
+        var removeSignature by remember { mutableStateOf(true) }
         AlertDialog(
-            onDismissRequest = onCancelSignedOverwrite,
+            onDismissRequest = { onCancelSignedOverwrite(false) },
             title = {
                 Text(
                     stringResource(
@@ -650,17 +665,30 @@ fun ViewerScreen(
                             else R.string.signed_overwrite_body
                         )
                     )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(checked = removeSignature, onCheckedChange = { removeSignature = it })
+                        Text(
+                            stringResource(R.string.signed_overwrite_remove_signature),
+                            modifier = Modifier.clickable { removeSignature = !removeSignature },
+                        )
+                    }
+                    Text(
+                        stringResource(R.string.signed_overwrite_remove_offer),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
                 }
             },
             confirmButton = {
-                TextButton(onClick = { onCancelSignedOverwrite(); onSaveAs() }) {
+                TextButton(onClick = { onCancelSignedOverwrite(removeSignature); onSaveAs() }) {
                     Text(stringResource(R.string.save_a_copy))
                 }
             },
             dismissButton = {
                 Row {
-                    TextButton(onClick = onCancelSignedOverwrite) { Text(stringResource(R.string.cancel)) }
-                    TextButton(onClick = onConfirmSignedOverwrite) { Text(stringResource(R.string.redact_overwrite)) }
+                    TextButton(onClick = { onCancelSignedOverwrite(false) }) { Text(stringResource(R.string.cancel)) }
+                    TextButton(onClick = { onConfirmSignedOverwrite(removeSignature) }) {
+                        Text(stringResource(R.string.redact_overwrite))
+                    }
                 }
             },
         )

@@ -2317,7 +2317,7 @@ tests = [
   "ios/MegaPDFTests/SignatureDetectionTests.swift::class",
   "ios/MegaPDFTests/PagesFieldHierarchyTests.swift::class",
 ]
-note = "PdfEngineTests also feeds the engine invalid bytes."
+note = "#576: the removal tick now reaches iOS too, as two explicit confirmationDialog rows rather than a checkbox -- SwiftUI's confirmationDialog is title+buttons+text, with no room to host a Toggle the way a WinUI/Avalonia dialog or a Compose AlertDialog can. SignatureDetectionViewerModelTests exercises removeSignature on exportFile directly (the dialog's own buttons are untestable here without a host view, same as #173's redaction confirmation); PdfEngineTests also feeds the engine invalid bytes."
 [feature.android]
 presence = "present"
 entry = "android/app/src/main/java/com/megapdf/android/ViewerScreen.kt::R.string.signed_overwrite_title"
@@ -2327,7 +2327,7 @@ tests = [
   "android/app/src/androidTest/java/com/megapdf/android/SignatureOverwriteTest.kt::class",
   "android/engine/src/androidTest/java/com/megapdf/engine/DocumentFlagsTest.kt::class",
 ]
-note = "the signed-document overwrite question has an instrumented test here; #576's choice to remove a dead signature now reaches macOS, Linux and Windows. Android and iOS still only warn about a signature our own save has already destroyed — each is its own pass, tracked by #576, in the idiom its own save flow already uses rather than a copy of the desktop checkbox."
+note = "#576: the removal tick now reaches every platform. Android's own idiom is a Material Checkbox inside the same AlertDialog the warning already used (Compose's AlertDialog, like WinUI's ContentDialog and Avalonia's Window, can host arbitrary content, so this is the same control-library idiom as the desktops); iOS's confirmationDialog cannot host a Toggle, so it offers two explicit rows instead -- see the iOS cell above. SignatureOverwriteTest drives the real Compose dialog, ticked and unticked, on both the Save-a-copy and Overwrite paths, reopening the saved file through a fresh engine each time."
 
 [[feature]]
 id = "packaged-install"

@@ -191,15 +191,18 @@ final class SignatureDetectionViewerModelTests: XCTestCase {
         }
     }
 
-    /// The quiet Save-a-copy notice (#481): fires once, the first time a copy is exported
-    /// from a signed document's open, and never again for the same open.
+    /// The quiet Save-a-copy notice (#481, #576): fires once, the first time a copy is
+    /// exported from a signed document's open, and never again for the same open. This is the
+    /// kept-signature wording -- #576 corrected it from "doesn't carry over to the copy",
+    /// which was untrue: `FPDF_SaveAsCopy` re-serialises the signature dictionary into the
+    /// copy, so it does carry over; only its validity does not.
     func testSaveACopyNotesTheSignatureOnceThenStaysQuiet() async throws {
         let (model, url) = try await openModel(try fixture("signed-approval"))
         defer { try? FileManager.default.removeItem(at: url); model.close() }
 
         XCTAssertNil(model.notice)
         _ = await model.exportFile(named: "copy.pdf")
-        XCTAssertEqual(model.notice, String(localized: "This document's digital signature doesn't carry over to the copy."))
+        XCTAssertEqual(model.notice, String(localized: "The copy carries the original's digital signature, and it is no longer valid."))
 
         // `showNotice` clears itself after four seconds (ViewerModel.showNotice) -- waited
         // out here so the second export's silence is distinguishable from the first
@@ -208,6 +211,47 @@ final class SignatureDetectionViewerModelTests: XCTestCase {
         XCTAssertNil(model.notice, "the transient notice clears itself")
         _ = await model.exportFile(named: "copy2.pdf")
         XCTAssertNil(model.notice, "the notice is once per open, not once per copy")
+    }
+
+    /// #576: the signed-save question's Save-a-copy row removes the signature by default --
+    /// the quiet notice says so, the view model's own flags reflect it immediately, and the
+    /// saved file genuinely carries no signature when reopened through a fresh engine.
+    func testSaveACopyRemovingTheSignatureNotesItWasRemoved() async throws {
+        let (model, url) = try await openModel(try fixture("signed-approval"))
+        defer { try? FileManager.default.removeItem(at: url); model.close() }
+
+        XCTAssertNil(model.notice)
+        let copy = await model.exportFile(named: "copy.pdf", removeSignature: true)
+        XCTAssertNotNil(copy)
+        XCTAssertEqual(model.notice, String(localized: "Saved without the document's digital signature. The document you opened is unchanged."))
+        XCTAssertFalse(model.isSignedDocument, "removal reflects immediately in the view model's own flags")
+
+        guard let copy else { return }
+        let engine = PdfEngine.shared
+        let reopened = try await engine.open(file: copy)
+        defer { Task { await engine.close(reopened) } }
+        let flags = await engine.documentFlags(reopened)
+        XCTAssertFalse(flags.contains(.signed), "the saved copy genuinely carries no signature when reopened")
+    }
+
+    /// #576's own worry, held here the same way the Windows and Android self-tests hold it: an
+    /// export that does not ask for removal must still carry the (now invalid) signature -- a
+    /// removal creeping into the ordinary export path is the one thing this feature decided
+    /// against.
+    func testSaveACopyNotRemovingKeepsTheSignature() async throws {
+        let (model, url) = try await openModel(try fixture("signed-approval"))
+        defer { try? FileManager.default.removeItem(at: url); model.close() }
+
+        let copy = await model.exportFile(named: "copy.pdf", removeSignature: false)
+        XCTAssertNotNil(copy)
+        XCTAssertTrue(model.isSignedDocument, "not removing it leaves the view model still reporting signed")
+
+        guard let copy else { return }
+        let engine = PdfEngine.shared
+        let reopened = try await engine.open(file: copy)
+        defer { Task { await engine.close(reopened) } }
+        let flags = await engine.documentFlags(reopened)
+        XCTAssertTrue(flags.contains(.signed), "the saved copy still carries the (now invalid) signature")
     }
 
     /// Save a copy on an unsigned document never shows the notice.

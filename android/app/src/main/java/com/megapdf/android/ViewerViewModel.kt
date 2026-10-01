@@ -3005,8 +3005,17 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    /** "Save a copy" destination picked via ACTION_CREATE_DOCUMENT, as a PDF. */
-    fun saveAs(uri: Uri) = writeTo(uri, isSaveAs = true)
+    /**
+     * "Save a copy" destination picked via ACTION_CREATE_DOCUMENT, as a PDF. If the signed-save
+     * warning's Save-a-copy button is what led here, [removeSignatureOnNextSaveAs] carries the
+     * tick's answer across the picker (#576) -- the ordinary "Save a copy" menu row never sets
+     * it, so it defaults off there, same as before this feature existed.
+     */
+    fun saveAs(uri: Uri) {
+        val remove = removeSignatureOnNextSaveAs
+        removeSignatureOnNextSaveAs = false
+        writeTo(uri, isSaveAs = true, removeSignatureFirst = remove)
+    }
 
     // --- Digital-signature overwrite warning (#476/#481) ---
 
@@ -3024,6 +3033,14 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
 
     private var pendingOverwrite: Pair<Uri, (() -> Unit)?>? = null
 
+    /**
+     * #576: the signed-save warning's Save-a-copy button recorded this before launching the
+     * picker; [saveAs] reads and clears it once the picker returns. Applying it here, rather
+     * than before the picker, means a picker the person then cancels never touched the open
+     * document's signature for nothing -- the same ordering every other platform uses.
+     */
+    private var removeSignatureOnNextSaveAs: Boolean = false
+
     /** Asks first when the open document is signed; otherwise writes immediately, as before. */
     private fun requestOverwrite(uri: Uri, afterSaved: (() -> Unit)? = null) {
         if (capabilities.isSigned) {
@@ -3034,12 +3051,18 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    /** The confirmation's deliberate choice: overwrite the signed original anyway. Refuses nothing. */
-    fun confirmSignedOverwrite() {
+    /**
+     * The confirmation's deliberate choice: overwrite the signed original anyway. Refuses
+     * nothing. [removeSignature] is the tick's answer (#576) -- the save was always going to
+     * invalidate the signature either way (33/33 on real signed documents, #476); this only
+     * decides whether the written file still carries the now-invalid bytes or admits it has
+     * none.
+     */
+    fun confirmSignedOverwrite(removeSignature: Boolean = false) {
         val (uri, afterSaved) = pendingOverwrite ?: return
         pendingOverwrite = null
         isSignedOverwritePending = false
-        writeTo(uri, isSaveAs = false, afterSaved)
+        writeTo(uri, isSaveAs = false, afterSaved, removeSignatureFirst = removeSignature)
     }
 
     /**
@@ -3048,10 +3071,15 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
      * written to the signed original, and whatever [save]/[saveAndClose]/[saveAndShare]/
      * [saveAndOpenExternal] was trying to do beyond writing is simply not carried out — the
      * person can ask for it again once they have decided what to do about the signature.
+     *
+     * [removeSignatureForSaveAs] is the tick's answer when this is reached through the
+     * Save-a-copy button rather than a plain Cancel (#576); the UI passes false for an actual
+     * Cancel, where the tick's state means nothing because nothing is being saved.
      */
-    fun cancelSignedOverwrite() {
+    fun cancelSignedOverwrite(removeSignatureForSaveAs: Boolean = false) {
         pendingOverwrite = null
         isSignedOverwritePending = false
+        removeSignatureOnNextSaveAs = removeSignatureForSaveAs
     }
 
     /**
@@ -3144,7 +3172,9 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    private fun writeTo(uri: Uri, isSaveAs: Boolean, afterSaved: (() -> Unit)? = null) {
+    private fun writeTo(
+        uri: Uri, isSaveAs: Boolean, afterSaved: (() -> Unit)? = null, removeSignatureFirst: Boolean = false,
+    ) {
         val doc = document ?: return
         if (isSaving || busy.locksDocument) return
         isSaving = true
@@ -3153,7 +3183,20 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         val mark = dirty.beginSave()
         viewModelScope.launch {
             var saved = false
+            // #576: read before removeSignatureFirst can flip it, the same way the .NET
+            // platforms capture wasSigned before mutating IsSigned -- the notice below needs to
+            // know what the document was, not what it becomes mid-save.
+            val wasSigned = capabilities.isSigned
+            var removedSignature = false
             try {
+                // #576: after the picker (if any), immediately before the write -- never
+                // earlier, so a save that is cancelled before this point never touches the
+                // open document's signature. The removal is on the in-memory document only;
+                // the file this was opened from is untouched either way.
+                if (removeSignatureFirst && doc.removeDigitalSignatures()) {
+                    removedSignature = true
+                    capabilities = capabilities.copy(isSigned = false, isCertificationSigned = false)
+                }
                 // Verified opened like the document: a protected document's copy is still
                 // protected (#132).
                 writeVerified(doc, uri, token, { doc.save(it) }, { engine.openFileLike(doc, it.path).close() })
@@ -3177,11 +3220,15 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                 // document dirty, so a later close still asks.
                 dirty.markSaved(mark)
                 statusMessage = str(R.string.saved)
-                // #481: Save a copy of a signed document says so, quietly and once — the
+                // #481, #576: Save a copy of a signed document says so, quietly and once — the
                 // signed original this came from was untouched ([requestOverwrite] never gated
-                // this path), but the new copy does not carry a valid signature either, since
-                // it went through the same full-rewrite save that invalidates one.
-                if (isSaveAs && capabilities.isSigned) showNotice(str(R.string.signed_copy_notice))
+                // this path) either way. The signature dictionary does carry over into a copy
+                // that keeps it (FPDF_SaveAsCopy re-serialises it) -- only its validity does
+                // not, which is why [signed_copy_notice] no longer says it "doesn't carry over".
+                if (isSaveAs) {
+                    if (removedSignature) showNotice(str(R.string.signature_removed_notice))
+                    else if (wasSigned) showNotice(str(R.string.signed_copy_notice))
+                }
                 saved = true
             } catch (e: CancellationException) {
                 throw e

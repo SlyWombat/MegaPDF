@@ -145,9 +145,19 @@
          picture of a name and must not be confused with it. -->
     <string name="signed_overwrite_title_certified">This document does not allow changes</string>
     <string name="signed_overwrite_body_certified">This document was certified not to be modified — its author declared that no changes are allowed at all. Saving here will break that certification as well as the digital signature. Save a copy instead to leave the signed original untouched.</string>
-    <!-- Shown once, quietly, after Save a copy of a signed document (#481): the copy is not
-         itself signed, but the original this came from was never touched. -->
-    <string name="signed_copy_notice">Saved. The digital signature doesn\'t carry over to a copy.</string>
+    <!-- #576: the tick added to this same warning, parity with the choice every other platform
+         now offers — ticked by default, since the save has already ended the signature either
+         way (33/33 on real signed documents, #476); it chooses between a file that admits it
+         is unsigned and a file that goes on claiming a signature it cannot support. -->
+    <string name="signed_overwrite_remove_signature">Also remove the signature, which will no longer be valid</string>
+    <string name="signed_overwrite_remove_offer">Left in, it travels with the file being saved and goes on claiming to describe a file it no longer describes, so MegaPDF and other readers report that file as signed. The document you opened is not changed either way — this reaches only the file being written. And a digital signature says a file has not changed since it was signed: it has never kept anyone from opening this document, so a file saved without it is readable by exactly the same people.</string>
+    <!-- Shown once, quietly, after Save a copy of a signed document that kept the signature
+         (#481, #576). It used to say the signature "doesn't carry over to a copy", which is
+         untrue -- FPDF_SaveAsCopy re-serialises the signature dictionary into the copy, and the
+         copy reports as signed when it is reopened. Only its validity does not carry over. -->
+    <string name="signed_copy_notice">Saved. The copy carries the document\'s digital signature, and it is no longer valid.</string>
+    <!-- #576: shown once, quietly, after a Save a copy that removed the signature instead. -->
+    <string name="signature_removed_notice">Saved without the document\'s digital signature. The document you opened is unchanged.</string>
 
     <!-- Added text -->
     <string name="add_text">Add text</string>

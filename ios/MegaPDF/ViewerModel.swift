@@ -2813,7 +2813,12 @@ final class ViewerModel: ObservableObject {
     /// commands wait. The document is marked saved only if nothing changed while the save ran (D3).
     /// `then` is the unsaved-changes prompt's Save: close, share, or open a different document,
     /// once the save that just wrote this one has landed.
-    func save(then followUp: UnsavedChangesFollowUp? = nil) {
+    /// `removeSignature` (#576): the confirmation's answer when overwriting a signed original
+    /// -- applied immediately before the write, never earlier, so a save this ends up not
+    /// making never touches the open document's signature for nothing. Ignored when there is
+    /// nothing to remove. Unused callers (the Unsaved-changes follow-up, which does not ask
+    /// this question) get the old behaviour by leaving it at its default.
+    func save(then followUp: UnsavedChangesFollowUp? = nil, removeSignature: Bool = false) {
         guard let doc = document, let url = sourceURL, !isSaving,
               let token = busy.begin(.saving, scope: .document, blocksFileCommands: true) else { return }
         isSaving = true
@@ -2826,6 +2831,7 @@ final class ViewerModel: ObservableObject {
             let staged = Self.stagingURL()
             defer { try? FileManager.default.removeItem(at: staged) }
             do {
+                if removeSignature { _ = await removeDigitalSignaturesNow(doc) }
                 let engine = PdfEngine.shared
                 try await engine.save(doc, to: staged)
                 busy.update(token, label: .checkingSavedFile)
@@ -2860,6 +2866,17 @@ final class ViewerModel: ObservableObject {
                 showSaveFailed(error)
             }
         }
+    }
+
+    /// Removes every digital signature from `doc`, in memory, on the person's explicit say-so
+    /// (#576) -- the same engine call every other platform makes
+    /// (`PdfEngine.removeDigitalSignatures(_:)`). The file on disk is untouched; this reaches
+    /// only what the save about to run writes. `documentFlags` is refreshed immediately so
+    /// `isSignedDocument`/`isCertifiedSignature` answer correctly for the rest of this save.
+    private func removeDigitalSignaturesNow(_ doc: PdfDocument) async -> Bool {
+        let removed = await PdfEngine.shared.removeDigitalSignatures(doc)
+        if removed { documentFlags.subtract([.signed, .signedCertification]) }
+        return removed
     }
 
     /// A new file in the temporary directory for a save to be staged in (#147).
@@ -2912,7 +2929,12 @@ final class ViewerModel: ObservableObject {
     /// The staged file carries the document's name, in a folder of its own: the export sheet
     /// names the copy after the file it is handed, whatever its default name says, and a staged
     /// "save-<UUID>.pdf" was what every copy was being called (#278).
-    func exportFile(named name: String) async -> URL? {
+    /// `removeSignature` (#576): the signed-save question's answer when this export is the
+    /// "Save a copy" it offered -- applied immediately before the write, never earlier, so an
+    /// export that fails or is never finished never touches the open document's signature for
+    /// nothing. The ordinary Save-a-copy menu row (which never asks the question) leaves this
+    /// at its default and behaves exactly as before #576.
+    func exportFile(named name: String, removeSignature: Bool = false) async -> URL? {
         guard let doc = document,
               let token = busy.begin(.saving, scope: .document, blocksFileCommands: true) else { return nil }
         defer { busy.end(token) }
@@ -2927,6 +2949,11 @@ final class ViewerModel: ObservableObject {
             return nil
         }
         do {
+            // #576: captured before removal can flip it -- the notice below needs to know what
+            // the document was, not what it becomes mid-export.
+            let wasSigned = isSignedDocument
+            var removedSignature = false
+            if removeSignature { removedSignature = await removeDigitalSignaturesNow(doc) }
             let engine = PdfEngine.shared
             try await engine.save(doc, to: staged)
             busy.update(token, label: .checkingSavedFile)
@@ -2938,11 +2965,16 @@ final class ViewerModel: ObservableObject {
             }
             exportEditCount = editsAtStart
             exportStagedURL = staged
-            // #481: quiet and once per open -- the common, already-safe path (the signed
-            // original is untouched) still deserves to know the copy isn't signed too.
-            if isSignedDocument, !signatureCopyNoticeShown {
+            // #481, #576: quiet and once per open -- the common, already-safe path (the signed
+            // original is untouched either way) still deserves the one fact about what became
+            // of the signature. The signature dictionary does carry over into a copy that keeps
+            // it (FPDF_SaveAsCopy re-serialises it) -- only its validity does not, which is why
+            // this no longer says the signature "doesn't carry over".
+            if (removedSignature || wasSigned), !signatureCopyNoticeShown {
                 signatureCopyNoticeShown = true
-                showNotice(String(localized: "This document's digital signature doesn't carry over to the copy."))
+                showNotice(removedSignature
+                    ? String(localized: "Saved without the document's digital signature. The document you opened is unchanged.")
+                    : String(localized: "The copy carries the original's digital signature, and it is no longer valid."))
             }
             return staged
         } catch {

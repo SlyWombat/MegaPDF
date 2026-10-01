@@ -9,7 +9,9 @@ struct ViewerView: View {
     @ObservedObject var busy: BusyState
     let displayName: String
     let pageSizes: [CGSize]
-    let onSaveCopy: () -> Void
+    /// `Bool` (#576): whether to leave the document's digital signature out of the copy --
+    /// always `false` from the ordinary Save-a-copy menu row, which never asks the question.
+    let onSaveCopy: (Bool) -> Void
     /// A Markdown export of the document's text (#386) -- a one-way, lossy export, not another
     /// Save-a-copy format; see `ViewerModel.exportMarkdownFile`.
     let onExportMarkdown: () -> Void
@@ -799,7 +801,10 @@ struct ViewerView: View {
                 }
             Menu {
                 Button("Save a copy") {
-                    if model.redactionMarkCount > 0 { redactConfirm = .copy } else { onSaveCopy() }
+                    // #576: the ordinary menu row never asks about the signature -- Save a copy
+                    // is already safe (the signed original is untouched), so it always keeps
+                    // whatever the document carries, the same as before this feature existed.
+                    if model.redactionMarkCount > 0 { redactConfirm = .copy } else { onSaveCopy(false) }
                 }
                     .disabled(model.isSaving || model.fileCommandsBlocked)
                     // #589: named, like its Markdown neighbour, so the CI test that taps it
@@ -1084,11 +1089,28 @@ struct ViewerView: View {
         }
     }
 
+    /// #576: when the document is also signed, this dialog is the only place the question is
+    /// ever put (its own message already mentions the signature, per `redactConfirmMessageText`)
+    /// -- so the removal choice has to live here too, not in a second dialog afterward. SwiftUI's
+    /// `confirmationDialog` is title + buttons + plain text, with no room for a `Toggle` the way
+    /// a WinUI/Avalonia dialog or a Compose `AlertDialog` can host one inline; the native iOS
+    /// answer to "a destination with a modifier" in an action sheet is a second, explicit row for
+    /// the less common choice, not a checkbox that does not fit the control. Save as a
+    /// copy/Overwrite remove the signature by default (the save has already ended it either way,
+    /// #476) -- an honesty default, not a deletion one -- and the extra row is for whoever wants
+    /// the author's bytes kept verbatim. Added only when there is a signature to ask about, so an
+    /// unsigned document's dialog is exactly as it was before #576.
     @ViewBuilder
     private var redactConfirmButtons: some View {
         Button("Save as a copy") {
             redactConfirm = nil
-            Task { if await model.applyRedactions(reportWithSave: true) { onSaveCopy() } }
+            Task { if await model.applyRedactions(reportWithSave: true) { onSaveCopy(model.isSignedDocument) } }
+        }
+        if model.isSignedDocument {
+            Button("Save as a copy, keeping the invalid signature") {
+                redactConfirm = nil
+                Task { if await model.applyRedactions(reportWithSave: true) { onSaveCopy(false) } }
+            }
         }
         // #386: offered here too -- marked-but-unapplied redactions must actually be
         // removed (applyRedactions) before ANY export reads the document's text, Markdown
@@ -1099,7 +1121,13 @@ struct ViewerView: View {
         }
         Button("Overwrite the original") {
             redactConfirm = nil
-            Task { if await model.applyRedactions(reportWithSave: true) { model.save() } }
+            Task { if await model.applyRedactions(reportWithSave: true) { model.save(removeSignature: model.isSignedDocument) } }
+        }
+        if model.isSignedDocument {
+            Button("Overwrite, keeping the invalid signature") {
+                redactConfirm = nil
+                Task { if await model.applyRedactions(reportWithSave: true) { model.save(removeSignature: false) } }
+            }
         }
         Button("Cancel", role: .cancel) { redactConfirm = nil }
     }
@@ -1123,18 +1151,29 @@ struct ViewerView: View {
     /// The confirmation #481 asks for, before Save overwrites a signed original with no
     /// redaction marks pending: Save a copy is the prominent, safe choice, and overwriting
     /// needs its own deliberate, destructive-styled tap -- the same shape as
-    /// `redactConfirmButtons`.
+    /// `redactConfirmButtons`. #576: the removal choice is two explicit rows rather than a
+    /// checkbox, for the reason `redactConfirmButtons` documents -- ticked-by-default becomes
+    /// "the plain button removes it; the extra row below is for keeping the author's bytes
+    /// verbatim".
     @ViewBuilder
     private var signatureConfirmButtons: some View {
         Button("Save a copy") {
             signatureConfirm = false
-            onSaveCopy()
+            onSaveCopy(true)
+        }
+        Button("Save a copy, keeping the invalid signature") {
+            signatureConfirm = false
+            onSaveCopy(false)
         }
         Button(model.isCertifiedSignature
                ? "Overwrite the certified original" : "Overwrite the signed original",
                role: .destructive) {
             signatureConfirm = false
-            model.save()
+            model.save(removeSignature: true)
+        }
+        Button("Overwrite, keeping the invalid signature", role: .destructive) {
+            signatureConfirm = false
+            model.save(removeSignature: false)
         }
         Button("Cancel", role: .cancel) { signatureConfirm = false }
     }

@@ -18,6 +18,8 @@ import androidx.test.espresso.intent.Intents.intending
 import androidx.test.espresso.intent.matcher.IntentMatchers.hasAction
 import androidx.test.espresso.intent.matcher.IntentMatchers.hasType
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.megapdf.engine.PdfEngine
+import kotlinx.coroutines.runBlocking
 import org.hamcrest.CoreMatchers.allOf
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -55,6 +57,18 @@ class SignatureOverwriteTest {
 
     private fun picked(uri: Uri) = Instrumentation.ActivityResult(Activity.RESULT_OK, Intent().setData(uri))
 
+    /** #576: reopens [file] through an engine of the test's own to check what it actually
+     *  contains, rather than trusting the view model's own account of it. */
+    private fun isSigned(file: File): Boolean = runBlocking {
+        val engine = PdfEngine()
+        val doc = engine.open(file.readBytes())
+        try {
+            doc.documentFlags().isSigned
+        } finally {
+            doc.close()
+        }
+    }
+
     /** A real edit: the signature fixtures carry no drawn checkbox to tick, unlike the demo. */
     private fun addTextEdit(facts: PageFacts) {
         rule.clickLabelled(str(R.string.add_text))
@@ -82,6 +96,9 @@ class SignatureOverwriteTest {
         // invalidated by one — the shape all 33 of #476's real corpus documents carried.
         rule.waitForText(str(R.string.signed_overwrite_title_certified))
         rule.waitForText(str(R.string.signed_overwrite_body_certified))
+        // #576: the removal tick is offered in the same dialog, ticked by default.
+        rule.waitForText(str(R.string.signed_overwrite_remove_signature))
+        rule.waitForText(str(R.string.signed_overwrite_remove_offer))
         // Nothing was written yet: the confirmation is up, not a silent save.
         assertTrue(rule.viewModel.isDirty)
         assertTrue("the signed original is untouched while the dialog is up", file.readBytes().contentEquals(originalBytes))
@@ -89,14 +106,45 @@ class SignatureOverwriteTest {
         val copy = Fixtures.empty("signed-copy-481.pdf")
         intending(allOf(hasAction(Intent.ACTION_CREATE_DOCUMENT), hasType("application/pdf")))
             .respondWith(picked(Fixtures.uri(copy)))
+        // The tick is left ticked by default (#576): this copy is saved without the signature.
         rule.clickText(str(R.string.save_a_copy))
 
         intended(allOf(hasAction(Intent.ACTION_CREATE_DOCUMENT), hasType("application/pdf")))
         rule.waitUntil(SETTLE_MS) { copy.length() > 0 && !rule.viewModel.isSaving }
         assertEquals("%PDF", header(copy))
+        // #576: the tick was honoured, so the quiet notice says the signature was removed,
+        // not that the copy keeps a now-invalid one.
+        rule.waitForText(str(R.string.signature_removed_notice))
+        assertFalse("the saved copy genuinely carries no signature when reopened", isSigned(copy))
+        // The signed original was never written to, through the whole exchange.
+        assertTrue("the signed original stays untouched by Save a copy", file.readBytes().contentEquals(originalBytes))
+    }
+
+    @Test
+    fun uncheckingTheTickKeepsTheNowInvalidSignatureInTheCopy() {
+        // #576's own worry, held here the same way the Windows and iOS self-tests hold it: the
+        // tick must be a real choice, not a removal that happens regardless of it.
+        val file = Fixtures.testAsset(Fixtures.SIGNED_CERTIFIED_ASSET, "signed-certified-481b.pdf")
+        val originalBytes = file.readBytes()
+        val facts = PageFacts.of(file)
+        rule.open(file)
+        addTextEdit(facts)
+
+        rule.clickText(str(R.string.save))
+        rule.waitForText(str(R.string.signed_overwrite_title_certified))
+        // Unticks the box; the text itself is the click target, same as the box.
+        rule.clickText(str(R.string.signed_overwrite_remove_signature))
+
+        val copy = Fixtures.empty("signed-copy-481b.pdf")
+        intending(allOf(hasAction(Intent.ACTION_CREATE_DOCUMENT), hasType("application/pdf")))
+            .respondWith(picked(Fixtures.uri(copy)))
+        rule.clickText(str(R.string.save_a_copy))
+
+        intended(allOf(hasAction(Intent.ACTION_CREATE_DOCUMENT), hasType("application/pdf")))
+        rule.waitUntil(SETTLE_MS) { copy.length() > 0 && !rule.viewModel.isSaving }
         // Save a copy says so, quietly and once (#481): the notice names what changed.
         rule.waitForText(str(R.string.signed_copy_notice))
-        // The signed original was never written to, through the whole exchange.
+        assertTrue("the saved copy still carries the (now invalid) signature", isSigned(copy))
         assertTrue("the signed original stays untouched by Save a copy", file.readBytes().contentEquals(originalBytes))
     }
 
@@ -116,10 +164,29 @@ class SignatureOverwriteTest {
 
         // The deliberate second tap: overwrite the signed original anyway. Nothing here is
         // refused — the person just has to choose it, rather than dismiss a warning to do
-        // what they were always going to do.
+        // what they were always going to do. The removal tick is left ticked (#576).
         rule.clickText(str(R.string.redact_overwrite))
         rule.waitUntil(SETTLE_MS) { !rule.viewModel.isDirty && !rule.viewModel.isSaving }
         assertFalse("the edit actually landed on disk", file.readBytes().contentEquals(originalBytes))
+        assertFalse("the overwritten file no longer claims a signature it cannot support", isSigned(file))
+    }
+
+    @Test
+    fun uncheckingTheTickBeforeOverwritingLeavesTheNowInvalidSignatureInPlace() {
+        val file = Fixtures.testAsset(Fixtures.SIGNED_APPROVAL_ASSET, "signed-approval-481b.pdf")
+        val originalBytes = file.readBytes()
+        val facts = PageFacts.of(file)
+        rule.open(file)
+        addTextEdit(facts)
+
+        rule.clickText(str(R.string.save))
+        rule.waitForText(str(R.string.signed_overwrite_title))
+        rule.clickText(str(R.string.signed_overwrite_remove_signature))
+        rule.clickText(str(R.string.redact_overwrite))
+
+        rule.waitUntil(SETTLE_MS) { !rule.viewModel.isDirty && !rule.viewModel.isSaving }
+        assertFalse("the edit actually landed on disk", file.readBytes().contentEquals(originalBytes))
+        assertTrue("not asking to remove it leaves the (now invalid) signature in the overwritten file", isSigned(file))
     }
 
     @Test
