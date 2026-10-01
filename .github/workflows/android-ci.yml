@@ -29,6 +29,12 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
+      # #624: pre-installs the NDK version Gradle will ask for anyway, with its own
+      # retry-and-verify loop, so a corrupted download from Google's SDK repository is
+      # caught here instead of failing the build below before any test runs.
+      - name: Install Android NDK (retry on corrupted download)
+        run: bash "$GITHUB_WORKSPACE/.github/scripts/install-ndk.sh"
+
       - name: Build and test
         run: ./gradlew --no-daemon :app:assembleDebug :app:testDebugUnitTest :engine:testDebugUnitTest
 
@@ -60,6 +66,11 @@ jobs:
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
+
+      # #624: same corrupted-NDK-download exposure as build-and-test -- this job's
+      # gradlew invocation also compiles :engine's native code.
+      - name: Install Android NDK (retry on corrupted download)
+        run: bash "$GITHUB_WORKSPACE/.github/scripts/install-ndk.sh"
 
       - name: Run instrumented engine and app tests
         uses: reactivecircus/android-emulator-runner@v2

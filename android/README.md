@@ -47,4 +47,7 @@ app's own UI tests (#346, see `TESTING.md`):
 ./gradlew :engine:connectedDebugAndroidTest :app:connectedDebugAndroidTest
 ```
 
-CI builds run in `.github/workflows/android-ci.yml`, path-filtered to `android/**`.
+CI builds run in `.github/workflows/android-ci.yml`, path-filtered to `android/**`. CI
+pre-installs the NDK version Gradle will ask for with its own retry-and-verify step
+(`.github/scripts/install-ndk.sh`, #624) — Google's SDK repository has twice served a
+corrupted side-by-side NDK download, which used to fail the build before any test ran.
