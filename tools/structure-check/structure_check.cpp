@@ -2325,6 +2325,113 @@ void RunGarbageOnDoc(const std::string& pdf, const std::string& dump_dir, const 
 
 }  // namespace
 
+// ---------------------------------------------------------------------------
+// hyphdiag mode (#488 investigation only -- not part of the #354 battery/gate). Numbers only.
+// Measures the line-wrap-hyphen divergence between the heuristic side and measure 1s raw side:
+//   * raw_ishyphen / raw_joined: how many characters PDFium flags FPDFText_IsHyphen, and how
+//     many of those JoinLineWrapHyphens actually drops (next real character ASCII lowercase).
+//   * f1_join is measure 1 exactly; f1_nojoin is the same comparison with the raw side NOT
+//     hyphen-joined at all. If the heuristic side had performed every join the raw side does,
+//     f1_nojoin would be much the WORSE of the two; if the heuristic side performed none of
+//     them, f1_nojoin is the better one.
+//   * blk_end_u0002: heuristic blocks whose text ends in U+0002 -- PDFiums masked code point
+//     for a line-end hyphen, which BuildPieces only rewrites to U+002D inside its join branch,
+//     so a block whose LAST line ends on a flagged hyphen emits the control character itself.
+//     This is the population BuildPieces li+1 < line_indices.size() guard cannot reach.
+// ---------------------------------------------------------------------------
+struct HyphTotals {
+    long long pages = 0, blocks = 0;
+    long long raw_ishyphen = 0, raw_joined = 0, raw_soft = 0;
+    long long a = 0, b_join = 0, m_join = 0, b_nojoin = 0, m_nojoin = 0;
+    long long blk_end_u0002 = 0, blk_end_hyphen_lit = 0, u0002_chars = 0;
+    long long blk_mid_u0002 = 0;
+};
+
+void RunHyphOnDoc(const std::string& pdf, HyphTotals* t) {
+    megapdf_document* doc = megapdf_open_file(pdf.c_str(), nullptr);
+    if (doc == nullptr) return;
+    const int pages = megapdf_page_count(doc);
+    if (pages <= 0) { megapdf_close(doc); return; }
+    megapdf_structure* s = megapdf_structure_load(doc, 0, pages, MEGAPDF_STRUCTURE_KEEP_FURNITURE |
+                                                                      MEGAPDF_STRUCTURE_ALL_FIELDS, nullptr);
+    if (s == nullptr) { megapdf_close(doc); return; }
+    const size_t n_blocks = megapdf_block_count(s);
+    std::vector<std::vector<Token>> toks(static_cast<size_t>(pages));
+    for (size_t i = 0; i < n_blocks; i++) {
+        megapdf_block blk{};
+        if (megapdf_block_get(s, i, &blk) != MEGAPDF_OK) continue;
+        if (blk.page < 0 || blk.page >= pages) continue;
+        if (blk.kind == MEGAPDF_BLOCK_FIELD) continue;
+        t->blocks++;
+        const std::vector<unsigned int> cps = Utf16ToCodepoints(BlockContentString(s, i, blk.kind));
+        size_t last = cps.size();
+        while (last > 0 && IsWhitespaceCpLocal(cps[last - 1])) last--;
+        if (last > 0) {
+            const unsigned int lc = cps[last - 1];
+            if (lc == 2) t->blk_end_u0002++;
+            else if (lc == 0x002D || lc == 0x2010) t->blk_end_hyphen_lit++;
+        }
+        for (size_t k = 0; k < cps.size(); k++) {
+            if (cps[k] == 2) { t->u0002_chars++; if (k + 1 < last) t->blk_mid_u0002++; }
+        }
+        for (const Token& tk : Tokenize(cps)) toks[static_cast<size_t>(blk.page)].push_back(tk);
+    }
+    FPDF_DOCUMENT raw = FPDF_LoadDocument(pdf.c_str(), nullptr);
+    for (int p = 0; p < pages && raw != nullptr; p++) {
+        FPDF_PAGE rp = FPDF_LoadPage(raw, p);
+        FPDF_TEXTPAGE tp = rp != nullptr ? FPDFText_LoadPage(rp) : nullptr;
+        if (tp == nullptr) { if (rp != nullptr) FPDF_ClosePage(rp); continue; }
+        const int nch = FPDFText_CountChars(tp);
+        t->pages++;
+        for (int i = 0; i < nch; i++) {
+            const unsigned int cp = FPDFText_GetUnicode(tp, i);
+            if (cp == kSoftHyphen) { t->raw_soft++; t->raw_joined++; continue; }
+            if (FPDFText_IsHyphen(tp, i) != 1) continue;
+            t->raw_ishyphen++;
+            for (int j = i + 1; j < nch; j++) {
+                if (FPDFText_IsGenerated(tp, j) == 1) continue;
+                const unsigned int ncp = FPDFText_GetUnicode(tp, j);
+                if (ncp == 0 || IsWhitespaceCpLocal(ncp)) continue;
+                if (IsAsciiLowerCp(ncp)) t->raw_joined++;
+                break;
+            }
+        }
+        const std::vector<Token> joined = Tokenize(JoinLineWrapHyphens(tp, nch));
+        std::vector<unsigned int> plain;
+        plain.reserve(static_cast<size_t>(nch > 0 ? nch : 0));
+        for (int i = 0; i < nch; i++) {
+            const unsigned int cp = FPDFText_GetUnicode(tp, i);
+            if (cp != 0) plain.push_back(cp);
+        }
+        const std::vector<Token> unjoined = Tokenize(plain);
+        FPDFText_ClosePage(tp);
+        FPDF_ClosePage(rp);
+        const FidelityCounts fj = MultisetF1(toks[static_cast<size_t>(p)], joined);
+        const FidelityCounts fn = MultisetF1(toks[static_cast<size_t>(p)], unjoined);
+        t->a += fj.a; t->b_join += fj.b; t->m_join += fj.matched;
+        t->b_nojoin += fn.b; t->m_nojoin += fn.matched;
+    }
+    if (raw != nullptr) FPDF_CloseDocument(raw);
+    megapdf_structure_free(s);
+    megapdf_close(doc);
+}
+
+int RunHyph(const std::vector<std::string>& pdfs) {
+    for (const auto& pdf : pdfs) {
+        HyphTotals t;
+        RunHyphOnDoc(pdf, &t);
+        const double f1j = (t.a + t.b_join) > 0 ? 2.0 * (double)t.m_join / (double)(t.a + t.b_join) : 1.0;
+        const double f1n = (t.a + t.b_nojoin) > 0 ? 2.0 * (double)t.m_nojoin / (double)(t.a + t.b_nojoin) : 1.0;
+        std::printf("hyphdiag pages=%lld blocks=%lld a=%lld b_join=%lld m_join=%lld f1_join=%.6f "
+                    "b_nojoin=%lld m_nojoin=%lld f1_nojoin=%.6f raw_ishyphen=%lld raw_joined=%lld raw_soft=%lld "
+                    "blk_end_u0002=%lld blk_end_hyphen_lit=%lld u0002_chars=%lld blk_mid_u0002=%lld\n",
+                    t.pages, t.blocks, t.a, t.b_join, t.m_join, f1j, t.b_nojoin, t.m_nojoin, f1n,
+                    t.raw_ishyphen, t.raw_joined, t.raw_soft,
+                    t.blk_end_u0002, t.blk_end_hyphen_lit, t.u0002_chars, t.blk_mid_u0002);
+    }
+    return 0;
+}
+
 int main(int argc, char** argv) {
     if (argc >= 3 && std::strcmp(argv[1], "census") == 0) {
         return RunCensus(argv[2]);
@@ -2339,6 +2446,11 @@ int main(int argc, char** argv) {
             else if (std::strcmp(argv[i], "--cli-reference") == 0 && i + 1 < argc) opt.cli_reference_file = argv[++i];
         }
         return RunCheck(opt);
+    }
+    if (argc >= 3 && std::strcmp(argv[1], "hyphdiag") == 0) {
+        std::vector<std::string> pdfs;
+        for (int i = 2; i < argc; i++) pdfs.push_back(argv[i]);
+        return RunHyph(pdfs);
     }
     if (argc >= 3 && std::strcmp(argv[1], "diag") == 0) {
         // #363 investigation only: structure_check diag <pdf> [<pdf> ...]
@@ -2395,6 +2507,7 @@ int main(int argc, char** argv) {
                 "  structure_check diagbaseline <pdf> [<pdf> ...]   (#363 follow-up investigation only)\n"
                 "  structure_check headingdiag <pdf> [<pdf> ...]   (#375 investigation only)\n"
                 "  structure_check bodysizediag <pdf> [<pdf> ...]   (#382 investigation only)\n"
-                "  structure_check garbage <pdf> [--dump-garbage <dir> --dump-id <id>]   (#385 investigation only)\n");
+                "  structure_check garbage <pdf> [--dump-garbage <dir> --dump-id <id>]   (#385 investigation only)\n"
+                "  structure_check hyphdiag <pdf> [<pdf> ...]   (#488 investigation only)\n");
     return 64;
 }
