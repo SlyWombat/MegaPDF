@@ -347,8 +347,13 @@ final class PageCheckTests: XCTestCase {
             // name, not the staging name (#278).
             XCTAssertEqual(file.lastPathComponent, "Rental Agreement.pdf")
         }
+        // Where the sheet would have put it (#572): the same destination twice, which is also
+        // the Replace case — the copy is adopted either way, and that is not what this test is
+        // about. SaveACopyAdoptionTests is.
+        let destination = FileManager.default.temporaryDirectory
+            .appendingPathComponent("Rental Agreement \(UUID().uuidString).pdf")
         model.noteDocumentChanged()
-        model.finishExport(saved: true)
+        model.finishExport(savedTo: destination)
         XCTAssertTrue(model.isDirty)
         if let file {
             XCTAssertFalse(FileManager.default.fileExists(atPath: file.path), "the staged copy goes once the exporter is done")
@@ -357,7 +362,7 @@ final class PageCheckTests: XCTestCase {
         }
 
         _ = await model.exportFile(named: "Rental Agreement")
-        model.finishExport(saved: true)
+        model.finishExport(savedTo: destination)
         XCTAssertFalse(model.isDirty)
         model.close()
     }

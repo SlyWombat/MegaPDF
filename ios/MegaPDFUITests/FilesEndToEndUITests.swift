@@ -75,7 +75,14 @@ final class FilesEndToEndUITests: XCTestCase {
         closeDocument()
     }
 
-    /// Save writes in place; Save a copy writes elsewhere and leaves the original alone.
+    /// Save writes in place; Save a copy writes elsewhere and leaves the original alone — and
+    /// the copy then **becomes** the document, so the next Save goes to the copy (#572).
+    ///
+    /// That last step is the one only this suite can prove. The URL comes from the real export
+    /// sheet, and writing to it needs the security-scoped access the app took when it adopted
+    /// it: a scope it failed to hold fails here, as "Save failed — use Save a copy." where
+    /// "Saved" is expected, and the script then finds the third edit in neither file. A unit
+    /// test's temporary directory needs no scope at all and would pass either way.
     func test4_saveAndSaveACopy() {
         open("e2e-save")
         addText("E2E SAVED TEXT", at: (72, 600))
@@ -83,6 +90,13 @@ final class FilesEndToEndUITests: XCTestCase {
         acknowledgeAlerts(until: "Saved", timeout: 30)
         addText("E2E COPY TEXT", at: (72, 540))
         saveACopy()
+        acknowledgeAlerts(until: "Saved", timeout: 30)
+        // The name on screen is the copy's from here on. Printed rather than asserted: iOS 26's
+        // sheet has no name field, so what Keep Both called the copy is the script's to check.
+        print("E2E note: after Save a copy the title reads "
+              + "\"\(app.navigationBars.firstMatch.identifier)\"")
+        addText("E2E AFTER COPY TEXT", at: (72, 480))
+        tapSave()
         acknowledgeAlerts(until: "Saved", timeout: 30)
         closeDocument(discardIfAsked: true)
     }
@@ -238,10 +252,23 @@ final class FilesEndToEndUITests: XCTestCase {
         pause(1.5)
     }
 
+    /// Waits for a control to stop being disabled. Everything in the viewer that writes is
+    /// disabled while a save, or the page check that follows an edit, is still running (#145) —
+    /// and XCUITest taps a disabled control without complaining, so the consequence surfaces
+    /// much later as something else never appearing. Found the hard way on a loaded machine:
+    /// a disabled "Save a copy" row swallowed the tap and the failure read "the export sheet
+    /// did not appear".
+    private func waitEnabled(_ element: XCUIElement, _ what: String, timeout: TimeInterval = 90) {
+        let deadline = Date().addingTimeInterval(timeout)
+        while !element.isEnabled && Date() < deadline { pause(0.5) }
+        XCTAssertTrue(element.isEnabled, dump("\(what) stayed disabled"))
+    }
+
     /// Save sits in the navigation bar, or folds into the system overflow on a narrow phone.
     private func tapSave() {
         let save = app.navigationBars.buttons["Save"].firstMatch
         if save.waitForExistence(timeout: 5) && save.isHittable {
+            waitEnabled(save, "Save")
             save.tap()
         } else {
             app.buttons["More"].firstMatch.tap(); pause(1.0)
@@ -265,7 +292,13 @@ final class FilesEndToEndUITests: XCTestCase {
     }
 
     private func saveACopy(exporterTimeout: TimeInterval = 30) {
-        more("Save a copy")
+        let more = app.buttons["viewerMore"].firstMatch
+        XCTAssertTrue(more.waitForExistence(timeout: 10), dump("no More menu"))
+        more.tap()
+        let row = app.buttons["Save a copy"].firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 5), dump("no Save a copy in More"))
+        waitEnabled(row, "the Save a copy row")
+        row.tap()
         export(timeout: exporterTimeout)
     }
 
