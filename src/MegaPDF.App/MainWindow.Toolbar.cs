@@ -145,6 +145,58 @@ public sealed partial class MainWindow
     /// document — but a real activation of the real handler, not a shortcut around it.</summary>
     internal void ClickBusyCancelButtonForTest() => OnBusyCancelButtonClick(BusyCancelButton, new RoutedEventArgs());
 
+    // --- For the `empty` self-test (#617) ---
+
+    /// <summary>
+    /// Every document-dependent toolbar and Pages-menu command's enabled state, keyed by its
+    /// AutomationId — the single source of truth the <c>empty</c> self-test reads to assert
+    /// that zero tabs means every one of these is disabled, Undo/Redo included. Listed by hand
+    /// rather than walked off the visual tree, the same choice <see cref="DescribeToolbar"/>
+    /// makes for the overflow list: there is no supertype that is "every command here and
+    /// nothing else" to walk instead.
+    /// </summary>
+    internal IReadOnlyDictionary<string, bool> DocumentCommandEnabledStatesForTest() => new Dictionary<string, bool>
+    {
+        [nameof(SaveButton)] = SaveButton.IsEnabled,
+        [nameof(SignaturesToolbarButton)] = SignaturesToolbarButton.IsEnabled,
+        [nameof(AddTextButton)] = AddTextButton.IsEnabled,
+        [nameof(WhiteoutButton)] = WhiteoutButton.IsEnabled,
+        [nameof(RedactButton)] = RedactButton.IsEnabled,
+        [nameof(PagesMenuButton)] = PagesMenuButton.IsEnabled,
+        [nameof(UndoButton)] = UndoButton.IsEnabled,
+        [nameof(RedoButton)] = RedoButton.IsEnabled,
+        [nameof(ZoomOutButton)] = ZoomOutButton.IsEnabled,
+        [nameof(ZoomMenuButton)] = ZoomMenuButton.IsEnabled,
+        [nameof(ZoomInButton)] = ZoomInButton.IsEnabled,
+        [nameof(SaveAsButton)] = SaveAsButton.IsEnabled,
+        [nameof(SecurityButton)] = SecurityButton.IsEnabled,
+        [nameof(PrintButton)] = PrintButton.IsEnabled,
+        [nameof(ShrinkButton)] = ShrinkButton.IsEnabled,
+        [nameof(FindButton)] = FindButton.IsEnabled,
+        [nameof(PagesPaneButton)] = PagesPaneButton.IsEnabled,
+        [nameof(ReadingModeButton)] = ReadingModeButton.IsEnabled,
+        [nameof(ClearMarksButton)] = ClearMarksButton.IsEnabled,
+        [nameof(CloseTabButton)] = CloseTabButton.IsEnabled,
+        // The Pages flyout's own commands (#617): unreachable while PagesMenuButton is
+        // disabled, but fixed the same way as the rest and checked anyway, since nothing here
+        // should depend on that button being the only thing standing between a null Active
+        // and one of these.
+        [nameof(RotateRightItem)] = RotateRightItem.IsEnabled,
+        [nameof(RotateLeftItem)] = RotateLeftItem.IsEnabled,
+        [nameof(DeletePagesItem)] = DeletePagesItem.IsEnabled,
+        [nameof(MovePageEarlierItem)] = MovePageEarlierItem.IsEnabled,
+        [nameof(MovePageLaterItem)] = MovePageLaterItem.IsEnabled,
+        [nameof(InsertBlankPageItem)] = InsertBlankPageItem.IsEnabled,
+        [nameof(InsertPagesFromFileItem)] = InsertPagesFromFileItem.IsEnabled,
+        [nameof(ExtractPagesItem)] = ExtractPagesItem.IsEnabled,
+    };
+
+    /// <summary>The three toolbar commands that never depended on a document and must stay
+    /// enabled with zero tabs open (#617): Open (how you would get one), New window and
+    /// Settings.</summary>
+    internal bool DocumentIndependentCommandsEnabledForTest =>
+        OpenButton.IsEnabled && NewWindowButton.IsEnabled && SettingsButton.IsEnabled;
+
     private static void SetLabels(AppBarButton button, string label, string tooltip, string? name = null)
     {
         button.Label = label;

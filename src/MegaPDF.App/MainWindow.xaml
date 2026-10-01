@@ -61,9 +61,28 @@
              Every command below acts on Shell.Active — the tab the tab strip has
              selected — not on a fixed ViewModel (#348 phase 1). x:Bind defaults to
              OneTime, so every one of these is explicitly Mode=OneWay: the plan's §6.4
-             sharp edge. Shell.Active can be null with zero tabs open; x:Bind null-checks
-             every step of a path automatically, so these simply evaluate to null/false
-             rather than throwing. -->
+             sharp edge.
+
+             Shell.Active can be null with zero tabs open, and #617 is what actually
+             happens then: x:Bind does NOT compute a converted fallback for a broken
+             path — it leaves the *target* property sitting at its own declared
+             default, whatever that is, regardless of the source property's type.
+             Verified on a real build rather than assumed: Visibility's default is
+             Visible; Control.IsEnabled's is true (so IsEnabled bound to a bool through
+             Active was exactly as broken as the busy strip, not safe the way it looked
+             from a screenshot); ArmableAppBarButton.IsArmed's is registered false,
+             which is correct; and a null Command tells an AppBarButton nothing, which
+             independently leaves it enabled. So nothing here binds Shell.Active.Busy.*,
+             Shell.Active.*Command or Shell.Active.<a bool bound to IsEnabled> directly
+             any more — ShellViewModel.Active's remarks explain the proxies (Shell.Busy,
+             Shell.UndoCommand, Shell.IsDocumentOpen, …) this binds to instead, each
+             with a real non-null fallback. Commands and bools reached by exactly one
+             DocumentViewModel property (no cross-document plumbing) are proxied the
+             same way for consistency, including three Pages-flyout commands that
+             cannot currently be reached with no tab (PagesMenuButton is itself
+             correctly disabled through Shell.IsDocumentOpen), because nothing here
+             should depend on that being the only guard. IsArmed stays bound straight
+             to Shell.Active: its default was already the correct one. -->
         <!-- Work that can count itself draws a determinate bar and says where it is —
              "Picture 312 of 1,000" — and work that can be stopped puts Stop beside it (#145).
              Measured, not guessed: a shrink of a 2.5 GB document takes 39.7 s and a search of
@@ -73,7 +92,7 @@
         <Grid
             x:Name="BusyStrip"
             Grid.Row="1"
-            Visibility="{x:Bind Shell.Active.Busy.ShowsStrip, Mode=OneWay}"
+            Visibility="{x:Bind Shell.Busy.ShowsStrip, Mode=OneWay}"
             Background="{ThemeResource LayerFillColorDefaultBrush}"
             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
             BorderThickness="0,0,0,1"
@@ -85,7 +104,7 @@
             <StackPanel Grid.Column="0" Spacing="{ThemeResource SpaceXs}" VerticalAlignment="Center">
                 <TextBlock
                     x:Name="BusyLabel"
-                    Text="{x:Bind Shell.Active.Busy.Label, Mode=OneWay}"
+                    Text="{x:Bind Shell.Busy.Label, Mode=OneWay}"
                     FontSize="{ThemeResource TypeCaption}"
                     AutomationProperties.LiveSetting="Polite" />
                 <!-- Its own line rather than folded into the label: the label is the strip's
@@ -93,16 +112,16 @@
                      announce a thousand times over one shrink. This line is not a live region. -->
                 <TextBlock
                     x:Name="BusyProgressText"
-                    Text="{x:Bind Shell.Active.Busy.ProgressText, Mode=OneWay}"
-                    Visibility="{x:Bind Shell.Active.Busy.HasProgress, Mode=OneWay}"
+                    Text="{x:Bind Shell.Busy.ProgressText, Mode=OneWay}"
+                    Visibility="{x:Bind Shell.Busy.HasProgress, Mode=OneWay}"
                     FontSize="{ThemeResource TypeCaption}"
                     Opacity="0.8" />
                 <ProgressBar
                     x:Name="BusyBar"
-                    IsIndeterminate="{x:Bind Shell.Active.Busy.IsIndeterminate, Mode=OneWay}"
+                    IsIndeterminate="{x:Bind Shell.Busy.IsIndeterminate, Mode=OneWay}"
                     Minimum="0" Maximum="1"
-                    Value="{x:Bind Shell.Active.Busy.ProgressValue, Mode=OneWay}"
-                    AutomationProperties.Name="{x:Bind Shell.Active.Busy.Label, Mode=OneWay}" />
+                    Value="{x:Bind Shell.Busy.ProgressValue, Mode=OneWay}"
+                    AutomationProperties.Name="{x:Bind Shell.Busy.Label, Mode=OneWay}" />
             </StackPanel>
             <!-- Stop, not Cancel: Cancel is the word on the button that abandons a dialog, and
                  this one abandons work rather than a question. It goes away the moment it is
@@ -114,14 +133,14 @@
                 Grid.Column="1"
                 Margin="12,0,0,0"
                 VerticalAlignment="Center"
-                Visibility="{x:Bind Shell.Active.Busy.CanCancel, Mode=OneWay}"
+                Visibility="{x:Bind Shell.Busy.CanCancel, Mode=OneWay}"
                 Click="OnBusyCancelButtonClick" />
             <TextBlock
                 x:Name="BusyCancellingLabel"
                 Grid.Column="1"
                 Margin="12,0,0,0"
                 VerticalAlignment="Center"
-                Visibility="{x:Bind Shell.Active.Busy.IsCancelling, Mode=OneWay}"
+                Visibility="{x:Bind Shell.Busy.IsCancelling, Mode=OneWay}"
                 FontSize="{ThemeResource TypeCaption}"
                 Opacity="0.8" />
         </Grid>
@@ -141,27 +160,27 @@
             </AppBarButton>
             <!-- The visible label carries the unsaved-changes dot; the UIA name
                  stays plain "Save" so Narrator announces a stable control name. -->
-            <AppBarButton x:Name="SaveButton" Command="{x:Bind Shell.Active.SaveCommand, Mode=OneWay}" Label="{x:Bind Shell.Active.SaveButtonLabel, Mode=OneWay}" AccessKey="S" KeyboardAcceleratorTextOverride="Ctrl+S" DynamicOverflowOrder="90" AutomationProperties.AutomationId="SaveButton">
+            <AppBarButton x:Name="SaveButton" Command="{x:Bind Shell.SaveCommand, Mode=OneWay}" Label="{x:Bind Shell.SaveButtonLabel, Mode=OneWay}" AccessKey="S" KeyboardAcceleratorTextOverride="Ctrl+S" DynamicOverflowOrder="90" AutomationProperties.AutomationId="SaveButton">
                 <AppBarButton.Icon><FontIcon Glyph="&#xE74E;" /></AppBarButton.Icon>
             </AppBarButton>
             <AppBarSeparator DynamicOverflowOrder="80" />
 
             <!-- The three editing tools follow the document's permissions (#131):
                  annotate for signatures, modify for whiteout and added text. -->
-            <AppBarButton x:Name="SignaturesToolbarButton" Click="OnSignaturesClicked" IsEnabled="{x:Bind Shell.Active.IsSigningAllowed, Mode=OneWay}" DynamicOverflowOrder="80" AutomationProperties.AutomationId="SignaturesButton">
+            <AppBarButton x:Name="SignaturesToolbarButton" Click="OnSignaturesClicked" IsEnabled="{x:Bind Shell.IsSigningAllowed, Mode=OneWay}" DynamicOverflowOrder="80" AutomationProperties.AutomationId="SignaturesButton">
                 <AppBarButton.Icon><FontIcon Glyph="&#xEE56;" /></AppBarButton.Icon>
             </AppBarButton>
-            <local:ArmableAppBarButton x:Name="AddTextButton" IsArmed="{x:Bind Shell.Active.IsTextBoxMode, Mode=OneWay}" Click="OnTextBoxModeClicked" IsEnabled="{x:Bind Shell.Active.IsTextBoxAllowed, Mode=OneWay}" DynamicOverflowOrder="70" AutomationProperties.AutomationId="AddTextButton">
+            <local:ArmableAppBarButton x:Name="AddTextButton" IsArmed="{x:Bind Shell.Active.IsTextBoxMode, Mode=OneWay}" Click="OnTextBoxModeClicked" IsEnabled="{x:Bind Shell.IsTextBoxAllowed, Mode=OneWay}" DynamicOverflowOrder="70" AutomationProperties.AutomationId="AddTextButton">
                 <local:ArmableAppBarButton.Icon><FontIcon Glyph="&#xE8D2;" /></local:ArmableAppBarButton.Icon>
             </local:ArmableAppBarButton>
-            <local:ArmableAppBarButton x:Name="WhiteoutButton" IsArmed="{x:Bind Shell.Active.IsWhiteoutMode, Mode=OneWay}" Click="OnWhiteoutModeClicked" IsEnabled="{x:Bind Shell.Active.IsEditingAllowed, Mode=OneWay}" DynamicOverflowOrder="40" AutomationProperties.AutomationId="WhiteoutButton">
+            <local:ArmableAppBarButton x:Name="WhiteoutButton" IsArmed="{x:Bind Shell.Active.IsWhiteoutMode, Mode=OneWay}" Click="OnWhiteoutModeClicked" IsEnabled="{x:Bind Shell.IsEditingAllowed, Mode=OneWay}" DynamicOverflowOrder="40" AutomationProperties.AutomationId="WhiteoutButton">
                 <local:ArmableAppBarButton.Icon><FontIcon Glyph="&#xE75C;" /></local:ArmableAppBarButton.Icon>
             </local:ArmableAppBarButton>
             <!-- Redact beside Whiteout, because the pair is the point (#173): one covers,
                  the other removes, and each tooltip says which. Glyph E7BA is Segoe Fluent's
                  Warning triangle, not a block-out mark: it reads as "careful", and it stays
                  for 2.0 (#146 §3). It overflows before Whiteout does, not after. -->
-            <local:ArmableAppBarButton x:Name="RedactButton" IsArmed="{x:Bind Shell.Active.IsRedactMode, Mode=OneWay}" Click="OnRedactModeClicked" IsEnabled="{x:Bind Shell.Active.IsEditingAllowed, Mode=OneWay}" DynamicOverflowOrder="41" AutomationProperties.AutomationId="RedactButton">
+            <local:ArmableAppBarButton x:Name="RedactButton" IsArmed="{x:Bind Shell.Active.IsRedactMode, Mode=OneWay}" Click="OnRedactModeClicked" IsEnabled="{x:Bind Shell.IsEditingAllowed, Mode=OneWay}" DynamicOverflowOrder="41" AutomationProperties.AutomationId="RedactButton">
                 <local:ArmableAppBarButton.Icon><FontIcon Glyph="&#xE7BA;" /></local:ArmableAppBarButton.Icon>
             </local:ArmableAppBarButton>
             <!-- Contextual (#144): shown while Add text is armed, or an added text box is
@@ -195,7 +214,7 @@
                     VerticalAlignment="Center"
                     Background="Transparent"
                     BorderThickness="0"
-                    IsEnabled="{x:Bind Shell.Active.IsDocumentOpen, Mode=OneWay}"
+                    IsEnabled="{x:Bind Shell.IsDocumentOpen, Mode=OneWay}"
                     AutomationProperties.AutomationId="PagesMenuButton">
                     <DropDownButton.Content>
                         <FontIcon Glyph="&#xE736;" FontSize="{ThemeResource TypeCaption}" />
@@ -209,38 +228,38 @@
                                                   KeyboardAcceleratorTextOverride="F4"
                                                   AutomationProperties.AutomationId="PagesPaneItem" />
                             <MenuFlyoutSeparator />
-                            <MenuFlyoutItem x:Name="RotateRightItem" Command="{x:Bind Shell.Active.RotatePagesRightCommand, Mode=OneWay}"
+                            <MenuFlyoutItem x:Name="RotateRightItem" Command="{x:Bind Shell.RotatePagesRightCommand, Mode=OneWay}"
                                             KeyboardAcceleratorTextOverride="Ctrl+R"
                                             AutomationProperties.AutomationId="RotateRightItem">
                                 <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE7AD;" /></MenuFlyoutItem.Icon>
                             </MenuFlyoutItem>
-                            <MenuFlyoutItem x:Name="RotateLeftItem" Command="{x:Bind Shell.Active.RotatePagesLeftCommand, Mode=OneWay}"
+                            <MenuFlyoutItem x:Name="RotateLeftItem" Command="{x:Bind Shell.RotatePagesLeftCommand, Mode=OneWay}"
                                             KeyboardAcceleratorTextOverride="Ctrl+Shift+R"
                                             AutomationProperties.AutomationId="RotateLeftItem">
                                 <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE7A7;" /></MenuFlyoutItem.Icon>
                             </MenuFlyoutItem>
-                            <MenuFlyoutItem x:Name="DeletePagesItem" Command="{x:Bind Shell.Active.DeletePagesCommand, Mode=OneWay}"
+                            <MenuFlyoutItem x:Name="DeletePagesItem" Command="{x:Bind Shell.DeletePagesCommand, Mode=OneWay}"
                                             AutomationProperties.AutomationId="DeletePagesItem">
                                 <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE74D;" /></MenuFlyoutItem.Icon>
                             </MenuFlyoutItem>
                             <MenuFlyoutSeparator />
-                            <MenuFlyoutItem x:Name="MovePageEarlierItem" Command="{x:Bind Shell.Active.MovePageEarlierCommand, Mode=OneWay}"
+                            <MenuFlyoutItem x:Name="MovePageEarlierItem" Command="{x:Bind Shell.MovePageEarlierCommand, Mode=OneWay}"
                                             KeyboardAcceleratorTextOverride="Ctrl+Shift+Left"
                                             AutomationProperties.AutomationId="MovePageEarlierItem" />
-                            <MenuFlyoutItem x:Name="MovePageLaterItem" Command="{x:Bind Shell.Active.MovePageLaterCommand, Mode=OneWay}"
+                            <MenuFlyoutItem x:Name="MovePageLaterItem" Command="{x:Bind Shell.MovePageLaterCommand, Mode=OneWay}"
                                             KeyboardAcceleratorTextOverride="Ctrl+Shift+Right"
                                             AutomationProperties.AutomationId="MovePageLaterItem" />
                             <MenuFlyoutSeparator />
-                            <MenuFlyoutItem x:Name="InsertBlankPageItem" Command="{x:Bind Shell.Active.InsertBlankPageCommand, Mode=OneWay}"
+                            <MenuFlyoutItem x:Name="InsertBlankPageItem" Command="{x:Bind Shell.InsertBlankPageCommand, Mode=OneWay}"
                                             AutomationProperties.AutomationId="InsertBlankPageItem">
                                 <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE710;" /></MenuFlyoutItem.Icon>
                             </MenuFlyoutItem>
-                            <MenuFlyoutItem x:Name="InsertPagesFromFileItem" Command="{x:Bind Shell.Active.InsertPagesFromFileCommand, Mode=OneWay}"
+                            <MenuFlyoutItem x:Name="InsertPagesFromFileItem" Command="{x:Bind Shell.InsertPagesFromFileCommand, Mode=OneWay}"
                                             AutomationProperties.AutomationId="InsertPagesFromFileItem">
                                 <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE8E5;" /></MenuFlyoutItem.Icon>
                             </MenuFlyoutItem>
                             <MenuFlyoutSeparator />
-                            <MenuFlyoutItem x:Name="ExtractPagesItem" Command="{x:Bind Shell.Active.ExtractSelectedPagesCommand, Mode=OneWay}"
+                            <MenuFlyoutItem x:Name="ExtractPagesItem" Command="{x:Bind Shell.ExtractSelectedPagesCommand, Mode=OneWay}"
                                             AutomationProperties.AutomationId="ExtractPagesItem">
                                 <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE792;" /></MenuFlyoutItem.Icon>
                             </MenuFlyoutItem>
@@ -250,10 +269,10 @@
             </AppBarElementContainer>
             <AppBarSeparator DynamicOverflowOrder="50" />
 
-            <AppBarButton x:Name="UndoButton" Command="{x:Bind Shell.Active.UndoCommand, Mode=OneWay}" KeyboardAcceleratorTextOverride="Ctrl+Z" DynamicOverflowOrder="50" AutomationProperties.AutomationId="UndoButton">
+            <AppBarButton x:Name="UndoButton" Command="{x:Bind Shell.UndoCommand, Mode=OneWay}" KeyboardAcceleratorTextOverride="Ctrl+Z" DynamicOverflowOrder="50" AutomationProperties.AutomationId="UndoButton">
                 <AppBarButton.Icon><FontIcon Glyph="&#xE7A7;" /></AppBarButton.Icon>
             </AppBarButton>
-            <AppBarButton x:Name="RedoButton" Command="{x:Bind Shell.Active.RedoCommand, Mode=OneWay}" KeyboardAcceleratorTextOverride="Ctrl+Y" DynamicOverflowOrder="10" AutomationProperties.AutomationId="RedoButton">
+            <AppBarButton x:Name="RedoButton" Command="{x:Bind Shell.RedoCommand, Mode=OneWay}" KeyboardAcceleratorTextOverride="Ctrl+Y" DynamicOverflowOrder="10" AutomationProperties.AutomationId="RedoButton">
                 <AppBarButton.Icon><FontIcon Glyph="&#xE7A6;" /></AppBarButton.Icon>
             </AppBarButton>
             <AppBarSeparator DynamicOverflowOrder="20" />
@@ -261,7 +280,7 @@
             <!-- One zoom control (#144): −, the level with a menu of Actual size, the
                  two fits and preset levels, and +. Icons only, even when the row is
                  labelled: the level itself is the label. -->
-            <AppBarButton x:Name="ZoomOutButton" LabelPosition="Collapsed" Command="{x:Bind Shell.Active.ZoomOutCommand, Mode=OneWay}" KeyboardAcceleratorTextOverride="Ctrl+−" DynamicOverflowOrder="20" AutomationProperties.AutomationId="ZoomOutButton">
+            <AppBarButton x:Name="ZoomOutButton" LabelPosition="Collapsed" Command="{x:Bind Shell.ZoomOutCommand, Mode=OneWay}" KeyboardAcceleratorTextOverride="Ctrl+−" DynamicOverflowOrder="20" AutomationProperties.AutomationId="ZoomOutButton">
                 <AppBarButton.Icon><FontIcon Glyph="&#xE738;" /></AppBarButton.Icon>
             </AppBarButton>
             <AppBarElementContainer x:Name="ZoomMenuItem" DynamicOverflowOrder="20"
@@ -273,8 +292,8 @@
                     VerticalAlignment="Center"
                     Background="Transparent"
                     BorderThickness="0"
-                    Content="{x:Bind Shell.Active.ZoomLabel, Mode=OneWay}"
-                    IsEnabled="{x:Bind Shell.Active.IsDocumentOpen, Mode=OneWay}"
+                    Content="{x:Bind Shell.ZoomLabel, Mode=OneWay}"
+                    IsEnabled="{x:Bind Shell.IsDocumentOpen, Mode=OneWay}"
                     AutomationProperties.AutomationId="ZoomMenuButton">
                     <DropDownButton.Flyout>
                         <MenuFlyout x:Name="ZoomMenu" Placement="BottomEdgeAlignedLeft" Opening="OnZoomMenuOpening">
@@ -298,26 +317,26 @@
                     </DropDownButton.Flyout>
                 </DropDownButton>
             </AppBarElementContainer>
-            <AppBarButton x:Name="ZoomInButton" LabelPosition="Collapsed" Command="{x:Bind Shell.Active.ZoomInCommand, Mode=OneWay}" KeyboardAcceleratorTextOverride="Ctrl+Plus" DynamicOverflowOrder="20" AutomationProperties.AutomationId="ZoomInButton">
+            <AppBarButton x:Name="ZoomInButton" LabelPosition="Collapsed" Command="{x:Bind Shell.ZoomInCommand, Mode=OneWay}" KeyboardAcceleratorTextOverride="Ctrl+Plus" DynamicOverflowOrder="20" AutomationProperties.AutomationId="ZoomInButton">
                 <AppBarButton.Icon><FontIcon Glyph="&#xE710;" /></AppBarButton.Icon>
             </AppBarButton>
 
             <CommandBar.SecondaryCommands>
-                <AppBarButton x:Name="SaveAsButton" Command="{x:Bind Shell.Active.SaveAsCommand, Mode=OneWay}" KeyboardAcceleratorTextOverride="Ctrl+Shift+S" AutomationProperties.AutomationId="SaveAsButton">
+                <AppBarButton x:Name="SaveAsButton" Command="{x:Bind Shell.SaveAsCommand, Mode=OneWay}" KeyboardAcceleratorTextOverride="Ctrl+Shift+S" AutomationProperties.AutomationId="SaveAsButton">
                     <AppBarButton.Icon><FontIcon Glyph="&#xE792;" /></AppBarButton.Icon>
                 </AppBarButton>
                 <!-- Set, change or remove the document's password; on a restricted
                      document, offers the owner password instead (#131, ADR-004). -->
-                <AppBarButton x:Name="SecurityButton" Command="{x:Bind Shell.Active.SecurityCommand, Mode=OneWay}" AutomationProperties.AutomationId="SecurityButton">
+                <AppBarButton x:Name="SecurityButton" Command="{x:Bind Shell.SecurityCommand, Mode=OneWay}" AutomationProperties.AutomationId="SecurityButton">
                     <AppBarButton.Icon><FontIcon Glyph="&#xE72E;" /></AppBarButton.Icon>
                 </AppBarButton>
-                <AppBarButton x:Name="PrintButton" Click="OnPrintClicked" IsEnabled="{x:Bind Shell.Active.IsPrintAllowed, Mode=OneWay}" KeyboardAcceleratorTextOverride="Ctrl+P" AutomationProperties.AutomationId="PrintButton">
+                <AppBarButton x:Name="PrintButton" Click="OnPrintClicked" IsEnabled="{x:Bind Shell.IsPrintAllowed, Mode=OneWay}" KeyboardAcceleratorTextOverride="Ctrl+P" AutomationProperties.AutomationId="PrintButton">
                     <AppBarButton.Icon><FontIcon Glyph="&#xE749;" /></AppBarButton.Icon>
                 </AppBarButton>
-                <AppBarButton x:Name="ShrinkButton" Command="{x:Bind Shell.Active.ShrinkForEmailCommand, Mode=OneWay}" AutomationProperties.AutomationId="ShrinkButton">
+                <AppBarButton x:Name="ShrinkButton" Command="{x:Bind Shell.ShrinkForEmailCommand, Mode=OneWay}" AutomationProperties.AutomationId="ShrinkButton">
                     <AppBarButton.Icon><FontIcon Glyph="&#xE715;" /></AppBarButton.Icon>
                 </AppBarButton>
-                <AppBarButton x:Name="FindButton" Click="OnFindClicked" IsEnabled="{x:Bind Shell.Active.IsDocumentOpen, Mode=OneWay}" KeyboardAcceleratorTextOverride="Ctrl+F" AutomationProperties.AutomationId="FindButton">
+                <AppBarButton x:Name="FindButton" Click="OnFindClicked" IsEnabled="{x:Bind Shell.IsDocumentOpen, Mode=OneWay}" KeyboardAcceleratorTextOverride="Ctrl+F" AutomationProperties.AutomationId="FindButton">
                     <AppBarButton.Icon><FontIcon Glyph="&#xE721;" /></AppBarButton.Icon>
                 </AppBarButton>
                 <!-- The second home for Reading mode (#504): the zoom flyout is where it
@@ -328,7 +347,7 @@
                      at a narrow width the Pages control has moved into this menu as an
                      element container, where a DropDownButton's own flyout is awkward, so the
                      pane at least stays one click away. -->
-                <AppBarButton x:Name="PagesPaneButton" Click="OnTogglePagesPaneClicked" IsEnabled="{x:Bind Shell.Active.IsDocumentOpen, Mode=OneWay}" KeyboardAcceleratorTextOverride="F4" AutomationProperties.AutomationId="PagesPaneButton">
+                <AppBarButton x:Name="PagesPaneButton" Click="OnTogglePagesPaneClicked" IsEnabled="{x:Bind Shell.IsDocumentOpen, Mode=OneWay}" KeyboardAcceleratorTextOverride="F4" AutomationProperties.AutomationId="PagesPaneButton">
                     <AppBarButton.Icon><FontIcon Glyph="&#xE736;" /></AppBarButton.Icon>
                 </AppBarButton>
                 <AppBarButton x:Name="ReadingModeButton" Click="OnReadingModeClicked" IsEnabled="{x:Bind Shell.HasDocuments, Mode=OneWay}" KeyboardAcceleratorTextOverride="Ctrl+H" AutomationProperties.AutomationId="ReadingModeButton">
@@ -337,7 +356,7 @@
                 <!-- Marks accumulate as you drag and are dropped as one step (#329), so the
                      tidying action is here rather than on the toolbar: it is not part of
                      marking. Offered only while there is something to drop. -->
-                <AppBarButton x:Name="ClearMarksButton" Click="OnClearRedactionMarksClicked" IsEnabled="{x:Bind Shell.Active.HasRedactionMarks, Mode=OneWay}" AutomationProperties.AutomationId="ClearMarksButton">
+                <AppBarButton x:Name="ClearMarksButton" Click="OnClearRedactionMarksClicked" IsEnabled="{x:Bind Shell.HasRedactionMarks, Mode=OneWay}" AutomationProperties.AutomationId="ClearMarksButton">
                     <AppBarButton.Icon><FontIcon Glyph="&#xE894;" /></AppBarButton.Icon>
                 </AppBarButton>
                 <AppBarSeparator />

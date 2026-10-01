@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Windows.Input;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MegaPDF.Core.Recovery;
@@ -57,8 +58,59 @@ public sealed partial class ShellViewModel : ObservableObject
     public ObservableCollection<DocumentViewModel> Documents { get; } = [];
 
     /// <summary>The tab the toolbar, menus and accelerators act on.</summary>
+    ///
+    /// <remarks>
+    /// #617: every <c>x:Bind</c> in <c>MainWindow.xaml</c> that reaches through <c>Shell.Active</c>
+    /// used to break silently with zero tabs open, because <c>x:Bind</c> does not compute a
+    /// converted fallback for a broken path — it leaves the *target* property sitting at its own
+    /// declared default, whatever that is for that property, regardless of the source property's
+    /// type. Measured off a real build (do not take the shape of this bug on faith — the original
+    /// report guessed a narrower one and was wrong): <see cref="Visibility"/>'s default is
+    /// <see cref="Visibility.Visible"/>; <c>Control.IsEnabled</c>'s is <see langword="true"/>, so
+    /// <c>IsEnabled="{x:Bind Shell.Active.IsDocumentOpen}"</c> is just as broken as the busy strip
+    /// was, not "fine because bool defaults to false" as it looked from the screenshot alone;
+    /// <c>ArmableAppBarButton.IsArmed</c>'s is registered <see langword="false"/>, which actually is
+    /// safe; and <c>ButtonBase.Command</c>'s is null, which independently leaves a button enabled
+    /// because a null <c>Command</c> tells it nothing to disable for.
+    ///
+    /// So every <c>Visibility</c>, <c>IsEnabled</c> and <c>Command</c> the toolbar needs through
+    /// <c>Active</c> is proxied here instead, each falling back to a safe non-null default
+    /// (<see cref="Busy"/>'s idle <see cref="BusyState"/>, <see cref="DisabledCommand.Instance"/>,
+    /// or a plain <see langword="false"/> given explicitly rather than hoped for) rather than to
+    /// <c>Active</c>'s absence. Only <c>IsArmed</c> stays bound straight to <c>Active</c>: its
+    /// registered default already is the correct one. <c>MainWindow.xaml</c> binds to
+    /// <c>Shell.*</c>, never <c>Shell.Active.*</c>, for anything in the first category — see that
+    /// file's toolbar comment — so the next binding anyone adds through <c>Active</c> is safe by
+    /// construction only if it follows the same rule, the way <see cref="HasDocuments"/>/
+    /// <see cref="EmptyStateVisibility"/> already did.
+    /// </remarks>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(WindowTitle))]
+    [NotifyPropertyChangedFor(nameof(Busy))]
+    [NotifyPropertyChangedFor(nameof(SaveCommand))]
+    [NotifyPropertyChangedFor(nameof(SaveAsCommand))]
+    [NotifyPropertyChangedFor(nameof(SecurityCommand))]
+    [NotifyPropertyChangedFor(nameof(ShrinkForEmailCommand))]
+    [NotifyPropertyChangedFor(nameof(UndoCommand))]
+    [NotifyPropertyChangedFor(nameof(RedoCommand))]
+    [NotifyPropertyChangedFor(nameof(ZoomInCommand))]
+    [NotifyPropertyChangedFor(nameof(ZoomOutCommand))]
+    [NotifyPropertyChangedFor(nameof(RotatePagesRightCommand))]
+    [NotifyPropertyChangedFor(nameof(RotatePagesLeftCommand))]
+    [NotifyPropertyChangedFor(nameof(DeletePagesCommand))]
+    [NotifyPropertyChangedFor(nameof(MovePageEarlierCommand))]
+    [NotifyPropertyChangedFor(nameof(MovePageLaterCommand))]
+    [NotifyPropertyChangedFor(nameof(InsertBlankPageCommand))]
+    [NotifyPropertyChangedFor(nameof(InsertPagesFromFileCommand))]
+    [NotifyPropertyChangedFor(nameof(ExtractSelectedPagesCommand))]
+    [NotifyPropertyChangedFor(nameof(SaveButtonLabel))]
+    [NotifyPropertyChangedFor(nameof(ZoomLabel))]
+    [NotifyPropertyChangedFor(nameof(IsDocumentOpen))]
+    [NotifyPropertyChangedFor(nameof(IsSigningAllowed))]
+    [NotifyPropertyChangedFor(nameof(IsTextBoxAllowed))]
+    [NotifyPropertyChangedFor(nameof(IsEditingAllowed))]
+    [NotifyPropertyChangedFor(nameof(IsPrintAllowed))]
+    [NotifyPropertyChangedFor(nameof(HasRedactionMarks))]
     private DocumentViewModel? _active;
 
     /// <summary>Drives the empty state: "no tabs" (plan §1 decision: no "Untitled" tab).</summary>
@@ -68,6 +120,70 @@ public sealed partial class ShellViewModel : ObservableObject
 
     /// <summary>The window's title bar text: the active tab's, or just the app name with no tabs.</summary>
     public string WindowTitle => Active?.WindowTitle ?? DocumentViewModel.AppName;
+
+    // --- #617: Active's busy state and commands, proxied so MainWindow.xaml never has to reach
+    // through a nullable Active. See the remarks on Active above for why reaching through it
+    // directly is the wrong shape for anything but a plain bool. ---
+
+    private readonly BusyState _idleBusy = new();
+
+    /// <summary>The active tab's busy state, or an always-idle instance with no tab open. Never
+    /// null, so every <c>Shell.Busy.*</c> binding gets the ordinary bool-to-Visibility conversion
+    /// instead of a broken path's fallback to the target's own default.</summary>
+    public BusyState Busy => Active?.Busy ?? _idleBusy;
+
+    public ICommand SaveCommand => Active?.SaveCommand ?? (ICommand)DisabledCommand.Instance;
+    public ICommand SaveAsCommand => Active?.SaveAsCommand ?? (ICommand)DisabledCommand.Instance;
+    public ICommand SecurityCommand => Active?.SecurityCommand ?? (ICommand)DisabledCommand.Instance;
+    public ICommand ShrinkForEmailCommand => Active?.ShrinkForEmailCommand ?? (ICommand)DisabledCommand.Instance;
+    public ICommand UndoCommand => Active?.UndoCommand ?? (ICommand)DisabledCommand.Instance;
+    public ICommand RedoCommand => Active?.RedoCommand ?? (ICommand)DisabledCommand.Instance;
+    public ICommand ZoomInCommand => Active?.ZoomInCommand ?? (ICommand)DisabledCommand.Instance;
+    public ICommand ZoomOutCommand => Active?.ZoomOutCommand ?? (ICommand)DisabledCommand.Instance;
+    public ICommand RotatePagesRightCommand => Active?.RotatePagesRightCommand ?? (ICommand)DisabledCommand.Instance;
+    public ICommand RotatePagesLeftCommand => Active?.RotatePagesLeftCommand ?? (ICommand)DisabledCommand.Instance;
+    public ICommand DeletePagesCommand => Active?.DeletePagesCommand ?? (ICommand)DisabledCommand.Instance;
+    public ICommand MovePageEarlierCommand => Active?.MovePageEarlierCommand ?? (ICommand)DisabledCommand.Instance;
+    public ICommand MovePageLaterCommand => Active?.MovePageLaterCommand ?? (ICommand)DisabledCommand.Instance;
+    public ICommand InsertBlankPageCommand => Active?.InsertBlankPageCommand ?? (ICommand)DisabledCommand.Instance;
+    public ICommand InsertPagesFromFileCommand => Active?.InsertPagesFromFileCommand ?? (ICommand)DisabledCommand.Instance;
+    public ICommand ExtractSelectedPagesCommand => Active?.ExtractSelectedPagesCommand ?? (ICommand)DisabledCommand.Instance;
+
+    // Cosmetic text reached through Active: a reference-type path break assigns a literal null
+    // (there is no conversion function to skip), which just blanks the label -- not the wrong
+    // kind of bug #617 is about, but the same discipline applies so Save and the zoom level keep
+    // their ordinary text while correctly disabled rather than going empty.
+    public string SaveButtonLabel => Active?.SaveButtonLabel ?? Strings.Save;
+    public string ZoomLabel => Active?.ZoomLabel ?? "";
+
+    // IsEnabled reached through Active (#617, verified on a real build -- see the remarks on
+    // Active above): Control.IsEnabled's own default is true, not false, so every one of these
+    // was exactly as broken as the busy strip, just less visible in a screenshot. IsArmed is not
+    // here: ArmableAppBarButton registers false as its default, which is already correct, so
+    // MainWindow.xaml keeps those three bound straight to Shell.Active.
+    public bool IsDocumentOpen => Active?.IsDocumentOpen ?? false;
+    public bool IsSigningAllowed => Active?.IsSigningAllowed ?? false;
+    public bool IsTextBoxAllowed => Active?.IsTextBoxAllowed ?? false;
+    public bool IsEditingAllowed => Active?.IsEditingAllowed ?? false;
+    public bool IsPrintAllowed => Active?.IsPrintAllowed ?? false;
+    public bool HasRedactionMarks => Active?.HasRedactionMarks ?? false;
+
+    /// <summary>
+    /// A command that can never execute, for a Shell.Active-less empty state (#617). WinUI's
+    /// <c>ButtonBase</c> treats a null <c>Command</c> as "nothing to ask, so stay however I was" —
+    /// which for a never-touched <c>AppBarButton</c> is enabled — rather than as "disabled". Every
+    /// <c>Shell.*Command</c> property above falls back to this instead of to null, so the button
+    /// is actually told it cannot run. <see cref="CanExecuteChanged"/> never needs to fire:
+    /// "always false" never changes.
+    /// </summary>
+    private sealed class DisabledCommand : ICommand
+    {
+        public static readonly DisabledCommand Instance = new();
+        private DisabledCommand() { }
+        public bool CanExecute(object? parameter) => false;
+        public void Execute(object? parameter) { }
+        public event EventHandler? CanExecuteChanged { add { } remove { } }
+    }
 
     /// <summary>A fresh, not-yet-opened document — what a new tab starts as. Becomes the active tab.</summary>
     public DocumentViewModel AddDocument()

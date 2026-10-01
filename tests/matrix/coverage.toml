@@ -2346,5 +2346,9 @@ ref = ".github/workflows/ci.yml::Run-Check \"more\""
 why = "the toolbar overflow state asserts nothing: it opens the flyout, returns true, and the flyout's own popup is not even in the captured PNG (#144). It proves the app does not crash opening More, which is not coverage of a feature"
 
 [[exempt]]
+ref = ".github/workflows/ci.yml::Run-Check \"empty\""
+why = "a regression guard for the zero-tab window chrome (#617: busy strip, Stop/\"Stopping…\", Undo/Redo and every other toolbar command), not coverage of one feature — the commands it checks already have their own cells for their document-open behaviour against other states"
+
+[[exempt]]
 ref = "ios/MegaPDFUITests/PageDragUITests.swift"
 why = "dragging a page tile onto another is a by-hand gate (#570): the drag is unreliable to synthesise on the simulator, so CI does not run this and no cell may count it"

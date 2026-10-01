@@ -672,6 +672,11 @@ jobs:
           # depends on that, and it is not particular to running in CI, so it
           # is left alone rather than chased here.
           #
+          # `empty` (#617): the window as it looks the instant it launches, zero tabs --
+          # the one state here that must NOT have a document open (App.xaml.cs knows not
+          # to open $fixture for it). No page to render, so it is the cheapest check in
+          # this job; 45s is still generous.
+          Run-Check "empty" 45
           # `pages` (#174) gets 120s where the others get 60: it is 107 checks
           # over eleven documents, it opens a second tab and reopens a document
           # into it a dozen times, and every reopen waits for the first page to
