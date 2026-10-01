@@ -758,6 +758,53 @@ What they cannot reach: the system picker's own sheet (DocumentsUI is stubbed, n
 driven), the OS share sheet, TalkBack itself, and how any of it *feels* — the manual pass
 in this file still stands.
 
+#### Three timing traps, and the numbers that settle them (#611)
+
+Main went red for most of a day on `PageToolsProgressTest`, and none of it was a product
+defect: it was three races the *tests* were losing, all of one family — a check that
+samples something the app is in the middle of changing. They are written down here because
+each was diagnosed from the test's name twice before anybody measured anything.
+
+1. **An operation has to outlast the busy strip's 0.5 s show threshold**
+   (`BusyState.SHOW_AFTER_MS`) before Stop is offered at all, and these fixtures were sized
+   by eye rather than by measurement. Measured on the hosted CI emulator: extract over the
+   old `q Q`-padded 800 x 100 KB fixture took **373 ms** — *under* the threshold, so most
+   runs had nothing to press Stop on. The 80 MB document was a mirage:
+   `megapdf_pages_extract` deflates what it copies and a no-op pair compresses to nothing,
+   so the real work was a 332 KB write. With incompressible padding the same shape takes
+   **1,893 ms**. The search sweep was the same story at 2,000 pages (**679 ms**, 1.4x the
+   threshold, 3 failures in 24) and is 8,000 pages now (**1,904 ms**). Extract runs at
+   ~42 MB/s of *output* and the sweep at ~0.24 ms a page, both near-linear, so bytes and
+   pages are the only dials: **re-measure before shrinking either count.** Combine's own
+   import of 5,000 pages is only **149 ms**; what keeps its token alive long enough is
+   re-reading 5,002 page sizes afterwards, not the import.
+2. **Undo is offered a moment before it will be obeyed.** `ViewerViewModel.undo` goes
+   through `launchEdit`, which drops the request silently while `editingBlocked`
+   (`editsInFlight > 0`) — by design (#145: a tap while one runs is ignored, never queued).
+   The button greys out on `toolsDisabled` instead, which deliberately leaves
+   `editsInFlight` out so quick page work does not make the toolbar flicker. An operation's
+   effect lands *inside* `launchEdit`'s block and its `editsInFlight--` in the `finally`
+   after it, so a test pressing Undo as soon as the previous change shows up is pressing
+   into that gap. Every test presses Undo and Redo through `clickUndo()` / `clickRedo()`,
+   which wait on `editingBlocked` — the question the view model actually answers. Do not
+   click the button directly.
+3. **A one-shot status cannot be asserted on.** `ViewerViewModel.statusMessage` used to be
+   erased by the toast that showed it, so "did the app say Stopped.?" was a race against a
+   recomposition the test cannot see. It is kept now, and the toast de-duplicates on
+   `statusSerial` instead.
+
+Two habits came out of it. A wait that can time out uses `waitUntilOrExplain`, so the
+report says what the app was doing rather than only a line number — that is what finally
+told all three apart. And `.github/scripts/run-instrumented-tests.sh` runs `adb root`
+*before* starting the logcat capture: `adb root` restarts adbd and tears down every
+connection it was serving, which is why four of the six original #611 failures uploaded a
+0-byte `instrumented-logcat.txt` — #545's diagnostics were missing exactly when needed.
+
+One thing #611 did **not** change, and is Dave's call rather than a flake: the toolbar
+genuinely does offer an Undo that the view model will discard, for the few hundred
+milliseconds after an edit that are too quick to show a spinner. #145 chose that over a
+flickering toolbar. A person who taps in that window sees nothing happen.
+
 ### megapdf-cli (#142, #355, #357)
 
 `megapdf-cli extract <file.pdf>` is a small, self-contained native binary — no .NET runtime,

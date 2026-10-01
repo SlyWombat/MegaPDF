@@ -63,8 +63,8 @@ class WhiteoutLifecycleTest {
 
     private fun tap(pt: Offset) = rule.page().performTouchInput { click(pt) }
 
-    private fun undo() = rule.clickLabelled(str(R.string.undo))
-    private fun redo() = rule.clickLabelled(str(R.string.redo))
+    private fun undo() = rule.clickUndo()
+    private fun redo() = rule.clickRedo()
 
     @Test
     fun menuRowArmsAndSaysSo() {

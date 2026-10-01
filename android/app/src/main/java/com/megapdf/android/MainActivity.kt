@@ -174,13 +174,23 @@ fun MegaPdfApp(viewModel: ViewerViewModel = viewModel(), screenshotState: String
     }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
 
-    // One-shot status toasts ("Saved", save errors).
-    val status = viewModel.statusMessage
-    LaunchedEffect(status) {
-        if (status != null) {
-            Toast.makeText(context, status, Toast.LENGTH_SHORT).show()
-            viewModel.consumeStatus()
-        }
+    // Status toasts ("Saved", save errors): one per message, keyed on the view model's own
+    // count of them rather than on the text (#611). Keying on the text meant showing a toast
+    // had to erase the message to avoid showing it twice — and the message is also the only
+    // record of what the app said, so erasing it left nothing for anything else to read. The
+    // count does the de-duplication instead, and the same message twice is still two toasts.
+    //
+    // The last serial already said is remembered across an activity recreation, because the view
+    // model outlives one and a fresh composition would otherwise toast the last message again on
+    // every rotation — which erasing the message used to prevent for free.
+    var saidSerial by androidx.compose.runtime.saveable.rememberSaveable {
+        androidx.compose.runtime.mutableStateOf(0)
+    }
+    val statusSerial = viewModel.statusSerial
+    LaunchedEffect(statusSerial) {
+        if (statusSerial <= saidSerial) return@LaunchedEffect
+        saidSerial = statusSerial
+        viewModel.statusMessage?.let { Toast.makeText(context, it, Toast.LENGTH_SHORT).show() }
     }
 
     // Share (#378): once the view model has a copy ready under cacheDir/share/, hand it to
