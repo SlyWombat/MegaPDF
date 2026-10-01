@@ -137,7 +137,12 @@
        tile size than the six behind it, every one of which has a grey toolbar across the
        top. That is the feature, not a defect in the capture, and the alternative — shoot
        reading mode in sepia, which makes the tile unmistakable — was left for Dave: a
-       set whose first image is the only tinted one reads as a different app. -->
+       set whose first image is the only tinted one reads as a different app.
+
+       Decided (Dave, 2026-10-01, during the #613/#616/#618/#621/#623 reconciliation):
+       stays blank, as the tile image and everywhere else. The blankness is the point —
+       reading mode is a feature about removing things — so do not switch this capture to
+       sepia and do not reorder the slots to move it off the tile. Settled; do not reopen. -->
   <screenshots>
     <screenshot type="default">
       <image type="source" width="1280" height="800">https://electricrv.ca/megapdf/screenshots/linux/en/01-reading.png</image>
