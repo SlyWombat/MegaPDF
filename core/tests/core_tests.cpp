@@ -6658,6 +6658,182 @@ void test_structure_rotated_pages(const std::string& repo) {
     }
 }
 
+// --------------------------------------------------------------------------
+// #584: PDFium masks a line-end hyphen's own FPDFText_GetUnicode to 2 (Char::is_hyphen's
+// comment, megapdf_structure.cpp). BuildPieces used to rewrite that masked value to a real
+// U+002D in exactly one place -- its join branch's "kept" case -- so a flagged hyphen whose
+// line is the LAST line of its own block (the join branch is only ever entered for a line
+// that has a NEXT line in the same block) went into MEGAPDF_BLOCK_TEXT as a literal U+0002
+// control character instead. ReadChars now normalises the code point once, at the source,
+// for every is_hyphen character, so there is no remaining path that can miss it.
+// --------------------------------------------------------------------------
+
+namespace {
+
+// A hyphenated line immediately followed by a differently-styled (bold, larger) heading
+// line. FPDFText_IsHyphen's own judgement is purely geometric -- confirmed with a standalone
+// probe against this exact shape while diagnosing #584 -- so it still flags the trailing
+// "-", but the style change starts a new block here, same as headings.pdf's body/heading
+// pairs do. That makes the hyphenated line the last line of ITS block, so BuildPieces'
+// `li + 1 < line_indices.size()` guard is false for it and the join branch -- the one place
+// the original fix lived -- never runs. Three lines/blocks (paragraph, heading, a second
+// paragraph) rather than two, so the fixture does not depend on end-of-page being special.
+std::vector<unsigned char> hyphen_block_boundary_pdf() {
+    std::string pdf = "%PDF-1.4\n";
+    std::vector<size_t> offsets;
+    auto add = [&](const std::string& body) {
+        offsets.push_back(pdf.size());
+        pdf += std::to_string(offsets.size()) + " 0 obj\n" + body + "\nendobj\n";
+    };
+    add("<< /Type /Catalog /Pages 2 0 R >>");
+    add("<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+    add("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
+        "/Resources << /Font << /F1 4 0 R /F2 5 0 R >> >> /Contents 6 0 R >>");
+    add("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>");
+    add("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>");
+    const std::string content =
+        "BT /F1 12 Tf 72 700 Td (This line ends with a trailing hy-) Tj ET "
+        "BT /F2 20 Tf 72 680 Td (Unrelated Heading) Tj ET "
+        "BT /F1 12 Tf 72 650 Td (Body text under the new heading.) Tj ET";
+    add("<< /Length " + std::to_string(content.size()) + " >>\nstream\n" + content + "\nendstream");
+    const size_t xref = pdf.size();
+    pdf += "xref\n0 " + std::to_string(offsets.size() + 1) + "\n0000000000 65535 f \n";
+    for (size_t off : offsets) {
+        char line[32];
+        std::snprintf(line, sizeof line, "%010zu 00000 n \n", off);
+        pdf += line;
+    }
+    pdf += "trailer\n<< /Size " + std::to_string(offsets.size() + 1) + " /Root 1 0 R >>\nstartxref\n" +
+           std::to_string(xref) + "\n%%EOF\n";
+    return std::vector<unsigned char>(pdf.begin(), pdf.end());
+}
+
+// True for a control character design never puts in block text on purpose. AppendSeparator
+// only ever emits ' ' (0x20); \n, \t, \r and \f can still arrive as a document's own (mis)coded
+// text (tools/structure-check/structure_check.cpp's own comment on a real U+000C from a bad
+// ToUnicode map), so they are not failures here -- this is the same "control characters other
+// than \n \t \r \f" contract #584's own corpus measurement used.
+bool is_disallowed_control(unsigned short u) {
+    return u < 0x20 && u != '\n' && u != '\t' && u != '\r' && u != '\f';
+}
+
+// Every block's MEGAPDF_BLOCK_TEXT/ALT/MARKER and every span's text in `s`, scanned for a
+// stray control character; prints where when it finds one (the pass/fail line alone does not
+// say which block). Returns the count.
+size_t count_stray_controls(const megapdf_structure* s, const std::string& label) {
+    size_t total = 0;
+    const size_t n = megapdf_block_count(s);
+    const megapdf_block_field fields[] = {MEGAPDF_BLOCK_TEXT, MEGAPDF_BLOCK_ALT, MEGAPDF_BLOCK_MARKER};
+    for (size_t i = 0; i < n; i++) {
+        for (megapdf_block_field f : fields) {
+            const size_t len = megapdf_block_string(s, i, f, nullptr, 0);
+            std::vector<unsigned short> buf(len);
+            if (len > 0) megapdf_block_string(s, i, f, buf.data(), len);
+            for (unsigned short u : buf) {
+                if (!is_disallowed_control(u)) continue;
+                total++;
+                std::fprintf(stderr, "  structure %s: block %zu field %d carries U+%04X\n", label.c_str(), i,
+                             static_cast<int>(f), u);
+            }
+        }
+        const size_t sn = megapdf_block_span_count(s, i);
+        for (size_t si = 0; si < sn; si++) {
+            const size_t len = megapdf_block_span_string(s, i, si, nullptr, 0);
+            std::vector<unsigned short> buf(len);
+            if (len > 0) megapdf_block_span_string(s, i, si, buf.data(), len);
+            for (unsigned short u : buf) {
+                if (!is_disallowed_control(u)) continue;
+                total++;
+                std::fprintf(stderr, "  structure %s: block %zu span %zu carries U+%04X\n", label.c_str(), i, si, u);
+            }
+        }
+    }
+    return total;
+}
+
+}  // namespace
+
+void test_structure_no_stray_control_characters(const std::string& fixtures, const std::string& schematic,
+                                                const std::string& repo) {
+    // #584's own regression case (see hyphen_block_boundary_pdf()'s comment): a hyphen PDFium
+    // flags whose join branch is never reached because its line is the last one in its block.
+    {
+        auto bytes = hyphen_block_boundary_pdf();
+        megapdf_document* d = megapdf_open(bytes.data(), bytes.size(), nullptr);
+        check(d != nullptr, "structure hyphen-block-boundary: opens");
+        if (d != nullptr) {
+            megapdf_structure* s = megapdf_structure_load(d, 0, 1, MEGAPDF_STRUCTURE_DEFAULT, nullptr);
+            check(s != nullptr, "structure hyphen-block-boundary: loads");
+            if (s != nullptr) {
+                check(megapdf_block_count(s) == 3,
+                      "structure hyphen-block-boundary: three blocks (hyphenated paragraph, heading, body)",
+                      std::to_string(megapdf_block_count(s)));
+                const std::string first = block_text_ascii(s, 0, MEGAPDF_BLOCK_TEXT);
+                check(first == "This line ends with a trailing hy-",
+                      "structure hyphen-block-boundary: a block-final flagged hyphen reads as a real "
+                      "U+002D, not a literal control character (#584)",
+                      first);
+                check(count_stray_controls(s, "hyphen-block-boundary") == 0,
+                      "structure hyphen-block-boundary: no stray control characters");
+                megapdf_structure_free(s);
+            }
+            megapdf_close(d);
+        }
+    }
+
+    // The broader sweep (#584): every committed structure fixture, scanned the same way, so a
+    // masked-character path on a different shape regresses here instead of only in real
+    // extracted text. None of these happened to hit the bug (the gap needed a block boundary
+    // right after a flagged hyphen, which nothing here has), but this is the net that would
+    // have caught it, and catches whatever comes next.
+    struct Case {
+        const char* name;
+        std::string path;
+        unsigned int flags;
+    };
+    const Case cases[] = {
+        {"demo", fixtures + "/demo.pdf", MEGAPDF_STRUCTURE_ALL_FIELDS},
+        {"doubled", fixtures + "/doubled.pdf", 0},
+        {"doubled-far", fixtures + "/doubled-far.pdf", 0},
+        {"forms", fixtures + "/forms.pdf", MEGAPDF_STRUCTURE_ALL_FIELDS},
+        {"formtext", fixtures + "/formtext.pdf", MEGAPDF_STRUCTURE_ALL_FIELDS},
+        {"userunit", fixtures + "/userunit.pdf", MEGAPDF_STRUCTURE_ALL_FIELDS},
+        {"microbit-v2-schematic", schematic, 0},
+        {"columns", repo + "/structure/columns.pdf", 0},
+        {"furniture", repo + "/structure/furniture.pdf", MEGAPDF_STRUCTURE_KEEP_FURNITURE},
+        {"lists", repo + "/structure/lists.pdf", 0},
+        {"headings", repo + "/structure/headings.pdf", 0},
+        {"tabular-headings", repo + "/structure/tabular-headings.pdf", 0},
+        {"reading-order-jump", repo + "/structure/reading-order-jump.pdf", 0},
+        {"xobject-text", repo + "/structure/xobject-text.pdf", 0},
+        {"scan", repo + "/structure/scan.pdf", 0},
+        {"mixed", repo + "/structure/mixed.pdf", 0},
+        {"tagged", repo + "/structure/tagged.pdf", MEGAPDF_STRUCTURE_KEEP_FURNITURE},
+        {"tagged-wrong", repo + "/structure/tagged-wrong.pdf", MEGAPDF_STRUCTURE_KEEP_FURNITURE},
+        {"tiny-font-size", repo + "/structure/tiny-font-size.pdf", 0},
+        {"tm-scaled-size", repo + "/structure/tm-scaled-size.pdf", 0},
+        {"vertical-cid", repo + "/structure/vertical-cid.pdf", 0},
+        {"vertical-tbrl", repo + "/structure/vertical-tbrl.pdf", 0},
+        {"rotated-pages", repo + "/structure/rotated-pages.pdf", 0},
+    };
+    size_t total = 0;
+    for (const Case& c : cases) {
+        auto bytes = read_file(c.path);
+        megapdf_document* d = megapdf_open(bytes.data(), bytes.size(), nullptr);
+        if (d == nullptr) continue;
+        const int count = megapdf_page_count(d);
+        megapdf_structure* s = megapdf_structure_load(d, 0, count, c.flags, nullptr);
+        if (s != nullptr) {
+            total += count_stray_controls(s, c.name);
+            megapdf_structure_free(s);
+        }
+        megapdf_close(d);
+    }
+    check(total == 0,
+          "structure: no committed fixture's block/span text carries a stray control character (#584)",
+          std::to_string(total));
+}
+
 void test_structure_tagged(const std::string& repo) {
     Doc d(repo + "/structure/tagged.pdf");
     if (!d.doc) { check(false, "structure tagged: opens"); return; }
@@ -8924,6 +9100,7 @@ int main(int argc, char** argv) {
     test_structure_reading_order_jump(std::string(MEGAPDF_REPO_FIXTURES));
     test_structure_cancel(argv[2]);
     test_structure_rotated_pages(std::string(MEGAPDF_REPO_FIXTURES));
+    test_structure_no_stray_control_characters(argv[1], argv[2], std::string(MEGAPDF_REPO_FIXTURES));
     test_structure_tm_scaled_size(std::string(MEGAPDF_REPO_FIXTURES));
     test_structure_span_font(std::string(MEGAPDF_REPO_FIXTURES));
     test_structure_tagged(std::string(MEGAPDF_REPO_FIXTURES));

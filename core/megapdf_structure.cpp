@@ -810,6 +810,16 @@ void ReadChars(const megapdf_page* page, PageWork* out) {
         c.preceded_by_break = pending_break;
         pending_break = false;
         c.is_hyphen = FPDFText_IsHyphen(tp, i) == 1;
+        // #584: PDFium masks a line-end hyphen's own GetUnicode to 2 (see Char::is_hyphen's
+        // comment above) rather than reporting its real code point. Fixed up once here, at the
+        // source, so every consumer of Char::unicode -- not just BuildPieces' join branch --
+        // gets a printable character: MEGAPDF_BLOCK_TEXT for a hyphen BuildPieces does not
+        // special-case, WordCodepoints, NormaliseLineText and the furniture matcher. A hyphen
+        // BuildPieces strips (two halves joined back into one word) is unaffected either way --
+        // it is popped from the piece stream regardless of which code point it carried.
+        if (c.is_hyphen && c.unicode == 2) {
+            c.unicode = kHyphenMinus;
+        }
         FS_MATRIX m{1, 0, 0, 1, 0, 0};
         if (FPDFText_GetMatrix(tp, i, &m)) {
             const double a = std::fabs(m.a) > 1e-6 ? std::fabs(m.a) : 1.0;
@@ -1511,13 +1521,15 @@ std::vector<Piece> BuildPieces(const TextView& v, const std::vector<int>& line_i
             }
             if (hyphen_join) {
                 if (strip) {
+                    // Removed outright: the two halves are joined back into one word, so it
+                    // does not matter here which code point this piece carried (ReadChars'
+                    // #584 fix-up or the original masked 2 -- it is discarded either way).
                     if (!pieces.empty()) pieces.pop_back();
-                } else if (!pieces.empty() && last_cp != kHyphenMinus && last_cp != kHyphenChar) {
-                    // Kept, but PDFium's masked code point (2, not the real character —
-                    // Char::is_hyphen's comment) cannot go out in the block's text as-is;
-                    // U+002D is design §1.2's own plain-hyphen spelling for this case.
-                    pieces.back().cp = kHyphenMinus;
                 }
+                // Kept (strip == false): no rewrite needed here any more. #584 -- ReadChars
+                // now substitutes U+002D for PDFium's masked code point 2 as soon as a
+                // character is read, so `pieces.back()` already carries the real hyphen by
+                // the time it gets here, same as a literal U+002D/U+2010 always did.
                 suppress_next_separator = true;
             }
         }
