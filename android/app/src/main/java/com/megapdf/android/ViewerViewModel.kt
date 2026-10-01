@@ -185,6 +185,21 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         private set
 
     /**
+     * Marketing capture only (`--es screenshot reading`, #613): the floating bar stays up
+     * instead of counting down to its idle fade.
+     *
+     * Set by [applyScreenshotMode] and by nothing else, so no launch a person makes can reach
+     * it. The production rules are untouched and still the only ones that run otherwise: the
+     * two-second countdown ([READING_BAR_IDLE_MS]), never arming it while touch exploration is
+     * on ([readingBarAutoHides]), and a tap on the page toggling the bar either way. What this
+     * removes is the race, not the behaviour — the capture is taken ten seconds after the
+     * launch, which is five countdowns after the bar would have gone, and the bar is the only
+     * thing in a reading-mode frame that says which application it is.
+     */
+    var screenshotPinsReadingBar: Boolean by mutableStateOf(false)
+        private set
+
+    /**
      * Both preferences are observed rather than read once: the Settings screen writes them
      * while a document is open, and the page behind it retints without a reopen. Called from
      * the `init` block at the foot of the class, after every property it touches exists.
@@ -1259,12 +1274,23 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                         now - 6 * day, listOf(app.getString(R.string.screenshot_location_3)))),
                 ), null)
             }
-            "viewer", "sign", "draw", "search", "text", "text-edit", "redact" -> {
-                screenshotSheet = if (state == "viewer") null else state
+            "viewer", "sign", "draw", "search", "text", "text-edit", "redact",
+            "reading", "pages" -> {
+                // The sheet is what a pose *opens over* the document, and neither of the two
+                // #613 poses is one: reading mode takes chrome away rather than adding any, and
+                // the page grid replaces the viewer instead of sitting over it.
+                screenshotSheet =
+                    if (state == "viewer" || state == "reading" || state == "pages") null else state
+                // Two poses need the six-page agreement rather than the one-page one: a grid of
+                // a single thumbnail says nothing, and the reading bar would read "Page 1 of 1".
+                // Same page 1, same document name, so the set is still one document (#613).
+                val asset =
+                    if (state == "reading" || state == "pages") R.string.screenshot_demo_pages_asset
+                    else R.string.screenshot_demo_asset
                 viewModelScope.launch {
                     try {
                         val bytes = withContext(Dispatchers.IO) {
-                            app.assets.open(app.getString(R.string.screenshot_demo_asset)).use { it.readBytes() }
+                            app.assets.open(app.getString(asset)).use { it.readBytes() }
                         }
                         val doc = engine.open(bytes)
                         val count = doc.pageCount()
@@ -1278,6 +1304,89 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                         closeCurrent()
                         attach(doc, security)
                         uiState = ViewerUiState.Viewing(app.getString(R.string.screenshot_document_name), sizes)
+                        if (state == "reading" || state == "pages") {
+                            // Both of these are a picture of several pages. The asset is
+                            // chosen above, so a count of one here means the wrong file was
+                            // bundled, not that the pose asked for the wrong thing.
+                            if (count < 3) {
+                                Log.e(
+                                    SCREENSHOT_TAG,
+                                    "::error:: the '$state' pose opened a document of $count "
+                                        + "page(s); it needs the six-page agreement "
+                                        + "(assets/demo*-pages.pdf)",
+                                )
+                            }
+                        }
+                        if (state == "reading") {
+                            // Reading mode (#505, #507) as the listing's lead slot (#613). The
+                            // hard part of this picture is that the feature's whole point is
+                            // that there is nothing left to photograph: the app bars are not
+                            // composed, the system bars go immersive, and what is left is a
+                            // page. Two things are deliberate, and they are the same two the
+                            // desktop pose makes.
+                            //
+                            // The floating bar is *pinned* rather than left to its two-second
+                            // idle countdown. It is the only thing in the frame that names the
+                            // application, and the capture is taken ten seconds after the
+                            // launch — five idle countdowns later. Nothing a person does
+                            // reaches this: READING_BAR_IDLE_MS and readingBarAutoHides are
+                            // untouched, and the bar still hides on a tap as it always did.
+                            //
+                            // The page colour is left at Normal. Sepia and Night belong to
+                            // reading mode too and would make the image unmistakable, but a
+                            // set whose first image is the only tinted one reads as a different
+                            // app from the seven behind it; the tint is named in the listing
+                            // copy, where a reader meets it as a choice.
+                            screenshotPinsReadingBar = true
+                            enterReadingMode()
+                            if (!readingMode) {
+                                Log.e(
+                                    SCREENSHOT_TAG,
+                                    "::error:: reading pose: the mode did not turn on, so this "
+                                        + "would be an ordinary viewer shot wearing the reading "
+                                        + "slot's caption",
+                                )
+                            }
+                        }
+                        if (state == "pages") {
+                            // The page grid with a selection (#174), for the page-tools slot
+                            // (#613). On a phone the tools are a screen of their own — not the
+                            // desktops' sidebar beside the document — and the selection turns
+                            // the top bar into what can be done to the pages picked. That
+                            // difference is the point of the picture, so it is shown rather
+                            // than normalised towards the Mac's.
+                            openPages()
+                            // Two pages, not one: a single selected cell reads as "the page you
+                            // are on", and every tool on this bar acts on a set.
+                            togglePageSelection(1)
+                            togglePageSelection(2)
+                            if (!isPagesOpen || selectedPages != setOf(1, 2)) {
+                                Log.e(
+                                    SCREENSHOT_TAG,
+                                    "::error:: pages pose: grid open=$isPagesOpen, "
+                                        + "selection=$selectedPages — the selection bar is the "
+                                        + "picture and it is not posed",
+                                )
+                            }
+                            viewModelScope.launch {
+                                // The grid asks for its own thumbnails once it is laid out, and
+                                // a cell that has not rendered yet is a grey rectangle. The
+                                // capture is taken at ten seconds; this looks at six, so a set
+                                // of empty cells goes red rather than quietly shipping. Not a
+                                // wait that *makes* them render — nothing here can — but the
+                                // pose's word on whether they did.
+                                delay(6_000)
+                                val missing = setOf(0, 1, 2).filter { it !in pageThumbnails }
+                                if (missing.isNotEmpty()) {
+                                    Log.e(
+                                        SCREENSHOT_TAG,
+                                        "::error:: pages pose: no thumbnail rendered for "
+                                            + "page(s) ${missing.map { it + 1 }} six seconds in "
+                                            + "— the grid would photograph as empty cells",
+                                    )
+                                }
+                            }
+                        }
                         if (state == "search") {
                             // Seed here, not from the UI: the document and the
                             // Viewing state are both already set, so the sweep can

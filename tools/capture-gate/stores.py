@@ -224,8 +224,13 @@ STORES: dict[str, dict] = {
             # was never meant for a store.
             "small": [(720, 1440)], "large": [(1440, 3200)],
         },
-        "order": ["home", "viewer", "search", "sign", "draw", "text",
-                  "text-edit", "redact"],
+        # The eight listing slots since #613, in listing order. `viewer` and
+        # `draw` are behind them because they are no longer listing slots —
+        # reading replaced the first and the second came out at Play's limit of
+        # eight — but the QA matrix still shoots both, and a pose this list does
+        # not name sorts to the end of the sheet rather than beside its siblings.
+        "order": ["reading", "text-edit", "sign", "pages", "text", "search",
+                  "redact", "home", "viewer", "draw"],
         "parse": _pose(
             r"(?P<device>small|tablet|large)__(?P<lang>en|fr-CA|fr-FR)__"
             r"(?:light|dark)__t\d+__(?P<pose>[A-Za-z0-9-]+)\.png$",
@@ -239,6 +244,18 @@ STORES: dict[str, dict] = {
         "accent_poses": {"redact": ("banner", "mark")},
         "accent_strict": False,
         "status_band": {"height_frac": 0.032},
+        # Reading mode (#507) puts the system bars into immersive mode, so the
+        # status bar is not drawn at all and the top 3.2 % of the frame is page
+        # and gutter. That is the feature, and the gate met it for the first
+        # time in #613: the band has none of the posed bar's ink in it, so the
+        # reading shot disagreed with every sibling about a status bar that is
+        # not there.
+        #
+        # Named rather than stood down, and the check is turned around for it:
+        # a *posed status bar* appearing in this pose means immersive mode did
+        # not engage, which is a defect worth a flag — the one thing that would
+        # put the emulator's own clock in the listing's lead image.
+        "barless_poses": ("reading",),
         "notes": "android/scripts/capture-screenshots.sh under SystemUI demo "
                  "mode. The aspect ratio and the tablet slot are Play Console "
                  "questions, written up in docs/qa/android-store-captures.md.",
