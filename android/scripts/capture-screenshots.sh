@@ -115,6 +115,15 @@ for state in reading text-edit sign pages text search redact home; do
     adb shell am start -n ca.electricrv.megapdf/com.megapdf.android.MainActivity --es screenshot "$state"
     sleep 10
     demo_status_bar
+    # A beat between the last broadcast and the shutter. `am broadcast` returns when the
+    # broadcast has been *dispatched*, not when SystemUI has redrawn the bar from it, and
+    # the 2026-10-01 fr-CA leg of this set came back with the emulator's real clock
+    # (4:13), a settings-gear notification, a mobile-signal triangle and a charging
+    # battery in seven of its eight shots while en and fr-FR were clean — the #49 race,
+    # one leg of a matrix at a time. The capture gate caught it across the languages
+    # ("the status bar differs from en's by 322 % of its ink"); this is what stops it
+    # reaching the gate.
+    sleep 2
     adb exec-out screencap -p > "$OUT/android-$state.png"
     if adb logcat -d -s megapdf-screenshot:E 2>/dev/null | grep -q '::error::'; then
         echo "FAILED $state — the pose reported an error:" >&2
