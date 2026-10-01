@@ -25,6 +25,89 @@ things a runner cannot see.
   intermittently while simulators boot; the scripts retry. Simulators are
   unaffected either way.
 
+## CI on this machine: turning it on and off (#614)
+
+`ios-ci.yml`'s `build` job runs here instead of on GitHub's macOS runners when,
+and only when, **both** of these are true. It is 36-55 minutes there and it
+queues behind every other job in the account; here it is ours and idle.
+
+**The two commands.** Run them from anywhere — they need no access to the Mac:
+
+```
+gh variable set MAC_SELF_HOSTED --body on     # use the Mac mini
+gh variable set MAC_SELF_HOSTED --body off    # back to GitHub's runners
+gh variable list                              # which is it right now
+```
+
+That is the whole switch. The variable is read in `runs-on`, so it takes effect
+on the next job to start; jobs already running are unaffected. **Set it to `off`
+whenever the Mac is going to be unavailable** — shut down, rebooting, on a
+different network, or being used for a capture session you do not want a CI job
+walking into. A job that asks for a runner which never appears does not fail
+fast: it sits in the queue for 24 hours and *then* fails. One `off` sends those
+jobs straight back to GitHub.
+
+**The second condition is the fork guard, and it is not a switch.** This
+repository is public. A self-hosted runner executes whatever a workflow file
+tells it to, on this machine, as the account it runs under — so a pull request
+opened from a **fork** never comes here, no matter what the variable says. It
+goes to GitHub's disposable macOS runner, which is what that is for. The guard
+is the `runs-on` expression in `ios-ci.yml`; it was proved by
+`.github/workflows/runner-selection-probe.yml`, not assumed, and the result is
+recorded on #614. There are no forks today, and the setting GitHub offers for
+this ("Require approval for fork pull request workflows") is only on
+*first-time* contributors here, so the guard has to be in the workflow.
+
+**Starting and stopping the runner on the machine itself** is separate from the
+variable, and only needed after a reboot or if it has been stopped:
+
+```
+ssh mac-mini
+# start it (foreground, one job then exit — it re-registers itself each time)
+cd /Users/ghrunner/actions-runner && nohup ./run.sh > ~/runner.log 2>&1 &
+# is it up?
+gh api repos/SlyWombat/MegaPDF/actions/runners --jq '.runners[] | {name,status,busy}'
+# stop it
+pkill -f 'actions-runner.*Runner.Listener'
+```
+
+Notes on how it is set up, and why each part is the way it is:
+
+- **It runs as its own account, `ghrunner`, not as `claude`.** `claude` holds
+  `~/.ssh/id_ed25519_github` — the read-write deploy key for this repository —
+  and six clones, two of them with unpushed commits. A CI job must not be able
+  to reach either, and that cannot be retrofitted later.
+- **Registered `--ephemeral`**, so the runner takes exactly one job and then
+  removes its own registration. A job that compromised the runner cannot
+  persist into the next one, and a half-finished job cannot leave a listener
+  holding a stale token. The trade is that `run.sh` exits after each job and has
+  to be started again, which is what the loop in the start command above is for.
+- **Label `megapdf-ios`.** The job asks for `[self-hosted, macOS, ARM64,
+  megapdf-ios]`, so nothing else in the repository can drift onto this machine
+  by accident.
+- **Every job starts from nothing**: the workspace is emptied before checkout,
+  derived data goes under the runner's own temp directory rather than the shared
+  `~/Library/Developer/Xcode/DerivedData`, and the two simulators are created
+  for the job and deleted by UDID when it ends. That last one is deliberate and
+  not optional — #569 was a flake caused entirely by state surviving between
+  runs. It also means a CI job will never shut down or erase a simulator you
+  booted yourself: it only ever touches devices named `megapdf-ci-*`.
+- **Not installed as a launchd service yet.** On macOS the runner's own
+  `svc.sh` installs a per-user LaunchAgent, and CoreSimulator wants a real user
+  session, so a headless daemon may not be able to boot a simulator at all. The
+  manual start above is proven; the reboot story is a deliberate follow-up
+  rather than a guess. Until then: after a reboot, either start it again or set
+  `MAC_SELF_HOSTED` to `off`.
+- **What is still hosted, on purpose.** `ios-ci.yml`'s `pdfkit-spike` job, and
+  every `macos-latest` job in `macos-app.yml`, `macos-appstore.yml`,
+  `macos-tester-build.yml`, `macos-screenshots.yml`, `core-tests.yml` and the
+  release workflows. The release and signing ones must stay hosted: they
+  materialise a Developer ID certificate and an App Store Connect key from
+  secrets, and those do not belong on a desktop. The others stay hosted because
+  they want .NET, which is a per-user install here, and because keeping some
+  macOS work on GitHub means that path stays exercised rather than rotting until
+  the day this machine is unavailable.
+
 ## What is installed (2026-09-11)
 
 | Piece | Where | Note |
@@ -37,6 +120,7 @@ things a runner cannot see.
 | Simulator build | `~/dd-ios` | derived data shared by the capture scripts |
 | Mac app | `~/app-macos/MegaPDF.app` | `tools/build-macos-app.sh osx-arm64 ~/app-macos` |
 | Captures | `~/captures/` | never committed; copy what is wanted into `artifacts/` locally |
+| GitHub Actions runner | `/Users/ghrunner/actions-runner` | 2026-10-01, #614. Its **own** account, because `claude` holds the deploy key. Ephemeral, label `megapdf-ios`. See "CI on this machine" above for the two commands. |
 
 ## Recipes
 
