@@ -415,6 +415,66 @@ tests = [
 note = "the render window's page-keeping arithmetic is unit-tested; no instrumented test scrolls."
 
 [[feature]]
+id = "scroll-position-indicator"
+title = "A small side indicator of scroll position, including in reading mode"
+area = "Viewing"
+about = """
+Dave, 2026-10-01: a capture pass found the Mac's reading mode keeps its scrollbar — track,
+arrows and thumb — in a mode that otherwise removes all chrome. He called that correct rather
+than a defect (it is the only thing saying where you are in a long document, which matters
+most exactly where the furniture is gone) and asked for the same affordance everywhere, each
+platform in its own idiom rather than one transplanted control.
+
+A survey first: Windows, Mac/Linux and iOS already had it. Each keeps its native scrollbar
+(WinUI's `ScrollViewer`, Avalonia's `ScrollViewer` with `AllowAutoHide="False"` since #143, and
+SwiftUI's default fading `ScrollView` indicator) untouched by reading mode — none of the three
+reading-mode implementations hide the page scroller, only the surrounding chrome — and all
+three read the whole document, because each platform's page list is one continuous scrollable
+surface rather than a per-page container. Only Android had nothing: `LazyColumn` draws no
+scrollbar of its own, and the one page-position readout that existed (the "N / total" counter)
+lived exclusively inside reading mode's floating bar, which is itself not there outside reading
+mode and fades after idling even inside it. Android's cell below is the one with new code; the
+others are the proof that nothing was needed."""
+[feature.windows]
+presence = "present"
+entry = "src/MegaPDF.App/DocumentView.xaml::PagesScroll"
+coverage = "ui"
+tests = [
+  ".github/workflows/ci.yml::Run-Check \"reading\"",
+  "tests/MegaPDF.Core.Tests/ReadingModeTests.cs::ReadingMode",
+]
+note = "pre-existing: the native ScrollViewer is never in reading mode's ChromeHosts list, and Screenshot.cs's reading state already asserts \"the page host is untouched\" (scroll.Visibility == Visible) across entry and exit. One continuous ScrollViewer holds every page, so the thumb reads whole-document position, not a per-page offset."
+[feature.macos]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/Views/MainWindow.axaml::PageScroll"
+coverage = "ui"
+tests = [
+  "src/MegaPDF.Avalonia/Program.cs::CheckReadingMode",
+  "tests/MegaPDF.Core.Tests/ReadingModeTests.cs::ReadingMode",
+]
+note = "pre-existing, and the capture-pass finding that started this row: PageScroller is absent from ChromeHosts and AllowAutoHide is off (#143), so the native scrollbar stays up, unfaded, through reading mode. CheckReadingMode already asserts window.PageScroller.IsVisible. One ScrollViewer over the whole document, so the thumb is whole-document position."
+[feature.linux]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/Views/MainWindow.axaml::PageScroll"
+coverage = "ui"
+tests = [
+  "src/MegaPDF.Avalonia/Program.cs::CheckReadingMode",
+  "tests/MegaPDF.Core.Tests/ReadingModeTests.cs::ReadingMode",
+]
+note = "same as macOS: one shared binary, same ScrollViewer, same self-test."
+[feature.ios]
+presence = "present"
+entry = "ios/MegaPDF/ViewerView.swift::ScrollView"
+coverage = "none"
+note = "pre-existing: SwiftUI's default fading scroll indicator, never overridden by `.scrollIndicators(...)` anywhere in the app, so reading mode (which hides only the nav/bottom bars and the tool strip) leaves it exactly as it is outside reading mode. The page list is one continuous ScrollView/LazyVStack over every page, so the indicator is whole-document position. Nothing automated asserts the indicator itself — it is not exposed to the accessibility tree XCUITest reads, the same reason ViewerZoomUITests has to sleep 1.5s for it to fade rather than assert on it directly."
+[feature.android]
+presence = "present"
+entry = "android/app/src/main/java/com/megapdf/android/ViewerScreen.kt::ScrollPositionIndicator("
+coverage = "engine"
+tests = ["android/app/src/test/java/com/megapdf/android/ScrollPositionIndicatorMathTest.kt::class"]
+note = "new: Android had neither a scrollbar (Compose draws none for LazyColumn) nor any position readout outside reading mode's own floating-bar counter. A thin trailing-edge thumb now appears while the LazyColumn scrolls and fades ~800ms after it stops, in both the plain viewer and reading mode alike (nothing here is gated on readingMode), decorative and clearAndSetSemantics-excluded from TalkBack since the page's own \"Page N\" description and the reading bar's counter already carry that information. It reads whole-document position: the math (ScrollPositionIndicator.kt) sums every page's rendered height analytically rather than reading firstVisibleItemIndex alone, which is unit-tested up to a 10,000-page document. No instrumented test yet drives the real overlay on a device — the same gap render-scroll's own Android cell already names for scrolling generally."
+
+[[feature]]
 id = "zoom"
 title = "Zoom (buttons, keyboard, wheel, pinch) and fit"
 area = "Viewing"
