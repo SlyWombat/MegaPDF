@@ -11,10 +11,14 @@ import Foundation
 // `PdfEngine.close` raises every registered flag and waits for the checks to finish before
 // megapdf_close(), so a check never touches a closed document or a page handle the close freed.
 
-/// A core cancel flag. Raised from any thread; freed when the last reference goes, which is
-/// never while a check still holds it.
-final class PageCheckFlag: @unchecked Sendable {
-    fileprivate let handle: OpaquePointer
+/// A core cancel flag (`megapdf_cancel`). Raised from any thread; freed when the last
+/// reference goes, which is never while the work holding it is still running.
+///
+/// Shared, not the page check's own: an extract takes one too (#145, `extractPages`), which is
+/// why `handle` is reachable from the rest of the engine and why this is no longer called
+/// `CoreCancelFlag`.
+final class CoreCancelFlag: @unchecked Sendable {
+    let handle: OpaquePointer
 
     init?() {
         guard let handle = megapdf_cancel_new() else { return nil }
@@ -33,7 +37,7 @@ extension PdfEngine {
     /// `.cancelled`; so does closing the document. A cached answer comes back at once.
     nonisolated func pageCheck(_ document: PdfDocument, pageIndex: Int) async -> PageCheckAnswer {
         guard !Task.isCancelled else { return .cancelled }
-        guard let flag = PageCheckFlag() else { return .unjudged }
+        guard let flag = CoreCancelFlag() else { return .unjudged }
         // Registered before the first core call: from here the document stays open until endCheck.
         guard document.beginCheck(flag) else { return .cancelled }
         return await withTaskCancellationHandler {
@@ -54,7 +58,7 @@ extension PdfEngine {
     private static let checkQueue = DispatchQueue(label: "megapdf.page-check", qos: .utility, attributes: .concurrent)
 
     /// The blocking part. Never on the actor, never on the main thread.
-    private static func runCheck(_ document: PdfDocument, pageIndex: Int, flag: PageCheckFlag) -> PageCheckAnswer {
+    private static func runCheck(_ document: PdfDocument, pageIndex: Int, flag: CoreCancelFlag) -> PageCheckAnswer {
         guard let page = megapdf_load_page(document.core, Int32(pageIndex)) else { return .unjudged }
         defer { megapdf_close_page(page) }
         var verdict = megapdf_layout_verdict()

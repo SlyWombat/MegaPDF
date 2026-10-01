@@ -863,6 +863,17 @@ struct ViewerView: View {
                         .disabled(!model.canRedact || model.fileCommandsBlocked)
                         .accessibilityIdentifier("viewerClearRedactionMarks")
                 }
+                // #3: beside Redact, because the two are the pair people confuse and this is
+                // where the difference can be read in one glance -- one covers, one removes,
+                // and the hints say exactly that. A Toggle for the same reason Redact is one:
+                // in a menu the armed state is the row's own, so the platform draws the
+                // checkmark and announces it.
+                Toggle("Whiteout", isOn: Binding(get: { model.whiteoutMode },
+                                                 set: { _ in model.toggleWhiteoutMode() }))
+                    .disabled(!model.canWhiteout || model.fileCommandsBlocked)
+                    .accessibilityValue(model.whiteoutMode ? "On" : "Off")
+                    .accessibilityHint("Cover an area without removing what is under it")
+                    .accessibilityIdentifier("viewerWhiteout")
                 Divider()
                 // #506: reading mode's entry point on every iPhone and iPad, beside Share
                 // and Export as Markdown as the plan's §4 asks. A Button, not a Toggle:
@@ -971,7 +982,8 @@ struct ViewerView: View {
                     .transition(.opacity)
             }
             if let work = busy.strip {
-                BusyStrip(label: work.label.text)
+                BusyStrip(work: work, canStop: busy.canStop, isStopping: busy.isStopping,
+                          onStop: busy.requestStop)
                     .transition(.opacity)
             }
         }
@@ -1462,15 +1474,37 @@ struct ViewerView: View {
                     removeLabel: "Remove mark"
                 )
             }
-            if model.redactMode, let band = redactBand, band.pageIndex == index {
+            if model.redactMode || model.whiteoutMode, let band = redactBand, band.pageIndex == index {
+                // The band shows what the drag is about to do, and the two tools do opposite
+                // things (#3): a redaction mark is translucent, so the content you are about
+                // to lose can still be read; a cover is opaque white, because that is
+                // literally what will be on the page.
                 Rectangle()
-                    .fill(Brand.redactionMark)
-                    .overlay(Rectangle().stroke(Brand.redactionMarkOutline, lineWidth: 1))
+                    .fill(model.whiteoutMode ? Color.white : Brand.redactionMark)
+                    .overlay(Rectangle().stroke(model.whiteoutMode ? Brand.accent
+                                                                   : Brand.redactionMarkOutline,
+                                                lineWidth: 1))
                     .frame(width: abs(band.current.x - band.origin.x),
                            height: abs(band.current.y - band.origin.y))
                     .offset(x: min(band.origin.x, band.current.x),
                             y: min(band.origin.y, band.current.y))
                     .allowsHitTesting(false)
+            }
+            // The selected cover's chrome: drag to move, corner grip to resize, X to remove
+            // (#3). The same `SelectionOverlay` a signature, a text box and a redaction mark
+            // already use -- there was no new interaction model to invent and no new hit
+            // target to size, which is the answer to #565's question about this platform.
+            // Free-form, like a mark and unlike a signature: a cover is an area.
+            if let cover = model.selectedWhiteout, cover.pageIndex == index {
+                SelectionOverlay(
+                    rect: cover.rect,
+                    pageSize: size,
+                    viewSize: CGSize(width: width, height: height),
+                    onCommit: model.commitWhiteoutRect,
+                    onRemove: model.removeSelectedWhiteout,
+                    aspectLocked: false,
+                    removeLabel: "Remove whiteout"
+                )
             }
             if let stamp = model.selectedStamp, stamp.pageIndex == index {
                 SelectionOverlay(
@@ -1504,11 +1538,13 @@ struct ViewerView: View {
         }
         .frame(width: width, height: height)
         .clipped()
-        // While Redact is armed a drag marks an area instead of scrolling (#173). The
-        // gesture is attached only when the tool is on, so the scroll view keeps its
-        // scrolling the rest of the time — and `minimumDistance` keeps a tap a tap.
+        // While Redact or Whiteout is armed a drag draws a rectangle instead of scrolling
+        // (#173, #3). One gesture for both tools rather than a second one of its own -- the
+        // armed tool decides what the rectangle becomes, and the band above shows which. The
+        // gesture is attached only when a tool is on, so the scroll view keeps its scrolling
+        // the rest of the time — and `minimumDistance` keeps a tap a tap.
         .simultaneousGesture(
-            model.redactMode
+            model.redactMode || model.whiteoutMode
                 ? DragGesture(minimumDistance: 8)
                     .onChanged { value in
                         if redactBand?.pageIndex == index {
@@ -1526,12 +1562,19 @@ struct ViewerView: View {
                         let top = min(value.startLocation.y, value.location.y) / height
                         let bottom = max(value.startLocation.y, value.location.y) / height
                         guard right - left > 0.005, bottom - top > 0.005 else { return }
-                        model.markForRedaction(
-                            pageIndex: index,
-                            rect: PdfRect(left: Double(left) * size.width,
-                                          bottom: Double(1 - bottom) * size.height,
-                                          right: Double(right) * size.width,
-                                          top: Double(1 - top) * size.height))
+                        let area = PdfRect(left: Double(left) * size.width,
+                                           bottom: Double(1 - bottom) * size.height,
+                                           right: Double(right) * size.width,
+                                           top: Double(1 - top) * size.height)
+                        // Which tool is armed decides what the rectangle becomes. Whiteout is
+                        // asked first because arming it disarms Redact, so both can never be
+                        // on -- and if they somehow were, covering is the one that can be
+                        // undone.
+                        if model.whiteoutMode {
+                            model.placeWhiteout(pageIndex: index, rect: area)
+                        } else {
+                            model.markForRedaction(pageIndex: index, rect: area)
+                        }
                     }
                 : nil
         )
@@ -1610,27 +1653,79 @@ struct DynamicXfaBanner: View {
     }
 }
 
-/// Document-level work in progress (#145): a label over an indeterminate bar, under the
-/// navigation bar. VoiceOver reads the label; the model announces it when the strip appears.
+/// Document-level work in progress (#145): a label over a bar, under the navigation bar —
+/// determinate with a count line when the work can say how far it has got, and with a Stop
+/// beside it when the work can be stopped. VoiceOver reads the label; the model announces it
+/// when the strip appears.
+///
+/// **The count is its own line, not part of the label.** The label is the strip's polite live
+/// region, and folding "Page 312 of 2,000" into it would have a screen reader announce it
+/// three hundred times over one search. The count sits inside the element that ignores its
+/// children, so it is drawn and not spoken; the label, which does not change, is what is
+/// spoken. (#563 made the same call on the desktops, for the same reason.)
+///
+/// **The button says Stop, not Cancel.** Cancel is the word that abandons a question; this
+/// abandons work. It goes insensitive the moment it is pressed, with "Stopping…" in its place,
+/// because work does not stop the instant it is asked to.
 struct BusyStrip: View {
-    let label: String
+    let work: BusyWork
+    /// Whether there is still running work behind the strip to stop. False while the strip
+    /// lives out its last 0.3 s, which is why it is asked of the state rather than of `work`.
+    let canStop: Bool
+    let isStopping: Bool
+    let onStop: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(label)
-                .font(.footnote)
-                .foregroundColor(.secondary)
-            ProgressView()
-                .progressViewStyle(.linear)
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(work.label.text)
+                    .font(.footnote)
+                    .foregroundColor(.secondary)
+                if let progress = work.progress {
+                    ProgressView(value: progress.fraction)
+                        .progressViewStyle(.linear)
+                } else {
+                    ProgressView()
+                        .progressViewStyle(.linear)
+                }
+                if let count = work.progressText {
+                    Text(count)
+                        .font(.caption.monospacedDigit())
+                        .foregroundColor(.secondary)
+                        .accessibilityIdentifier("busyCount")
+                }
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(work.label.text)
+            .accessibilityAddTraits(.updatesFrequently)
+            .accessibilityIdentifier("busyStrip")
+            if work.cancellable {
+                // Typed as keys, two literals rather than a ternary, so the catalog sees both.
+                Button(action: onStop) {
+                    // The 44-point target is around the LABEL, with a content shape to match,
+                    // not a `.frame` on the button: a frame outside it grows the layout and
+                    // leaves the hit area the size of the words. Measured on a simulator at
+                    // 15.7 points tall that way -- a third of what a finger needs, and
+                    // something only a running app would have said.
+                    Group {
+                        if isStopping {
+                            Text("Stopping…")
+                        } else {
+                            Text("Stop")
+                        }
+                    }
+                    .frame(minWidth: 44, minHeight: 44)
+                    .contentShape(Rectangle())
+                }
+                .font(.footnote.weight(.semibold))
+                .disabled(!canStop)
+                .accessibilityIdentifier("busyStop")
+            }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.bar)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(label)
-        .accessibilityAddTraits(.updatesFrequently)
-        .accessibilityIdentifier("busyStrip")
     }
 }
 

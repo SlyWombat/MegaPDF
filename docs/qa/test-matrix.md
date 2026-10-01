@@ -17,7 +17,7 @@ Each cell says two things and both are checked against the code:
 | `GAP` | the feature is **missing** where it should exist — the #571 shape |
 | `+m` | a by-hand step in `TESTING.md` / `docs/RELEASING.md` covers it too |
 
-225 pairings: 128 UI, 61 eng, 13 —, 14 n/a, 9 GAP.
+225 pairings: 131 UI, 59 eng, 13 —, 14 n/a, 8 GAP.
 
 This map is about *what is covered*, not whether the covering tests pass — that is the
 other jobs' business — and it does not replace the by-hand pass in `docs/RELEASING.md`
@@ -28,13 +28,12 @@ other jobs' business — and it does not replace the by-hand pass in `docs/RELEA
 This is the part worth reading. A map that only restated what passes would not be
 worth checking in.
 
-### Missing feature — absent where it should exist (9)
+### Missing feature — absent where it should exist (8)
 
 Nothing is failing; nothing is looking. #571 (Linux had an About window with no route to it) and #3 (Android had no whiteout at all) were both this.
 
 | feature | platform | what is missing | issue |
 |---|---|---|---|
-| Whiteout (cover) (`whiteout`) | ios | no whiteout tool. The reason given in the engine source is that mobile's feature set excludes it — which stopped being true when Android got one on 2026-09-30. | — |
 | A withheld permission is said out loud, and the person may continue (`permission-override`) | ios | iOS page tools landed in #570 consulting no permission bit at all, so this is the one platform where the question has to arrive with the detection rather than replace it. | #558 |
 | A withheld permission is said out loud, and the person may continue (`permission-override`) | linux | same as macOS. | #558 |
 | A withheld permission is said out loud, and the person may continue (`permission-override`) | macos | same as Windows — the shared MegaPDF.Core DocumentCapabilities both desktops consume is the half that has to change, so these two land together. | #558 |
@@ -64,7 +63,7 @@ The feature is reachable and no test in CI touches it.
 | Print (`print`) | macos | the self-test checks the command's enablement and nothing else; no print is ever performed in CI. | — |
 | Print (`print`) | windows | nothing automated touches printing on Windows: no self-test state, no core test of PdfPrinter, and tools/windows-qa's print flow is manual. | — |
 
-### Engine only — this platform's own path is untested (61)
+### Engine only — this platform's own path is untested (59)
 
 The shared core proves the operation. Nothing proves this platform reaches it correctly, which is where #401 and #412 lived.
 
@@ -81,7 +80,6 @@ The shared core proves the operation. Nothing proves this platform reaches it co
 | Light and dark app chrome (`theme`) | linux | as macOS. | — |
 | Light and dark app chrome (`theme`) | macos | --self-test never switches theme; the --theme flag exists for by-hand screenshot poses only. | — |
 | Light and dark app chrome (`theme`) | windows | token parity across platforms is asserted; no self-test state switches theme. The page-colour tint in `reading` is a different thing. | — |
-| Add text (`add-text`) | ios | geometry, style and round-trip at the engine; no UI test places a box. | — |
 | Edit the document's own text (`body-text-edit`) | android | engine only — iOS has a live UI test for the same feature (#113/#114) and Android does not. | — |
 | Edit the document's own text (`body-text-edit`) | windows | the engine side is the best-tested part of the app; no Windows self-test state retypes a line in the UI. | — |
 | Checkboxes, real and drawn (`checkboxes`) | ios | no mark-style setting on iOS and no UI test taps a box. | — |
@@ -120,7 +118,6 @@ The shared core proves the operation. Nothing proves this platform reaches it co
 | Password — set, change, remove, and opening a protected document (`password`) | ios | set-password and wrong-password-then-remove are real UI tests, and both are excluded from CI — the only platform with a UI test for this and it does not run. | — |
 | Password — set, change, remove, and opening a protected document (`password`) | linux | same as macOS. | — |
 | Password — set, change, remove, and opening a protected document (`password`) | macos | the self-test checks a password prompt survives a tab switch but never sets, changes or removes a password through the UI. | — |
-| Progress and Stop on long operations (`progress-cancel`) | ios | the timing state machine only; no UI test sees a busy strip or presses Stop. | — |
 | Save a copy / Save As (`save-a-copy`) | windows | no self-test state drives Save As; the picker is the OS's. | — |
 | Save (overwrite in place) (`save-in-place`) | ios | FilesEndToEndUITests saves through the real picker and is excluded from CI. | — |
 | Share (`share`) | ios | ShareVerificationUITests drives the real sheet and is excluded from CI for Files-app flakiness. | — |
@@ -162,9 +159,9 @@ The shared core proves the operation. Nothing proves this platform reaches it co
 | **Checkboxes, real and drawn** | UI+m | UI | UI | eng | UI |
 | **Make a signature (draw, type, photo) and the library** | UI+m | eng+m | eng+m | eng | eng |
 | **Place, move, resize and remove a signature** | UI+m | UI | UI | eng | eng |
-| **Add text** | UI+m | UI | UI | eng | UI |
+| **Add text** | UI+m | UI | UI | UI | UI |
 | **Edit the document's own text** | eng+m | UI | UI | UI | eng |
-| **Whiteout (cover)** | UI+m | UI | UI | GAP | UI |
+| **Whiteout (cover)** | UI+m | UI | UI | UI | UI |
 
 ### Redaction
 
@@ -194,7 +191,7 @@ The shared core proves the operation. Nothing proves this platform reaches it co
 | **A withheld permission is said out loud, and the person may continue** | GAP | GAP | GAP | GAP | UI |
 | **Shrink for email** | UI+m | UI+m | UI+m | GAP | GAP |
 | **Print** | —+m | —+m | UI+m | GAP | GAP |
-| **Progress and Stop on long operations** | UI | UI | UI | eng | UI |
+| **Progress and Stop on long operations** | UI | UI | UI | UI | UI |
 
 ### Lifecycle and state
 
@@ -354,7 +351,7 @@ import, which is where #99–#101 lived.
 - **Windows** — UI+m. coverage: UI/VM. reachable from `src/MegaPDF.App/MainWindow.xaml::AddTextButton`. tests: `.github/workflows/ci.yml::Run-Check "whiteout-text"`, `tests/MegaPDF.Core.Tests/WhiteoutAndTextBoxTests.cs::TextBox`, `tests/MegaPDF.Core.Tests/TextBoxSubstitutionTests.cs::Substitution`. by hand: `TESTING.md::**Add text**`. size chips, multi-line splitting and restyle-on-re-edit, since #3/#4.
 - **macOS** — UI. coverage: UI/VM. reachable from `src/MegaPDF.Avalonia/Views/MainWindow.MenuBar.cs::Strings.AddText`. tests: `tests/MegaPDF.Core.Tests/WhiteoutAndTextBoxTests.cs::TextBox`, `tests/MegaPDF.Core.Tests/TextBoxSubstitutionTests.cs::Substitution`, `tests/MegaPDF.Core.Tests/FontSubstitutionTests.cs::Font`. the self-test adds boxes, splits on Shift+Enter, restyles and undoes, through the view model.
 - **Linux** — UI. coverage: UI/VM. reachable from `src/MegaPDF.Avalonia/Views/MainWindow.MenuBar.cs::Strings.AddText`. tests: `tests/MegaPDF.Core.Tests/WhiteoutAndTextBoxTests.cs::TextBox`, `tests/MegaPDF.Core.Tests/TextBoxSubstitutionTests.cs::Substitution`, `tests/MegaPDF.Core.Tests/FontSubstitutionTests.cs::Font`. same as macOS.
-- **iOS/iPadOS** — eng. coverage: engine only. reachable from `ios/MegaPDF/ViewerView.swift::Label("Add text"`. tests: `ios/MegaPDFTests/AddTextTests.swift::class`. geometry, style and round-trip at the engine; no UI test places a box.
+- **iOS/iPadOS** — UI. coverage: UI/VM. reachable from `ios/MegaPDF/ViewerView.swift::Label("Add text"`. tests: `ios/MegaPDFTests/AddTextTests.swift::class`, `ios/MegaPDFTests/MultilineTextTests.swift::class`, `ios/MegaPDFUITests/MultilineTextUITests.swift::testTheFieldHandsBackANewlineForAReturnAndNotACarriageReturn`, `.github/workflows/ios-ci.yml::-only-testing:MegaPDFUITests/MultilineTextUITests`. geometry, style and round-trip at the engine; size chips since #43 and multi-line splitting since #4, with the UI test reading the code points the field actually hands back for a Return — the thing Windows and Android each got wrong by assuming it. No UI test places a box.
 - **Android** — UI. coverage: UI/VM. reachable from `android/app/src/main/java/com/megapdf/android/ViewerScreen.kt::R.string.add_text`. tests: `android/app/src/androidTest/java/com/megapdf/android/TextBoxMultilineTest.kt::class`, `android/engine/src/androidTest/java/com/megapdf/engine/TextBoxTest.kt::class`, `android/engine/src/test/java/com/megapdf/engine/PdfWriteTextOptionsTest.kt::class`.
 
 ### Edit the document's own text (`body-text-edit`)
@@ -369,15 +366,22 @@ import, which is where #99–#101 lived.
 
 The row that made the case for this map. Android had no whiteout tool at all until #3/#4
 landed on 2026-09-30, while the issue that produced them discussed improving its chrome on
-four platforms. iOS still has none, and the comment that explains why
-(ios/MegaPDF/Engine/PdfEngine+Redaction.swift: "iOS has no whiteout — mobile's feature set
-is fill, check, sign, find and add text") describes a mobile feature set that Android no
-longer has.
+four platforms — and iOS turned out to be in the same position a day later, with the same
+cause: the core functions had been there since contract 5 and were never bound.
+
+What made the iOS one harder to notice than a gap was that a code comment stated the absence
+as a design position — ios/MegaPDF/Engine/PdfEngine+Redaction.swift said "iOS has no
+whiteout — mobile's feature set is fill, check, sign, find and add text" — and that had
+already stopped being true when Android got one. A stale intent asserted as fact answers the
+question before anyone asks it. Both platforms have the tool now.
+
+The lesson this row exists for: when an issue says a feature needs improving on four
+platforms, check first that it exists on four platforms.
 
 - **Windows** — UI+m. coverage: UI/VM. reachable from `src/MegaPDF.App/MainWindow.xaml::WhiteoutButton`. tests: `.github/workflows/ci.yml::Run-Check "whiteout-text"`, `tests/MegaPDF.Core.Tests/WhiteoutAndTextBoxTests.cs::Whiteout`. by hand: `TESTING.md::**Whiteout**`.
 - **macOS** — UI. coverage: UI/VM. reachable from `src/MegaPDF.Avalonia/Views/MainWindow.MenuBar.cs::Strings.Cover`. tests: `tests/MegaPDF.Core.Tests/WhiteoutAndTextBoxTests.cs::Whiteout`. placed and round-tripped through the view model; the move/resize chrome the Windows state drives is not asserted here.
 - **Linux** — UI. coverage: UI/VM. reachable from `src/MegaPDF.Avalonia/Views/MainWindow.MenuBar.cs::Strings.Cover`. tests: `tests/MegaPDF.Core.Tests/WhiteoutAndTextBoxTests.cs::Whiteout`. same as macOS.
-- **iOS/iPadOS** — GAP. absent (gap). no whiteout tool. The reason given in the engine source is that mobile's feature set excludes it — which stopped being true when Android got one on 2026-09-30.
+- **iOS/iPadOS** — UI. coverage: UI/VM. reachable from `ios/MegaPDF/ViewerView.swift::viewerWhiteout`. tests: `ios/MegaPDFTests/WhiteoutTests.swift::class`. the whole lifecycle through the view model — arm, drag to place, tap to select, move, resize, remove, undo — plus the engine binding and both history operations (#3). The placement gesture is Redact's own drag, which no UI test drives on this platform either.
 - **Android** — UI. coverage: UI/VM. reachable from `android/app/src/main/java/com/megapdf/android/ViewerScreen.kt::R.string.whiteout`. tests: `android/app/src/androidTest/java/com/megapdf/android/WhiteoutLifecycleTest.kt::class`. arrived with its own instrumented test (#3/#4), which is why it is the strongest mobile cell here.
 
 ### Redact — mark text or an area, move, resize, remove, clear all (`redact-mark`)
@@ -516,7 +520,7 @@ show*: each one has a working refusal, so no test fails — they are walls that 
 - **Windows** — UI. coverage: UI/VM. reachable from `src/MegaPDF.App/MainWindow.xaml::BusyCancelButton`. tests: `.github/workflows/ci.yml::Run-Check "progress"`, `tests/MegaPDF.Core.Tests/BusyStateTests.cs::Busy`.
 - **macOS** — UI. coverage: UI/VM. reachable from `src/MegaPDF.Avalonia/Views/MainWindow.axaml::BusyStrip`. tests: `src/MegaPDF.Avalonia/Program.cs::CheckProgressAndCancel`, `src/MegaPDF.Avalonia/Program.cs::CheckBusyStripControls`, `tests/MegaPDF.Core.Tests/BusyStateTests.cs::Busy`.
 - **Linux** — UI. coverage: UI/VM. reachable from `src/MegaPDF.Avalonia/Views/MainWindow.axaml::BusyStrip`. tests: `src/MegaPDF.Avalonia/Program.cs::CheckProgressAndCancel`, `src/MegaPDF.Avalonia/Program.cs::CheckBusyStripControls`, `tests/MegaPDF.Core.Tests/BusyStateTests.cs::Busy`.
-- **iOS/iPadOS** — eng. coverage: engine only. reachable from `ios/MegaPDF/ViewerView.swift::busy`. tests: `ios/MegaPDFTests/BusyStateTests.swift::class`, `ios/MegaPDFTests/NoticeLifetimeTests.swift::class`. the timing state machine only; no UI test sees a busy strip or presses Stop.
+- **iOS/iPadOS** — UI. coverage: UI/VM. reachable from `ios/MegaPDF/ViewerView.swift::busyStop`. tests: `ios/MegaPDFTests/BusyStateTests.swift::class`, `ios/MegaPDFTests/NoticeLifetimeTests.swift::class`, `ios/MegaPDFTests/ProgressAndStopTests.swift::class`, `ios/MegaPDFUITests/ProgressStripUITests.swift::testAScanShowsItsCountAndCanBeStoppedFromTheStrip`, `.github/workflows/ios-ci.yml::-only-testing:MegaPDFUITests/ProgressStripUITests`. the timing state machine, the progress and Stop layer, and a UI test that reads the count line and presses the Stop in a running app — which is how the Stop's hit area was found to be 15.7 points tall. Search has progress and Stop, extract has Stop, a save has neither on purpose (#145); shrink does not exist on this platform.
 - **Android** — UI. coverage: UI/VM. reachable from `android/app/src/main/java/com/megapdf/android/ViewerScreen.kt::BusyStopSnackbar`. tests: `android/app/src/test/java/com/megapdf/android/BusyStateTest.kt::class`, `android/app/src/test/java/com/megapdf/android/PageOperationBusyLabelTest.kt::class`, `android/app/src/androidTest/java/com/megapdf/android/PageToolsProgressTest.kt::class`.
 
 ### Undo and redo (`undo-redo`)
