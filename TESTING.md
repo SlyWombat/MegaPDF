@@ -338,7 +338,8 @@ permanently instead of being fetched or copied per run:
 |---|---|---:|---|
 | private | `~/pdf-test` | 4,337 documents | never re-fetched — it is the owner's own machine copy |
 | private (Canadian forms) | `~/pdf-test-ca` | 135 documents | same |
-| public | `~/pdf-public` | 1,349 documents, 144 MB | `tools/stress/public-corpus/fetch.sh ~/pdf-public` |
+| private (UN) | `~/pdf-test-un` | 90 documents | same |
+| public | `~/pdf-public` | **1,494 documents, 4.3 GB** (#609, 2026-10-01) | `tools/stress/public-corpus/fetch.sh ~/pdf-public` |
 
 Point any battery at `~/pdf-public` exactly as at `~/megapdf-public-corpus` above — it is
 the same corpus, just not re-downloaded:
@@ -350,6 +351,21 @@ the same corpus, just not re-downloaded:
 `~/pdf-public` is chmod'd read-only the same way `~/pdf-test` is (`dr-xr-sr-x` directories,
 `r--r--r--` files), so an ordinary battery run cannot write into it, move a file, or repair
 a mismatch by accident — the same protection the private corpus has had all along.
+
+**What is staged there, and what is not (#609).** Until 2026-10-01 this mount held 1,381 of
+the manifest's 1,777 rows and every battery summary reported the figure as "the public
+corpus" with nothing saying what it was 1,381 *of*. It now holds **1,494 rows**: the 108 UK
+OGL forms and the 7 very large `govinfo-large` documents were staged on Dave's decision
+(#609) — 112 of the 115 landed; three `uk-hmrc` rows no longer hash to the manifest and are
+#625. The **280 `wiki-*` non-Latin rows are excluded by decision, not by accident**, and the
+decision is recorded in `~/pdf-public/EXCLUDED-FROM-THIS-CORPUS.tsv` where
+`tools/stress/corpus_coverage.sh` reads it, so every battery summary now prints the
+exclusion by name instead of leaving a silent hole. One further row is on disk but outside
+every number any battery prints: the qpdf fixture whose extension is `.Pdf`, which
+`find -name '*.pdf'` does not match — long footnoted as "assumed / not verified", now
+counted and named in the coverage block. Staging those 115 documents costs about 25 minutes
+and 4.2 GB, nearly all of it the two multi-gigabyte rows, so it is a thing to do once per
+machine and leave alone.
 
 **Scratch is disposable; corpora persist.** Every agent brief says "leave the machine as
 you found it" and "clean up after yourself" — that means your own build directories,
@@ -1296,6 +1312,174 @@ whatever #587's own tests already cover.
 No issue filed from this run: the one genuinely new finding (#524, via #532) is a fix confirmed,
 not a regression, and everything else measured is #445 or #498 confirmed exactly rather than
 rediscovered.
+
+### Eleventh run, 2026-10-01: all three batteries, all four corpora, over the staged corpus, `wip/609-stage-and-measure` at 993ba98 (#609, #612)
+
+**The first run over a public corpus that says what it is a count of, and the first over the
+two populations that were added to the manifest because they found defects.** Dave's decision
+on #609 was to stage the missing documents rather than redefine the condition, so this run is
+the measurement after staging: #612 fixed the fetch, 112 of the 115 missing documents were
+staged on k3's `~/pdf-public`, and all three batteries ran over the result. Run on kdocker3 in
+a container (`megapdf:base`, PDFium still at 33 patches,
+`pdfium-7934-megapdf-2b3b415e86b1`), all four corpora through `structure-battery.sh
+--reference --cli`, then `markdown-battery.sh`, then `pages-battery.sh` (#567's full
+seven-operation shape), in the tenth run's own order and concurrency: structure and markdown
+with all four corpora at once, pages as private+public (`--jobs 8`/`--jobs 6`) then
+Canadian+UN (`--jobs 8`). About 55 minutes for everything, against the tenth run's 30 -- the
+whole of the difference is the seven large documents.
+
+**Zero crashes and zero hangs, in every battery, on every corpus. 5,875 documents:**
+
+| corpus | on disk | visited | opened (structure/markdown) | the rest |
+|---|---:|---:|---:|---|
+| private | 4,158 | 4,158 | 4,084 | 12 encrypted, 62 unreadable format |
+| public | **1,493** | **1,493** | **1,480** | 5 encrypted, 8 unreadable format |
+| Canadian | 134 | 134 | 134 | — |
+| UN | 90 | 90 | 90 | — |
+
+Private, Canadian and UN are identical to the tenth run on every line. Public is +112
+documents and +112 opened: **every one of the 112 newly staged documents opened**, on both
+paths, with nothing newly encrypted, unreadable, crashing or hanging. `pages-battery.sh`
+counts differently as always: private 4,084 opened (12 protected, 62 did-not-open), public
+**1,486** opened (4 protected, 3 did-not-open, 5 separately flagged `input already damaged`),
+Canadian and UN 134/90 with nothing flagged.
+
+**What the corpus actually was, printed by the run itself (#609's cheap half, and the part
+that stops this recurring).** Every battery summary now ends with a coverage block from
+`tools/stress/corpus_coverage.sh`. Public's, verbatim in substance:
+
+| | |
+|---|---:|
+| manifest rows | 1,777 |
+| rows present on disk | 1,494 |
+| rows the `*.pdf` walk reaches — **the population every number below is over** | **1,493** |
+| staged but not reached (`.Pdf`, qpdf) | 1 |
+| stated exclusion: `wiki-*` non-Latin, deferred by Dave decision | 280 |
+| not accounted for: `uk-hmrc`, source re-served different bytes (#625) | 3 |
+
+Coverage **1,493 of 1,777 (84.0%), PARTIAL** -- against the tenth run's unstated 1,381 of
+1,777 (77.7%). The three corpora with no manifest print one line saying so rather than
+nothing, because an absent line reads as "nobody checked". Nothing in the block gates: a
+partial corpus is a fact about the machine, not a regression in the code under test.
+
+**Structure, against F1 >= 0.998 and order agreement tau >= 0.9:**
+
+| corpus | token F1, internal | token F1, CLI | tau median | CLI bad exits | |
+|---|---:|---:|---:|---:|---|
+| private | **0.998997** | 0.998997 | 0.951 | 0 | pass |
+| public | **0.980019** | 0.980019 | 0.978 | 0 | **fail — #498, confirmed** |
+| Canadian | **0.999932** | 0.999932 | 0.994 | 0 | pass |
+| UN | **0.999136** | 0.999136 | 0.967 | 0 | pass |
+
+Markdown: every gate passes on all four corpora (0 crashes, 0 hangs, 0 other bad exit codes,
+0 cmark parse failures, 0 cmark timeouts), public now over 1,493 documents rather than 1,381.
+
+**Pages** (0 crashes/hangs, 0 qpdf failures, 0 qpdf timeouts, 0 count mismatches, 0 write
+failures, 0 refusals outside the contract's own two):
+
+| corpus | crashes/hangs | QPDF FAILED | COUNT MISMATCH | WRITE FAILED | REFUSED, other | |
+|---|---:|---:|---:|---:|---:|---|
+| private | 0/0 | 0 | 0 | 0 | 0 | pass |
+| public | 0/0 | 0 | 0 | 0 | **9** | **fail — #445, confirmed** |
+| Canadian | 0/0 | 0 | 0 | 0 | 0 | pass |
+| UN | 0/0 | 0 | 0 | 0 | 0 | pass |
+
+**Public's structure failure is #498 unchanged, and the aggregate's move from 0.974441 to
+0.980019 is the staging, attributed to the token.** Resolved by manifest `source` from the
+battery log's own per-document `fid_match`/`fid_a`/`fid_b`:
+
+| source | docs | tokens | token F1 |
+|---|---:|---:|---:|
+| `govinfo-signed` | 33 | 10,041,571 | **0.973305** |
+| `govinfo-large` | 7 | 5,331,327 | **0.989955** |
+| `irs` | 136 | 266,159 | 0.998664 |
+| `uscis` | 50 | 172,827 | 0.999991 |
+| `uk-dwp` | 24 | 95,980 | **0.999984** |
+| `uk-homeoffice` | 22 | 89,862 | **0.999900** |
+| `uk-hmrc` | 59 | 82,508 | **0.999558** |
+| `verapdf` | 860 | 10,400 | 0.999567 |
+| `qpdf` | 174 | 6,053 | 1.000000 |
+| `pdfium` | 115 | 1,730 | 0.999133 |
+
+`govinfo-signed` measures **0.973305** -- the tenth run's figure to six decimal places, on the
+same 33 documents, which is #498 confirmed and not rediscovered. **Restricting to the tenth
+run's own population (dropping `govinfo-large` and the three `uk-*` sources) reproduces
+0.974441 exactly, over 1,368 documents and 10,498,740 tokens -- the tenth run's public figure,
+token for token.** So the aggregate did not move because anything changed in the engine; it
+moved because 5.33 M tokens scoring 0.989955 joined a population of 10.5 M scoring 0.974441.
+`govinfo-large` measures **0.989955**, which is #488's own recorded figure to six decimal
+places: that category is understood (97.1% of its deficit is line-wrap hyphens that never
+join, because line building merges lines across the column gutter), #488 is out of the
+milestone with the bar for a future attempt written down, and **nothing was attempted here**.
+Public still fails the gate, by less, for exactly the reason it failed before.
+
+**The UK forms had never been measured, and this is what they produced.** All three sources
+pass the fidelity gate with room to spare -- 0.999984, 0.999900, 0.999558, the best scores of
+any real-document source in the corpus and comfortably above `irs` (0.998664). They
+contributed **zero** crashes, hangs, qpdf failures, count mismatches, write failures and zero
+`REFUSED, other`. The one thing they did produce is field-hierarchy refusals, below. #479 (the
+divergence between the internal path and the command line that this population originally
+found) does not reappear: internal and CLI F1 are identical to six decimals on every corpus,
+public included.
+
+**The seven large documents are clean on every operation.** 7 seen, 7 opened, zero refusals of
+any kind, zero timeouts -- `pages-battery.sh`'s 300s bound was not approached by any operation
+on a 2.07 GB document, which is what `tools/stress/public-corpus/README.md`, "Very large
+documents", already recorded from a separate run and is now true in a battery that measured
+them alongside everything else.
+
+**Public's nine `REFUSED, other` are #445's known pair, confirmed exactly.** Resolved by
+manifest source rather than by name: `pdfium` 7 (rotate 2, move 1, extract 2, importself 2 --
+the two primary documents whose own pages the engine cannot load) and `verapdf` 2 (importpair
+only -- two otherwise-clean documents whose fixed pairing partner happens to be one of those
+two). Four distinct documents, nine refusals, the ninth and tenth runs' accounting down to the
+operation. None of the 112 newly staged documents is among them.
+
+**Field-`/Parent`-hierarchy refusal, through `import` only -- and the UK forms moved it, as
+#609 predicted they would:**
+
+| corpus | importself refused-fields | rate | importpair | rate |
+|---|---:|---:|---:|---:|
+| private | 37 / 4,084 | **0.91%** | 0 / 4,084 | 0% |
+| public | **230 / 1,486** | **15.48%** | 0 / 1,486 | 0% |
+| Canadian | 5 / 134 | 3.7% | 4 / 134 | 3.0% |
+| UN | 0 / 90 | 0% | 0 / 90 | 0% |
+
+Private (0.91%), Canadian (5 and 4) and UN (0) are the tenth run's numbers exactly. Public
+rose from 212 to 230, and **all 18 of the increase are UK forms**: `uk-dwp` **11 of 24
+(45.8%)**, `uk-homeoffice` **5 of 22 (22.7%)**, `uk-hmrc` **2 of 59 (3.4%)**. The seven large
+documents produced none. The rate order is worth noting rather than burying: DWP's 45.8% is
+the second-highest of any source in the corpus after IRS's 100% (136 of 136), and these are
+numbered-question benefit forms -- the shape #609 said was "exactly the population that
+exposed the list-marker bug in the measure". It is contract behaviour (exit 9, a refusal
+rather than a corruption, since #452/#463) and so not a gate failure and not re-filed, but
+somebody should decide whether a one-in-two refusal rate on real UK benefit forms is
+acceptable product behaviour, which is a question for Dave and not for this run.
+`extract`-side refusals remain **zero on all four corpora**, which is the ninth run's finding
+re-confirmed over a 112-document-larger population: past PDFium patch 33, extracting pages
+into a brand-new document has no pre-existing field name for the collision check to trip
+over, so `extract` structurally cannot reach this refusal and `import` can. The zero is the
+contract, not a dead probe.
+
+**`fetch.sh` was fixed first, because #609 could not be done without it (#612).** `--max-time
+300` aborted the two multi-gigabyte rows at around 875 MB on four attempts out of four, so the
+command the manifest's README names could not fetch the manifest's own corpus. Replaced with a
+low-speed abort and resumption. Proved on the real rows, not only in the test: the 1.57 GB row
+was carried past 1.53 GB, the run was killed there deliberately, and the re-run resumed from
+exactly that offset and transferred only the remaining 34,122,108 bytes before its manifest
+sha256 verified; the 2.07 GB row's first single `curl` invocation ran unbroken past 1.07 GB
+over about ten minutes -- more than three times the old wall clock, at a size the old wall
+clock could never have reached. All 7 landed and verified. 112 of the 115 missing documents
+staged; the other three are #625, three `uk-hmrc` rows whose source now serves different
+bytes, each refused on its own by the rule that a pinned hash is never re-fetched over (#525).
+
+**One issue filed: #625.** Everything else is confirmation. #498 is confirmed to six decimals
+on the same 33 documents; #445 is confirmed to the operation on the same four; #488's figure
+is confirmed to six decimals and explicitly not attempted; #567's refusal measure is
+confirmed on private, Canadian and UN and extended on public; #479 does not reappear. The
+release-candidate condition in #537 that a full corpus battery be green still cannot be
+claimed -- but for the first time the reason is written in the run's own output rather than
+inferred from a count nobody could interpret.
 
 ## Reporting
 
