@@ -44,6 +44,21 @@ final class EditHistory {
     private var done: [PdfEditOperation] = []
     private var undone: [PdfEditOperation] = []
 
+    /// Called with every operation that leaves the history **for good**: pushed off the end by
+    /// the capacity, thrown away with the redo branch, or cleared with the document.
+    ///
+    /// It exists for the one kind of edit that is holding something the engine owns: a page
+    /// delete keeps the deleted page alive so the undo can put back the page itself (#174,
+    /// contract 10). An operation that can never be undone again is holding a page nothing can
+    /// restore, and on a phone a long session of deletes would otherwise keep every one of them
+    /// alive for as long as the document was open. The history does not know about the engine,
+    /// so it says what left rather than freeing anything itself.
+    var onDropped: ([PdfEditOperation]) -> Void = { _ in }
+
+    /// Everything the history is holding, in no particular order — for a caller that has to
+    /// let go of all of it at once (the document being replaced, a redaction applied).
+    var all: [PdfEditOperation] { done + undone }
+
     var canUndo: Bool { !done.isEmpty }
     var canRedo: Bool { !undone.isEmpty }
     var undoName: String? { done.last?.name }
@@ -65,8 +80,12 @@ final class EditHistory {
     /// marks are outside the history and Undo takes back the wrong thing.
     func record(_ operation: PdfEditOperation) {
         done.append(operation)
-        if done.count > Self.capacity { done.removeFirst() }
+        var dropped: [PdfEditOperation] = []
+        if done.count > Self.capacity { dropped.append(done.removeFirst()) }
+        // A new edit is a new branch: everything that was undone can never be redone again.
+        dropped.append(contentsOf: undone)
         undone.removeAll()
+        if !dropped.isEmpty { onDropped(dropped) }
     }
 
     /// Reverts the last operation, and hands it back so the caller can see whether the
@@ -99,8 +118,10 @@ final class EditHistory {
     }
 
     func clear() {
+        let dropped = done + undone
         done.removeAll()
         undone.removeAll()
+        if !dropped.isEmpty { onDropped(dropped) }
     }
 
     /// Hands every other operation the mark ids the one just applied or reverted re-marked

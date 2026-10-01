@@ -447,7 +447,7 @@ The plain-text content-fidelity bar (every glyph search can find comes out exact
 the Markdown acceptance line are a later phase's (#355, #357); this phase has no writer to
 hold to them yet. The README's mention of a command line waits for the CLI itself (#356).
 
-### 3.10 F9 — Page tools *(scope amendment — 2026-09-27, #174; engine half, then the Mac/Linux desktops)*
+### 3.10 F9 — Page tools *(scope amendment — 2026-09-27, #174; engine half, then the Mac/Linux desktops, then iPhone and iPad)*
 
 **User story:** *"This scan came in sideways. Take out the blank page. Put the signed pages
 from the other file after page 3. Save pages 2–4 as their own file."*
@@ -552,6 +552,81 @@ copy still work — not "the change failed". The last page of a document becomes
 is, with the way round it (Save Selected Pages As). Neither is a disabled button with no
 explanation. The #118 layout guard is *not* in this path at all: no page operation rewrites a
 content stream, so none of them can answer `MEGAPDF_ERR_LAYOUT`.
+
+#### Android's and Windows's halves
+
+Not written down here yet. Android's page tools shipped in #554 (a full-screen **Pages** screen
+with a contextual selection bar — a phone cannot show a readable page and a thumbnail grid at
+once) and Windows's in #560 (a reflowing grid of tiles in a pane docked left inside the tab, on
+F4, after Edge's page pane and File Explorer's Gallery). Each merge carries its own reasoning, and
+each rejected copying the others on purpose. This section should gain their two subsections the
+next time either is touched.
+
+#### The iPhone and iPad half *(#174)*
+
+**One grid, two ways it arrives, because the two are not the same machine.** In **compact
+width** (every iPhone, and an iPad in Slide Over) the pages come up as a **sheet with detents**:
+at `.medium` they fill the lower half and the page being worked on is still on screen above
+them, and dragged to `.large` it is the full grid. A sheet is what iOS uses for a self-contained
+task over the thing you are looking at, and it is deliberately not a navigation destination —
+pushing onto the stack on iOS means going deeper into the content, and rearranging the content is
+not deeper into it. In **regular width** (an iPad full screen, or the wide half of a Split View)
+the same grid is a **sidebar inside the viewer**, toggled from the tool strip #172 gave the iPad:
+that is the one answer iPadOS already has for structure beside content — the thumbnail sidebar
+Files' own Quick Look and Books show — and beside the page, turning page 3 turns page 3 in front
+of you. Both are chrome for reading mode's purposes (§3.11) and leave the accessibility tree with
+it, not merely the screen.
+
+**Select is a mode**, unlike Android's grid and the desktops' strips, which select on a plain
+tap because no other meaning is available there. Here there is one: this grid sits beside or over
+the document, so a tap on a thumbnail **goes to that page**. Picking pages to act on is therefore
+iOS's own Select mode (Photos, Files, Mail), with a contextual bar of commands under the grid —
+and it earns its keep twice, because "turn these six pages" becomes one gesture and one undo
+step. Every command is *also* on a tile's long-press menu, which is the surface iOS's own PDF
+markup puts Rotate Left/Right, Insert and Delete on, and which a pointer on an iPad reaches by
+right-click. Nothing is only in the context menu.
+
+**Reordering has three ways in.** A long-press drag is what a finger expects and is the one that
+is unusable with VoiceOver and impossible without a touchscreen, so every tile also carries *Move
+Earlier* and *Move Later* as custom accessibility actions and as menu rows, and *Move to…* takes a
+typed position — this platform's answer to the desktops' cut and paste (#2), and the same command
+Android landed on.
+
+**Keys.** ⌥⌘2 shows and hides the pages on an iPad keyboard: Preview's own Thumbnails key, and
+what MegaPDF for Mac took above, because an iPad keyboard is a Mac keyboard and the app's own Mac
+build is an iPad user's nearest neighbour. The desktops' rotate chords are deliberately not here;
+they act on a selection, and the selection lives on the pane where its commands are.
+
+**Undo.** On the sheet, in the grid's own header — the app's own Undo is on the bottom toolbar,
+which the sheet is sitting over, and a rotation that cannot be taken back without first putting
+the sheet away is not one undo step in any useful sense. On the iPad, not repeated: the strip
+above the sidebar already carries it.
+
+**This leg's own layer** (`ios/MegaPDF/`): `PdfEngine+Pages.swift` (the whole of contract 10, with
+`PageToolRefusal`/`PageToolError` so nothing matches on an English message, and `RemovedPage`,
+whose spent handle **throws** — #429/#441 were both a history naming something the engine had
+replaced and quietly doing nothing); `PageShift.swift`, the renumbering primitive, where a page
+that is gone maps to **nil** rather than 0; `PageOperations.swift`, the five reversible
+operations, each one undo step, each reporting `shifts(reverted:)` and `changedPages`;
+`EditHistory.onDropped`, so a deleted page the core is holding is freed when its operation leaves
+the history for good; `DocumentCapabilities.canAssemblePages`/`canExtractPages`; and
+`PageCheckCoordinator.renumber`, so the once-per-page #139 answers follow their pages.
+`ViewerModel.applyPageShifts` is where all of it meets the app's own index-keyed state — the page
+sizes, the rendered images, the grid's thumbnails and selection, the search hits and the settled
+pages. There is **no recovery journal on iOS** (single-session documents, `EditHistory`'s own
+note), so the journal entries the desktops record have no counterpart here.
+
+**The two refusals are surfaced, not hidden**, in the same words Android uses, so four platforms
+say one thing about one limit: `MEGAPDF_ERR_FIELDS` becomes a sentence naming the form on those
+pages and saying nothing was changed, and the last page becomes the rule it is — said when Delete
+is pressed, with *Save Pages As…* as the way round it. The first is raised as a **titled alert**
+rather than a self-clearing notice, because the battery's ninth run (#567) measures it at 0.91% of
+the private corpus and 15.4% of the public one: at that rate it is part of how combining documents
+works rather than a corner of it. Only an import can reach it — an extract writes a new file, and
+on PDFium ≥ 33 a new file has no name for a hierarchy to collide with. The #118 layout guard is not on this path
+at all and `PageToolRefusal` has no case for it; `PageToolsTests` drives that rather than claiming
+it, by showing the guard awake on a page it declines and then running every page operation over
+that same page.
 
 #### Acceptance criteria (this phase)
 
