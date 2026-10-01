@@ -1,0 +1,41 @@
+# The #330 coverage map, checked against the tree on every push.
+#
+# A workflow of its own rather than a job in ci.yml, for one reason: ci.yml has
+# `paths-ignore` for `android/**` and `ios/**`, and a change under those paths is exactly
+# the kind that invalidates the map — a tool added or a test file renamed on a platform
+# ci.yml never looks at. This has no path filter at all.
+#
+# It reads the tree and nothing else: no build, no app, no emulator, a couple of seconds.
+# Blocking, because the thing it protects is a claim about coverage, and a claim about
+# coverage that is allowed to be wrong is worse than no claim.
+name: QA matrix
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  coverage-map:
+    name: Coverage map
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # Every `entry` and every test reference in tests/matrix/coverage.toml must resolve
+      # against this commit's tree, every feature must have a cell per platform, and every
+      # test file, Avalonia --self-test section and Windows self-test state must be cited by
+      # some cell or carry an exemption with a reason. Then docs/qa/test-matrix.md is
+      # regenerated and compared, the same drift idiom as the `notices` job in ci.yml.
+      - name: The coverage map resolves against the tree, and the matrix is not stale
+        run: python3 tools/qa/check-matrix.py --check
+
+      # Printed into the log on purpose: the gap list is the point of the map, and a run
+      # whose gaps nobody reads is a run that only proves a file parses.
+      - name: The gaps it names
+        run: python3 tools/qa/check-matrix.py --gaps

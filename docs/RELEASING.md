@@ -70,6 +70,11 @@ was being verified (§3, the tag rule).
 gh run list --commit <full sha> --json name,conclusion,url
 ```
 
+`qa-matrix` is among them and is the cheapest thing on this list to read: its log ends with
+the gap list from `docs/qa/test-matrix.md`, which is what nothing in CI is looking at on this
+commit. It is not a gate on its own — a gap is a known gap, not a red — but a gap that has
+grown since the last release is worth a look before submitting.
+
 Done: every workflow that ran on that commit is `success`. **`ci.yml` has `paths-ignore`
 for `android/**`, `ios/**` and the Android PDFium**, so an Android- or iOS-only final
 commit has no CI run and no `MegaPDF-store-packages` artifact of its own; the Windows
