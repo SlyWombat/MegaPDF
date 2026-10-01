@@ -1774,7 +1774,16 @@ coverage = "ui"
 tests = [
   "android/app/src/androidTest/java/com/megapdf/android/PageToolsTest.kt::undo",
   "android/app/src/test/java/com/megapdf/android/PageHistoryTest.kt::undo",
+  "android/app/src/androidTest/java/com/megapdf/android/ToolbarGateTest.kt::theToolbarNeverOffersACommandTheViewModelWouldRefuse",
 ]
+note = """
+[ToolbarGateTest] is about whether the Undo the toolbar *offers* is one the app will act on,
+rather than about any one operation undoing correctly. Through 2.1 it was not: the controls
+greyed out on `toolsDisabled` while the actions were refused on `editingBlocked`, two
+predicates that agreed except for the few hundred milliseconds after every edit, in which a
+tap was discarded in silence. Dave reversed #145's trade-off for 2.2 — a discarded tap is
+reported as lost work, a brief grey-out is not — and this row now has a test for the
+invariant across all eleven controls, not only Undo and Redo."""
 
 [[feature]]
 id = "unsaved-prompt"

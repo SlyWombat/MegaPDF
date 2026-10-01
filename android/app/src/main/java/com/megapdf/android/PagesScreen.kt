@@ -111,8 +111,11 @@ fun PagesScreen(
     canUndo: Boolean,
     canRedo: Boolean,
     busy: BusyState?,
-    /** A change is still going in, or a save runs: the tools wait rather than queue (#145). */
-    toolsDisabled: Boolean,
+    /**
+     * A change is still going in, or a save runs: the tools wait rather than queue (#145), and
+     * they show disabled for exactly as long — see [ViewerViewModel.editingBlocked].
+     */
+    editingBlocked: Boolean,
     pageTint: PageTint,
     onThumbnailWindowChange: (firstVisible: Int, lastVisible: Int, targetWidthPx: Int) -> Unit,
     onToggleSelection: (pageIndex: Int) -> Unit,
@@ -135,7 +138,7 @@ fun PagesScreen(
     // the wall this replaced, and it cannot say what the author asked; the view model does, once
     // per document, the first time one of these tools is used. What still disables them is a
     // change or a save already going in (#145).
-    val enabled = !toolsDisabled
+    val enabled = !editingBlocked
     // Everything selected cannot be deleted: a PDF must keep a page, and the engine refuses it
     // (MEGAPDF_ERR_ARGUMENT). Saying so by disabling the button is better than saying so in a
     // dialog after the tap — the refusal dialog is for what cannot be predicted from here.
@@ -235,7 +238,7 @@ fun PagesScreen(
                             )
                             DropdownMenuItem(
                                 text = { Text(stringResource(R.string.pages_save_selection)) },
-                                enabled = selection.isNotEmpty() && !toolsDisabled,
+                                enabled = selection.isNotEmpty() && !editingBlocked,
                                 onClick = { menuOpen = false; onSaveSelectionAs() },
                             )
                             HorizontalDivider()
@@ -263,13 +266,13 @@ fun PagesScreen(
                     ToolbarAction(
                         icon = ToolbarIcons.Undo,
                         label = stringResource(R.string.undo),
-                        enabled = canUndo && !toolsDisabled,
+                        enabled = canUndo && !editingBlocked,
                         onClick = onUndo,
                     )
                     ToolbarAction(
                         icon = ToolbarIcons.Redo,
                         label = stringResource(R.string.redo),
-                        enabled = canRedo && !toolsDisabled,
+                        enabled = canRedo && !editingBlocked,
                         onClick = onRedo,
                     )
                     Spacer(Modifier.width(8.dp))

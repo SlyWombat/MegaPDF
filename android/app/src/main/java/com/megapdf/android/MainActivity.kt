@@ -253,7 +253,7 @@ fun MegaPdfApp(viewModel: ViewerViewModel = viewModel(), screenshotState: String
                 canUndo = viewModel.canUndo,
                 canRedo = viewModel.canRedo,
                 busy = viewModel.busy,
-                toolsDisabled = viewModel.toolsDisabled,
+                editingBlocked = viewModel.editingBlocked,
                 pageTint = viewModel.pageTint,
                 onThumbnailWindowChange = viewModel::updateThumbnailWindow,
                 onToggleSelection = viewModel::togglePageSelection,
@@ -358,7 +358,6 @@ fun MegaPdfApp(viewModel: ViewerViewModel = viewModel(), screenshotState: String
                 // Busy feedback (#145).
                 busy = viewModel.busy,
                 editingBlocked = viewModel.editingBlocked,
-                toolsDisabled = viewModel.toolsDisabled,
                 onCurrentPageChange = viewModel::onCurrentPageChanged,
                 onSaveAndClose = viewModel::saveAndClose,
                 // Share (#378): no unsaved changes shares immediately (same export as

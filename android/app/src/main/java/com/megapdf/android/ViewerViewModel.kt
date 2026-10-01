@@ -1237,17 +1237,30 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
     /**
      * True while a change is still going in, waiting on its page check or its warning, or a save
      * or password change runs. Further edits are blocked, never queued or dropped (#145).
+     *
+     * **This is the only predicate for "an editing command is refused right now", and the screen
+     * greys its controls out on this and nothing else.** It used to have a near-twin,
+     * `toolsDisabled` (`locksDocument || page.isVisible`), which was what the toolbar actually
+     * dimmed on — a strictly smaller condition, chosen so that page work too quick to show a
+     * spinner would not make the whole toolbar blink. The cost of that choice was a window of a
+     * few hundred milliseconds after every edit in which the toolbar offered an Undo this
+     * property would refuse, and `launchEdit` drops a refused command in silence: the person
+     * taps Undo, nothing happens, and that is reported as lost work rather than as a flicker.
+     * Dave reversed the #145 trade-off for 2.2 on exactly that ground, so the twin is gone and
+     * what is offered is what will be acted on.
+     *
+     * The blink it was avoiding was then measured, which #145 never did: on the CI emulator a
+     * checkbox tap holds this for **5.6 ms**, a page rotation for under a millisecond, an undo
+     * for 1.5-77 ms. A frame is 16.7 ms, so the common cases do not survive to be drawn at all.
+     *
+     * Nothing became *newly* enabled when the twin went, which is what made the swap safe to
+     * make in one step: every `busy.page` spinner is started inside a [launchEdit] or
+     * [launchPageEdit] block, so `page.isVisible` implies `editsInFlight > 0`, and
+     * `locksDocument` is a term of this property too. The old condition was a subset of this
+     * one, so unifying them can only ever disable something earlier, never offer something new.
      */
     val editingBlocked: Boolean
         get() = editsInFlight > 0 || pageRewriteDeciding || busy.locksDocument
-
-    /**
-     * Whether the toolbar's editing tools show disabled: during a save or password change, and
-     * once page work has run long enough to show its spinner. Quicker page work only ignores
-     * taps, so the toolbar doesn't flicker on every checkbox.
-     */
-    val toolsDisabled: Boolean
-        get() = busy.locksDocument || busy.page.isVisible
 
     /** The page the list reports as current; Add text checks it early (#145). */
     private var currentPage = 0
