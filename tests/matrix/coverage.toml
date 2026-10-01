@@ -1614,10 +1614,13 @@ tests = [
 note = "the timing state machine only; no UI test sees a busy strip or presses Stop."
 [feature.android]
 presence = "present"
-entry = "android/app/src/main/java/com/megapdf/android/ViewerScreen.kt::BusyLabel"
-coverage = "engine"
-tests = ["android/app/src/test/java/com/megapdf/android/BusyStateTest.kt::class"]
-note = "as iOS."
+entry = "android/app/src/main/java/com/megapdf/android/ViewerScreen.kt::BusyStopSnackbar"
+coverage = "ui"
+tests = [
+  "android/app/src/test/java/com/megapdf/android/BusyStateTest.kt::class",
+  "android/app/src/test/java/com/megapdf/android/PageOperationBusyLabelTest.kt::class",
+  "android/app/src/androidTest/java/com/megapdf/android/PageToolsProgressTest.kt::class",
+]
 
 
 # =============================================================================

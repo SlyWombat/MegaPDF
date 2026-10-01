@@ -853,11 +853,19 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         val app = getApplication<Application>()
         // Locks like a save: the pages being copied are read off the document, so an edit going in
         // underneath would put half of one into the new file.
-        val token = busy.beginDocument(BusyLabel.SAVING, locks = true)
+        //
+        // Stop only, no progress (#145): the engine has taken a cancel flag since #174, but it is
+        // one call with no interior to count against — the same reasoning the Mac and Windows
+        // passes followed for their own extract. A stopped extract leaves nothing at [uri], since
+        // the engine's own contract for a cancelled megapdf_pages_extract is that nothing is left
+        // at the temp path either, and [temp] is deleted below regardless.
+        val cancel = com.megapdf.engine.PdfCancelFlag()
+        var stoppedByUser = false
+        val token = busy.beginDocument(BusyLabel.SAVING, locks = true, cancel = { stoppedByUser = true; cancel.cancel() })
         viewModelScope.launch {
             val temp = File(app.cacheDir, "extract-${System.nanoTime()}.pdf")
             try {
-                doc.extractPages(pages, temp.path)
+                doc.extractPages(pages, temp.path, cancel)
                 withContext(Dispatchers.IO) {
                     val pfd = app.contentResolver.openFileDescriptor(uri, "wt")
                         ?: throw IllegalStateException("provider returned no descriptor")
@@ -871,6 +879,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                 statusMessage = if (pages.size == 1) str(R.string.page_saved_as)
                 else str(R.string.pages_saved_as, pages.size)
             } catch (e: CancellationException) {
+                if (stoppedByUser) statusMessage = str(R.string.work_stopped)
                 throw e
             } catch (e: com.megapdf.engine.PdfPagesException) {
                 pageToolRefusal = e.refusal
@@ -928,9 +937,14 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    /** [perform], with document-level busy feedback: the Pages screen draws no page spinners. */
+    /**
+     * [perform], with document-level busy feedback: the Pages screen draws no page spinners, so
+     * every structure operation reports in its own strip rather than at [PdfEditOperation.pageIndex]
+     * — which for a delete is a page the operation is about to remove, the defect the Mac and
+     * Windows passes found and fixed (#145). [busyLabel] names what the strip says while it runs.
+     */
     private suspend fun performPageEdit(operation: PdfEditOperation, doc: PdfDocument) {
-        val token = busy.beginDocument(BusyLabel.APPLYING)
+        val token = busy.beginDocument(operation.busyLabel)
         try {
             perform(operation, doc)
         } finally {
@@ -1612,17 +1626,40 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
 
     private var searchJob: Job? = null
 
+    /**
+     * Set the moment [stopSearch] asks the running sweep to end, and reset by the next
+     * [startSearch] — so the one `CancellationException` a cancelled [searchJob] throws can tell
+     * "the person asked this to stop" from "a newer query superseded it", which cancels the same
+     * job the same way but says nothing (#145): the newer query owns the result from then on, and
+     * a status line about the query it just replaced would be a stale sentence about the wrong
+     * search.
+     */
+    private var searchStopRequested = false
+
     /** As-you-type search from the search bar; debounced against fast typing. */
     fun updateSearchQuery(query: String) = startSearch(query, SEARCH_DEBOUNCE_MS)
+
+    /**
+     * Stops the running sweep (#145): a per-page loop with nothing at stake in abandoning it, the
+     * same reasoning the Mac and Windows passes gave search. Unlike typing a new query, which
+     * clears [searchHits] because the newer term owns the result, this leaves them exactly as
+     * they stood the moment the sweep was asked to end.
+     */
+    private fun stopSearch() {
+        searchStopRequested = true
+        searchJob?.cancel()
+    }
 
     /**
      * The search itself: wait out [debounceMs], then sweep every page on the
      * engine thread and aggregate hits into one flat document-ordered list.
      * Case-insensitive literal substring — the cross-platform contract.
      * Screenshot mode passes a zero debounce for its one deliberate query.
-     * The sweep shows Searching… in the strip (#145) but never blocks editing.
+     * The sweep shows Searching… in the strip (#145) but never blocks editing, with the page it
+     * is on against the page count, and it may be stopped.
      */
     private fun startSearch(query: String, debounceMs: Long) {
+        searchStopRequested = false   // a new sweep supersedes any Stop still pending on the old one
         searchQuery = query
         searchJob?.cancel()
         searchHits = emptyList()
@@ -1638,8 +1675,9 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
             var token: BusyToken? = null
             try {
                 if (debounceMs > 0) delay(debounceMs)
-                token = busy.beginDocument(BusyLabel.SEARCHING)
+                token = busy.beginDocument(BusyLabel.SEARCHING, cancel = ::stopSearch)
                 val hits = ArrayList<SearchHit>()
+                val pageCount = state.pageSizes.size
                 for (pageIndex in state.pageSizes.indices) {
                     val page = doc.openPage(pageIndex)
                     try {
@@ -1647,10 +1685,14 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                     } finally {
                         page.close()
                     }
+                    // After the page, not before it: "page 1 of N" while page 1 is still being
+                    // read would be a count that finishes before the work does.
+                    token?.report(pageIndex + 1, pageCount)
                 }
                 searchHits = hits
                 currentHitIndex = if (hits.isEmpty()) -1 else 0
             } catch (e: CancellationException) {
+                if (searchStopRequested) statusMessage = str(R.string.search_stopped)
                 throw e
             } catch (e: Exception) {
                 statusMessage = str(R.string.search_failed)

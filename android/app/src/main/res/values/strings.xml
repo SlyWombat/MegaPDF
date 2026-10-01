@@ -209,6 +209,21 @@
     <string name="busy_checking_page">Checking this page…</string>
     <string name="busy_applying">Applying…</string>
     <string name="busy_exporting">Exporting…</string>
+    <!-- The page tools (#145, #174): named for what each one does, rather than the generic
+         "Applying…" above, on the same reasoning the Mac and Windows passes used. -->
+    <string name="busy_turning_pages">Turning pages…</string>
+    <string name="busy_deleting_pages">Deleting pages…</string>
+    <string name="busy_moving_page">Moving page…</string>
+    <string name="busy_inserting_page">Inserting page…</string>
+    <string name="busy_adding_pages">Adding pages…</string>
+    <!-- The strip's count line for a cancellable, per-item sweep (#145): its own line rather than
+         folded into the label, so a screen reader is not asked to announce it once per item. -->
+    <string name="busy_progress_of_pages">Page %1$d of %2$d</string>
+    <!-- Busy strip Stop (#145): the word that abandons work in progress, as distinct from Cancel,
+         which abandons a question. -->
+    <string name="stop">Stop</string>
+    <string name="work_stopped">Stopped.</string>
+    <string name="search_stopped">Search stopped.</string>
     <string name="search_failed">Couldn\'t search this document.</string>
     <string name="edit_failed">Couldn\'t make that change.</string>
     <string name="signature_move_failed">Couldn\'t move this signature</string>

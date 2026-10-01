@@ -1,5 +1,6 @@
 package com.megapdf.engine
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withContext
 
 /**
@@ -196,18 +197,41 @@ suspend fun PdfDocument.importPages(
 }
 
 /**
+ * Stops an in-progress [PdfDocument.extractPages] call (#145): the only page tool slow enough,
+ * and with nothing at stake in abandoning it, to be worth one — one engine call rather than a
+ * per-item loop, so there is no honest count to report alongside it, the same reasoning the Mac
+ * and Windows passes gave their own extract. [cancel] is safe to call from any thread, including
+ * while the call it was given to is still running on the engine's own thread; raising it after
+ * that call has returned does nothing.
+ */
+class PdfCancelFlag {
+    internal val native = NativeCancel()
+
+    fun cancel() = native.raise()
+}
+
+/**
  * Split: writes [pages] (null means every page, repeats allowed, in the order given) as a new
  * PDF at [outPath], with the save discipline every platform's save uses — the whole file to a
  * sibling temporary name, reopened and its page count checked, and only then given the
  * destination's name, so a crash or a full disk leaves either no file or a whole one. This
  * document is unchanged and nothing is recorded: an extract is a copy, not an edit.
+ *
+ * [cancel], raised while this runs, stops the write and leaves nothing at [outPath]: this throws
+ * [CancellationException] rather than [PdfPagesException], as any other cooperative cancellation
+ * does, so a caller already catching one for its own coroutine's cancellation handles this the
+ * same way.
  */
-suspend fun PdfDocument.extractPages(pages: List<Int>?, outPath: String): Unit =
+suspend fun PdfDocument.extractPages(pages: List<Int>?, outPath: String, cancel: PdfCancelFlag? = null): Unit =
     withContext(PdfEngine.pdfiumDispatcher) {
-        PdfiumNative.nativePagesExtract(
-            nativeHandle(), pages?.toIntArray()?.takeIf { it.isNotEmpty() },
-            outPath.nulTerminatedUtf8(), 0L,
-        ).orThrow(Op.EXTRACT)
+        try {
+            PdfiumNative.nativePagesExtract(
+                nativeHandle(), pages?.toIntArray()?.takeIf { it.isNotEmpty() },
+                outPath.nulTerminatedUtf8(), cancel?.native?.pointer ?: 0L,
+            ).orThrow(Op.EXTRACT)
+        } finally {
+            cancel?.native?.free()
+        }
     }
 
 /** Which call is being made, for the one refusal that means different things depending. */
@@ -228,6 +252,10 @@ private enum class Op { ROTATE, DELETE, RESTORE, MOVE, INSERT, IMPORT, EXTRACT }
  */
 private fun Int.orThrow(op: Op): Int {
     if (this >= 0) return this
+    // Only [PdfDocument.extractPages] ever hands the native call a cancel flag, so this is the
+    // one page tool that can come back this way: a cooperative stop, not a refusal, so it is
+    // reported the way every other cancellation in this codebase is (#145).
+    if (this == PdfiumNative.STATUS_CANCELLED) throw CancellationException("extract stopped")
     val refusal = when (this) {
         PdfiumNative.STATUS_FIELDS -> PageToolRefusal.FIELD_HIERARCHY
         PdfiumNative.STATUS_REDACT -> PageToolRefusal.REDACTION_POISONED

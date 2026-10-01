@@ -17,7 +17,7 @@ Each cell says two things and both are checked against the code:
 | `GAP` | the feature is **missing** where it should exist — the #571 shape |
 | `+m` | a by-hand step in `TESTING.md` / `docs/RELEASING.md` covers it too |
 
-220 pairings: 118 UI, 70 eng, 13 —, 14 n/a, 5 GAP.
+220 pairings: 119 UI, 69 eng, 13 —, 14 n/a, 5 GAP.
 
 This map is about *what is covered*, not whether the covering tests pass — that is the
 other jobs' business — and it does not replace the by-hand pass in `docs/RELEASING.md`
@@ -60,7 +60,7 @@ The feature is reachable and no test in CI touches it.
 | Print (`print`) | macos | the self-test checks the command's enablement and nothing else; no print is ever performed in CI. | — |
 | Print (`print`) | windows | nothing automated touches printing on Windows: no self-test state, no core test of PdfPrinter, and tools/windows-qa's print flow is manual. | — |
 
-### Engine only — this platform's own path is untested (70)
+### Engine only — this platform's own path is untested (69)
 
 The shared core proves the operation. Nothing proves this platform reaches it correctly, which is where #401 and #412 lived.
 
@@ -122,7 +122,6 @@ The shared core proves the operation. Nothing proves this platform reaches it co
 | Password — set, change, remove, and opening a protected document (`password`) | linux | same as macOS. | — |
 | Password — set, change, remove, and opening a protected document (`password`) | macos | the self-test checks a password prompt survives a tab switch but never sets, changes or removes a password through the UI. | — |
 | Password — set, change, remove, and opening a protected document (`password`) | windows | no Windows self-test state opens the security dialog; every platform's UI path to this is untested except iOS's, and iOS's is excluded from CI. | — |
-| Progress and Stop on long operations (`progress-cancel`) | android | as iOS. | — |
 | Progress and Stop on long operations (`progress-cancel`) | ios | the timing state machine only; no UI test sees a busy strip or presses Stop. | — |
 | Save a copy / Save As (`save-a-copy`) | ios | the live cases are in FilesEndToEndUITests, excluded from CI. | — |
 | Save a copy / Save As (`save-a-copy`) | windows | no self-test state drives Save As; the picker is the OS's. | — |
@@ -198,7 +197,7 @@ The shared core proves the operation. Nothing proves this platform reaches it co
 | **Password — set, change, remove, and opening a protected document** | eng | eng | eng | eng | eng |
 | **Shrink for email** | UI+m | UI+m | UI+m | GAP | GAP |
 | **Print** | —+m | —+m | UI+m | GAP | GAP |
-| **Progress and Stop on long operations** | UI | UI | UI | eng | eng |
+| **Progress and Stop on long operations** | UI | UI | UI | eng | UI |
 
 ### Lifecycle and state
 
@@ -503,7 +502,7 @@ counters for two whole battery runs before #567's reporting fix.
 - **macOS** — UI. coverage: UI/VM. reachable from `src/MegaPDF.Avalonia/Views/MainWindow.axaml::BusyStrip`. tests: `src/MegaPDF.Avalonia/Program.cs::CheckProgressAndCancel`, `src/MegaPDF.Avalonia/Program.cs::CheckBusyStripControls`, `tests/MegaPDF.Core.Tests/BusyStateTests.cs::Busy`.
 - **Linux** — UI. coverage: UI/VM. reachable from `src/MegaPDF.Avalonia/Views/MainWindow.axaml::BusyStrip`. tests: `src/MegaPDF.Avalonia/Program.cs::CheckProgressAndCancel`, `src/MegaPDF.Avalonia/Program.cs::CheckBusyStripControls`, `tests/MegaPDF.Core.Tests/BusyStateTests.cs::Busy`.
 - **iOS/iPadOS** — eng. coverage: engine only. reachable from `ios/MegaPDF/ViewerView.swift::busy`. tests: `ios/MegaPDFTests/BusyStateTests.swift::class`, `ios/MegaPDFTests/NoticeLifetimeTests.swift::class`. the timing state machine only; no UI test sees a busy strip or presses Stop.
-- **Android** — eng. coverage: engine only. reachable from `android/app/src/main/java/com/megapdf/android/ViewerScreen.kt::BusyLabel`. tests: `android/app/src/test/java/com/megapdf/android/BusyStateTest.kt::class`. as iOS.
+- **Android** — UI. coverage: UI/VM. reachable from `android/app/src/main/java/com/megapdf/android/ViewerScreen.kt::BusyStopSnackbar`. tests: `android/app/src/test/java/com/megapdf/android/BusyStateTest.kt::class`, `android/app/src/test/java/com/megapdf/android/PageOperationBusyLabelTest.kt::class`, `android/app/src/androidTest/java/com/megapdf/android/PageToolsProgressTest.kt::class`.
 
 ### Undo and redo (`undo-redo`)
 

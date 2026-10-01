@@ -204,6 +204,15 @@
     <string name="busy_checking_page">Vérification de cette page…</string>
     <string name="busy_applying">Modification en cours…</string>
     <string name="busy_exporting">Exportation…</string>
+    <string name="busy_turning_pages">Rotation des pages…</string>
+    <string name="busy_deleting_pages">Suppression des pages…</string>
+    <string name="busy_moving_page">Déplacement de la page…</string>
+    <string name="busy_inserting_page">Insertion de la page…</string>
+    <string name="busy_adding_pages">Ajout de pages…</string>
+    <string name="busy_progress_of_pages">Page %1$d sur %2$d</string>
+    <string name="stop">Arrêter</string>
+    <string name="work_stopped">Arrêté.</string>
+    <string name="search_stopped">Recherche arrêtée.</string>
     <string name="search_failed">Impossible de rechercher dans ce document.</string>
     <string name="edit_failed">Impossible d\'effectuer cette modification.</string>
     <string name="signature_move_failed">Impossible de déplacer cette signature</string>

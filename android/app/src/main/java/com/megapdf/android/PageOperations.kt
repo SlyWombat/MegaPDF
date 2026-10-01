@@ -212,3 +212,20 @@ class ImportPagesOperation(
         held = emptyList()
     }
 }
+
+/**
+ * The busy strip's label for this operation (#145): named for what it is doing rather than the
+ * generic [BusyLabel.APPLYING], the way the Mac and Windows passes named theirs
+ * (`BusyTurningPages`, `BusyDeletingPages`, …) once they gave every page tool a strip to report
+ * in at all. A pure mapping — no engine call, no busy state — so it is tested on the JVM rather
+ * than needing a device.
+ */
+val PdfEditOperation.busyLabel: BusyLabel
+    get() = when (this) {
+        is RotatePagesOperation -> BusyLabel.TURNING_PAGES
+        is DeletePagesOperation -> BusyLabel.DELETING_PAGES
+        is MovePageOperation -> BusyLabel.MOVING_PAGE
+        is InsertBlankPageOperation -> BusyLabel.INSERTING_PAGE
+        is ImportPagesOperation -> BusyLabel.ADDING_PAGES
+        else -> BusyLabel.APPLYING
+    }
