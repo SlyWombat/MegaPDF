@@ -961,7 +961,24 @@ internal static class Screenshot
                 failed++;
         }
 
-        var scratch = Path.Combine(Path.GetTempPath(), "megapdf-selftest-pages");
+        // #569: a fixed name here, reused by every run on the same machine, let this check poison
+        // itself. RecentFiles (SDD §3.4) remembers a scroll position per *path*, which is right for
+        // a real document someone reopens — but this check always rewrites work.pdf's bytes from
+        // fixture.pdf and expects to meet a document that has never been seen before. A run that
+        // left the view scrolled down (ordinary: by the time this check reaches its later sections
+        // the document is two pages and has been scrolled) wrote that position back under this same
+        // path, and the *next* run restored it on open — so "the page you are looking at" was
+        // already page 2 before "with nothing selected, Rotate Left turns the page you are looking
+        // at" ever ran, and Rotate Left turned the page the test was not looking at.
+        //
+        // Measured directly (not guessed): with a %LOCALAPPDATA%\MegaPDF carrying one stale entry
+        // for this path, the check failed 8/8 runs, every time on this exact line, and a debug
+        // build that printed TargetPages at the moment of failure showed the fallback page was
+        // wrong, not late — nothing races here, something remembers. Cleared before every run, the
+        // same build passed 30/30, and with a GUID per run below it held 60/60 even starting from
+        // the worst-case polluted profile and never cleaning between runs. A GUID per run makes
+        // that history impossible to meet again.
+        var scratch = Path.Combine(Path.GetTempPath(), $"megapdf-selftest-pages-{Guid.NewGuid():N}");
         Directory.CreateDirectory(scratch);
         try
         {
