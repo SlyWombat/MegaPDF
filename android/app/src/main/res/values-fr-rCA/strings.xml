@@ -304,31 +304,50 @@
     <string name="screenshot_redacted_word">sections 1 à 4</string>
 
     <!-- Mode lecture (#507, #513) -->
+    <!-- FR-REVIEW #507 — new with reading mode, not yet read by the reviewer. -->
     <string name="reading_mode">Mode lecture</string>
+    <!-- FR-REVIEW #507 — new with reading mode, not yet read by the reviewer. -->
     <string name="reading_mode_on">Mode lecture activé</string>
+    <!-- FR-REVIEW #507 — new with reading mode, not yet read by the reviewer. -->
     <string name="reading_mode_off">Mode lecture désactivé</string>
+    <!-- FR-REVIEW #507 — new with reading mode, not yet read by the reviewer. -->
     <string name="reading_controls">Commandes de lecture</string>
-    <!-- Jamais « Quitter », qui est réservé à Quit -->
+    <!-- Jamais « Quitter », qui est réservé à Quit. FR-REVIEW #507 — new with reading mode, not yet read by the reviewer. -->
     <string name="exit_reading_mode">Sortir du mode lecture</string>
+    <!-- FR-REVIEW #507 — new with reading mode, not yet read by the reviewer. -->
     <string name="previous_page">Page précédente</string>
+    <!-- FR-REVIEW #507 — new with reading mode, not yet read by the reviewer. -->
     <string name="next_page">Page suivante</string>
     <string name="page_counter">%1$d / %2$d</string>
+    <!-- FR-REVIEW #507 — new with reading mode, not yet read by the reviewer. -->
     <string name="go_to_page">Aller à la page</string>
+    <!-- FR-REVIEW #507 — new with reading mode, not yet read by the reviewer. -->
     <string name="page_of">sur %1$d</string>
+    <!-- FR-REVIEW #513 — new with reading preferences, not yet read by the reviewer. -->
     <string name="fit_width">Ajuster à la largeur</string>
+    <!-- FR-REVIEW #513 — new with reading preferences, not yet read by the reviewer. -->
     <string name="fit_page">Ajuster à la page</string>
+    <!-- FR-REVIEW #513 — new with reading preferences, not yet read by the reviewer. -->
     <string name="zoom_in">Agrandir</string>
+    <!-- FR-REVIEW #513 — new with reading preferences, not yet read by the reviewer. -->
     <string name="zoom_out">Réduire</string>
 
     <!-- Réglages (#513) -->
+    <!-- FR-REVIEW #513 — new with reading preferences, not yet read by the reviewer. -->
     <string name="settings">Réglages</string>
+    <!-- FR-REVIEW #513 — new with reading preferences, not yet read by the reviewer. -->
     <string name="settings_reading">Lecture</string>
+    <!-- FR-REVIEW #513 — new with reading preferences, not yet read by the reviewer. -->
     <string name="page_colours">Couleurs de la page</string>
-    <!-- « Normales » s'accorde avec « couleurs » -->
+    <!-- « Normales » s'accorde avec « couleurs ». FR-REVIEW #513 — new with reading preferences, not yet read by the reviewer. -->
     <string name="page_colours_normal">Normales</string>
+    <!-- FR-REVIEW #513 — new with reading preferences, not yet read by the reviewer. -->
     <string name="page_colours_sepia">Sépia</string>
+    <!-- FR-REVIEW #513 — new with reading preferences, not yet read by the reviewer. -->
     <string name="page_colours_night">Nuit</string>
+    <!-- FR-REVIEW #513 — new with reading preferences, not yet read by the reviewer. The #168 trade-off, stated in the settings copy. -->
     <string name="night_inverts_pictures">Le mode nuit inverse la page, images comprises.</string>
+    <!-- FR-REVIEW #513 — new with reading preferences, not yet read by the reviewer. Off by default (#168 decision 2). -->
     <string name="open_in_reading_mode">Ouvrir les documents en mode lecture</string>
     <!-- Outils de pages (#174) -->
     <string name="pages">Pages</string>

@@ -296,6 +296,52 @@ public class StringCatalogueTests
             + string.Join("\n", offenders));
     }
 
+    /// <summary>
+    /// France puts a non-breaking space before "?", "!" and ";" as well as ":"
+    /// (Quebec: ":" only) — tools/gen_strings.py's FRANCE_PUNCTUATION pass is
+    /// supposed to guarantee this on every string it derives.
+    ///
+    /// This is the fr-FR sibling of <see cref="FrenchPutsANonBreakingSpaceBeforeAColon"/>:
+    /// every "?", "!" and ";" in a France catalogue must be preceded by exactly
+    /// U+00A0, never a plain space and never nothing at all.
+    ///
+    /// It exists because a derivation bug shipped a plain space here instead: the
+    /// fr-CA source for CannotDeleteLastPage had a stray plain space before its
+    /// semicolon, and the old pass only inserted the non-breaking space when the
+    /// preceding character was not already whitespace — so it saw that plain
+    /// space, treated the mark as already handled, and skipped it. Checking the
+    /// derived output for the exact code point, rather than trusting the pass
+    /// ran, is what would have caught it.
+    /// </summary>
+    [Fact]
+    public void FrenchPutsANonBreakingSpaceBeforeQuestionMarksExclamationsAndSemicolons()
+    {
+        var offenders = new List<string>();
+        void Check(string label, Dictionary<string, string> values)
+        {
+            foreach (var (key, value) in values)
+            {
+                for (var i = 0; i < value.Length; i++)
+                {
+                    if (value[i] != '?' && value[i] != '!' && value[i] != ';')
+                        continue;
+                    var prev = i > 0 ? value[i - 1] : '\0';
+                    if (prev != ' ')
+                        offenders.Add($"{label} {key}: {value}");
+                }
+            }
+        }
+
+        Check("Windows fr-FR", ResxValues("src/MegaPDF.App/Strings/fr-FR/Resources.resw"));
+        Check("macOS fr", ResxValues("src/MegaPDF.Avalonia/Strings/Strings.fr.resx"));
+        Check("Android values-fr", AndroidValues("android/app/src/main/res/values-fr/strings.xml"));
+        Check("iOS fr", IosValues("fr"));
+
+        Assert.True(offenders.Count == 0,
+            "France French wants U+00A0 before ? ! and ; (tools/gen_strings.py FRANCE_PUNCTUATION), "
+            + "not a plain space and not nothing:\n" + string.Join("\n", offenders.Distinct()));
+    }
+
     /// <summary>Anything a catalogue substitutes into, in any of the four dialects of placeholder.</summary>
     private static readonly Regex Placeholders =
         new(@"\{[^}]*\}|%(\d+\$)?(lld|ld|[sd@])", RegexOptions.Compiled);

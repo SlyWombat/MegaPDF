@@ -191,7 +191,18 @@ FR_CA_TO_FR_FR = [
 ]
 
 # France puts a non-breaking space before ? ! ; as well as : (Quebec: : only).
-FRANCE_PUNCTUATION = re.compile("(?<=[^\\s\u00a0])([?!;])")
+#
+# This matches any run of whitespace (including none) immediately before the
+# punctuation \u2014 not just "no whitespace at all" \u2014 and replaces the whole run
+# with a single U+00A0. A narrower pattern that only matched when there was
+# *no* preceding character (e.g. an `(?<=[^\s\u00a0])` lookbehind) would see
+# an existing plain space as "already has something there" and skip the
+# insertion entirely, silently shipping that plain space into fr-FR instead
+# of the required non-breaking one. Matching the whole run and normalising it
+# handles "no space", "a stray plain space" and "an existing nbsp" the same
+# way, and is idempotent: re-running it on already-correct output (one nbsp)
+# replaces that nbsp with itself.
+FRANCE_PUNCTUATION = re.compile(r"\s*([?!;])")
 XML_ENTITY = re.compile(r"&#?\w+;")
 
 

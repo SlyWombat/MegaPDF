@@ -1454,7 +1454,7 @@
       }
     },
     "Exit" : {
-      "comment" : "#506: the floating bar's last button. Never *Quitter*, which is Quit",
+      "comment" : "#506: the floating bar's last button. Never *Quitter*, which is Quit FR-REVIEW #506 — new with reading mode, not yet read by the reviewer.",
       "localizations" : {
         "fr" : {
           "stringUnit" : {
@@ -1471,7 +1471,7 @@
       }
     },
     "Exit reading mode" : {
-      "comment" : "#506: that button's accessible name",
+      "comment" : "#506: that button's accessible name FR-REVIEW #506 — new with reading mode, not yet read by the reviewer.",
       "localizations" : {
         "fr" : {
           "stringUnit" : {
@@ -1587,7 +1587,7 @@
       }
     },
     "Fit page" : {
-      "comment" : "#512: the reading bar's zoom preset",
+      "comment" : "#512: the reading bar's zoom preset FR-REVIEW #512 — new with reading preferences, not yet read by the reviewer.",
       "localizations" : {
         "fr" : {
           "stringUnit" : {
@@ -1604,7 +1604,7 @@
       }
     },
     "Fit width" : {
-      "comment" : "#512: the reading bar's zoom preset",
+      "comment" : "#512: the reading bar's zoom preset FR-REVIEW #512 — new with reading preferences, not yet read by the reviewer.",
       "localizations" : {
         "fr" : {
           "stringUnit" : {
@@ -1670,7 +1670,7 @@
       }
     },
     "Go" : {
-      "comment" : "#506: the button that goes to the typed page number",
+      "comment" : "#506: the button that goes to the typed page number FR-REVIEW #506 — new with reading mode, not yet read by the reviewer.",
       "localizations" : {
         "fr" : {
           "stringUnit" : {
@@ -1687,7 +1687,7 @@
       }
     },
     "Go to page" : {
-      "comment" : "#506: the box the reading bar's page number opens",
+      "comment" : "#506: the box the reading bar's page number opens FR-REVIEW #506 — new with reading mode, not yet read by the reviewer.",
       "localizations" : {
         "fr" : {
           "stringUnit" : {
@@ -2065,7 +2065,7 @@
       }
     },
     "Next page" : {
-      "comment" : "#506: the reading bar",
+      "comment" : "#506: the reading bar FR-REVIEW #506 — new with reading mode, not yet read by the reviewer.",
       "localizations" : {
         "fr" : {
           "stringUnit" : {
@@ -2082,7 +2082,7 @@
       }
     },
     "Night" : {
-      "comment" : "#512: a page colour",
+      "comment" : "#512: a page colour FR-REVIEW #512 — new with reading preferences, not yet read by the reviewer.",
       "localizations" : {
         "fr" : {
           "stringUnit" : {
@@ -2099,7 +2099,7 @@
       }
     },
     "Night inverts the page, pictures included." : {
-      "comment" : "#512: said in the settings copy because it is a decision (#168 decision 3), not a defect",
+      "comment" : "#512: said in the settings copy because it is a decision (#168 decision 3), not a defect FR-REVIEW #512 — new with reading preferences, not yet read by the reviewer.",
       "localizations" : {
         "fr" : {
           "stringUnit" : {
@@ -2148,7 +2148,7 @@
       }
     },
     "Normal" : {
-      "comment" : "#512: a page colour. Agrees with *couleurs*, the label above the list",
+      "comment" : "#512: a page colour. Agrees with *couleurs*, the label above the list FR-REVIEW #512 — new with reading preferences, not yet read by the reviewer.",
       "localizations" : {
         "fr" : {
           "stringUnit" : {
@@ -2362,7 +2362,7 @@
       }
     },
     "Open documents in reading mode" : {
-      "comment" : "#512: the settings toggle; off by default (#168 decision 2)",
+      "comment" : "#512: the settings toggle; off by default (#168 decision 2) FR-REVIEW #512 — new with reading preferences, not yet read by the reviewer.",
       "localizations" : {
         "fr" : {
           "stringUnit" : {
@@ -2526,7 +2526,7 @@
       }
     },
     "Page %lld of %lld" : {
-      "comment" : "#506: what VoiceOver hears on the reading bar's page number, which shows as digits",
+      "comment" : "#506: what VoiceOver hears on the reading bar's page number, which shows as digits FR-REVIEW #506 — new with reading mode, not yet read by the reviewer.",
       "localizations" : {
         "fr" : {
           "stringUnit" : {
@@ -2543,7 +2543,7 @@
       }
     },
     "Page colours" : {
-      "comment" : "#512: the settings row. British spelling in the English, as everywhere else in this app",
+      "comment" : "#512: the settings row. British spelling in the English, as everywhere else in this app FR-REVIEW #512 — new with reading preferences, not yet read by the reviewer.",
       "localizations" : {
         "fr" : {
           "stringUnit" : {
@@ -2849,7 +2849,7 @@
       }
     },
     "Previous page" : {
-      "comment" : "#506: the reading bar. Distinct from the find bar's Résultat précédent, which is about matches",
+      "comment" : "#506: the reading bar. Distinct from the find bar's Résultat précédent, which is about matches FR-REVIEW #506 — new with reading mode, not yet read by the reviewer.",
       "localizations" : {
         "fr" : {
           "stringUnit" : {
@@ -2866,7 +2866,7 @@
       }
     },
     "Reading" : {
-      "comment" : "#512: the settings sheet's section of reading preferences",
+      "comment" : "#512: the settings sheet's section of reading preferences FR-REVIEW #512 — new with reading preferences, not yet read by the reviewer.",
       "localizations" : {
         "fr" : {
           "stringUnit" : {
@@ -2883,7 +2883,7 @@
       }
     },
     "Reading controls" : {
-      "comment" : "#506: the accessible name of the floating bar inside reading mode",
+      "comment" : "#506: the accessible name of the floating bar inside reading mode FR-REVIEW #506 — new with reading mode, not yet read by the reviewer.",
       "localizations" : {
         "fr" : {
           "stringUnit" : {
@@ -2900,7 +2900,7 @@
       }
     },
     "Reading mode" : {
-      "comment" : "#506: the More menu row and the iPad tool strip button that enter reading mode",
+      "comment" : "#506: the More menu row and the iPad tool strip button that enter reading mode FR-REVIEW #506 — new with reading mode, not yet read by the reviewer.",
       "localizations" : {
         "fr" : {
           "stringUnit" : {
@@ -2917,7 +2917,7 @@
       }
     },
     "Reading mode off" : {
-      "comment" : "#506: announced to VoiceOver on leaving reading mode",
+      "comment" : "#506: announced to VoiceOver on leaving reading mode FR-REVIEW #506 — new with reading mode, not yet read by the reviewer.",
       "localizations" : {
         "fr" : {
           "stringUnit" : {
@@ -2934,7 +2934,7 @@
       }
     },
     "Reading mode on" : {
-      "comment" : "#506: announced to VoiceOver on entering reading mode",
+      "comment" : "#506: announced to VoiceOver on entering reading mode FR-REVIEW #506 — new with reading mode, not yet read by the reviewer.",
       "localizations" : {
         "fr" : {
           "stringUnit" : {
@@ -3424,7 +3424,7 @@
       }
     },
     "Sepia" : {
-      "comment" : "#512: a page colour",
+      "comment" : "#512: a page colour FR-REVIEW #512 — new with reading preferences, not yet read by the reviewer.",
       "localizations" : {
         "fr" : {
           "stringUnit" : {
@@ -3473,7 +3473,7 @@
       }
     },
     "Settings" : {
-      "comment" : "#512: the settings sheet's title, and the Home screen's gear",
+      "comment" : "#512: the settings sheet's title, and the Home screen's gear FR-REVIEW #512 — new with reading preferences, not yet read by the reviewer.",
       "localizations" : {
         "fr" : {
           "stringUnit" : {
@@ -3490,7 +3490,7 @@
       }
     },
     "Settings…" : {
-      "comment" : "#512: the ⋯ menu row that opens it",
+      "comment" : "#512: the ⋯ menu row that opens it FR-REVIEW #512 — new with reading preferences, not yet read by the reviewer.",
       "localizations" : {
         "fr" : {
           "stringUnit" : {
@@ -4626,7 +4626,7 @@
       }
     },
     "Zoom in" : {
-      "comment" : "#512: the reading bar",
+      "comment" : "#512: the reading bar FR-REVIEW #512 — new with reading preferences, not yet read by the reviewer.",
       "localizations" : {
         "fr" : {
           "stringUnit" : {
@@ -4643,7 +4643,7 @@
       }
     },
     "Zoom out" : {
-      "comment" : "#512: the reading bar",
+      "comment" : "#512: the reading bar FR-REVIEW #512 — new with reading preferences, not yet read by the reviewer.",
       "localizations" : {
         "fr" : {
           "stringUnit" : {
