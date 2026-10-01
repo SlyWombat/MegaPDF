@@ -151,7 +151,7 @@ struct PagesPanel: View {
         .fileExporter(
             isPresented: Binding(get: { model.pageExport != nil },
                                  set: { if !$0 { model.pageExport = nil } }),
-            document: model.pageExport.map { PdfExportDocument(file: $0.url) },
+            document: model.pageExport.map { StagedExportDocument(file: $0.url) },
             contentType: .pdf,
             defaultFilename: model.pageExport?.defaultName
         ) { result in

@@ -71,10 +71,21 @@ jobs:
             CODE_SIGNING_ALLOWED=NO
 
       # The UI tests that drive the built app on the simulator (#405): pinch zoom,
-      # body-text editing, Markdown export, the recents rows' labels, the viewer
-      # bar's contrast and the redaction save question. Measured on the runner
-      # (2026-09-27): about 20 s to build the test bundle, 3-4 minutes to boot
-      # the simulator, and 6-7 minutes of tests — three to four times what the
+      # body-text editing, Markdown export, Save a copy, the recents rows' labels,
+      # the viewer bar's contrast and the redaction save question.
+      #
+      # #589 is why Save a copy is in this list. It was broken on every document on
+      # `main` — two `.fileExporter` modifiers on one view, and the PDF one never
+      # presented — while every job here stayed green, because the only suite that
+      # drove the real export sheet for it (FilesEndToEndUITests) is excluded below
+      # and the unit tests call `finishExport` directly, with no sheet involved.
+      # SaveACopyExportUITests presents the real system sheet off bytes in the launch
+      # environment, so it needs none of the staged Files fixtures that keep the
+      # end-to-end suite off a runner, and it fails if the sheet does not appear.
+      #
+      # Measured on the runner (2026-09-27, before #589's two tests, which add about
+      # 50 s on the Mac mini): about 20 s to build the test bundle, 3-4 minutes to
+      # boot the simulator, and 6-7 minutes of tests — three to four times what the
       # same tests take on the Mac mini (2.5 minutes); about 10 minutes on the
       # job in all.
       #
@@ -123,6 +134,7 @@ jobs:
             -only-testing:MegaPDFUITests/PageToolsUITests \
             -only-testing:MegaPDFUITests/BodyTextEditUITests \
             -only-testing:MegaPDFUITests/MarkdownExportUITests \
+            -only-testing:MegaPDFUITests/SaveACopyExportUITests \
             -only-testing:MegaPDFUITests/RecentsAccessibilityUITests/testEveryRecentRowAnnouncesWhereItsFileLives \
             -only-testing:MegaPDFUITests/ViewerBarContrastUITests \
             -only-testing:MegaPDFUITests/RedactionUITests/testSaveIsReachableWithAMarkAndAsksBeforeRemoving \
@@ -138,7 +150,10 @@ jobs:
       # of the same reason: the two widths get genuinely different answers -- a sheet with
       # detents on the phone, a sidebar beside the document on the iPad -- and each of those
       # tests skips on the other width, so neither destination alone runs the whole suite.
-      - name: Run the zoom, reading-mode and page-tools tests on an iPad too
+      # Save a copy is here because #589 was reported on both widths, the ⋯ menu it is
+      # tapped from is a different control on each, and in regular width the pages sidebar
+      # puts a second file exporter in the same hierarchy as the viewer's own.
+      - name: Run the zoom, reading-mode, page-tools and Save-a-copy tests on an iPad too
         run: |
           xcodebuild test-without-building \
             -project MegaPDF.xcodeproj \
@@ -148,6 +163,7 @@ jobs:
             -only-testing:MegaPDFUITests/ViewerZoomUITests \
             -only-testing:MegaPDFUITests/ReadingModeUITests \
             -only-testing:MegaPDFUITests/PageToolsUITests \
+            -only-testing:MegaPDFUITests/SaveACopyExportUITests \
             CODE_SIGNING_ALLOWED=NO
 
       - name: Upload the UI test result bundle
