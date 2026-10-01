@@ -123,7 +123,7 @@
     <!-- Added text -->
     <string name="add_text">Ajouter du texte</string>
     <string name="edit_text">Modifier le texte</string>
-    <string name="add_text_hint">Ceci sera ajouté là où vous avez touché.</string>
+    <string name="add_text_hint">Ceci sera ajouté là où vous avez touché. Appuyez sur Entrée pour commencer une nouvelle ligne.</string>
     <string name="edit_text_hint">Ceci remplace le texte que vous avez touché.</string>
     <string name="size">Taille</string>
     <string name="font">Police</string>
@@ -271,6 +271,11 @@
     <string name="redact_needs_permission">Ce document n\'autorise pas les modifications ; il ne peut pas être caviardé.</string>
     <!-- The fail-closed case the rehearsal says cannot happen (#173). #173 — new French, for francophone review -->
     <string name="redact_failed">Le caviardage n\'a pas pu être terminé et ce fichier ne peut plus être enregistré. Fermez-le et rouvrez-le&#160;: rien n\'a été écrit.</string>
+
+    <string name="whiteout">Blanc de correction</string>
+    <string name="whiteout_failed">Impossible de placer ce blanc de correction</string>
+    <string name="whiteout_move_failed">Impossible de déplacer ce blanc de correction</string>
+    <string name="whiteout_remove_failed">Impossible de supprimer ce blanc de correction</string>
     <!-- #173 — new French, for francophone review -->
     <string name="redact_mark_count">%1$s zones marquées pour caviardage</string>
     <!-- #173 — new French, for francophone review -->

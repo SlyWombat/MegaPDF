@@ -144,7 +144,10 @@
     <!-- Added text -->
     <string name="add_text">Add text</string>
     <string name="edit_text">Edit text</string>
-    <string name="add_text_hint">This will be added where you tapped.</string>
+    <!-- #4: a new note may run to more than one line — the phone's own Enter key, where a
+         desktop reads the same gesture as Shift+Enter. Correcting an existing box stays
+         single-line, so this wording is only ever shown for a new placement. -->
+    <string name="add_text_hint">This will be added where you tapped. Press Enter to start a new line.</string>
     <string name="edit_text_hint">This replaces the text you tapped.</string>
     <string name="size">Size</string>
     <string name="font">Font</string>
@@ -286,6 +289,14 @@
     <string name="redact_needs_permission">This document doesn\'t allow changes, so it can\'t be redacted.</string>
     <!-- The fail-closed case the rehearsal says cannot happen (#173) -->
     <string name="redact_failed">The redaction couldn\'t be finished, and this file can no longer be saved. Close it and open it again — nothing was written.</string>
+
+    <!-- Whiteout (#3): a drag over the page covers that area, like Redact, but it is not
+         destructive — what is underneath is still there, and removing the whiteout
+         uncovers it — so it needs no confirmation before saving the way Redact does. -->
+    <string name="whiteout">Whiteout</string>
+    <string name="whiteout_failed">Couldn\'t place that whiteout</string>
+    <string name="whiteout_move_failed">Couldn\'t move that whiteout</string>
+    <string name="whiteout_remove_failed">Couldn\'t remove that whiteout</string>
     <string name="redact_mark_count">%1$s areas marked for redaction</string>
     <string name="redact_mark_count_one">1 area marked for redaction</string>
     <string name="redact_ok">OK</string>
