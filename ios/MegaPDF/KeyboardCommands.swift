@@ -20,6 +20,8 @@ struct ViewerCommandTarget {
     var find: (() -> Void)?
     var undo: (() -> Void)?
     var redo: (() -> Void)?
+    /// Shows or hides the pages (#174).
+    var pages: (() -> Void)?
 }
 
 struct OpenPDFCommandTarget {
@@ -76,6 +78,16 @@ struct MegaPDFCommands: Commands {
             Button("Redo") { viewer?.redo?() }
                 .keyboardShortcut("z", modifiers: [.command, .shift])
                 .disabled(viewer?.redo == nil)
+        }
+        // The pages sidebar (#174). ⌥⌘2 is Preview's own Thumbnails key, and it is what
+        // MegaPDF for Mac took in #556 — an iPad keyboard is a Mac keyboard, and the app's own
+        // Mac build is the nearest neighbour an iPad user has. (The desktops' rotate chords are
+        // deliberately not here: they act on a selection, and the selection lives on the pane,
+        // where its commands are.)
+        CommandGroup(after: .sidebar) {
+            Button("Pages") { viewer?.pages?() }
+                .keyboardShortcut("2", modifiers: [.command, .option])
+                .disabled(viewer?.pages == nil)
         }
         CommandGroup(after: .textEditing) {
             Button("Find in document") { viewer?.find?() }

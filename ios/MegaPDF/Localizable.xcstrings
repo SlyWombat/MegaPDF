@@ -178,6 +178,103 @@
         }
       }
     },
+    "%lld pages" : {
+      "comment" : "How many pages: the grid's count, and the file name an extract of several offers (#174)",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld pages"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld pages"
+          }
+        }
+      }
+    },
+    "%lld pages added." : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld pages ajoutées."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld pages ajoutées."
+          }
+        }
+      }
+    },
+    "%lld pages deleted." : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld pages supprimées."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld pages supprimées."
+          }
+        }
+      }
+    },
+    "%lld pages saved." : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld pages enregistrées."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld pages enregistrées."
+          }
+        }
+      }
+    },
+    "%lld pages turned." : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld pages pivotées."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld pages pivotées."
+          }
+        }
+      }
+    },
+    "%lld selected" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld sélectionnées"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld sélectionnées"
+          }
+        }
+      }
+    },
     "-redacted" : {
       "comment" : "Appended to the file name offered by Save as a copy (#173); no accents — it is a file name",
       "localizations" : {
@@ -292,6 +389,86 @@
         }
       }
     },
+    "1 page" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 page"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 page"
+          }
+        }
+      }
+    },
+    "1 page added." : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 page ajoutée."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 page ajoutée."
+          }
+        }
+      }
+    },
+    "1 page saved." : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 page enregistrée."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 page enregistrée."
+          }
+        }
+      }
+    },
+    "A PDF has to keep at least one page." : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Un PDF doit conserver au moins une page."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Un PDF doit conserver au moins une page."
+          }
+        }
+      }
+    },
+    "A redaction on this document didn't finish, so it can only be closed now. Close it and open it again — nothing was written." : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Un caviardage de ce document ne s'est pas terminé, alors il ne peut plus qu'être fermé. Fermez-le et ouvrez-le de nouveau — rien n'a été écrit."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Un caviardage de ce document ne s'est pas terminé, alors il ne peut plus qu'être fermé. Fermez-le et ouvrez-le de nouveau — rien n'a été écrit."
+          }
+        }
+      }
+    },
     "About" : {
       "localizations" : {
         "fr" : {
@@ -336,6 +513,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Ajouter"
+          }
+        }
+      }
+    },
+    "Add pages" : {
+      "comment" : "Screen-reader name of the grid's + menu (#174)",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ajouter des pages"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ajouter des pages"
           }
         }
       }
@@ -433,6 +627,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Archives"
+          }
+        }
+      }
+    },
+    "Blank page added as page %lld." : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Page blanche ajoutée comme page %lld."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Page blanche ajoutée comme page %lld."
           }
         }
       }
@@ -1493,6 +1703,54 @@
         }
       }
     },
+    "Hold a page to move it" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Maintenez une page pour la déplacer"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Maintenez une page pour la déplacer"
+          }
+        }
+      }
+    },
+    "Insert Blank Page" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Insérer une page blanche"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Insérer une page blanche"
+          }
+        }
+      }
+    },
+    "Insert Pages from File…" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Insérer des pages depuis un fichier…"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Insérer des pages depuis un fichier…"
+          }
+        }
+      }
+    },
     "Insurance Claim Form.pdf" : {
       "localizations" : {
         "fr" : {
@@ -1596,6 +1854,22 @@
     "MegaPDF" : {
       "shouldTranslate" : false
     },
+    "MegaPDF couldn't make that page change safely, so it left the document as it was." : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MegaPDF n'a pas pu effectuer cette modification de pages en toute sûreté, alors le document est resté tel quel."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MegaPDF n'a pas pu effectuer cette modification de pages en toute sûreté, alors le document est resté tel quel."
+          }
+        }
+      }
+    },
     "MegaPDF couldn't remove everything you marked on page %@, so it removed nothing and left the file as it was." : {
       "comment" : "Refusal body (#173); {0} is a page number",
       "localizations" : {
@@ -1673,6 +1947,87 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Autres options pour %@"
+          }
+        }
+      }
+    },
+    "More page commands" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Autres commandes de pages"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Autres commandes de pages"
+          }
+        }
+      }
+    },
+    "Move" : {
+      "comment" : "The Move to… box's confirm button (#174)",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Déplacer"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Déplacer"
+          }
+        }
+      }
+    },
+    "Move Earlier" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Déplacer vers le début"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Déplacer vers le début"
+          }
+        }
+      }
+    },
+    "Move Later" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Déplacer vers la fin"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Déplacer vers la fin"
+          }
+        }
+      }
+    },
+    "Move to…" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Déplacer vers…"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Déplacer vers…"
           }
         }
       }
@@ -1837,6 +2192,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Introuvable · %@"
+          }
+        }
+      }
+    },
+    "Nothing was changed" : {
+      "comment" : "Title of the alert that says a page change was refused (#174)",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rien n'a été modifié"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rien n'a été modifié"
           }
         }
       }
@@ -2137,6 +2509,22 @@
         }
       }
     },
+    "Page %lld goes to the position you type." : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La page %lld ira à la position que vous inscrivez."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La page %lld ira à la position que vous inscrivez."
+          }
+        }
+      }
+    },
     "Page %lld of %lld" : {
       "comment" : "#506: what VoiceOver hears on the reading bar's page number, which shows as digits",
       "localizations" : {
@@ -2167,6 +2555,103 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Couleurs de la page"
+          }
+        }
+      }
+    },
+    "Page deleted." : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Page supprimée."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Page supprimée."
+          }
+        }
+      }
+    },
+    "Page moved to %lld." : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Page déplacée à la position %lld."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Page déplacée à la position %lld."
+          }
+        }
+      }
+    },
+    "Page turned." : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Page pivotée."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Page pivotée."
+          }
+        }
+      }
+    },
+    "Pages" : {
+      "comment" : "The page tools' screen (#174): its heading, the dot-dot-dot row and the iPad strip's button",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pages"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pages"
+          }
+        }
+      }
+    },
+    "Pages hidden" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pages masquées"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pages masquées"
+          }
+        }
+      }
+    },
+    "Pages shown" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pages affichées"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pages affichées"
           }
         }
       }
@@ -2678,6 +3163,38 @@
         }
       }
     },
+    "Rotate Left" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rotation à gauche"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rotation à gauche"
+          }
+        }
+      }
+    },
+    "Rotate Right" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rotation à droite"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rotation à droite"
+          }
+        }
+      }
+    },
     "Save" : {
       "localizations" : {
         "fr" : {
@@ -2690,6 +3207,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Enregistrer"
+          }
+        }
+      }
+    },
+    "Save Pages As…" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enregistrer les pages sous…"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enregistrer les pages sous…"
           }
         }
       }
@@ -2820,6 +3353,55 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Recherche…"
+          }
+        }
+      }
+    },
+    "Select" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sélectionner"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sélectionner"
+          }
+        }
+      }
+    },
+    "Select All" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tout sélectionner"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tout sélectionner"
+          }
+        }
+      }
+    },
+    "Select pages" : {
+      "comment" : "The selection bar before anything is picked (#174)",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sélectionnez des pages"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sélectionnez des pages"
           }
         }
       }
@@ -3133,6 +3715,22 @@
         }
       }
     },
+    "That file doesn't allow anything to be copied out of it, so its pages can't be added here." : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ce fichier n'autorise aucune copie de son contenu, alors ses pages ne peuvent pas être ajoutées ici."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ce fichier n'autorise aucune copie de son contenu, alors ses pages ne peuvent pas être ajoutées ici."
+          }
+        }
+      }
+    },
     "That file is no longer accessible. Pick it again to reopen it." : {
       "localizations" : {
         "fr" : {
@@ -3145,6 +3743,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Ce fichier n'est plus accessible. Sélectionnez-le de nouveau pour le rouvrir."
+          }
+        }
+      }
+    },
+    "That file needs a password, so MegaPDF can't take pages out of it." : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ce fichier exige un mot de passe, alors MegaPDF ne peut pas en extraire de pages."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ce fichier exige un mot de passe, alors MegaPDF ne peut pas en extraire de pages."
           }
         }
       }
@@ -3177,6 +3791,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "L'image de cette signature est introuvable."
+          }
+        }
+      }
+    },
+    "The file couldn't be read or written." : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le fichier n'a pas pu être lu ni écrit."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le fichier n'a pas pu être lu ni écrit."
           }
         }
       }
@@ -3403,6 +4033,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Ce document n'autorise pas les modifications; il ne peut pas être caviardé."
+          }
+        }
+      }
+    },
+    "This document doesn't allow its pages to be copied out. Its owner password would." : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ce document n'autorise pas la copie de ses pages. Son mot de passe de propriétaire le permettrait."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ce document n'autorise pas la copie de ses pages. Son mot de passe de propriétaire le permettrait."
+          }
+        }
+      }
+    },
+    "This document doesn't allow its pages to be rotated, deleted, moved or added to. Its owner password would." : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ce document n'autorise pas la rotation, la suppression, le déplacement ni l'ajout de pages. Son mot de passe de propriétaire le permettrait."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ce document n'autorise pas la rotation, la suppression, le déplacement ni l'ajout de pages. Son mot de passe de propriétaire le permettrait."
           }
         }
       }
@@ -3702,6 +4364,39 @@
         }
       }
     },
+    "Those pages carry a form field whose name belongs to a group of fields, and this document already has a field of that name. MegaPDF can't rename it without breaking the form, so it added nothing rather than damage it." : {
+      "comment" : "#174: the field-hierarchy refusal. Deliberate and whole -- nothing was changed",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ces pages contiennent un champ de formulaire dont le nom appartient à un groupe de champs, et ce document a déjà un champ de ce nom. MegaPDF ne peut pas le renommer sans briser le formulaire, alors il n'a rien ajouté plutôt que d'endommager le formulaire."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ces pages contiennent un champ de formulaire dont le nom appartient à un groupe de champs, et ce document a déjà un champ de ce nom. MegaPDF ne peut pas le renommer sans briser le formulaire, alors il n'a rien ajouté plutôt que d'endommager le formulaire."
+          }
+        }
+      }
+    },
+    "Those pages couldn't be saved." : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ces pages n'ont pas pu être enregistrées."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ces pages n'ont pas pu être enregistrées."
+          }
+        }
+      }
+    },
     "Type" : {
       "localizations" : {
         "fr" : {
@@ -3975,6 +4670,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "rien"
+          }
+        }
+      }
+    },
+    "page %lld" : {
+      "comment" : "Part of the file name Save Pages As… offers for one page (#174)",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "page %lld"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "page %lld"
+          }
+        }
+      }
+    },
+    "pages %lld-%lld" : {
+      "comment" : "Part of the file name Save Pages As… offers for a run of pages (#174)",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "pages %lld-%lld"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "pages %lld-%lld"
           }
         }
       }
