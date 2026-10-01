@@ -98,6 +98,9 @@ SIG="$ROOT/tools/assets/megawoman-sig.jpg"
     echo "language: $LANG_TAG ($CULTURE)"
     echo "window:   $WINDOW"
     echo "document: $(basename "$DOC") (from $(basename "$FIXTURE"))"
+    # Two slots open a longer document under the same name (#613), so the record of
+    # what was shot has to say which file each of them came from.
+    echo "pages doc: $(basename "$LONG_DOC") (from $(basename "$LONG_FIXTURE")), slots 01-reading and 04-pages"
     echo "taken:    $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 } | tee "$OUT/RUN.txt"
 

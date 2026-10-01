@@ -165,6 +165,16 @@ STORES: dict[str, dict] = {
         # of it. It is the only accent in slots 1–4, and without this the
         # gate read it as a selection left on (#400).
         "tab_underline": {"rows": (93, 95)},
+        # Words tesseract invents here out of a French label. The signature
+        # flyout's three buttons are an icon above a word (#99-101), and at
+        # this window's size the reader runs the pencil glyph into the label
+        # under it and returns "Done wes" for "Dessiner Taper". The flyout is
+        # French: the same build at the Linux set's 1280x800 reads "Dessiner
+        # Taper À partir d'une" correctly, and the 2.1.1 Mac set — before the
+        # picker was redesigned — read nothing from that row at all, which is
+        # why this only started flagging in 2.2 (#613). Excused by name and
+        # reported on the sheet, not dropped.
+        "ocr_misreads": {"sign": {"done": "'Dessiner', under its pencil glyph"}},
         "status_band": None,
         "notes": "tools/macos-store-captures.sh. Each image has a .log beside "
                  "it recording the toolbar mode and the menu-bar check.",
