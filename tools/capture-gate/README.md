@@ -28,7 +28,7 @@ open /tmp/gate/sheet-mac.html
 | `--store mac` | `tools/macos-store-captures.sh` output, `<set>/<lang>/` |
 | `--store ios` | `tools/ios-screenshots.sh` output — add `--only /listing` to leave the review set out |
 | `--store play` | `android/scripts/capture-screenshots.sh` output, and the 27-cell QA matrix |
-| `--store linux` | the Linux QA rig's `shots-gnome/` |
+| `--store linux` | the Linux QA rig's `shots-gnome/`, and `tools/linux/store-captures.sh` output (`artifacts/store/linux/<lang>/`) — one profile, because the listing set and the QA matrix are the same app at the same sizes |
 | `--store video` | the stills `tools/preview-gate.py` cuts out of an app preview, **one language at a time** |
 
 Useful flags:

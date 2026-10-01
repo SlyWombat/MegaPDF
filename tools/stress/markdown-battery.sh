@@ -23,6 +23,11 @@
 # or pasted.
 set -uo pipefail
 
+# #609: corpus_coverage.sh, run at the end, says what this battery's document count is
+# a count OF -- ten recorded runs printed "public 1,381" with nothing anywhere saying it
+# was 1,381 of a 1,777-row manifest.
+STRESS_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+
 CLI=${1:?usage: markdown-battery.sh <megapdf-cli> <cmark> <corpus> <out-dir> [options]}
 CMARK=${2:?}
 CORPUS=${3:?}
@@ -128,6 +133,10 @@ elapsed=$(( $(date +%s) - started ))
     echo "other bad exit code:     $bad_exit (gate: must be 0 -- valid codes here are 0/2/3/4/5, never 1/6/7/130)"
     echo "cmark parse failures:    $cmark_fail (gate: must be 0)"
     echo "cmark timed out (> ${TIMEOUT}s): $cmark_hung (gate: must be 0; #442 -- bounded so a hang cannot stall the whole battery)"
+    # #609: what the count above is a count of. Last in the summary rather than first
+    # so it reads as the footnote to every number, and never gates -- a partial corpus
+    # is a fact about the machine, not a regression in the code under test.
+    "$STRESS_DIR/corpus_coverage.sh" "$CORPUS" "$visited" || true
 } | tee "$SUMMARY"
 
 [ "$crashed" -eq 0 ] && [ "$hung" -eq 0 ] && [ "$bad_exit" -eq 0 ] && [ "$cmark_fail" -eq 0 ] && [ "$cmark_hung" -eq 0 ]

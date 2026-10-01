@@ -415,7 +415,7 @@ final class PdfDocument: @unchecked Sendable {
     /// and waits for them before megapdf_close(), and no check may begin once closing started.
     private let lock = NSLock()
     private var closing = false
-    private var checks: [ObjectIdentifier: PageCheckFlag] = [:]
+    private var checks: [ObjectIdentifier: CoreCancelFlag] = [:]
     private var drained: [CheckedContinuation<Void, Never>] = []
 
     fileprivate init(core: OpaquePointer) {
@@ -429,7 +429,7 @@ final class PdfDocument: @unchecked Sendable {
     }
 
     /// Registers a check before its first core call. False once the document is closing.
-    func beginCheck(_ flag: PageCheckFlag) -> Bool {
+    func beginCheck(_ flag: CoreCancelFlag) -> Bool {
         lock.lock()
         defer { lock.unlock() }
         guard !closing else { return false }
@@ -438,7 +438,7 @@ final class PdfDocument: @unchecked Sendable {
     }
 
     /// The check's last core call has returned (its page handle closed too).
-    func endCheck(_ flag: PageCheckFlag) {
+    func endCheck(_ flag: CoreCancelFlag) {
         lock.lock()
         checks[ObjectIdentifier(flag)] = nil
         var waiting: [CheckedContinuation<Void, Never>] = []

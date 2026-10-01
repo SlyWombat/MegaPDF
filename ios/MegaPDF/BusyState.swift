@@ -46,6 +46,18 @@ enum BusyScope: Equatable {
     var isDocument: Bool { self == .document }
 }
 
+/// How far a piece of work has got, when it can count (#145).
+struct BusyProgress: Equatable {
+    let done: Int
+    let total: Int
+
+    /// 0...1, for a determinate bar.
+    var fraction: Double {
+        guard total > 0 else { return 0 }
+        return min(1, max(0, Double(done) / Double(total)))
+    }
+}
+
 /// One piece of running work.
 struct BusyWork: Identifiable, Equatable {
     let id: Int
@@ -57,6 +69,20 @@ struct BusyWork: Identifiable, Equatable {
     var blocksFileCommands: Bool
     /// Off while the work waits on the person (the #139 warning is up): no spinner behind an alert.
     var showsIndicator: Bool
+    /// How far it has got. nil means it cannot say, and the bar stays indeterminate.
+    var progress: BusyProgress?
+    /// The count in words, for the strip's own line.
+    ///
+    /// This class holds the numbers and **none** of the wording: a search counts pages and a
+    /// shrink would count pictures, and only the app has either noun in either language. The
+    /// words come from the `progressFormat` the app hands `begin` (#563's rule, kept here so
+    /// the five platforms' busy layers stay the same shape).
+    var progressText: String?
+    /// Whether this work can be stopped at all.
+    let cancellable: Bool
+    /// Set the moment Stop is pressed: the button goes insensitive and says "Stopping…",
+    /// because long work does not stop the instant it is asked to.
+    var isCancelling: Bool
 }
 
 /// A handle on running work, returned by `begin`.
@@ -100,11 +126,28 @@ final class BusyState: ObservableObject {
     /// The spinner on a page, when it is showing.
     @Published private(set) var pageIndicator: BusyWork?
 
+    /// Whether the strip on screen has work behind it that can still be stopped (#145).
+    ///
+    /// Asked of `works`, never of the published strip: once the last piece of work ends the
+    /// strip lives out its 0.3 s minimum holding its last value, and there is nothing left to
+    /// stop. The progress **holds** that last value through those 0.3 s on purpose — a bar
+    /// falling back to indeterminate for the final fraction of a second would be exactly the
+    /// flicker the 0.5 s / 0.3 s rule exists to prevent.
+    @Published private(set) var canStop = false
+
+    /// Stop has been pressed and the work has not finished yet.
+    @Published private(set) var isStopping = false
+
     private let scheduler: BusyScheduler
     private let showDelay: TimeInterval
     private let minimumVisible: TimeInterval
     private let announce: @MainActor (String) -> Void
     private var nextId = 1
+    /// What to call when Stop is pressed, and how to word a count -- closures, so they live
+    /// beside `works` rather than in it: `BusyWork` is `Equatable`, which is what lets the
+    /// indicator publish only on a real change.
+    private var stopHandlers: [Int: () -> Void] = [:]
+    private var progressFormats: [Int: (Int, Int) -> String] = [:]
     private lazy var stripTiming = IndicatorTiming(owner: self, isDocument: true)
     private lazy var pageTiming = IndicatorTiming(owner: self, isDocument: false)
 
@@ -125,15 +168,49 @@ final class BusyState: ObservableObject {
     var blocksFileCommands: Bool { works.contains { $0.blocksFileCommands } }
 
     /// Starts work. Blocking work answers nil while other blocking work runs: the tap is ignored.
+    ///
+    /// `onStop` is what makes the work stoppable; `progressFormat` is what makes a count
+    /// readable. Work that passes neither behaves exactly as it did before #145's second half:
+    /// an indeterminate bar with no button.
     func begin(_ label: BusyLabel, scope: BusyScope, blocking: Bool = true,
-               blocksFileCommands: Bool = false, showsIndicator: Bool = true) -> BusyToken? {
+               blocksFileCommands: Bool = false, showsIndicator: Bool = true,
+               progressFormat: ((Int, Int) -> String)? = nil,
+               onStop: (() -> Void)? = nil) -> BusyToken? {
         if blocking && isBlocked { return nil }
         let work = BusyWork(id: nextId, label: label, scope: scope, blocking: blocking,
-                            blocksFileCommands: blocksFileCommands, showsIndicator: showsIndicator)
+                            blocksFileCommands: blocksFileCommands, showsIndicator: showsIndicator,
+                            progress: nil, progressText: nil,
+                            cancellable: onStop != nil, isCancelling: false)
         nextId += 1
+        if let onStop { stopHandlers[work.id] = onStop }
+        if let progressFormat { progressFormats[work.id] = progressFormat }
         works.append(work)
         refresh()
         return BusyToken(id: work.id)
+    }
+
+    /// Says how far running work has got. Safe to call after it has ended.
+    func report(_ token: BusyToken, done: Int, total: Int) {
+        guard let i = works.firstIndex(where: { $0.id == token.id }) else { return }
+        let progress = BusyProgress(done: done, total: total)
+        guard works[i].progress != progress else { return }
+        works[i].progress = progress
+        works[i].progressText = progressFormats[token.id]?(done, total)
+        refresh()
+    }
+
+    /// Asks the newest stoppable **running** work to stop, and says so on screen at once.
+    ///
+    /// The newest running one, like the indicator's own choice of what to show: whatever the
+    /// strip is reporting is what a person pressing Stop means. Nothing here stops anything by
+    /// itself — it raises the flag and calls the handler, and the work ends when it notices,
+    /// which is why the button says "Stopping…" rather than going away.
+    func requestStop() {
+        guard let i = works.lastIndex(where: { $0.cancellable && !$0.isCancelling }) else { return }
+        works[i].isCancelling = true
+        let handler = stopHandlers[works[i].id]
+        refresh()
+        handler?()
     }
 
     /// Changes what running work says, where it shows, or whether it shows at all.
@@ -154,7 +231,14 @@ final class BusyState: ObservableObject {
     func end(_ token: BusyToken) {
         guard let i = works.firstIndex(where: { $0.id == token.id }) else { return }
         works.remove(at: i)
+        forget(token.id)
         refresh()
+    }
+
+    /// Drops the closures a finished piece of work left behind.
+    private func forget(_ id: Int) {
+        stopHandlers[id] = nil
+        progressFormats[id] = nil
     }
 
     /// Runs `body` as busy work, ending it however `body` finishes. Nil when blocked.
@@ -169,15 +253,20 @@ final class BusyState: ObservableObject {
     /// Drops everything at once, indicators included.
     func reset() {
         works = []
+        stopHandlers = [:]
+        progressFormats = [:]
         stripTiming.reset()
         pageTiming.reset()
         strip = nil
         pageIndicator = nil
+        canStop = false
+        isStopping = false
     }
 
     /// The document closed: its page-level work is over, and the spinner goes at once. Document-level
     /// work stays, because whoever started it (an open, a password change that reopens) ends it.
     func endPageWork() {
+        for work in works where !work.scope.isDocument { forget(work.id) }
         works.removeAll { !$0.scope.isDocument }
         pageTiming.reset()
         pageIndicator = nil
@@ -205,14 +294,27 @@ final class BusyState: ObservableObject {
             let appearing = strip == nil && work != nil
             if strip != work { strip = work }
             if appearing, let work { announce(work.label.text) }
+            // The strip is what Stop acts on, so whether there is anything to stop changes
+            // with it -- including here, where the 0.5 s threshold fires from the scheduler
+            // and never passes through `refresh`.
+            updateStopState()
         } else if pageIndicator != work {
             pageIndicator = work
         }
     }
 
+    /// Whether the work behind the strip can still be stopped, and whether it has been asked
+    /// to. Against `works`, never against the published strip -- see `canStop`.
+    private func updateStopState() {
+        let behindTheStrip = works.first { $0.id == strip?.id }
+        canStop = behindTheStrip?.cancellable == true && behindTheStrip?.isCancelling == false
+        isStopping = behindTheStrip?.isCancelling == true
+    }
+
     private func refresh() {
         stripTiming.refresh()
         pageTiming.refresh()
+        updateStopState()
     }
 }
 

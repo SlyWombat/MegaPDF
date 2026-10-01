@@ -4,8 +4,13 @@
 # The other four platforms' listing sets have had a script each since #146 §3; Linux had
 # only the QA matrix, which is a different job: that one shoots eleven poses in three
 # languages, two themes and four widths to find layout defects, and every image in it is
-# named for a cell rather than for a listing slot. This shoots the six slots the Mac and
-# Windows listings already use, once per language, at one size.
+# named for a cell rather than for a listing slot. This shoots the seven listing slots,
+# once per language, at one size.
+#
+# Seven slots since #613, in the order Dave settled on 2026-10-01: signing, editing and
+# reading are what people come for and lead; redaction and whiteout are minor and move
+# back. Reading replaces the old viewer shot at the front rather than joining it — both
+# are a picture of a page, and the reading one says something as well.
 #
 # Usage: tools/linux/store-captures.sh [lang] [out-dir] [app-tree]
 #   lang      en (default), fr-CA or fr-FR
@@ -102,6 +107,22 @@ esac
 [ -f "$FIXTURE" ] || { echo "no demo document at $FIXTURE" >&2; exit 1; }
 cp "$FIXTURE" "$DOC"
 
+# The same agreement, with the four sections it names and a landscape rate schedule
+# behind it (#613). Two slots need a document that has more than one page in it: the
+# Pages sidebar of a one-page document is a single thumbnail, which is a picture of
+# nothing, and reading mode's floating bar would read "1 of 1". Page 1 is byte-identical
+# to the page every other slot shows, and the file is opened under the same name, so the
+# set is still one document from end to end.
+case "$LANG_TAG" in
+    en)    LONG_FIXTURE="$WORK/fixtures/demo-pages.pdf" ;;
+    fr-CA) LONG_FIXTURE="$WORK/fixtures/demo-fr-pages.pdf" ;;
+    fr-FR) LONG_FIXTURE="$WORK/fixtures/demo-fr-FR-pages.pdf" ;;
+esac
+LONG_DOC="$WORK/long/$(basename "$DOC")"
+mkdir -p "$WORK/long"
+[ -f "$LONG_FIXTURE" ] || { echo "no multi-page demo document at $LONG_FIXTURE" >&2; exit 1; }
+cp "$LONG_FIXTURE" "$LONG_DOC"
+
 # The signature the library shot shows, named rather than left to the app's search:
 # passing it is also what makes the flyout show exactly one known card instead of
 # whatever library the machine has.
@@ -118,12 +139,12 @@ SIG="$ROOT/tools/assets/megawoman-sig.jpg"
     echo "taken:    $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 } | tee "$OUT/RUN.txt"
 
-# The six listing slots, in listing order — the same six the Mac set shoots, so the two
-# desktop listings show the same app doing the same things.
-#   viewer  the demo agreement open, as it will print
+# The seven listing slots, in listing order (#613).
+#   reading the agreement with the chrome gone and the floating bar up
 #   text    a typed name on the blank line, nothing selected
-#   search  the find bar with a term and a hit count
 #   sign    the signature library flyout
+#   pages   the Pages sidebar, two pages picked out
+#   search  the find bar with a term and a hit count
 #   redact  a line marked and selected, with the chrome that takes it off (2.1, #329)
 #   home    the empty window with a recents list
 shoot() {
@@ -147,23 +168,25 @@ shoot() {
 }
 
 echo "capturing $LANG_TAG"
-shoot 01-viewer ""       "$DOC"
-shoot 02-text   text     "$DOC"
-shoot 03-search find     "$DOC"
-shoot 04-sign   sign     "$DOC"   "$SIG"
-shoot 05-redact redact   "$DOC"
+shoot 01-reading reading "$LONG_DOC"
+shoot 02-text    text    "$DOC"
+shoot 03-sign    sign    "$DOC"   "$SIG"
+shoot 04-pages   pages   "$LONG_DOC"
+shoot 05-search  find    "$DOC"
+shoot 06-redact  redact  "$DOC"
 # No document: the home shot is the empty window, and its recents come from DemoContent
 # rather than from whatever this machine last opened.
-shoot 06-home   home     ""
+shoot 07-home    home    ""
 
-# Six files, all 1280x800, none empty. The capture gate is the review
+# Seven files, all 1280x800, none empty. The capture gate is the review
 # (`tools/capture-gate/gate.py --store linux`); this is the part that must not even
 # reach it.
 python3 - "$OUT" "$WINDOW" <<'PY'
 import sys, struct, pathlib
 out = pathlib.Path(sys.argv[1])
 want = tuple(int(n) for n in sys.argv[2].split("x"))
-slots = ["01-viewer", "02-text", "03-search", "04-sign", "05-redact", "06-home"]
+slots = ["01-reading", "02-text", "03-sign", "04-pages", "05-search", "06-redact",
+         "07-home"]
 bad = []
 for slot in slots:
     p = out / f"{slot}.png"

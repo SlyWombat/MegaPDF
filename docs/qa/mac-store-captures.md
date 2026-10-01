@@ -16,7 +16,7 @@ Both from the in-house Mac (`tools/mac-mini.md`), from a checkout of the commit
 being shipped:
 
 ```
-# Mac: six listing images per language, 1440x900
+# Mac: seven listing images per language, 1440x900 (#613)
 tools/build-macos-app.sh osx-arm64 ~/app-store
 tools/macos-store-captures.sh en    ~/store/macos-screenshots/en
 tools/macos-store-captures.sh fr-CA ~/store/macos-screenshots/fr-CA
@@ -56,7 +56,7 @@ Every image, every language. The script checks the first two itself and fails th
 run; the rest are read by eye.
 
 1. **The size is exact.** Mac 1440×900; iPhone 6.9" 1320×2868; iPad 13" 2064×2752.
-2. **Every listing slot is present** — six for the Mac, the eight
+2. **Every listing slot is present** — seven for the Mac since #613, the eight
    `docs/app-store-listing.md` maps for iOS — and review shots are not among them.
 3. **The UI language matches the set.** No English in a French shot, no French
    caption on an English one, including the status line and the window title.
@@ -65,13 +65,17 @@ run; the rest are read by eye.
 5. **The toolbar is the current one**: Open / Save / Sign / Add text / Cover /
    Redact / Undo / Redo / zoom / More. If Redact is missing, the set predates 2.0.
 6. **Nothing transient**: nothing *selected* in the wrong place, no first-boot
-   banner, no accelerator badge, no stray dialog, no spinner. Slot 5's chrome is
-   the exception and is the point of that image: the mark, its box, its four
+   banner, no accelerator badge, no stray dialog, no spinner. Two exceptions, and
+   in both the chrome is the point of the image. Slot 4's selection — two rows of
+   the Pages sidebar picked out, and the toolbar's Pages button toggled on — is
+   the feature, not a selection left behind. And slot 6's: the mark, its box, its four
    corner handles, and the ✕ at the mark's own top-right corner — see the note
    under the slot table for what changed in 2.1.
 7. **Nothing from this machine**: no container path, no real file name, no library
    entry that is not "Mega W.".
-8. **The zoom reads 100%.**
+8. **The zoom reads 100%** in the six slots that have a toolbar to read it off.
+   Slot 1 has none: reading mode takes the toolbar away, so there is no zoom chip
+   in that frame and the gate records the check as skipped rather than passed.
 9. **The document's name is the same in every shot of the set.**
 
 ## What this runbook cannot settle from here
@@ -98,16 +102,54 @@ run; the rest are read by eye.
 
 ### Mac App Store — 1440×900, `light-NN-<state>.png`
 
+Seven slots since #613, in the order Dave settled on 2026-10-01: *"Redaction and
+whiteout are minor features that move to the back, signing, editing and reading
+are common features."*
+
 | Slot | File | What it shows |
 |---|---|---|
-| 1 | `light-01-viewer.png` | The filled, signed agreement. The shot that leads. |
+| 1 | `light-01-reading.png` | The agreement with the chrome gone and the floating bar up (#505). |
 | 2 | `light-02-text.png` | A typed name on the blank line, nothing selected. |
-| 3 | `light-03-search.png` | The find bar with a term typed and "1 of 3". |
-| 4 | `light-04-sign.png` | The signature library flyout, one card. |
-| 5 | `light-05-redact.png` | A line marked and selected, with the chrome that takes it off — 2.1's headline (#329). Changed for 2.1: 2.0's pose armed the tool instead. |
-| 6 | `light-06-home.png` | The empty window and its recents list. |
+| 3 | `light-03-sign.png` | The signature library flyout, one card. |
+| 4 | `light-04-pages.png` | The Pages sidebar beside the document, two pages picked out (#174). |
+| 5 | `light-05-search.png` | The find bar with a term typed and "1 of 3". |
+| 6 | `light-06-redact.png` | A line marked and selected, with the chrome that takes it off — 2.1's headline (#329). Changed for 2.1: 2.0's pose armed the tool instead. |
+| 7 | `light-07-home.png` | The empty window and its recents list. |
 
-**Slot 5 changed twice on 2026-09-20, and the set has to be shot after both
+**`viewer` left the set.** It was slot 1 — the filled, signed agreement — and
+**reading replaced it** rather than joining it: both are a picture of a page, and
+the reading one says something as well. The state still exists in the app and in
+`docs/qa/mac-screen-inventory.md`; it is simply not a listing slot.
+
+**Slot 1 is the hardest image in the set, for the reason the feature exists.**
+Reading mode takes the toolbar, the tab strip, the sidebar and the status line off
+the screen, so the frame is a page on a canvas and the floating bar is the only
+thing in it that names the application — and the bar fades after two seconds of
+idle, which is when the window is rendered. The pose therefore **pins the bar**
+(`MainWindow.PinReadingPillForCapture`, added by the Linux pass of #613 and shared
+by both desktops, because they are the same Avalonia app). Read slot 1 for the
+bar: if it is not there, the picture is a page and nothing else.
+
+**Page colour is left at Normal in slot 1.** Sepia and Night belong to reading
+mode too and would make the image unmistakable, but a set whose first image is the
+only tinted one reads as a different app from the six behind it, and the tint is in
+the description, where a reader meets it as a choice.
+
+**Slots 1 and 4 open a different document from the other five.** A Pages sidebar
+with one thumbnail is a picture of nothing and the floating bar would read "Page 1
+of 1", so both open `demo-pages.pdf` (`demo-fr-pages.pdf` / `demo-fr-FR-pages.pdf`
+in French): the same filled, ticked, signed page 1, followed by the agreement's
+four sections and a landscape rate schedule. It is opened under the same document
+name as the one-page one, so the set is still one document from end to end — check
+that the status line says the same name in all seven.
+
+**Slot 4 is deliberately not the phone's picture.** The Mac puts the page tools in
+a thumbnail sidebar beside the document that stays open while you work; Android
+puts them on a screen of their own with a contextual selection bar. Both are the
+platform's own idiom (#165) and the difference is worth showing rather than
+normalising.
+
+**Slot 6 changed twice on 2026-09-20, and the set has to be shot after both
 (#338).** Before them, 2.1 wrote no image for this state in any language — the
 pose asked for a mark and read it before the placement had run, so the run failed
 the slot on `::error::`. (2.0 did write one: `docs/qa/linux-fr/redact.png`, the
@@ -116,7 +158,7 @@ And the ✕ that takes a mark off was drawn at the *page's* top-right corner, ha
 of it cut off above the page, instead of at the mark's. Both are fixed on the
 desktops branch and were verified by shooting all six slots with the Avalonia
 build on a Windows machine, in en and fr-CA; the images are the three things to
-read in slot 5 — the translucent band across the line, the four corner handles,
+read in slot 6 — the translucent band across the line, the four corner handles,
 and the ✕ on the mark's top-right corner, with the status line under the page
 reading "Drag to move, corners to resize, Delete to remove" in the set's
 language.

@@ -60,6 +60,11 @@
 # so it is otherwise unused today.
 set -uo pipefail
 
+# #609: corpus_coverage.sh, run at the end, says what this battery's document count is
+# a count OF -- ten recorded runs printed "public 1,381" with nothing anywhere saying it
+# was 1,381 of a 1,777-row manifest.
+STRESS_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+
 CHECK=${1:?usage: structure-battery.sh <megapdf_structure_check> <corpus> <out-dir> [options]}
 CORPUS=${2:?}
 OUT=${3:?}
@@ -336,6 +341,10 @@ order_gates=0
             echo "cli bad exit codes:    $cli_bad_exit (gate: must be 0 -- valid codes here are 0/2/3/4/5, never 1/6/7/130)"
         fi
     fi
+    # #609: what the count above is a count of. Last in the summary rather than first
+    # so it reads as the footnote to every number, and never gates -- a partial corpus
+    # is a fact about the machine, not a regression in the code under test.
+    "$STRESS_DIR/corpus_coverage.sh" "$CORPUS" "$opened" || true
 } | tee "$SUMMARY"
 
 # Exit 0 only when every gate that applies holds.

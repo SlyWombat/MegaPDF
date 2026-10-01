@@ -50,7 +50,7 @@ class TextBoxMultilineTest {
      *  in the history, where the demo page's own drawn checkboxes sit, so a stray scan tap
      *  landing on one is a checkable explanation rather than a guess. */
     private fun undoAndWaitDone(facts: PageFacts) {
-        rule.clickLabelled(str(R.string.undo))
+        rule.clickUndo()
         try {
             rule.waitUntil(SETTLE_MS) { !rule.viewModel.canUndo }
         } catch (e: androidx.compose.ui.test.ComposeTimeoutException) {

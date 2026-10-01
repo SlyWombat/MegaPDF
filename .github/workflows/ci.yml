@@ -114,6 +114,9 @@ jobs:
           # #457: dynamic-xfa.pdf/hybrid-xfa.pdf, the self-test's "dynamic XFA" check.
           python3 tools/gen_xfa_fixtures.py "$RUNNER_TEMP/fixtures"
           # #481: signed-approval.pdf/signed-certified.pdf, the self-test's "signed document" check.
+          # #576 adds signed-reason.pdf (a signing date and a signer's reason, which the
+          # save question names) and signature-field-unsigned.pdf (a signature field with
+          # no signature in it: #476 §5b's false positive).
           python3 tools/gen_signature_fixtures.py "$RUNNER_TEMP/fixtures"
 
       # --render-check returns before Avalonia is ever initialised, so it proves
@@ -413,6 +416,9 @@ jobs:
           # #457: dynamic-xfa.pdf/hybrid-xfa.pdf, the self-test's "dynamic XFA" check.
           python3 tools/gen_xfa_fixtures.py "$RUNNER_TEMP/fixtures"
           # #481: signed-approval.pdf/signed-certified.pdf, the self-test's "signed document" check.
+          # #576 adds signed-reason.pdf (a signing date and a signer's reason, which the
+          # save question names) and signature-field-unsigned.pdf (a signature field with
+          # no signature in it: #476 §5b's false positive).
           python3 tools/gen_signature_fixtures.py "$RUNNER_TEMP/fixtures"
 
       # --- the .deb -------------------------------------------------------------
@@ -666,6 +672,11 @@ jobs:
           # depends on that, and it is not particular to running in CI, so it
           # is left alone rather than chased here.
           #
+          # `empty` (#617): the window as it looks the instant it launches, zero tabs --
+          # the one state here that must NOT have a document open (App.xaml.cs knows not
+          # to open $fixture for it). No page to render, so it is the cheapest check in
+          # this job; 45s is still generous.
+          Run-Check "empty" 45
           # `pages` (#174) gets 120s where the others get 60: it is 107 checks
           # over eleven documents, it opens a second tab and reopens a document
           # into it a dozen times, and every reopen waits for the first page to

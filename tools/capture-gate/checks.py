@@ -177,6 +177,21 @@ def toolbar(shot, profile) -> list[Finding]:
     if not _is_frame(shot, profile):
         return [_skip("toolbar", "not a full window — a crop has no toolbar to "
                                  "measure")]
+    # Some poses are *supposed* to have no chrome at all: reading mode (#505)
+    # hides the toolbar, the tab strip and the status bar, and the page host it
+    # leaves behind reaches the top of the window. Measuring a toolbar there
+    # reports the whole search depth as a 200 px bar, which is how the #613
+    # reading slot came back flagged. Turned around instead: in a pose named
+    # here, finding a band is the defect, because a band means the mode did not
+    # turn on and the capture is an ordinary viewer shot in the reading slot.
+    if shot.pose in spec.get("chromeless_poses", ()):
+        depth = spec["depth"]
+        if shot.toolbar_end is not None and shot.toolbar_end < depth:
+            return [_flag("toolbar", f"a {shot.toolbar_end} px band of chrome at "
+                                     f"the top of a pose that should have none — "
+                                     f"did reading mode turn on?")]
+        return [_ok("toolbar", f"no chrome band in the top {depth} px, which is "
+                               f"what this pose is")]
     raster = im.gray(shot.path)
     end = shot.toolbar_end
     # A title bar of its own (Windows) sits above the commands and is not a
@@ -494,10 +509,23 @@ def language_purity(shot, profile) -> list[Finding]:
     # happens to contain an English one is not an English string.
     hits = [w for w in ENGLISH_MARKERS
             if re.search(rf"\b{re.escape(w)}\b", haystack)]
+    # Words this platform's reader is known to *invent* in a named pose. A
+    # marker the OCR produced out of a French label is not a string from the
+    # wrong catalogue, and excusing it is better than excusing the whole check
+    # — but it is reported rather than dropped, so the sheet still shows what
+    # was let through and the next reader can disagree with the measurement.
+    misreads = (profile.get("ocr_misreads") or {}).get(shot.pose, {})
+    excused = [w for w in hits if w in misreads]
+    hits = [w for w in hits if w not in misreads]
     if hits:
         return [_flag("language", f"the English word {hits[0]!r} is on a "
                                   f"{shot.lang} capture — a string that did not "
                                   f"come from the catalogue?")]
+    if excused:
+        return [_ok("language", "no English UI words on a French capture — "
+                                + "; ".join(f"{w!r} is this reader's misreading "
+                                            f"of {misreads[w]}"
+                                            for w in excused))]
     return [_ok("language", "no English UI words on a French capture")]
 
 
@@ -648,9 +676,41 @@ def chrome_consistent(group: list, profile, live_clock: bool = False) -> list[tu
     if len(group) < 3:
         return out
     if (profile.get("status_band") or {}).get("height_frac"):
+        # A pose that hides the system bars on purpose — reading mode (#507),
+        # which goes immersive, so the band this check measures is page and
+        # gutter rather than a clock. Comparing it with its siblings measures
+        # the absence and reports it as a notification (#613).
+        #
+        # Taken out of the buckets and given the opposite check instead: the
+        # posed bar *appearing* here is the defect, because it means immersive
+        # mode did not engage and the listing's lead image is carrying the
+        # emulator's own status bar. Measured against the set's own bar rather
+        # than against a stored one, so a re-shoot needs nothing updated here.
+        barless = profile.get("barless_poses", ())
+        posed = [s for s in group if s.status_ink and s.pose not in barless]
+        if barless and len(posed) >= 3:
+            scores = {id(s): sum(im.mask_difference(s.status_ink, o.status_ink)
+                                 for o in posed if o is not s) for s in posed}
+            bar = min(posed, key=lambda s: scores[id(s)]).status_ink
+            total = max(sum(bar), 1)
+            for shot in group:
+                if shot.pose not in barless or not shot.status_ink:
+                    continue
+                shared = 1 - im.mask_difference(shot.status_ink, bar) / total
+                if shared > 0.5:
+                    out.append((shot, _flag(
+                        "chrome", f"{100 * shared:.0f} % of the posed status "
+                                  f"bar's ink is in the top of this image, and "
+                                  f"this pose hides the system bars — immersive "
+                                  f"mode did not engage")))
+                else:
+                    out.append((shot, _ok(
+                        "chrome", f"no status bar in the top of the frame, "
+                                  f"which is what this pose is ({100 * shared:.0f} "
+                                  f"% of the set's bar is present)")))
         buckets = collections.defaultdict(list)
         for shot in group:
-            if shot.status_ink:
+            if shot.status_ink and shot.pose not in barless:
                 buckets[shot.status_bg].append(shot)
         for bucket in buckets.values():
             if len(bucket) < 3:

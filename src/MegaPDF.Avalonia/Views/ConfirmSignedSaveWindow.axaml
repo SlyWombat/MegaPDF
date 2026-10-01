@@ -3,17 +3,37 @@
         xmlns:loc="using:MegaPDF.Avalonia"
         x:Class="MegaPDF.Avalonia.Views.ConfirmSignedSaveWindow"
         Title="{x:Static loc:Strings.SignedSaveWarningTitle}"
-        Width="480" SizeToContent="Height"
+        Width="540" SizeToContent="Height"
         WindowStartupLocation="CenterOwner"
         CanResize="False">
   <!-- #476, #481: the warning before Save overwrites a signed original. Save a copy is the
        DEFAULT action, same shape as ConfirmRedactionWindow — the safe path (Dave's framing:
        filling in a form and saving a copy under your own name is the common case and is
        already safe) should be the easy one, and overwriting the signed original needs a
-       deliberate second choice. Nothing here is refused. -->
+       deliberate second choice. Nothing here is refused.
+
+       #576 adds the removal to this same conversation as a TICK, not a fourth button, and
+       the three buttons ship exactly as they were. Dave's reasoning, worth keeping because
+       it is not obvious: a button is a different destination and would compete with the two
+       that are already there, while a tick is a modifier on the destination you have
+       already chosen — so the choice sits on the action it affects. Nothing shipped is
+       removed either, so somebody who wants to overwrite and keep the author's signature
+       bytes verbatim still can. -->
   <StackPanel Margin="24" Spacing="{DynamicResource SpaceM}">
     <TextBlock Name="PromptText" FontWeight="SemiBold" TextWrapping="Wrap" />
+    <!-- What this signature is, when the document says: its own signing date and the
+         signer's own reason (#576). Collapsed when the document records neither, because
+         naming nothing is better than naming a blank. -->
+    <TextBlock Name="SignatureText" TextWrapping="Wrap" IsVisible="False" />
     <TextBlock Name="BodyText" TextWrapping="Wrap" Opacity="0.85" />
+    <!-- Ticked by default. Not because a tick that deletes should default to on, but
+         because by the time this box matters the save has already ended the signature
+         (#476, 33/33 with no edit at all): the tick decides between a file that admits it
+         is unsigned and a file that goes on claiming a signature it cannot support. -->
+    <CheckBox Name="RemoveSignatureCheck" IsChecked="True"
+              Content="{x:Static loc:Strings.SignedSaveRemoveSignature}" />
+    <TextBlock Name="RemoveOfferText" TextWrapping="Wrap" Opacity="0.85"
+               Text="{x:Static loc:Strings.SignedSaveRemoveOffer}" />
     <Grid ColumnDefinitions="Auto,*,Auto,Auto" Margin="0,8,0,0">
       <Button Name="OverwriteButton" Grid.Column="0"
               Content="{x:Static loc:Strings.OverwriteSignedButton}" />

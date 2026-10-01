@@ -100,8 +100,8 @@ class RedactionMarkLifecycleTest {
 
     private fun Double.near(other: Double) = kotlin.math.abs(this - other) < 0.5
 
-    private fun undo() = rule.clickLabelled(str(R.string.undo))
-    private fun redo() = rule.clickLabelled(str(R.string.redo))
+    private fun undo() = rule.clickUndo()
+    private fun redo() = rule.clickRedo()
 
     @Test
     fun markSelectMoveRemoveAndUndoEachStep() {
@@ -193,7 +193,7 @@ class RedactionMarkLifecycleTest {
         rule.waitForGone(hasContentDescription(markName))
 
         // One Undo brings every mark back, and the row with them.
-        rule.clickLabelled(str(R.string.undo))
+        rule.clickUndo()
         rule.waitUntil(SETTLE_MS) { marks.size == two }
         rule.clickLabelled(str(R.string.more_options))
         rule.waitForText(clear)

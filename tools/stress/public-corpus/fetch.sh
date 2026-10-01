@@ -4,6 +4,7 @@
 #   tools/stress/public-corpus/fetch.sh [<dest>] [--jobs N] [--jobs-per-host N]
 #       [--category form,tagged,...] [--source verapdf,qpdf,pdfium]
 #       [--verify-only] [--dry-run] [--manifest <path>]
+#       [--min-speed BYTES-PER-SEC] [--stall-time SECONDS]
 #
 # <dest> defaults to ~/megapdf-public-corpus -- OUTSIDE the repository, on purpose. The
 # PDFs are never committed (#434): the manifest is what the repository holds, and the
@@ -19,6 +20,10 @@
 #     rest of the run (#525) -- a re-rendering source (Wikipedia's PDF export is the
 #     known case) moves its own bytes on its own schedule, and the final summary
 #     counts exactly how many of the selected documents that happened to, by name.
+#
+# Size: this manifest's largest row is 2.07 GB and its smallest is a few kilobytes, so the
+# transfer below is bounded by transfer SPEED, not by wall clock, and resumes rather than
+# restarts -- see #612 and the comment on fetch_one's curl call.
 #
 # Politeness: --jobs is the total worker count, --jobs-per-host caps how many of those
 # hit any one host at once (default 2). govinfo.gov asks for rate limiting explicitly
@@ -36,17 +41,27 @@ CATEGORIES=""
 SOURCES=""
 VERIFY_ONLY=0
 DRY_RUN=0
+# #612: a transfer is abandoned when it averages under MIN_BYTES_PER_SEC for STALL_SECONDS,
+# and never for taking a long time at a healthy rate. 1 KB/s over two minutes is well below
+# anything a working link does and well above zero, so it separates "the connection died"
+# from "this document is two gigabytes" -- which is the distinction `--max-time 300` could
+# not make, and the whole of this issue. Both are flags because the right numbers are a
+# property of the link, not of the corpus.
+MIN_BYTES_PER_SEC=1024
+STALL_SECONDS=120
 
 while [ $# -gt 0 ]; do
     case "$1" in
         --jobs) JOBS=$2; shift 2 ;;
+        --min-speed) MIN_BYTES_PER_SEC=$2; shift 2 ;;
+        --stall-time) STALL_SECONDS=$2; shift 2 ;;
         --jobs-per-host) JOBS_PER_HOST=$2; shift 2 ;;
         --category) CATEGORIES=$2; shift 2 ;;
         --source) SOURCES=$2; shift 2 ;;
         --manifest) MANIFEST=$2; shift 2 ;;
         --verify-only) VERIFY_ONLY=1; shift ;;
         --dry-run) DRY_RUN=1; shift ;;
-        -h|--help) sed -n '2,30p' "${BASH_SOURCE[0]}"; exit 0 ;;
+        -h|--help) sed -n '2,32p' "${BASH_SOURCE[0]}"; exit 0 ;;
         -*) echo "unknown option: $1" >&2; exit 2 ;;
         *) if [ -n "$DEST" ]; then echo "unexpected argument: $1" >&2; exit 2; fi
            DEST=$1; shift ;;
@@ -138,45 +153,119 @@ fetch_one() {
     fi
 
     mkdir -p "$dir" || return 1
-    local tmp="$out.part.$$"
-    local attempt delay=2
-    for attempt in 1 2 3 4; do
-        # --tls-max 1.2 (#434 federal-forms extension): www.uscis.gov's Akamai front end
-        # answers a bare 403 to at least one curl build's default TLS 1.3 handshake --
-        # verified on kdocker3, 2026-09-27, with no proxy, no IP block and a browser
-        # User-Agent all ruled out first. Forcing TLS 1.2 clears it and was re-checked
-        # against irs.gov and raw.githubusercontent.com too, so it is applied to every
-        # fetch rather than singled out for one host.
-        if curl -sS -L --fail --max-time 300 --connect-timeout 20 --tls-max 1.2 \
-                -o "$tmp" "$url"; then
-            local got; got=$(sha256sum "$tmp" | cut -d' ' -f1)
-            if [ "$got" != "$want" ]; then
-                rm -f "$tmp"
-                echo "MISMATCH-ON-FETCH $rel have=$got want=$want url=$url" >&2
-                echo "mismatch $rel" >> "$RESULTS"
-                return 3
-            fi
-            local bytes; bytes=$(wc -c < "$tmp")
-            if [ "$bytes" != "$size" ]; then
-                rm -f "$tmp"
-                echo "SIZE-MISMATCH $rel have=$bytes want=$size" >&2
-                echo "mismatch $rel" >> "$RESULTS"
-                return 3
-            fi
-            mv -f "$tmp" "$out" || return 1
-            echo "got  $rel"
-            echo "ok $rel" >> "$RESULTS"
-            return 0
+    # A partial name that does NOT carry $$: a run that is interrupted -- or killed at the
+    # nine-hundredth megabyte of a two-gigabyte row -- hands its bytes to the next run
+    # instead of making it start over (#612). Safe to share across runs because nothing
+    # below trusts a partial: it is resumed from, then hashed, and the hash is what decides.
+    # Two fetchers never contend for one partial, because the host-grouped xargs below
+    # hands each manifest row to exactly one worker.
+    local tmp="$out.part"
+    # ATTEMPTS is one more than the four this loop used before #612, because the
+    # resumed-copy-is-bad path below legitimately spends one of them re-fetching whole.
+    local attempts=5
+    local attempt delay=2 resumed=0 restarted=0
+    for ((attempt = 1; attempt <= attempts; attempt++)); do
+        local have=0
+        [ -f "$tmp" ] && have=$(wc -c < "$tmp")
+        if [ "$have" -gt "$size" ]; then
+            # Longer than the manifest says this document is, so it is not a prefix of it and
+            # there is nothing to resume from -- a stale partial from a URL that has since
+            # moved is the way this happens. Start the document over rather than append.
+            echo "OVERLONG-PARTIAL $rel have=$have want=$size -- discarded, fetching whole" >&2
+            rm -f "$tmp"; have=0
         fi
-        rm -f "$tmp"
-        [ "$attempt" -lt 4 ] && sleep "$delay" && delay=$((delay * 2))
+        # "Resumed" means some of these bytes arrived in an earlier attempt or an earlier
+        # run -- including the case where a partial is already the full length and no
+        # transfer happens at all this time round. It is what the hash-failure path below
+        # keys off, so it has to cover every way a byte can predate this attempt.
+        if [ "$have" -gt 0 ]; then resumed=1; else resumed=0; fi
+
+        local rc=0
+        if [ "$have" -ne "$size" ]; then
+            local resume=()
+            if [ "$have" -gt 0 ]; then resume=(-C -); fi
+            # Two deliberate choices here, both from #612:
+            #
+            # --speed-limit/--speed-time instead of --max-time. A fixed wall clock is the
+            # wrong shape for a size-unbounded fetch: `--max-time 300` aborted this
+            # manifest's two multi-gigabyte rows at around 875 MB on four attempts out of
+            # four, so the documented command could not fetch its own corpus, while the same
+            # 300 seconds happily passes a four-kilobyte row that has been stalled for 299 of
+            # them. A low-speed abort catches the dead connection the timeout was presumably
+            # there for -- under 1 KB/s averaged over two minutes is a connection that has
+            # stopped, at any file size -- without punishing a large file for being large.
+            # There is deliberately no overall ceiling: a row that keeps delivering bytes is
+            # allowed to take as long as its own size needs.
+            #
+            # -C - instead of starting over. For a 2 GB row on an unreliable link a retry
+            # that restarts is close to useless, which is why the four retries above never
+            # once got further than the first attempt did.
+            #
+            # --tls-max 1.2 (#434 federal-forms extension): www.uscis.gov's Akamai front end
+            # answers a bare 403 to at least one curl build's default TLS 1.3 handshake --
+            # verified on kdocker3, 2026-09-27, with no proxy, no IP block and a browser
+            # User-Agent all ruled out first. Forcing TLS 1.2 clears it and was re-checked
+            # against irs.gov and raw.githubusercontent.com too, so it is applied to every
+            # fetch rather than singled out for one host.
+            curl -sS -L --fail --connect-timeout 20 \
+                 --speed-limit "$MIN_BYTES_PER_SEC" --speed-time "$STALL_SECONDS" \
+                 --tls-max 1.2 "${resume[@]}" -o "$tmp" "$url" || rc=$?
+            if [ "$rc" -ne 0 ] && [ "${#resume[@]}" -gt 0 ]; then
+                case "$rc" in
+                    33|36)
+                        # 33: the server will not serve a byte range at all. 36: it rejected
+                        # the offset asked for. Either way this partial can never be
+                        # completed by resuming, so drop it and let the next attempt fetch
+                        # the document whole -- never leave a row unfetchable because of a
+                        # file we ourselves left lying about.
+                        echo "RESUME-REFUSED $rel curl=$rc -- partial discarded, fetching whole" >&2
+                        rm -f "$tmp"; resumed=0
+                        continue ;;
+                esac
+            fi
+        fi
+
+        if [ "$rc" -eq 0 ] && [ -f "$tmp" ]; then
+            # The hash is checked on every path that can produce bytes, resumed or not. That
+            # is what makes resumption safe to do at all (#612): a resumed transfer is
+            # exactly where a corrupted tail would come from, so this check is mandatory
+            # here, not an option, and the size is checked against the manifest beside it.
+            local bytes; bytes=$(wc -c < "$tmp")
+            local got; got=$(sha256sum "$tmp" | cut -d' ' -f1)
+            if [ "$got" = "$want" ] && [ "$bytes" = "$size" ]; then
+                mv -f "$tmp" "$out" || return 1
+                if [ "$resumed" -eq 1 ]; then echo "got  $rel (resumed)"; else echo "got  $rel"; fi
+                echo "ok $rel" >> "$RESULTS"
+                return 0
+            fi
+            if [ "$resumed" -eq 1 ] && [ "$restarted" -eq 0 ]; then
+                # Do not accuse the source of having moved on the strength of a resumed
+                # transfer. A bad tail of our own making and a re-rendered document look
+                # identical from here, so fetch this row whole exactly once before calling
+                # it a mismatch -- otherwise #612's own fix would start manufacturing #525s.
+                echo "RESUMED-COPY-BAD $rel -- partial discarded, fetching whole once" >&2
+                rm -f "$tmp"; restarted=1; resumed=0
+                continue
+            fi
+            rm -f "$tmp"
+            if [ "$got" != "$want" ]; then
+                echo "MISMATCH-ON-FETCH $rel have=$got want=$want url=$url" >&2
+            else
+                echo "SIZE-MISMATCH $rel have=$bytes want=$size" >&2
+            fi
+            echo "mismatch $rel" >> "$RESULTS"
+            return 3
+        fi
+        # The partial is kept on a transfer failure, on purpose: it is what the next
+        # attempt resumes from.
+        [ "$attempt" -lt "$attempts" ] && sleep "$delay" && delay=$((delay * 2))
     done
     echo "FETCH-FAILED $rel url=$url" >&2
     echo "failed $rel" >> "$RESULTS"
     return 1
 }
 export -f fetch_one
-export DEST
+export DEST MIN_BYTES_PER_SEC STALL_SECONDS
 RESULTS="$WORK/results.tsv"
 : > "$RESULTS"
 export RESULTS
@@ -240,6 +329,14 @@ if [ "$MISMATCH" -gt 0 ]; then
 fi
 if [ "$FAILED" -gt 0 ]; then
     echo "failed to fetch:      $FAILED of $TOTAL -- see the FETCH-FAILED lines above." >&2
+    # #612: resume means a failed row usually leaves most of its bytes behind, so say so --
+    # otherwise the obvious next move after a failure is to delete everything and start the
+    # 2 GB row from zero, which is the behaviour this issue removed.
+    PARTIALS=$(find "$DEST" -type f -name '*.part' 2>/dev/null | wc -l | tr -d ' ')
+    if [ "${PARTIALS:-0}" -gt 0 ]; then
+        echo "partial downloads:    $PARTIALS kept on disk (*.part). Re-run the same command and" >&2
+        echo "                      each one resumes from where it stopped; do not delete them." >&2
+    fi
 fi
 if [ "$MISMATCH" -gt 0 ] || [ "$FAILED" -gt 0 ]; then
     echo "$DEST is missing $((MISMATCH + FAILED)) of $TOTAL documents named above; every" >&2
