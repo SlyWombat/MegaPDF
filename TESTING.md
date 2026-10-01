@@ -61,6 +61,22 @@ photo/scan (white background is removed automatically). Then click the signature
 click the page to place it. Click a placed signature to select it: drag to move,
 drag the round corner handle to resize, ✕ or Delete key to remove.
 
+What this places is an *electronic signature* — a picture of a name. It is **not**
+a *digital signature*, the cryptographic kind backed by a certificate, and nothing
+MegaPDF says around this feature may imply otherwise (#602). If a string you meet
+while testing suggests that placing a signature made the document verifiable,
+tamper-evident, certified, legally binding or secure, that is a bug worth filing.
+**A document that already has a digital signature** — open one of the genuinely
+signed PDFs — `signed-approval.pdf` and `signed-certified.pdf`, written by
+`python3 tools/gen_signature_fixtures.py <outdir>` — and press
+Ctrl+S. MegaPDF must warn **at that point**, not on open, and must say *digital
+signature* rather than just *signature*: *"This document has a digital signature"*,
+or *"This document is certified against changes"* when the signature certifies the
+document. **Save a copy** is the prominent choice and leaves the original untouched;
+**Overwrite the original** is the deliberate, secondary one. After Save a copy, a
+quiet line says the original's digital signature doesn't carry over. Nothing is ever
+refused, and nothing here is about the signatures you place yourself (#481, #602).
+
 **Whiteout** — the Whiteout button, then drag across anything (text, images, even a
 scan) to cover it with white. Click a whiteout to select it; ✕ or Delete removes it.
 Whiteout **covers**; it does not remove. What is underneath is still in the file, and
@@ -473,7 +489,7 @@ above is a transparent substitute for `~/megapdf-public-corpus`, not a different
 ### Third addition, 2026-09-28: 33 genuinely-signed documents (#471 part 1)
 
 Not a battery run — a targeted measurement, per the task brief, of what `megapdf_save()`'s
-full rewrite does to a signature already on a document. 33 documents from `www.govinfo.gov`
+full rewrite does to a digital signature already on a document. 33 documents from `www.govinfo.gov`
 (GPO Federal Register, Public Law, Congressional Record, CFR and Statutes at Large PDFs),
 every one independently verified `Signature is Valid` with poppler's `pdfsig` before any
 MegaPDF code touched it. The corpus is now **1,382 documents, 298.1 MB**; the new `signed`
@@ -483,7 +499,7 @@ category and the `govinfo-signed` source are documented in
     tools/stress/public-corpus/build-manifest.py --add-source govinfo-signed  # from a machine that can reach www.govinfo.gov
     tools/stress/public-corpus/fetch.sh --category signed                    # → ~/megapdf-public-corpus/govinfo-signed
 
-**Result: the signature does not survive a MegaPDF save, with or without an edit.**
+**Result: the digital signature does not survive a MegaPDF save, with or without an edit.**
 
 | stage | result (33/33) |
 |---|---|
@@ -491,8 +507,8 @@ category and the `govinfo-signed` source are documented in
 | after `megapdf_save()`, no edit at all | `Digest Mismatch` |
 | after `megapdf_save()` following one edit | `Digest Mismatch` |
 
-The two after-save rows are identical: saving invalidates the signature regardless of
-whether the content changed, because `FPDF_SaveAsCopy` re-serialises the whole file and
+The two after-save rows are identical: saving invalidates the digital signature regardless
+of whether the content changed, because `FPDF_SaveAsCopy` re-serialises the whole file and
 carries the original `/ByteRange` bounds over unchanged into a file whose length is now
 different. Filed as **#476** — a behaviour finding per the task brief, `core/` untouched, no
 gate adjusted. See the README section for the full detail (including the specific

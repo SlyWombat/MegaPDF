@@ -44,7 +44,7 @@ Stating what MegaPDF will *not* do is as important as what it will. Out of scope
 
 - PDF creation from scratch, ~~page assembly/reordering, merging/splitting~~ *(scope amendment, 2026-09-27 — page tools are in scope; see §3.10 and #174)*
 - OCR of scanned documents
-- Cryptographic digital signatures (PKI / certificate-based signing) — MegaPDF signatures are *graphic* signatures, which is what the target user means by "signing"
+- **Digital signatures** — the cryptographic kind, made with a **digital ID** (a certificate and private key). MegaPDF places an **electronic signature**: an image of a name, which is what the target user means by "signing". The feature keeps that friendly naming, and the two senses are kept apart in every string: see `docs/localisation-glossary.md`, "Signatures: two different things" (#602). MegaPDF does detect a document's existing digital signature and warns before a save invalidates it (§3.4, #481) — detecting one is not signing one, and that warning is the only place the words *digital signature* belong.
 - ~~Redaction~~, commenting/review workflows, form *authoring* *(scope amendment, 2026-09-17 — redaction is in scope for 2.0 and implemented on every platform; see §3.8 and #173. It was a non-goal because MegaPDF only ever covered content, and a cover mistaken for a removal is worse than no feature at all; §3.8 exists because the engine can now really remove it.)*
 - Cloud storage integration beyond what the Windows file picker already provides (OneDrive etc. work transparently through the file system)
 - macOS/Linux desktop versions
@@ -174,6 +174,17 @@ The heuristic detector for drawn squares is a differentiating feature — compet
 ### 3.3 F3 — Signature Management
 
 **User story:** *"I keep my signature, my initials, and my boss's signature on file. I drag the right one onto the line, nudge it into place, and save."*
+
+**What this feature is, in the industry's words (#602).** It places an
+**electronic signature** — a picture of a name. It is not a **digital
+signature**, which is cryptographic and needs a **digital ID**; that is a
+non-goal (§1.4), and the only place MegaPDF says *digital signature* is the
+warning before a save invalidates a document's own one (§3.4, #481). The
+feature keeps its friendly naming in the interface — Signatures, Sign, your
+signatures — and no string around it may suggest that placing one makes the
+document verifiable, tamper-evident, certified, legally binding or secure.
+`docs/localisation-glossary.md`, "Signatures: two different things", is the
+rule in full, with both French variants.
 
 #### The signature library
 

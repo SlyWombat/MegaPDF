@@ -767,19 +767,19 @@
     <comment>#457: said instead of arming signature/checkmark placement on a dynamic-XFA document</comment>
   </data>
   <data name="SignedSaveWarningTitle" xml:space="preserve">
-    <value>This document is signed</value>
-    <comment>#476, #481: Save's confirmation before overwriting a signed original (ordinary/approval signature)</comment>
+    <value>This document has a digital signature</value>
+    <comment>#476, #481, #602: Save's confirmation before overwriting a signed original (ordinary/approval signature). Says "digital signature", not just "signed", so it cannot be read as "you have signed this" in a session where the user also placed a signature from the library</comment>
   </data>
   <data name="SignedSaveWarningBody" xml:space="preserve">
     <value>Saving over this document will invalidate its digital signature. Save a copy instead to keep the signed original intact.</value>
     <comment>#476, #481</comment>
   </data>
   <data name="CertifiedSaveWarningTitle" xml:space="preserve">
-    <value>This document is signed and certified against changes</value>
-    <comment>#476, #481: shown instead of SignedSaveWarningTitle when the signature carries a /DocMDP certification — measured as the common case, not the rare one, on real signed documents</comment>
+    <value>This document is certified against changes</value>
+    <comment>#476, #481, #602: shown instead of SignedSaveWarningTitle when the signature carries a /DocMDP certification — measured as the common case, not the rare one, on real signed documents. The title states the certification, which nothing in the Signatures feature claims; the body names the digital signature</comment>
   </data>
   <data name="CertifiedSaveWarningBody" xml:space="preserve">
-    <value>This document's signature certifies it — its author declared that it should not be changed at all. Saving over it will invalidate the signature. Save a copy instead to keep the signed original intact.</value>
+    <value>This document's digital signature certifies it — its author declared that it should not be changed at all. Saving over it will invalidate that signature. Save a copy instead to keep the signed original intact.</value>
     <comment>#476, #481</comment>
   </data>
   <data name="SaveACopyButton" xml:space="preserve">
@@ -791,8 +791,8 @@
     <comment>#476, #481: the signed-document save warning's deliberate, secondary action</comment>
   </data>
   <data name="SignatureNotCarriedNotice" xml:space="preserve">
-    <value>The signature on the original doesn't carry over to this copy.</value>
-    <comment>#476, #481: said once, quietly, after Save a copy on a signed document</comment>
+    <value>The original's digital signature doesn't carry over to this copy.</value>
+    <comment>#476, #481, #602: said once, quietly, after Save a copy on a signed document — the document's own digital signature, not the one the user placed</comment>
   </data>
   <data name="UnsupportedProtection" xml:space="preserve">
     <value>This PDF uses a kind of protection MegaPDF can't open.</value>
