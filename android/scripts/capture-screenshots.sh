@@ -20,6 +20,23 @@ done
 
 adb shell settings put global sysui_demo_allowed 1
 
+# Android's own first-run lesson in immersive mode: the first time an app hides the
+# system bars, SystemUI puts a teal panel over the top half of the screen — "Viewing
+# full screen / To exit, swipe down from the top / GOT IT" — and dims everything
+# under it. Reading mode (#507) hides the bars, so the #613 reading pose is the first
+# capture in this script's history to meet it, and the first run of the new set came
+# back with that panel over all three languages' lead image, in English in the French
+# sets because the string is SystemUI's and the emulator's system language is English.
+# The capture gate could not see it: the panel is not the posed status bar, so the
+# "no status bar in this pose" check passed on a frame that was three-quarters system
+# dialog.
+#
+# Confirming it up front is the same kind of thing as the demo status bar and the
+# disabled launcher below: a first-run affordance of the device, not of the app,
+# removed so the image is the app. The setting is per-device and this emulator is
+# thrown away with the run.
+adb shell settings put secure immersive_mode_confirmations confirmed
+
 # MEGAPDF_LANG=fr-CA (or fr-FR) switches the app's language through Android 13's
 # per-app locale (#91): the app then loads demo-fr.pdf (fr-CA) or demo-fr-FR.pdf
 # (fr-FR, France's own text since #310) and the French names, and

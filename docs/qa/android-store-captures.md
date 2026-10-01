@@ -53,6 +53,22 @@ Each of these has been a defect at least once, so each is named:
   navigation buttons beside it — it was in all 24 tablet captures. The script
   disables the launcher for the run and puts it back on the way out. No effect on a
   phone: the captures come out byte-identical either way.
+- **Android's immersive-mode lesson.** The first time an app hides the system bars,
+  SystemUI puts a teal panel over the top half of the screen — *"Viewing full screen
+  / To exit, swipe down from the top / GOT IT"* — and dims everything under it.
+  Reading mode hides the bars, so the first run of the #613 set came back with that
+  panel over the lead image in all three languages, in **English** in the French sets
+  because the string is SystemUI's and the emulator's system language is English.
+  `settings put secure immersive_mode_confirmations confirmed` before the first launch
+  removes it.
+
+  **The gate could not see it, and that is worth knowing.** The panel is not the posed
+  status bar, so the new "this pose has no status bar" check passed on a frame that
+  was three-quarters system dialog; the toolbar check stands down on Android
+  altogether; and the panel is in every language, so no cross-language check
+  disagreed. All 24 images came back with zero flags. A pose with no chrome has
+  almost nothing left for a gate to measure, which is exactly why every image is read
+  by eye.
 - **The status bar.** SystemUI demo mode, re-asserted before every capture, not once
   at the start: clock 9:41, battery 100 % unplugged, Wi-Fi full **with `fully true`**
   (without it SystemUI draws the "no internet" badge over the icon, because the
