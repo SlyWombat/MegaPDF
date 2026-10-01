@@ -3276,6 +3276,23 @@
         }
       }
     },
+    "Save over the certified original?" : {
+      "comment" : "#481: the Password sheet's own Save confirmation title when the open document carries a certification (/DocMDP) signature -- the twin of \"Save over the signed original?\"",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enregistrer par-dessus l'original certifié ?"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enregistrer par-dessus l'original certifié?"
+          }
+        }
+      }
+    },
     "Save over the signed original?" : {
       "comment" : "#481: the Save confirmation title when the open document carries an existing signature and no redaction marks are pending -- also reused by the Password sheet's own confirmation, since it writes over the file the same way",
       "localizations" : {
@@ -3924,23 +3941,6 @@
         }
       }
     },
-    "The signature on this document doesn't carry over to the copy." : {
-      "comment" : "#481: the quiet, once-per-open notice shown the first time Save a copy is used on a signed document -- the common, already-safe path still deserves to know the copy isn't signed",
-      "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "La signature de ce document ne sera pas reportée dans la copie."
-          }
-        },
-        "fr-CA" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "La signature de ce document ne sera pas reportée dans la copie."
-          }
-        }
-      }
-    },
     "The text there is in a font MegaPDF can't redraw around your marks." : {
       "localizations" : {
         "fr" : {
@@ -4069,6 +4069,23 @@
         }
       }
     },
+    "This document has a digital signature. Saving here will invalidate it." : {
+      "comment" : "#481: the Password sheet's message for an ordinary signature -- the sheet offers Continue/Cancel rather than Save a copy, so it stops after what will happen",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ce document porte une signature numérique. L'enregistrer ici invalidera la signature."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ce document porte une signature numérique. L'enregistrer ici invalidera la signature."
+          }
+        }
+      }
+    },
     "This document has a digital signature. Saving here will invalidate it. Save a copy to keep the signed original intact." : {
       "comment" : "#476, #481: the ordinary-signature case of the Save confirmation's message -- says what will happen before naming the safe alternative",
       "localizations" : {
@@ -4153,6 +4170,23 @@
         }
       }
     },
+    "This document is certified as closed to changes. Saving here will invalidate that certification." : {
+      "comment" : "#481: the certification (/DocMDP) twin of the message above, in the Password sheet",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ce document est certifié fermé aux modifications. L'enregistrer ici invalidera cette certification."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ce document est certifié fermé aux modifications. L'enregistrer ici invalidera cette certification."
+          }
+        }
+      }
+    },
     "This document is certified as closed to changes. Saving here will invalidate that certification. Save a copy to keep the signed original intact." : {
       "comment" : "#476, #481: the certification-signature (/DocMDP) case -- measured as the common case, not the edge case (33/33 of #476's real corpus), so it gets its own, stronger wording rather than the ordinary-signature sentence",
       "localizations" : {
@@ -4182,6 +4216,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Ce document est protégé."
+          }
+        }
+      }
+    },
+    "This document's digital signature doesn't carry over to the copy." : {
+      "comment" : "#481: the quiet, once-per-open notice shown the first time Save a copy is used on a signed document -- the common, already-safe path still deserves to know the copy isn't signed",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La signature numérique de ce document ne sera pas reportée dans la copie."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La signature numérique de ce document ne sera pas reportée dans la copie."
           }
         }
       }

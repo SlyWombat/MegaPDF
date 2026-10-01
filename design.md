@@ -214,6 +214,17 @@ Terminology the product uses for itself: the task is **fill-check-sign-save**
 (`SDD.md` §1.3). The persona is **"Pat, the office administrator"** (§2.1) — not
 technical, does this a few times a week, resents every minute.
 
+One word carries two meanings and the design must not blur them (#602). What
+MegaPDF places is an **electronic signature** — a picture of a name — and in the
+interface it is simply *Signatures*, *Sign*, *your signature*, which is the right
+friendly naming and stays. A document's own cryptographic signature is a
+**digital signature**, made with a **digital ID**, and those words appear only
+where MegaPDF warns that a save will invalidate one. So no label, tooltip,
+status line or empty state beside Sign may promise that the document is now
+verifiable, tamper-evident, certified, legally binding or secure; *protected*
+and *secure* are the password feature's words. `docs/localisation-glossary.md`,
+"Signatures: two different things", is the rule.
+
 ---
 
 ## Where the current design falls short

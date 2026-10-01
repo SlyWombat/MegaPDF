@@ -2625,7 +2625,7 @@ final class ViewerModel: ObservableObject {
             // original is untouched) still deserves to know the copy isn't signed too.
             if isSignedDocument, !signatureCopyNoticeShown {
                 signatureCopyNoticeShown = true
-                showNotice(String(localized: "The signature on this document doesn't carry over to the copy."))
+                showNotice(String(localized: "This document's digital signature doesn't carry over to the copy."))
             }
             return staged
         } catch {

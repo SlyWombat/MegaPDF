@@ -547,14 +547,20 @@
                 </details>
 
                 <details class="answer" id="a-signature" data-plat="all"
-                         data-match="handwriting|photo of my signature|sign it|my signature|background|signature library"
-                         data-not="digitally signed|certificate"
+                         data-match="handwriting|photo of my signature|sign it|my signature|background|signature library|electronic signature"
+                         data-not="digitally signed|digital signature|certificate|digital id"
                          data-strong="signature|signatures|initials">
                     <summary>Signatures: drawing, photographing, and where they live</summary>
                     <div class="body">
                         <p>Three ways in: draw it, type it, or photograph the one you sign on paper —
                         in which case MegaPDF drops the white background so only the ink lands on the
                         page. Then place it, move it and resize it until it sits on the line.</p>
+                        <p>This is the handwritten kind — an <em>electronic signature</em>, a picture
+                        of your name on the page. It is not a <em>digital signature</em>, the
+                        cryptographic kind backed by a certificate, and placing one does not make the
+                        document verifiable, certified or tamper-evident. If a document you were sent
+                        already carries a digital signature of its own, see
+                        <a href="#a-signed">A document that already has a digital signature</a>.</p>
                         <p>Your signatures are stored in MegaPDF's own private storage on that device
                         and nowhere else. They are not synced, not backed up by us, and not shared
                         between your devices — there is no server for them to sync through. Deleting
@@ -646,14 +652,18 @@
                 </details>
 
                 <details class="answer" id="a-signed" data-plat="all"
-                         data-match="digitally signed|signature invalid|invalidate|signed document|breaks the signature"
+                         data-match="digitally signed|digital signature|digital id|signature invalid|invalidate|signed document|breaks the signature"
                          data-strong="certified|certificate">
-                    <summary>A document that is already digitally signed</summary>
+                    <summary>A document that already has a digital signature</summary>
                     <div class="body">
-                        <p>Changing a signed PDF invalidates its signature — that is the entire point
-                        of one, and no app can alter a document and keep its signature valid. MegaPDF
-                        warns you before it saves over one, and offers to <strong>save a copy</strong>
-                        so the signed original survives.</p>
+                        <p>Some documents carry a <em>digital signature</em>: a cryptographic one,
+                        made with a certificate, that lets a reader check the document has not changed
+                        since it was signed. This is not the same thing as the signature you place
+                        from your own library, and MegaPDF cannot create one.</p>
+                        <p>Changing such a PDF invalidates its digital signature — that is the entire
+                        point of one, and no app can alter a document and keep its signature valid.
+                        MegaPDF warns you before it saves over one, and offers to
+                        <strong>save a copy</strong> so the signed original survives.</p>
                         <p>Some documents go further and are <em>certified</em>: their author declared
                         that they should not be changed at all. MegaPDF says so in stronger words, and
                         the advice is the same — work on a copy.</p>
