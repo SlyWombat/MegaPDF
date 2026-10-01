@@ -612,8 +612,19 @@ internal sealed class PdfiumDocument : IPdfDocument
         ArgumentNullException.ThrowIfNull(removed);
         lock (PdfiumLibrary.Lock)
         {
-            if (_disposed || !removed.IsHeld)
-                return;   // closing the document frees every page still held
+            if (!removed.IsHeld)
+                return;   // already restored, or already discarded
+            // Used to also return early when _disposed: under the old contract,
+            // megapdf_close() deleted every removed page it still held, so calling this
+            // afterwards would have been a use after free, and the ~16-byte shell was left
+            // unfreed for the life of the process. Since #578's dead-handle contract,
+            // megapdf_close() empties the handle instead of deleting it and
+            // megapdf_discard_removed_page accepts a dead handle on purpose, freeing just
+            // that shell — so the call below is correct whether or not this document has
+            // closed meanwhile, which is what stops the leak (#583). This binding and the
+            // core it links are always built from the same commit (MegaPDF.Core.csproj
+            // rebuilds megapdf_core from core/*.cpp whenever those sources change), so
+            // there is no older core this call could run against.
             CoreNative.megapdf_discard_removed_page(removed.Handle);
             removed.Released();
         }
@@ -1586,18 +1597,31 @@ internal sealed class PdfiumPage : IPdfPage
         _disposed = true;
         lock (PdfiumLibrary.Lock)
         {
-            // A page still open when its document closed went with it: megapdf_close freed the
-            // handle, and closing it again would be a use after free (#145). Since #536 the
-            // document waits for every page it handed out, so this can only be a page whose
-            // use was never counted — it stays as the guard it always was rather than a claim
-            // that the window is gone.
-            if (_owner.IsClosed)
-                return;
+            // A page still open when its document closed went with it under the old contract:
+            // megapdf_close freed the handle, and closing it again was a use after free (#145).
+            // Since #536 the document waits for every page it handed out, so this can only be
+            // a page whose use was never counted — it stays as the guard it always was rather
+            // than a claim that the window is gone.
+            //
+            // Since #578's dead-handle contract, megapdf_close_page() on a page whose document
+            // has already closed finds `page` and `owner` already nulled and only frees this
+            // ~64-byte shell, not a use after free — accepting a dead handle is the whole point
+            // of that contract. So the call below no longer needs to be routed around; making
+            // it either way is what stops the leak (#583). This binding and the core it links
+            // are always built from the same commit (MegaPDF.Core.csproj rebuilds
+            // megapdf_core.dll/.dylib/.so from core/*.cpp whenever those sources change, and
+            // Android/iOS compile the same sources straight into their own binaries), so there
+            // is no older core this call could run against.
+            //
             // FORM_OnBeforeClosePage + FPDF_ClosePage, in the core.
             CoreNative.megapdf_close_page(_core);
-            // Under the same lock as the close, so the document's Dispose is never woken to
-            // find the page it was waiting for still open (#536).
-            _owner.ReleaseUse();
+            if (!_owner.IsClosed)
+                // Under the same lock as the close, so the document's Dispose is never woken to
+                // find the page it was waiting for still open (#536). Left conditional, unlike
+                // the native free above: this is bookkeeping for the document's own wait loop,
+                // which has already finished in the case this guards, so there is nothing left
+                // for it to release.
+                _owner.ReleaseUse();
         }
     }
 

@@ -156,11 +156,20 @@ class PdfEngine {
          * the undo history dropped its oldest entry, or cleared its redo branch. Detached for
          * the same reason [closeDetached] is — the callers are not coroutines and must not wait
          * — and on the engine thread because freeing one closes a PDFium document.
+         *
+         * Its document may have closed meanwhile. Under the old contract `megapdf_close()`
+         * deleted every removed page it still held, so this call used to be skipped whenever
+         * [owner] was already closed — closing it again would have been a use after free.
+         * That left the ~16-byte shell `megapdf_close()` now empties instead of deleting
+         * (#578's dead-handle contract) unfreed for the life of the process, since skipping
+         * the call meant nobody ever freed it. `megapdf_discard_removed_page` accepts a dead
+         * handle on purpose and only frees that shell, so the call is made either way now and
+         * the leak is gone (#583). [owner] is kept as a parameter for the call sites; it is not
+         * read here any more.
          */
         internal fun discardRemovedPage(owner: PdfDocument, removed: Long) {
             teardownScope.launch {
-                // Its document may have closed meanwhile, which freed it (#549's rule).
-                if (!owner.isClosed) PdfiumNative.nativeDiscardRemovedPage(removed)
+                PdfiumNative.nativeDiscardRemovedPage(removed)
             }
         }
 
@@ -1015,21 +1024,32 @@ class PdfPage internal constructor(
     suspend fun close(): Unit = withContext(engine.dispatcher + NonCancellable) {
         if (!closed) {
             closed = true
-            // A page whose document closed first went with it (#549): megapdf_close() closes
-            // and frees every page still open, so closing the handle again is a use after
-            // free -- it reads the freed megapdf_page, walks the freed document's open-page
-            // list, and hands an already-closed FPDF_PAGE to FPDF_ClosePage. The trap that
-            // followed landed in FPDF_ClosePage, many opens after the damage was done.
+            // A page whose document closed first went with it under the old contract (#549):
+            // megapdf_close() closed and freed every page still open, so closing the handle
+            // again was a use after free -- it read the freed megapdf_page, walked the freed
+            // document's open-page list, and handed an already-closed FPDF_PAGE to
+            // FPDF_ClosePage. The trap that followed landed in FPDF_ClosePage, many opens
+            // after the damage was done.
             //
-            // That ordering is the ordinary teardown, not a race lost rarely. ViewerViewModel
-            // .onCleared() cancels the render job and then PdfEngine.closeDetached() queues
-            // the document's close on the engine's one thread straight away, while the
-            // cancelled render resumes on the main thread and only then queues this close
-            // behind it. This is the desktop's `PdfiumPage.Dispose` guard (#145), which the
-            // Android binding never had; the desktop's other half -- the document waiting for
-            // every handle it handed out (#536) -- cannot be copied here, because this engine
-            // runs on a single thread and the close would wait on a task queued behind it.
-            if (!owner.isClosed) PdfiumNative.nativeClosePage(handle)
+            // That ordering was the ordinary teardown here, not a race lost rarely.
+            // ViewerViewModel.onCleared() cancels the render job and then
+            // PdfEngine.closeDetached() queues the document's close on the engine's one
+            // thread straight away, while the cancelled render resumes on the main thread and
+            // only then queues this close behind it. This is the desktop's `PdfiumPage.Dispose`
+            // guard (#145), which the Android binding never had; the desktop's other half --
+            // the document waiting for every handle it handed out (#536) -- cannot be copied
+            // here, because this engine runs on a single thread and the close would wait on a
+            // task queued behind it.
+            //
+            // Since #578's dead-handle contract, megapdf_close_page() on a page whose document
+            // has already closed finds `page` and `owner` already nulled and only frees this
+            // ~64-byte shell rather than touching freed memory -- accepting a dead handle is
+            // the whole point of that contract. So the ordinary-teardown case above no longer
+            // needs to be routed around the call; it is made either way now, which is what
+            // stops the leak (#583). This binding and the core it links are always compiled
+            // from the same commit (CMakeLists.txt here compiles core/*.cpp straight into
+            // this .so), so there is no older core this call could run against.
+            PdfiumNative.nativeClosePage(handle)
         }
     }
 }

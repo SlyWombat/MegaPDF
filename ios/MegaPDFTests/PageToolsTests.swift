@@ -290,6 +290,26 @@ final class PageToolsTests: XCTestCase {
         await engine.discardRemovedPage(removed)
     }
 
+    /// The ordinary case for an undo stack (#578's own report): a removed page outlives the
+    /// document's close, so its discard runs after `megapdf_close()` has already emptied the
+    /// handle rather than deleted it. `discardRemovedPage`'s guard used to skip the free
+    /// entirely once the document was destroyed — safe under the old contract, but it leaked
+    /// the ~16-byte shell for the life of the process, since nothing else ever freed it (#583).
+    /// Looped, because the point of #583 is that this no longer accumulates; the byte-count
+    /// evidence for that is the core suite under LeakSanitizer (#578's own method), not this
+    /// test, but a regression here would mean the call path itself broke.
+    func testDiscardingARemovedPageAfterItsDocumentHasClosedStillFreesIt() async throws {
+        let engine = PdfEngine.shared
+        for _ in 0..<50 {
+            let doc = try await engine.open(pdf(pageSizes: fourSizes))
+            let removed = try await engine.deletePage(doc, pageIndex: 0)
+            XCTAssertTrue(removed.isHeld)
+            await engine.close(doc)
+            await engine.discardRemovedPage(removed)
+            XCTAssertFalse(removed.isHeld)
+        }
+    }
+
     /// A page the core is holding is freed when its operation leaves the history for good — the
     /// redo branch here. On a phone, a long session of deletes would otherwise keep every deleted
     /// page alive for as long as the document was open.
