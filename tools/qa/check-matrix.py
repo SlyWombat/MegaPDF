@@ -147,6 +147,27 @@ def windows_selftest_states() -> list[str]:
     return sorted(set(re.findall(r'^\s*Run-Check\s+"([a-z-]+)"', text, re.MULTILINE)))
 
 
+# #598: ios-ci.yml names each UI suite it runs as its own `-only-testing` line, split
+# across an iPhone lane (broad) and an iPad lane (narrow, width-class differences only),
+# and both lanes are two branches away from an add/add conflict that drops a line and
+# keeps the job green. Windows cells survive that shape because they cite the workflow
+# *line* (`.github/workflows/ci.yml::Run-Check "..."`) — delete the line and the citation
+# stops resolving. iOS cells used to cite only the test *file*, which the conflict never
+# touches, so the drop was invisible here too (#598's live instance: the open-picker cell
+# claimed `ui` citing FilesEndToEndUITests, which ios-ci.yml has never run). So an iOS
+# `coverage = "ui"` cell citing a `ios/MegaPDFUITests/*.swift` file must also cite the
+# ios-ci.yml text that actually runs it, the way Windows cites Run-Check.
+IOS_WORKFLOW = ".github/workflows/ios-ci.yml"
+IOS_UI_TEST_GLOB = "ios/MegaPDFUITests/*.swift"
+
+
+def ios_ui_suite(path: str) -> str | None:
+    """The bare suite name (`Foo`) for a `ios/MegaPDFUITests/Foo.swift` ref, else None."""
+    if not fnmatch.fnmatch(path, IOS_UI_TEST_GLOB):
+        return None
+    return Path(path).stem
+
+
 SUITE_GLOBS = [
     ("core tests (.NET)", "tests/MegaPDF.Core.Tests/*Tests.cs"),
     ("core tests (native)", "core/tests/*.c*"),
@@ -285,6 +306,27 @@ def validate(data: dict, problems: Problems) -> None:
                     _, needle = split_ref(ref)
                     if needle:
                         cited_needles.add((path, needle))
+
+            # #598: see the note above ios_ui_suite — a `ui` claim on an iOS UI test
+            # suite must also cite the ios-ci.yml text that runs it, or it can go
+            # stale exactly the way the open-picker cell already had.
+            if pid == "ios" and coverage == "ui":
+                lane_citations = [
+                    needle for path, needle in (split_ref(ref) for ref in tests)
+                    if path == IOS_WORKFLOW and needle
+                ]
+                suites = {s for s in (ios_ui_suite(split_ref(ref)[0]) for ref in tests) if s}
+                for suite in sorted(suites):
+                    if not any(suite in citation for citation in lane_citations):
+                        problems.add(
+                            cwhere,
+                            f"coverage ui cites ios/MegaPDFUITests/{suite}.swift but does not "
+                            f"also cite the ios-ci.yml lane that runs it — add a `tests` entry "
+                            f'like "{IOS_WORKFLOW}::MegaPDFUITests/{suite}" naming the actual '
+                            "-only-testing line, the way Windows cells cite Run-Check lines "
+                            "(and if no such line exists, this suite does not run in CI and "
+                            "the cell should say so instead of claiming `ui`)",
+                        )
 
             if coverage in ("none", "engine") and not cell.get("note"):
                 problems.add(cwhere, f"coverage {coverage} is a hole — say what is missing in `note`")

@@ -33,6 +33,14 @@
 # CI runs must be cited by some cell or carry an `[[exempt]]` with a reason — that is what
 # keeps this file from going quietly stale as tests are added.
 #
+# #598: an iOS `coverage = "ui"` cell citing an `ios/MegaPDFUITests/*.swift` suite must
+# also cite the `.github/workflows/ios-ci.yml` text that runs it (the `-only-testing`
+# line), the same way a Windows cell cites `.github/workflows/ci.yml::Run-Check "..."`.
+# ios-ci.yml names each UI suite on its own line, duplicated across an iPhone and an iPad
+# lane, and a conflict that drops one line keeps the job green with no warning — citing
+# only the test file never noticed, because the conflict never touches that file. Citing
+# the line means a dropped line breaks a citation here instead.
+#
 # Coverage here means "something looks at it", never "it works": the suites themselves say
 # that. And none of it replaces the by-hand pass in docs/RELEASING.md §2.3, which is still
 # the release gate and still where every 2.1.1 show-stopper was found.
@@ -181,10 +189,9 @@ note = "the portal picker is screenshotted by hand (docs/qa/linux-portal-file-di
 [feature.ios]
 presence = "present"
 entry = "ios/MegaPDF/HomeView.swift::Button(\"Open PDF\")"
-coverage = "ui"
-tests = ["ios/MegaPDFUITests/FilesEndToEndUITests.swift::test1"]
+coverage = "none"
 manual = "docs/RELEASING.md::Files → share sheet → MegaPDF"
-note = "FilesEndToEndUITests drives the real Files picker but is excluded from CI (needs a 1 GB fixture); tools/ios-files-e2e.sh runs it by hand."
+note = "#598: this cell claimed `ui` citing FilesEndToEndUITests, which drives the real Files picker and exists — but ios-ci.yml has never run it (excluded, needs a 1 GB fixture), so the claim was false and nothing caught it until the lane-citation check did. tools/ios-files-e2e.sh runs it by hand."
 [feature.android]
 presence = "present"
 entry = "android/app/src/main/java/com/megapdf/android/HomeScreen.kt::R.string.open_pdf"
@@ -224,6 +231,7 @@ entry = "ios/MegaPDF/HomeView.swift::Remove from Recents"
 coverage = "ui"
 tests = [
   "ios/MegaPDFUITests/RecentsAccessibilityUITests.swift::testEveryRecentRowAnnouncesWhereItsFileLives",
+  ".github/workflows/ios-ci.yml::-only-testing:MegaPDFUITests/RecentsAccessibilityUITests/testEveryRecentRowAnnouncesWhereItsFileLives",
   "ios/MegaPDFTests/RecentsStoreTests.swift::Recents",
   "ios/MegaPDFTests/RecentLocationTests.swift::Location",
 ]
@@ -434,6 +442,7 @@ entry = "ios/MegaPDF/ViewerView.swift::PinchZoom"
 coverage = "ui"
 tests = [
   "ios/MegaPDFUITests/ViewerZoomUITests.swift::class",
+  ".github/workflows/ios-ci.yml::-only-testing:MegaPDFUITests/ViewerZoomUITests",
   "ios/MegaPDFTests/ZoomAnchorTests.swift::class",
 ]
 note = "the one feature CI exercises on both an iPhone and an iPad destination."
@@ -534,6 +543,7 @@ entry = "ios/MegaPDF/ReadingBar.swift::ReadingBar"
 coverage = "ui"
 tests = [
   "ios/MegaPDFUITests/ReadingModeUITests.swift::class",
+  ".github/workflows/ios-ci.yml::-only-testing:MegaPDFUITests/ReadingModeUITests",
   "ios/MegaPDFTests/ReadingModeTests.swift::class",
 ]
 note = "run on both the iPhone and the iPad destination, including the iPad tool-strip entry point."
@@ -605,7 +615,10 @@ tests = ["src/MegaPDF.Avalonia/Program.cs::CheckPageTools"]
 presence = "present"
 entry = "ios/MegaPDF/ViewerView.swift::PagesPanel(model: model,"
 coverage = "ui"
-tests = ["ios/MegaPDFUITests/PageToolsUITests.swift::testThePhonesGridIsASheetThatLeavesThePageOnScreen"]
+tests = [
+  "ios/MegaPDFUITests/PageToolsUITests.swift::testThePhonesGridIsASheetThatLeavesThePageOnScreen",
+  ".github/workflows/ios-ci.yml::-only-testing:MegaPDFUITests/PageToolsUITests",
+]
 note = "arrived with #570 — a sheet on a compact width and a sidebar on a regular one, both asserted in CI on their own destinations."
 [feature.android]
 presence = "present"
@@ -915,6 +928,7 @@ entry = "ios/MegaPDF/BodyTextSheet.swift::BodyTextSheet"
 coverage = "ui"
 tests = [
   "ios/MegaPDFUITests/BodyTextEditUITests.swift::class",
+  ".github/workflows/ios-ci.yml::-only-testing:MegaPDFUITests/BodyTextEditUITests",
   "ios/MegaPDFTests/BodyTextTests.swift::class",
 ]
 note = "the only live UI test of this on any platform, and it runs in CI."
@@ -1058,6 +1072,7 @@ coverage = "ui"
 tests = [
   "ios/MegaPDFTests/RedactionTests.swift::apply",
   "ios/MegaPDFUITests/RedactionUITests.swift::testSaveIsReachableWithAMarkAndAsksBeforeRemoving",
+  ".github/workflows/ios-ci.yml::-only-testing:MegaPDFUITests/RedactionUITests/testSaveIsReachableWithAMarkAndAsksBeforeRemoving",
 ]
 [feature.android]
 presence = "present"
@@ -1149,6 +1164,7 @@ entry = "ios/MegaPDF/PagesView.swift::Rotate Left"
 coverage = "ui"
 tests = [
   "ios/MegaPDFUITests/PageToolsUITests.swift::testRotatingASelectionIsOneChangeAndOneUndo",
+  ".github/workflows/ios-ci.yml::-only-testing:MegaPDFUITests/PageToolsUITests",
   "ios/MegaPDFTests/PageToolsTests.swift::testDeletingPagesTakesExactlyThoseAndUndoPutsThePagesThemselvesBack",
   "ios/MegaPDFTests/PageToolsModelTests.swift::testTheSizesFollowARotationAndItsPictureIsRedrawn",
   "ios/MegaPDFTests/PageCheckTests.swift::class",
@@ -1406,6 +1422,7 @@ entry = "ios/MegaPDF/ViewerView.swift::Export as Markdown"
 coverage = "ui"
 tests = [
   "ios/MegaPDFUITests/MarkdownExportUITests.swift::class",
+  ".github/workflows/ios-ci.yml::-only-testing:MegaPDFUITests/MarkdownExportUITests",
   "ios/MegaPDFTests/StructureExportTests.swift::class",
 ]
 [feature.android]
@@ -1997,7 +2014,10 @@ note = "as macOS."
 presence = "present"
 entry = "ios/MegaPDF/ViewerView.swift::colorScheme"
 coverage = "ui"
-tests = ["ios/MegaPDFUITests/ViewerBarContrastUITests.swift::class"]
+tests = [
+  "ios/MegaPDFUITests/ViewerBarContrastUITests.swift::class",
+  ".github/workflows/ios-ci.yml::-only-testing:MegaPDFUITests/ViewerBarContrastUITests",
+]
 note = "the one real check of chrome legibility on a dark bar on any platform; it is not a system-wide dark-mode pass."
 [feature.android]
 presence = "present"
@@ -2044,7 +2064,10 @@ note = "as macOS; Orca itself is by hand."
 presence = "present"
 entry = "ios/MegaPDF/ViewerView.swift::accessibilityLabel"
 coverage = "ui"
-tests = ["ios/MegaPDFUITests/RecentsAccessibilityUITests.swift::testEveryRecentRowAnnouncesWhereItsFileLives"]
+tests = [
+  "ios/MegaPDFUITests/RecentsAccessibilityUITests.swift::testEveryRecentRowAnnouncesWhereItsFileLives",
+  ".github/workflows/ios-ci.yml::-only-testing:MegaPDFUITests/RecentsAccessibilityUITests/testEveryRecentRowAnnouncesWhereItsFileLives",
+]
 note = "a real row announcement is asserted; the VoiceOver-running case is a mocked flag, not VoiceOver."
 [feature.android]
 presence = "present"
