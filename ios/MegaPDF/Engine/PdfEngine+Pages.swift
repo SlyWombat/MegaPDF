@@ -192,15 +192,23 @@ extension PdfEngine {
 
     /// Frees a removed page without putting it back: the undo that would have used it is gone.
     ///
-    /// A page whose document has already closed went with it — `megapdf_close()` frees every
-    /// removed page still held — so this does nothing then. That guard is `PdfPage.close`'s
-    /// rule on Android (#549) and it is here for the same reason: freeing it twice is a use
-    /// after free, and teardown order is not something the caller of a discard is thinking
-    /// about. Safe to call twice, and safe to call on a handle a restore has consumed.
+    /// Under the old contract, a page whose document had already closed went with it —
+    /// `megapdf_close()` deleted every removed page it still held — so this used to do nothing
+    /// then, at the cost of leaking the ~16-byte shell `megapdf_close()` now empties instead of
+    /// deleting (#578's dead-handle contract). `megapdf_discard_removed_page` accepts a dead
+    /// handle on purpose and only frees that shell, so the call below is made whether or not
+    /// the document has closed meanwhile, and the leak is gone (#583). This guard, added for
+    /// page tools (#174), was not among the sites #578's report named — it only enumerated the
+    /// Android and .NET guards, going by "iOS scopes its page handles rather than guarding" —
+    /// but it skips the same free the same way, so it needed the same fix.
+    ///
+    /// Freeing it twice is still a use after free regardless of the document's state, and
+    /// teardown order is not something the caller of a discard is thinking about, so the
+    /// `removed.handle` guard above — distinct from the one just removed — stays: it is what
+    /// makes this safe to call twice, and safe to call on a handle a restore has consumed.
     func discardRemovedPage(_ removed: RemovedPage) {
         guard let handle = removed.handle else { return }
         removed.handle = nil
-        guard !removed.owner.isDestroyed else { return }
         megapdf_discard_removed_page(handle)
     }
 

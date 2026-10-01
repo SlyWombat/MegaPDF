@@ -340,6 +340,30 @@ public class PageToolsTests
         }
     }
 
+    /// <summary>
+    /// The ordinary case #578's report calls out: a removed page held for an undo stack
+    /// outlives the document close, so its discard runs after <c>_owner.IsClosed</c> would
+    /// have been true under the guard this replaces (#583). Looped, because the point of #583
+    /// is that this shell no longer accumulates — the byte-count evidence for that lives in
+    /// the core suite under LeakSanitizer (#578's own method), not in a managed test, but a
+    /// regression here would mean the call path broke, which this would catch: a return to the
+    /// old guard shape would make <see cref="RemovedPage.IsHeld"/> never report false here.
+    /// </summary>
+    [Fact]
+    public void DiscardingARemovedPageAfterItsDocumentHasClosedStillFreesIt()
+    {
+        using var file = TwoPages();
+        for (var i = 0; i < 200; i++)
+        {
+            var document = _engine.Open(file.Path);
+            var removed = document.DeletePage(0);
+            Assert.True(removed.IsHeld);
+            document.Dispose();   // megapdf_close() empties the removed page rather than freeing it (#578)
+            document.DiscardRemovedPage(removed);   // used to be skipped once the document had closed (#583)
+            Assert.False(removed.IsHeld);
+        }
+    }
+
     [Fact]
     public void ABlankPageIsInsertedAtTheSizeAsked()
     {
