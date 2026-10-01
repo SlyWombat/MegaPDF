@@ -375,10 +375,187 @@ void test_lifecycle(const std::string& fixtures) {
     megapdf_page* a2 = megapdf_load_page(d, 0);   // the same index twice is two handles
     check(a && b && a2 && a != a2, "lifecycle: three page handles");
     megapdf_close_page(a);
-    megapdf_close(d);                              // closes b and a2
+    megapdf_close(d);                              // releases b and a2, leaving their handles valid
+    // Both orders are correct now (#551): the handles the document released are still the
+    // caller's to close, and closing them is harmless rather than a use-after-free.
+    megapdf_close_page(b);
+    megapdf_close_page(a2);
     // Reopen to prove the library survives a close-with-open-pages.
     Doc again(fixtures + "/fixture.pdf");
     check(again.doc != nullptr && megapdf_page_count(again.doc) == 2, "lifecycle: reopen after close works");
+}
+
+// The dead-handle contract (#551), the defect being #549: megapdf_close() used to free every
+// page handle, detached object and removed page still outstanding, so a caller that closed one
+// of them afterwards read freed memory. On glibc that is an immediate segfault inside
+// FPDF_ClosePage; on Android's hardened allocator the chunk is quarantined and the process dies
+// a dozen documents later, which is how it was first seen and why the trap site was not the bug
+// site. Every assertion below is also an AddressSanitizer assertion — a wrong answer fails the
+// check, a use-after-free fails the process — and the Linux leg of core-tests.yml runs ASan.
+void test_dead_handles(const std::string& fixtures) {
+    auto bytes = read_file(fixtures + "/fixture.pdf");
+    auto open = [&bytes] { return megapdf_open(bytes.data(), bytes.size(), nullptr); };
+    // Not the Doc/Page helpers anywhere here: these tests close by hand, in the order under test.
+
+    // 1. A late close of a page. The sequence from #549's tombstone, and the one Android
+    //    cannot avoid producing: the document's close runs first, the page's close after.
+    {
+        megapdf_document* d = open();
+        megapdf_page* p = megapdf_load_page(d, 0);
+        megapdf_page* q = megapdf_load_page(d, 1);
+        check(d != nullptr && p != nullptr && q != nullptr, "#551 a document and two pages open");
+        megapdf_close(d);
+        megapdf_close_page(p);     // the use-after-free of #549
+        megapdf_close_page(q);     // and again, to prove the first did not corrupt the second
+    }
+
+    // 2. A late *use* of a page, which must be loud rather than quiet. The whole point of
+    //    keeping the shell alive is that a stale call lands somewhere that can refuse it.
+    {
+        megapdf_document* d = open();
+        megapdf_page* p = megapdf_load_page(d, 0);
+        if (p == nullptr) { check(false, "#551 a page opens for the late-use test"); return; }
+        const double was_width = megapdf_page_width(p);
+        check(was_width > 0, "#551 the page has a size while its document is open");
+        megapdf_close(d);
+
+        auto closed = [](const char* what) {
+            const bool ok = megapdf_last_error() == MEGAPDF_LAST_ERR_CLOSED;
+            check(ok, std::string("#551 ") + what + ": megapdf_last_error() says the document is closed",
+                  std::to_string(megapdf_last_error()));
+        };
+        // The render. A dead page must not silently draw nothing.
+        std::vector<unsigned char> px(8 * 8 * 4, 0x11);
+        check(megapdf_render(p, px.data(), 8, 8, 8 * 4, 0) == MEGAPDF_ERR_CLOSED, "#551 a render on a dead page fails");
+        closed("render");
+        check(px[0] == 0x11, "#551 the refused render left the caller's buffer alone");
+
+        // Geometry, which answered out of its own cached fields and so could have gone on
+        // answering plausibly for ever.
+        check(megapdf_page_width(p) == 0.0 && megapdf_page_height(p) == 0.0, "#551 a dead page has no size");
+        closed("page_width/height");
+        double cx = 7, cy = 7;
+        megapdf_page_crop_origin(p, &cx, &cy);
+        check(cx == 0 && cy == 0, "#551 a dead page has no crop origin");
+        closed("page_crop_origin");
+        check(megapdf_page_user_unit(p) == 1.0, "#551 a dead page's /UserUnit is the neutral 1.0");
+        closed("page_user_unit");
+        check(megapdf_page_index(p) == MEGAPDF_ERR_CLOSED, "#551 a dead page has no index — and not -1, which means deleted");
+        closed("page_index");
+
+        // Reads.
+        check(megapdf_page_object_count(p) == MEGAPDF_ERR_CLOSED, "#551 a dead page draws no objects, loudly");
+        check(megapdf_object_type(p, 0) == MEGAPDF_ERR_CLOSED, "#551 object_type refuses a dead page");
+        megapdf_rect r{};
+        check(megapdf_object_bounds(p, 0, &r) == MEGAPDF_ERR_CLOSED, "#551 object_bounds refuses a dead page");
+        check(megapdf_text_load(p, 0) == nullptr, "#551 text_load refuses a dead page");
+        closed("text_load");
+        check(megapdf_form_fields_load(p) == nullptr, "#551 form_fields_load refuses a dead page");
+        check(megapdf_stamps_load(p) == nullptr, "#551 stamps_load refuses a dead page");
+        auto term = utf16("fixture");
+        check(megapdf_search_page(p, term.data(), nullptr, 0) == 0, "#551 search refuses a dead page");
+        closed("search_page");
+        check(megapdf_detect_checkbox_squares(p, nullptr, 0) == 0, "#551 checkbox detection refuses a dead page");
+        megapdf_layout_verdict v{};
+        check(megapdf_page_regeneration_verdict(p, &v) == MEGAPDF_ERR_CLOSED, "#551 the page check refuses a dead page");
+        check(megapdf_page_regeneration_verdict_cached(p, &v) == MEGAPDF_ERR_CLOSED, "#551 the cached page check too");
+        check(megapdf_text_editable(p, 0) == MEGAPDF_ERR_CLOSED, "#551 text_editable refuses a dead page");
+
+        // Writes, which must change nothing because there is nothing left to change.
+        const megapdf_rect area{100, 500, 200, 540};
+        int index = -1;
+        check(megapdf_add_whiteout(p, &area, &index) == MEGAPDF_ERR_CLOSED, "#551 a whiteout cannot be added to a dead page");
+        check(megapdf_whiteouts(p, nullptr, 0) == 0, "#551 a dead page lists no whiteouts");
+        auto id = utf16("dead");
+        auto text = utf16("x");
+        check(megapdf_add_text_box(p, -1, text.data(), "Helvetica", 12, 72, 400, id.data(), &index) == MEGAPDF_ERR_CLOSED,
+              "#551 a text box cannot be added to a dead page");
+        check(megapdf_find_text_box(p, id.data()) == MEGAPDF_ERR_CLOSED, "#551 find_text_box refuses a dead page");
+        check(megapdf_remove_text_box(p, id.data()) == MEGAPDF_ERR_CLOSED,
+              "#551 remove_text_box refuses a dead page rather than reporting the box already gone");
+        check(megapdf_move_text_box(p, 0, 1, 1) == MEGAPDF_ERR_CLOSED, "#551 move_text_box refuses a dead page");
+        check(megapdf_insert_text_run(p, 0, text.data(), "Helvetica", 12, 72, 400) == MEGAPDF_ERR_CLOSED,
+              "#551 insert_text_run refuses a dead page");
+        int outcome = -1;
+        megapdf_detached* replaced = nullptr;
+        check(megapdf_set_text(p, 0, text.data(), 0, &outcome, &replaced) == MEGAPDF_ERR_CLOSED,
+              "#551 set_text refuses a dead page");
+        check(replaced == nullptr, "#551 a refused set_text hands back no undo handle");
+        check(megapdf_remove_annotation(p, 0) == MEGAPDF_ERR_CLOSED, "#551 remove_annotation refuses a dead page");
+        check(megapdf_remove_stamp(p, id.data()) == MEGAPDF_ERR_CLOSED, "#551 remove_stamp refuses a dead page");
+        check(megapdf_form_click(p, 10, 10) == MEGAPDF_ERR_CLOSED, "#551 form_click refuses a dead page");
+        check(megapdf_form_set_text(p, 10, 10, text.data()) == MEGAPDF_ERR_CLOSED, "#551 form_set_text refuses a dead page");
+        check(megapdf_redaction_mark(p, &area, nullptr) == MEGAPDF_ERR_CLOSED, "#551 a redaction mark cannot be made on a dead page");
+        check(megapdf_redaction_marks(p, nullptr, 0) == 0, "#551 a dead page carries no redaction marks");
+        check(megapdf_redaction_remove_mark(p, 1) == MEGAPDF_ERR_CLOSED, "#551 redaction_remove_mark refuses a dead page");
+        check(megapdf_detach_object(p, 0) == nullptr, "#551 nothing can be detached from a dead page");
+        closed("detach_object");
+        const int one = 0;
+        check(megapdf_detach_text_runs(p, &one, 1) == nullptr, "#551 no text runs can be detached from a dead page");
+
+        megapdf_close_page(p);
+    }
+
+    // 3. A late discard of a detached object. Bindings keep these on an undo stack for as long
+    //    as the document is open, so a discard after the close is the ordinary case, not a slip.
+    {
+        megapdf_document* d = open();
+        megapdf_page* p = megapdf_load_page(d, 0);
+        if (p == nullptr) { check(false, "#551 a page opens for the detached-object test"); return; }
+        const megapdf_rect area{100, 500, 200, 540};
+        int index = -1;
+        check(megapdf_add_whiteout(p, &area, &index) == MEGAPDF_OK, "#551 a whiteout is added to detach");
+        megapdf_detached* x = megapdf_detach_object(p, index);
+        check(x != nullptr && megapdf_detached_count(x) == 1, "#551 the whiteout is detached and held");
+        megapdf_close(d);
+        // The handle is dead, not freed: it answers, and it answers that it is closed.
+        check(megapdf_detached_count(x) == 0, "#551 a dead detached handle holds nothing");
+        check(megapdf_last_error() == MEGAPDF_LAST_ERR_CLOSED, "#551 and says the document is closed");
+        megapdf_detached_part part{};
+        check(megapdf_detached_get(x, 0, &part) == MEGAPDF_ERR_CLOSED, "#551 detached_get refuses a dead handle");
+        check(megapdf_restore_detached(p, x) == MEGAPDF_ERR_CLOSED, "#551 a dead detached handle cannot be restored");
+        check(megapdf_restore_object(p, x, index) == MEGAPDF_ERR_CLOSED, "#551 nor restored as a single object");
+        megapdf_discard_detached(x);   // the use-after-free this case exists for
+        megapdf_close_page(p);
+    }
+
+    // 4. A late discard of a removed page — the same handle shape as 3, kept for a page-tools
+    //    undo (#174), and held for just as long.
+    {
+        megapdf_document* d = open();
+        megapdf_removed_page* removed = nullptr;
+        check(megapdf_page_delete(d, 1, &removed) == MEGAPDF_OK && removed != nullptr,
+              "#551 a page is deleted and kept for an undo", megapdf_last_error_message());
+        megapdf_close(d);
+        megapdf_document* other = open();
+        check(megapdf_page_restore(other, removed, 0) == MEGAPDF_ERR_CLOSED,
+              "#551 a dead removed page cannot be put back — and the answer is CLOSED, not 'another document'");
+        check(megapdf_last_error() == MEGAPDF_LAST_ERR_CLOSED, "#551 and it says why");
+        megapdf_close(other);
+        megapdf_discard_removed_page(removed);   // the use-after-free this case exists for
+    }
+
+    // 5. The contract's promise is "in any order", so the old order must still be exactly right:
+    //    every handle closed first, then the document, with nothing left for the close to do.
+    {
+        megapdf_document* d = open();
+        megapdf_page* p = megapdf_load_page(d, 0);
+        const megapdf_rect area{100, 500, 200, 540};
+        int index = -1;
+        megapdf_add_whiteout(p, &area, &index);
+        megapdf_detached* x = megapdf_detach_object(p, index);
+        megapdf_removed_page* removed = nullptr;
+        megapdf_page_delete(d, 1, &removed);
+        check(p != nullptr && x != nullptr && removed != nullptr, "#551 a page, a detached object and a removed page");
+        megapdf_close_page(p);
+        megapdf_discard_detached(x);
+        megapdf_discard_removed_page(removed);
+        megapdf_close(d);
+        // And the library still works afterwards, as test_lifecycle asserts for its own order.
+        megapdf_document* again = open();
+        check(again != nullptr && megapdf_page_count(again) == 2, "#551 the library survives both orders");
+        megapdf_close(again);
+    }
 }
 
 // SDD §6.2 contract 2 on the shared fixture: page 1 of fixture.pdf draws exactly
@@ -990,6 +1167,7 @@ std::vector<Box> boxes_of(const megapdf_page* page) {
 
 void test_whiteouts_and_text_boxes(const std::string& fixtures) {
     // Whiteouts, and detach/restore/discard around them.
+    megapdf_detached* held_across_the_close = nullptr;   // declared out here so it outlives the Doc
     {
         Doc d(fixtures + "/fixture.pdf");
         Page p(d.doc, 0);
@@ -1018,11 +1196,15 @@ void test_whiteouts_and_text_boxes(const std::string& fixtures) {
         check(megapdf_detach_object(nullptr, 0) == nullptr && megapdf_restore_object(p.page, nullptr, 0) == MEGAPDF_ERR_ARGUMENT, "null detached handles are rejected");
         megapdf_discard_detached(nullptr);
 
-        // A detached object still held when the document closes is freed by the core (ASan/LSan watch this).
+        // A detached object still held when the document closes: the core destroys the objects
+        // it holds and leaves the handle valid, so the discard below is still owed (#551 — it
+        // used to free the handle here, which made that discard a use-after-free, #549).
         megapdf_add_whiteout(p.page, &area, &index);
-        megapdf_detached* leaked = megapdf_detach_object(p.page, index);
-        check(leaked != nullptr, "second whiteout detaches for the close test");
+        held_across_the_close = megapdf_detach_object(p.page, index);
+        check(held_across_the_close != nullptr, "second whiteout detaches for the close test");
     }
+    check(megapdf_detached_count(held_across_the_close) == 0, "a detached handle outlives its document holding nothing");
+    megapdf_discard_detached(held_across_the_close);
     // Text boxes: add, list, find, move, restyle, remove.
     {
         Doc d(fixtures + "/fixture.pdf");
@@ -4792,7 +4974,7 @@ void test_page_check_cancel_and_concurrency() {
         const bool parked = wait_parked(park);
         std::atomic<bool> closed{false};
         std::thread close_thread([&] {
-            megapdf_close(doc);   // closes the page handle too
+            megapdf_close(doc);   // releases the page handle too, leaving it valid to close (#551)
             closed = true;
         });
         std::this_thread::sleep_for(std::chrono::milliseconds(200));
@@ -4803,6 +4985,7 @@ void test_page_check_cancel_and_concurrency() {
         megapdf_testing_set_page_check_hook(nullptr, nullptr);
         check(closed && (result == MEGAPDF_ERR_CANCELLED || result == 1), "page check: closing its document mid-run stops it cleanly",
               std::to_string(result.load()));
+        megapdf_close_page(page);   // still owed, and harmless after the close (#551)
     }
 
     // The page changes while it runs: the answer describes the page as it was and is not kept.
@@ -7546,12 +7729,15 @@ void test_page_tools(const std::string& fixtures, const std::string& repo_fixtur
             check(texts_of(q0.page) == t0, "pages: the page kept is page 0");
         }
         check(megapdf_page_delete(d.doc, 0, nullptr) == MEGAPDF_ERR_ARGUMENT, "pages: the last page cannot be deleted");
-        // A removed page still held at close is freed with the document (ASan would say otherwise).
+        // A removed page still held at close: the document frees the page copy and leaves the
+        // handle valid, so the discard below is still owed (#551; it used to free the handle
+        // here, which made a late discard a use-after-free — see test_dead_handles).
         Doc leak(fixture_path);
         megapdf_removed_page* held = nullptr;
         check(megapdf_page_delete(leak.doc, 1, &held) == MEGAPDF_OK && held != nullptr, "pages: a page deleted and never restored");
         Doc other(fixture_path);
         check(megapdf_page_restore(other.doc, held, 0) == MEGAPDF_ERR_ARGUMENT, "pages: a removed page restores only into its own document");
+        megapdf_discard_removed_page(held);
         megapdf_removed_page* discarded = nullptr;
         check(megapdf_page_delete(other.doc, 0, &discarded) == MEGAPDF_OK, "pages: another delete");
         megapdf_discard_removed_page(discarded);
@@ -8421,6 +8607,7 @@ int main(int argc, char** argv) {
     test_signature_detection(argv[1]);
     test_signature_detection_corpus();
     test_lifecycle(argv[1]);
+    test_dead_handles(argv[1]);
     test_open_from_file(argv[1]);
     test_read_from_copy(argv[1]);
     test_fixture_square(argv[1]);

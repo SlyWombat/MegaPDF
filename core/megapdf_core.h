@@ -71,13 +71,50 @@ enum {
     MEGAPDF_ERR_NOT_JUDGED = -8,  /* megapdf_page_regeneration_verdict_cached(): the page has no answer yet (#145) */
     MEGAPDF_ERR_FILE = -9,        /* a file could not be created, read or written (#147) */
     MEGAPDF_ERR_REDACT = -10,     /* a redaction could not remove everything it had to, so it removed nothing (#173) */
-    MEGAPDF_ERR_FIELDS = -11      /* the pages carry form fields in a /Parent hierarchy this build's PDFium cannot
+    MEGAPDF_ERR_FIELDS = -11,     /* the pages carry form fields in a /Parent hierarchy this build's PDFium cannot
                                      carry across a page copy (#174), or (once it can, #452) megapdf_pages_import
                                      found a field in such a hierarchy whose top-level name already exists in this
                                      document and cannot be renamed; nothing was changed. Which of the two applies
                                      is a compile-time property of this binary (MEGAPDF_PDFIUM_PATCHES), not
                                      something a caller chooses -- see megapdf_pages_import()/megapdf_pages_extract() */
+    MEGAPDF_ERR_CLOSED = -12      /* the document this page, detached object or removed page belonged to has been
+                                     closed, so the handle holds nothing; it is still valid, and still has to be
+                                     closed or discarded. See "The dead-handle contract" below (#551) */
 };
+
+/**
+ * The dead-handle contract (#551).
+ *
+ * megapdf_close() releases what a megapdf_page, megapdf_detached or megapdf_removed_page
+ * handle held -- the PDFium page, the detached page objects, the scratch document -- and
+ * leaves the handle itself alive and dead: it holds nothing. Such a handle is never freed
+ * memory, so there is no ordering a caller has to get right:
+ *
+ *   - megapdf_close_page(), megapdf_discard_detached() and megapdf_discard_removed_page()
+ *     free a dead handle, harmlessly, in any order relative to megapdf_close() -- before it
+ *     or after it, on any thread.
+ *   - every other call taking one refuses it: MEGAPDF_ERR_CLOSED from an entry point that
+ *     returns a status, and 0, 0.0 or NULL from one that returns a count, a size or a
+ *     handle, always with megapdf_last_error() == MEGAPDF_LAST_ERR_CLOSED. A render on a
+ *     dead page fails; it does not quietly draw nothing.
+ *   - the handle must still be closed or discarded. The shell is about 64 bytes and the
+ *     core cannot free it, because it cannot know whether the caller still holds it.
+ *
+ * This replaces the rule that a caller had to close every page handle before its document.
+ * That rule was unkeepable: a binding whose engine runs on one thread cannot wait inside
+ * megapdf_close() for a page close that is queued behind it (#549, #550). What one binding
+ * cannot obey is not a rule. The bindings' own lifetime guards stay as defence in depth.
+ *
+ * Restoring a detached object or a removed page still consumes its handle, as it always
+ * has; using a consumed handle is a different mistake and is still the caller's to avoid.
+ *
+ * MEGAPDF_LAST_ERR_CLOSED is what megapdf_last_error() carries, in the same space as
+ * MEGAPDF_OPEN_ERR_TOO_LARGE: PDFium's own codes are 0-6 and MegaPDF's start at 100, so a
+ * binding can tell them apart. It exists because the entry points that answer with a
+ * count, a size, a double or NULL have no int to carry MEGAPDF_ERR_CLOSED in, and "0"
+ * alone would be exactly the quiet failure this contract is here to prevent.
+ */
+#define MEGAPDF_LAST_ERR_CLOSED 101u
 
 /**
  * A cancel flag for a page check (#145). megapdf_cancel_raise() may be called from any
@@ -207,7 +244,14 @@ MEGAPDF_API int megapdf_reads_fd(const megapdf_document* document, int fd);
  */
 MEGAPDF_API int megapdf_read_from_copy(megapdf_document* document, const char* copy_path_utf8);
 
-/** Closes every page still open on it, tears down the form environment, frees it. NULL is fine. */
+/**
+ * Releases every page still open on it, every detached object and every removed page it is
+ * keeping for an undo, tears down the form environment, and frees the document. NULL is fine.
+ *
+ * Those handles are released, not freed: each stays valid, holds nothing, refuses every call
+ * and still has to be closed or discarded — in any order relative to this call. See "The
+ * dead-handle contract" above (#551).
+ */
 MEGAPDF_API void megapdf_close(megapdf_document* document);
 
 MEGAPDF_API int megapdf_page_count(const megapdf_document* document);
@@ -305,9 +349,14 @@ MEGAPDF_API unsigned int megapdf_document_flags(const megapdf_document* document
  * ----------------------------------------------------------------------- */
 
 /**
- * Loads page `index` (form-fill hooks applied). Returns NULL on failure. A page
- * must be closed with megapdf_close_page(); closing the document closes any
- * page still open, after which the page handle is invalid.
+ * Loads page `index` (form-fill hooks applied). Returns NULL on failure. A page must be
+ * closed with megapdf_close_page().
+ *
+ * Closing the document releases every page still open on it — the PDFium page goes, and the
+ * page handle stays valid and holds nothing. Every call on it then fails
+ * (MEGAPDF_ERR_CLOSED, or megapdf_last_error() == MEGAPDF_LAST_ERR_CLOSED for the calls with
+ * no status to return), and megapdf_close_page() frees it, in any order relative to
+ * megapdf_close(). See "The dead-handle contract" above (#551).
  */
 MEGAPDF_API megapdf_page* megapdf_load_page(megapdf_document* document, int index);
 MEGAPDF_API void megapdf_close_page(megapdf_page* page);
@@ -595,14 +644,18 @@ MEGAPDF_API int megapdf_restyle_text_box(const megapdf_page* page, int object_in
 /**
  * The object index of the text box carrying `id`, or -1. A marked box with no id
  * (written before the param existed) answers to "text:untagged#<object index>",
- * the derived handle the phones give it.
+ * the derived handle the phones give it. MEGAPDF_ERR_CLOSED for a dead page (#551): a page
+ * whose document has closed has no boxes to find, which is not the same as not having this one.
  */
 MEGAPDF_API int megapdf_find_text_box(const megapdf_page* page, const unsigned short* id);
 
-/** How many objects the page draws. 0 for a NULL page. */
+/** How many objects the page draws. 0 for a NULL page, MEGAPDF_ERR_CLOSED for a dead one (#551). */
 MEGAPDF_API int megapdf_page_object_count(const megapdf_page* page);
 
-/** PDFium's object type (FPDF_PAGEOBJ_TEXT = 1, PATH = 2, IMAGE = 3, ...), or -1 for a bad index. */
+/**
+ * PDFium's object type (FPDF_PAGEOBJ_TEXT = 1, PATH = 2, IMAGE = 3, ...), or -1 for a bad index.
+ * MEGAPDF_ERR_CLOSED for a dead page (#551), which is not the same as "no object there".
+ */
 MEGAPDF_API int megapdf_object_type(const megapdf_page* page, int object_index);
 
 /** Bounds of any page object, crop space. MEGAPDF_ERR_ARGUMENT for a bad index. */
@@ -617,7 +670,10 @@ MEGAPDF_API int megapdf_remove_text_box(const megapdf_page* page, const unsigned
 /**
  * Detached objects: page objects removed from their page but kept alive so an
  * undo can put them back byte-identical. The core owns them; restoring consumes the
- * handle, discarding frees it, and closing the document frees any still held.
+ * handle, discarding frees it, and closing the document destroys the objects any handle
+ * still holds — the handle then stays valid and dead, refusing everything but
+ * megapdf_discard_detached(), which is still owed (#551; bindings hold these across an undo
+ * stack, so a discard long after the close is the ordinary case).
  *
  * megapdf_detach_object() takes exactly the one object at `object_index`, whatever it
  * is; megapdf_restore_object() puts a one-object handle back at `object_index`, and
@@ -1549,7 +1605,10 @@ MEGAPDF_API int megapdf_write_text(megapdf_document* document, int first_page, i
  * rect: those are already mapped.
  * ----------------------------------------------------------------------- */
 
-/** The page's index in its document as it is numbered now; -1 for a NULL handle or a deleted page. */
+/**
+ * The page's index in its document as it is numbered now; -1 for a NULL handle or a deleted page
+ * (a live answer a view acts on, #174), and MEGAPDF_ERR_CLOSED for a dead one (#551).
+ */
 MEGAPDF_API int megapdf_page_index(const megapdf_page* page);
 
 /** The page's /Rotate in quarter turns clockwise, 0–3; MEGAPDF_ERR_ARGUMENT for a bad document or index. */
@@ -1594,11 +1653,16 @@ MEGAPDF_API int megapdf_page_delete(megapdf_document* document, int page, megapd
  * widgets, and a save writes them; a reader that builds its form panel from /AcroForm
  * /Fields alone will not list them. MEGAPDF_ERR_ARGUMENT for a NULL handle, a handle from
  * another document or a bad index; MEGAPDF_ERR_PDFIUM when PDFium refuses (the handle
- * stays valid).
+ * stays valid); MEGAPDF_ERR_CLOSED when the handle's own document has been closed, answered
+ * before "another document" because it is the more specific truth (#551).
  */
 MEGAPDF_API int megapdf_page_restore(megapdf_document* document, megapdf_removed_page* removed, int at);
 
-/** Frees a removed page without restoring it. NULL is fine. */
+/**
+ * Frees a removed page without restoring it. NULL is fine, and so is a handle whose document
+ * has already been closed — closing the document frees the page copy it held and leaves the
+ * handle valid for exactly this call (#551).
+ */
 MEGAPDF_API void megapdf_discard_removed_page(megapdf_removed_page* removed);
 
 /**
