@@ -229,7 +229,7 @@ public sealed partial class MainWindow
             host.Visibility = Visibility.Visible;
         // The busy strip is bound to work that may well have finished while the mode
         // was on; hand it back to its binding rather than leaving it pinned open.
-        BusyStrip.Visibility = Shell.Active?.Busy.ShowsStrip == true ? Visibility.Visible : Visibility.Collapsed;
+        BusyStrip.Visibility = Shell.Busy.ShowsStrip ? Visibility.Visible : Visibility.Collapsed;
 
         ApplyReadingModeToTabs();
 

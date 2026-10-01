@@ -49,6 +49,13 @@ internal static class Screenshot
     /// </summary>
     public static async Task<bool> ApplyStateAsync(MainWindow window, string state)
     {
+        // #617: the one state that needs *no* document — the opposite of every other one
+        // below — so it runs before the "needs a document" guard, not through it.
+        // App.xaml.cs's RunScreenshotAsync already knows not to open the command line's
+        // fixture for this state.
+        if (state == "empty")
+            return CheckEmptyState(window);
+
         // --screenshot always runs its own process, standalone, against the one tab it
         // opened (#348 phase 1, plan §6.10) — never redirected, never more than one tab.
         if (window.Shell.Active is not { } vm)
@@ -232,6 +239,57 @@ internal static class Screenshot
                 Console.Error.WriteLine($"unknown --screenshot-state '{state}'");
                 return false;
         }
+    }
+
+    /// <summary>
+    /// A freshly launched window, zero tabs (#617) — the first Windows store capture of this
+    /// screen ever taken found three things wrong at once, all one cause: with no tab, <c>
+    /// Shell.Active</c> is null, and the <c>x:Bind</c>s that used to reach through it fell back
+    /// to their *target* property's own default rather than a safe one — <see
+    /// cref="Visibility.Visible"/> for the busy strip and both halves of Stop, "stay however I
+    /// was" (enabled) for Undo/Redo and every other command bound by <c>Command</c> alone. See
+    /// <c>ShellViewModel.Active</c>'s remarks for the fix: every one of those now reaches
+    /// through a <c>Shell</c>-level proxy with a real non-null fallback instead.
+    ///
+    /// Needs *no* document — the opposite of every other state in this file — which is why it
+    /// is handled before <see cref="ApplyStateAsync"/>'s "needs a document" guard rather than
+    /// through it, and why <c>App.xaml.cs</c> skips opening the command line's fixture for it.
+    /// </summary>
+    private static bool CheckEmptyState(MainWindow window)
+    {
+        if (window.Shell.HasDocuments)
+        {
+            Console.Error.WriteLine("--screenshot-state empty needs zero tabs open, but one is.");
+            return false;
+        }
+
+        var passed = 0;
+        var failed = 0;
+        void Check(string what, bool ok)
+        {
+            Console.Error.WriteLine($"{(ok ? "PASS" : "FAIL")}: {what}");
+            if (ok)
+                passed++;
+            else
+                failed++;
+        }
+
+        Check("the busy strip is not up with no work running", !window.BusyStripIsVisibleForTest);
+        // Not "not both at once" — neither is drawn at all. Mutual exclusion would still pass
+        // with both collapsed, which is exactly the bug: #617's screenshot showed both visible,
+        // painted over each other, not one incorrectly chosen over the other.
+        Check("Stop is not drawn", !window.BusyCancelButtonIsVisibleForTest);
+        Check("\"Stopping…\" is not drawn either", !window.BusyCancellingLabelIsVisibleForTest);
+
+        foreach (var (name, enabled) in window.DocumentCommandEnabledStatesForTest())
+            Check($"{name} is disabled", !enabled);
+
+        Check("Open, New window and Settings stay enabled with no document",
+              window.DocumentIndependentCommandsEnabledForTest);
+
+        if (failed > 0)
+            Console.Error.WriteLine($"empty: {failed} of {passed + failed} checks failed.");
+        return failed == 0;
     }
 
     /// <summary>
