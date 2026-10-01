@@ -95,11 +95,28 @@ final class PageToolsUITests: XCTestCase {
         app.launchEnvironment["MEGAPDF_UITEST_PDF_BASE64"] = base64
         app.launch()
         let page = documentPage()
-        XCTAssertTrue(appears(page, timeout: 30), dump("the test document did not open"))
+        XCTAssertTrue(appears(page, timeout: 30), dump(openingState()))
         // Asked once, here, rather than on every read of it — see `pagesProbe`.
         XCTAssertTrue(appears(pagesProbe, timeout: 30),
                       dump("the pages probe is missing — did -uiTestZoomProbes survive? (#174)"))
         return page
+    }
+
+    /// Why the document is not on screen, in the app's own words if it has any.
+    ///
+    /// "The test document did not open" was a true sentence and a misleading one: on the
+    /// hosted run that went red (36929065249) the screen recording shows the app sitting on
+    /// **"Opening…"** with its progress bar running, which is the app saying "I am still
+    /// working" rather than "I failed". The difference took a fifty-eight-minute round to
+    /// find, and `busyOpening` was in the tree the whole time. So the failure asks (#599,
+    /// #145).
+    private func openingState() -> String {
+        let opening = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier == 'busyOpening'")).firstMatch
+        if let label = (try? opening.snapshot())?.label {
+            return "the test document did not open — the app is still busy: '\(label)'"
+        }
+        return "the test document did not open, and the app is not reporting itself busy"
     }
 
     /// The document's first page, as an **image**.

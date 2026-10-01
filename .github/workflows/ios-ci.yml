@@ -243,12 +243,44 @@ jobs:
       # the keyboard flag can be written first: the first keyboard on a fresh
       # simulator comes up under iOS's QuickPath tip, and the flag is what a
       # first keyboard would have left (#406).
-      - name: Boot the simulator
+      #
+      # **And warmed, which is the part that was costing verdicts (#599).** Since #615
+      # this job CREATES both simulators, so neither has ever booted, neither has the
+      # app installed, and neither has started the services a first launch needs. That
+      # cost does not disappear — it lands on whichever test runs first in a lane, inside
+      # an assertion with a thirty-second budget. Measured on a hosted runner, run
+      # 36929065249: `app.launch()` took **sixty seconds** (forty of them in "Setting up
+      # automation session"), and the first `exists` check after it took 4.9 s and the
+      # next 25.6 s, so a thirty-second wait for the document got **two looks** and gave
+      # up while the app was still showing "Opening…" on the screen recording. The test
+      # it landed on was `PageToolsUITests.testDeletingAPageAndUndoingItPutsThePageBack`,
+      # which is simply the first test of the iPad lane alphabetically; on the iPhone
+      # lane the same cost lands on `BodyTextEditUITests`, whose recorded failure is
+      # "Timed out while launching application via Xcode". One mechanism, two lanes, a
+      # different test name each time — which is what made it look like five flaky tests.
+      #
+      # So the boot, the install and one real launch happen here, where they are time
+      # rather than a verdict. On our own Mac this costs seconds and changes nothing (the
+      # same first test measures 14 s there); on a hosted runner it is the difference.
+      # The iPad is included for the first time: it was never booted at all, and its
+      # lane's first test is the one that went red.
+      - name: Boot and warm the simulators
         run: |
-          xcrun simctl boot "$SIM_UDID" || true
-          xcrun simctl bootstatus "$SIM_UDID" -b
-          xcrun simctl spawn "$SIM_UDID" defaults write com.apple.keyboard.preferences \
-            DidShowContinuousPathIntroduction -bool true
+          APP="$DD/Build/Products/Debug-iphonesimulator/MegaPDF.app"
+          test -d "$APP" || { echo "no app at $APP"; exit 1; }
+          for u in "$SIM_UDID" "$IPAD_UDID"; do
+            xcrun simctl boot "$u" || true
+            xcrun simctl bootstatus "$u" -b
+            xcrun simctl spawn "$u" defaults write com.apple.keyboard.preferences \
+              DidShowContinuousPathIntroduction -bool true
+            xcrun simctl install "$u" "$APP"
+            # One real launch, so the dyld closure, PDFium and the simulator's own
+            # first-app services are warm before any test asserts on a clock.
+            xcrun simctl launch "$u" com.megapdf.ios >/dev/null || true
+            sleep 8
+            xcrun simctl terminate "$u" com.megapdf.ios >/dev/null 2>&1 || true
+            echo "warmed $u"
+          done
 
       - name: Run the UI tests
         run: |
