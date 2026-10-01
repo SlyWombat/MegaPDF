@@ -79,7 +79,9 @@
     <string name="markdown_export_failed">Impossible d\'exporter en Markdown.</string>
 
     <!-- Sécurité du document (#131) -->
-    <string name="security_restricted_notice">Le propriétaire de ce document en a restreint les modifications. Pour le modifier, déverrouillez-le avec le mot de passe du propriétaire à partir du menu.</string>
+    <!-- #558 : reformulé. « restreint » et le renvoi au mot de passe du propriétaire disaient
+         qu\'un verrou bloquait le document; c\'est une demande de l\'auteur, pas un verrou. -->
+    <string name="security_restricted_notice">L\'auteur de ce document a demandé qu\'il ne soit pas modifié. Vous pouvez tout de même le modifier&#160;: MegaPDF vous le dira d\'abord.</string>
     <string name="security_restricted_edit">Le propriétaire de ce document ne permet pas cette modification. Déverrouillez-le d\'abord avec le mot de passe du propriétaire.</string>
     <string name="security_unlock_menu">Déverrouiller avec le mot de passe du propriétaire…</string>
     <string name="security_unlock_title">Déverrouiller le document</string>
@@ -347,6 +349,20 @@
     <string name="pages_insert_blank">Insérer une page blanche</string>
     <string name="pages_add_from_file">Ajouter des pages depuis un fichier…</string>
     <string name="pages_save_selection">Enregistrer les pages sous…</string>
+
+    <!-- Ce que l\'auteur du document a demandé, et le choix de la personne (#558, ADR-004,
+         décision 11). Une seule forme pour chaque bit que MegaPDF consulte&#160;: dire ce qui a été
+         demandé, puis offrir de continuer. La formulation rapporte une DEMANDE et ne laisse
+         jamais entendre qu\'elle est contraignante&#160;: « a demandé », jamais « restreint »,
+         « verrouillé », « protégé » ni « n\'autorise pas »; et aucune mention du mot de passe du
+         propriétaire, qui n\'est pas ce qu\'il faut ici. -->
+    <string name="permission_ask_title_editing">Modifier ce document ?</string>
+    <string name="permission_ask_title_assembly">Réorganiser ces pages ?</string>
+    <string name="permission_ask_title_extraction">Extraire ces pages ?</string>
+    <string name="permission_ask_editing">L\'auteur de ce document a demandé que son contenu ne soit pas modifié.</string>
+    <string name="permission_ask_assembly">L\'auteur de ce document a demandé que ses pages ne soient pas réordonnées, retirées ni complétées.</string>
+    <string name="permission_ask_extraction">L\'auteur de ce document a demandé que rien n\'en soit copié.</string>
+    <string name="permission_ask_note">C\'est une demande et non un verrou&#160;: à vous de décider. La demande reste dans le document, et MegaPDF ne vous le redemandera pas tant qu\'il est ouvert.</string>
     <string name="page_turned">Page pivotée.</string>
     <string name="pages_turned">%1$d pages pivotées.</string>
     <string name="page_deleted">Page supprimée.</string>
