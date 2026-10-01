@@ -1,0 +1,85 @@
+name: Runner selection probe
+
+# Temporary (#614). This workflow exists to *prove* the runner-selection
+# expression that ios-ci.yml uses, rather than to assume it.
+#
+# This repository is public, so a self-hosted runner must never execute a pull
+# request from a fork: a fork's pull request can put anything in a workflow
+# step and it would run on our Mac, as the account the runner runs under. The
+# expression below picks the Mac only when the pull request's head repository is
+# this repository, and only when the kill switch variable says the Mac is on.
+#
+# Every job here runs on GitHub's hosted Ubuntu. Nothing in it touches the Mac;
+# it only prints what the expression evaluates to, so the branches can be read
+# off a real GitHub expression evaluation in every event shape. Delete this file
+# once the result is recorded on #614.
+
+on:
+  push:
+    branches: ['wip/614-**']
+  pull_request:
+    paths: ['.github/workflows/runner-selection-probe.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  evaluate:
+    name: What the expression evaluates to
+    runs-on: ubuntu-latest
+    steps:
+      - name: The contexts the expression reads
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          THIS_REPO: ${{ github.repository }}
+          PR_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          KILL_SWITCH: ${{ vars.MAC_SELF_HOSTED }}
+        run: |
+          echo "github.event_name                            = [$EVENT_NAME]"
+          echo "github.repository                            = [$THIS_REPO]"
+          echo "github.event.pull_request.head.repo.full_name= [$PR_HEAD_REPO]"
+          echo "vars.MAC_SELF_HOSTED                         = [$KILL_SWITCH]"
+
+      # Exactly the expression ios-ci.yml uses, minus the fromJSON() wrapper so
+      # the result is a printable string. fromJSON of the same two literals is
+      # proved separately by the array-in-runs-on job below.
+      - name: 1. The real expression, as it stands right now
+        env:
+          SELECTED: ${{ (vars.MAC_SELF_HOSTED == 'on' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && '["self-hosted","macOS","ARM64","megapdf-ios"]' || '["macos-latest"]' }}
+        run: echo "PROBE real            -> $SELECTED"
+
+      # The fork branch of the same expression. The head-repository comparison is
+      # made against a name that is not this repository, which is precisely what a
+      # fork's pull request would produce. Must print macos-latest, and must do so
+      # even when the kill switch is on.
+      - name: 2. As if this pull request came from a fork
+        env:
+          SELECTED: ${{ ('on' == 'on' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == 'someone-else/MegaPDF-fork')) && '["self-hosted","macOS","ARM64","megapdf-ios"]' || '["macos-latest"]' }}
+        run: echo "PROBE fork simulation -> $SELECTED"
+
+      # The kill switch, with everything else held in the Mac's favour. Must
+      # print macos-latest.
+      - name: 3. As if the kill switch were off
+        env:
+          SELECTED: ${{ ('off' == 'on' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && '["self-hosted","macOS","ARM64","megapdf-ios"]' || '["macos-latest"]' }}
+        run: echo "PROBE switch off      -> $SELECTED"
+
+      # The switch on and the head repository matching: the only combination that
+      # may print the self-hosted label set.
+      - name: 4. As if the kill switch were on, same-repository branch
+        env:
+          SELECTED: ${{ ('on' == 'on' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && '["self-hosted","macOS","ARM64","megapdf-ios"]' || '["macos-latest"]' }}
+        run: echo "PROBE switch on, ours -> $SELECTED"
+
+  # Proves the shape rather than the condition: a runs-on fed by
+  # fromJSON() of a JSON array literal chosen by a ternary really does resolve to
+  # a runner. If this job runs at all, the mechanism ios-ci.yml relies on works.
+  array-form:
+    name: fromJSON() in runs-on resolves to a runner
+    runs-on: ${{ fromJSON(github.event_name != 'this-is-never-an-event-name' && '["ubuntu-latest"]' || '["ubuntu-22.04"]') }}
+    steps:
+      - name: Which runner picked this up
+        run: |
+          echo "PROBE runner picked up the job: $RUNNER_OS / $ImageOS"
+          echo "PROBE expected the true branch: ubuntu-latest"
