@@ -475,38 +475,43 @@ of a document and little else. Four decisions, all in `Shot-Reading.ps1`:
 - **A page in the middle of a long document**, so the bar has a position worth
   showing and the arrows either side of it have somewhere to go.
 
-**Slot 8 cannot be uploaded as it stands — see "What the home capture found" below (#617).**
+**Slot 8 was blocked on #617 and is not any more** — see "What the home capture found" below.
 
 ### What the home capture found
 
 `08-home.png` is the first Windows store capture ever taken of the empty state (the
 harness README had said "never shoot it", because it lists the machine's own recent
-documents). Posing the list exposed three defects on the zero-tab window, all of them
-visible in the image:
+documents). Posing that list exposed three defects on the zero-tab window, all of
+them visible in the first image:
 
-1. **The busy strip is up with no work running** — a progress bar under the toolbar
-   on an app that has just launched with no document.
-2. **Stop and "Stopping…" are painted on top of each other.** They share
-   `Grid.Column="1"` in `MainWindow.xaml` and are meant to be mutually exclusive;
-   the image shows both.
-3. **Undo and Redo are enabled** with no document open, while every other command is
-   correctly disabled.
+1. **The busy strip was up with no work running** — a progress bar under the toolbar
+   on an app that had just launched with no document.
+2. **Stop and "Stopping…" were painted on top of each other.** They share
+   `Grid.Column="1"` in `MainWindow.xaml` and are meant to be mutually exclusive.
+3. **Undo and Redo were enabled** with no document open, while every other command
+   was correctly disabled.
 
-All three have one cause: with no tab, `Shell.Active` is null, so every
-`x:Bind Shell.Active.Busy.*` falls back to its property default — and `Visibility`'s
-default is `Visible`, and an `AppBarButton` with a null `Command` is enabled. It is
-#348's null `Active` meeting #145's busy strip, on the one screen the Windows app has
-no self-test for (#462). Opened as **#617**, and fixed in #629 — which found the
-defect to be far wider than the three controls the image shows: `Control.IsEnabled`
-also defaults to **true**, so all 28 commands that bound through the null `Active`
-were live, most of them in flyouts no screenshot reaches. The capture is kept in the
-set as the evidence rather than re-shot until it looks acceptable, and it is replaced
-the moment #629 is on main.
+One cause: with no tab, `Shell.Active` is null, so every `x:Bind` through it falls
+back to its target property's default — and `Visibility`'s default is **Visible**,
+while `Control.IsEnabled`'s is **true**. #348's null `Active` meeting #145's busy
+strip, on the one screen the Windows app has no self-test for (#462).
+
+**Filed as #617 and fixed in #629**, which found the defect to be far wider than the
+picture could show: **28** commands were live on that screen, including Save, Save
+As, Print, Password, Shrink, Redact, Find, both zoom buttons, the Pages menu and its
+eight flyout commands, and Clear marks. A screenshot reaches three of those. The slot
+was re-shot against the fix on 2026-10-01 and is uploadable.
 
 `Shot-Home.ps1` asserts the empty state from now on rather than leaving it to the
-eye: it walks the toolbar, the "…" overflow and the Pages menu and fails the step if
-anything but Open is enabled with no document open. A picture cannot show a flyout,
-and that is where most of #617 was.
+eye: it walks the toolbar, the "…" overflow and the Pages menu by automation id and
+**fails the step** if anything but Open is enabled with no document open. On the
+re-shoot it reported *30 commands checked, 0 enabled* in all three languages. A
+picture cannot show a flyout, and that is where most of #617 was.
+
+One cosmetic thing the re-shoot leaves, not worth blocking on and recorded so the
+next person does not re-find it: with no document the zoom control is an empty
+combo — a drop-down chevron between − and + with no value in it. It is correctly
+disabled; it just reads as slightly unfinished at full size.
 
 ### Before this set
 
