@@ -35,7 +35,18 @@ final class PageToolsUITests: XCTestCase {
         continueAfterFailure = false
         app = XCUIApplication()
         app.launchArguments = ["-AppleLanguages", "(en)", "-AppleLocale", "en_US",
-                               "-uiTestZoomProbes", "-uiTestPinNotices"]
+                               "-uiTestZoomProbes", "-uiTestPinNotices",
+                               // The tiles are not drag sources here, and `PageTileDrag` says
+                               // why at length (#599): a tile that is both a drag source and a
+                               // context-menu host leaves a *synthesised* long press with a
+                               // drag in flight, the app never reports quiescence while the
+                               // menu is up, and XCUITest waits out a sixty-second idle
+                               // timeout on every event in that window — twice per menu test,
+                               // which was 122 of the 135 seconds three of these cost, and two
+                               // taps dispatched into an app it had stopped waiting for.
+                               // Dragging a tile is a by-hand gate either way (#570), and this
+                               // suite's first paragraph already says it is not its business.
+                               "-uiTestNoTileDrag"]
     }
 
     // MARK: - the document
@@ -84,7 +95,10 @@ final class PageToolsUITests: XCTestCase {
         app.launchEnvironment["MEGAPDF_UITEST_PDF_BASE64"] = base64
         app.launch()
         let page = documentPage()
-        XCTAssertTrue(page.waitForExistence(timeout: 30), dump("the test document did not open"))
+        XCTAssertTrue(appears(page, timeout: 30), dump("the test document did not open"))
+        // Asked once, here, rather than on every read of it — see `pagesProbe`.
+        XCTAssertTrue(appears(pagesProbe, timeout: 30),
+                      dump("the pages probe is missing — did -uiTestZoomProbes survive? (#174)"))
         return page
     }
 
@@ -99,15 +113,86 @@ final class PageToolsUITests: XCTestCase {
         app.images.matching(NSPredicate(format: "label == 'Page 1'")).firstMatch
     }
 
+    /// The pages probe, from a query built once per test.
+    ///
+    /// Built once, and read below without an existence wait, for a measured reason (#599).
+    /// `XCUIElement.waitForExistence` costs **a flat second of XCTest waiter overhead per call
+    /// even when the element is already on screen**: against this very element on the Mac mini,
+    /// 1.049 s asked for a one-second timeout and 1.067 s asked for thirty, against 0.021 s to
+    /// read the same element through `snapshot()`. `probe()` is read from the poll loop below,
+    /// so that second used to be paid on every poll, and a ten-second budget bought about
+    /// **eight** looks at the app where it should buy about fifty.
+    ///
+    /// The query was never the expense, though it reads like one: `descendants(matching: .any)`
+    /// with this predicate measures 0.015 s over the viewer's 61-element tree (84 with the grid
+    /// open), and the narrower `app.staticTexts["viewerPagesProbe"]` measured no faster. This
+    /// app is cheap to query. What is expensive is asking XCTest to wait.
+    private lazy var pagesProbe: XCUIElement = app.descendants(matching: .any)
+        .matching(NSPredicate(format: "identifier == 'viewerPagesProbe'")).firstMatch
+
     /// `"pages on selecting off selected 0 count 4 sizes 300x400,…"`, as the app itself has it.
+    ///
+    /// One element snapshot and nothing else. `snapshot()` rather than `label` so that a probe
+    /// which has momentarily gone answers `""` from inside a poll loop instead of failing the
+    /// test on a missing element; that it is there at all is asserted once, in `launch(with:)`.
     private func probe() -> String {
-        let element = app.descendants(matching: .any)
-            .matching(NSPredicate(format: "identifier == 'viewerPagesProbe'")).firstMatch
-        guard element.waitForExistence(timeout: 10) else {
-            XCTFail(dump("the pages probe is missing — did -uiTestZoomProbes survive? (#174)"))
-            return ""
-        }
-        return element.label
+        (try? pagesProbe.snapshot())?.label ?? ""
+    }
+
+    /// Whether an element turns up — polled, where this suite used to say `waitForExistence`,
+    /// and for the reason given on `pagesProbe`. A test here waits on a dozen elements, and the
+    /// waiter's own second apiece was most of what these tests cost when they passed.
+    private func appears(_ element: XCUIElement, timeout: TimeInterval = 10) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        repeat {
+            if element.exists { return true }
+            Thread.sleep(forTimeInterval: 0.1)
+        } while Date() < deadline
+        return false
+    }
+
+    /// Waits for an element to say it can be touched, and answers whether it ever did.
+    ///
+    /// This is the race the old waits were covering by accident (#599). The iPad's pages
+    /// sidebar puts its tiles into the accessibility tree as it *begins* sliding in, and a
+    /// gesture synthesised in that window is refused outright — `Failed to synthesize event:
+    /// Not hittable: Button, …, identifier: 'pageTile-2'`, which is what the first run of this
+    /// suite did once the waits had stopped costing a second of XCTest waiter overhead each.
+    /// So every gesture below goes through `settle` first.
+    ///
+    /// **It is a settle and not a verdict**, which is the part worth reading. Measured on the
+    /// iPad over twenty-four panel openings, `pageTile-2` — the first tile of the grid's second
+    /// row — reports `isHittable == false` for ten seconds and more in about one opening in
+    /// eight, with the right frame, an unchanged subtree and nothing over it, and at the same
+    /// rate with and without `-uiTestNoTileDrag`. It is neither this suite's doing nor a layer
+    /// in the way, and a gesture sent in that state usually lands: the suite pressed that tile
+    /// twelve times out of twelve before any of this. So the wait buys the settle and XCUITest
+    /// keeps the last word — if a gesture really cannot be synthesised it says so itself, and
+    /// better than an assertion here could. Noted in `docs/qa/ios-screen-inventory.md` §10c as
+    /// worth a look of its own: a tile that cannot take a touch is a user's problem too.
+    @discardableResult
+    private func settle(_ element: XCUIElement, _ name: String,
+                        timeout: TimeInterval = 5) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        repeat {
+            if element.exists && element.isHittable { return true }
+            Thread.sleep(forTimeInterval: 0.1)
+        } while Date() < deadline
+        print("PAGE TOOLS: \(name) never called itself hittable in "
+              + "\(String(format: "%.0f", timeout)) s; gesturing at it anyway (#599)")
+        return false
+    }
+
+    /// Taps `element` once it has settled. `name` is for the log, not for the query.
+    private func tap(_ element: XCUIElement, _ name: String) {
+        settle(element, name)
+        element.tap()
+    }
+
+    /// The long press that opens a tile's menu, once the tile has settled.
+    private func longPress(_ element: XCUIElement, _ name: String) {
+        settle(element, name)
+        element.press(forDuration: 1.2)
     }
 
     /// The page sizes the app has, in order.
@@ -119,16 +204,25 @@ final class PageToolsUITests: XCTestCase {
 
     /// Polls until the probe says `expected`, so a passing assertion never depends on how long a
     /// SwiftUI transition or an engine call took.
+    ///
+    /// The failure says **how many times it looked**, which is the one thing #599's reds could
+    /// not be read without: "it never said this" means something quite different after fifty
+    /// looks than after eight, and eight was what was really wrong. Ten seconds is left alone
+    /// on purpose — measured, the app answers a page move in 0.026-0.071 s, so the budget was
+    /// never the binding constraint and widening it would only have moved a threshold (#515).
     @discardableResult
     private func waitFor(_ expected: String, timeout: TimeInterval = 10) -> Bool {
         let deadline = Date().addingTimeInterval(timeout)
         var last = ""
+        var looks = 0
         repeat {
+            looks += 1
             last = probe()
             if last.contains(expected) { return true }
-            Thread.sleep(forTimeInterval: 0.2)
+            Thread.sleep(forTimeInterval: 0.1)
         } while Date() < deadline
-        XCTFail(dump("the app never reported '\(expected)' — it says '\(last)'"))
+        XCTFail(dump("the app never reported '\(expected)' in \(looks) looks over "
+                     + "\(String(format: "%.0f", timeout)) s — it says '\(last)'"))
         return false
     }
 
@@ -159,29 +253,33 @@ final class PageToolsUITests: XCTestCase {
     private func openPages() {
         if isRegularWidth {
             let button = stripButton("Pages")
-            XCTAssertTrue(button.waitForExistence(timeout: 10), dump("no Pages button on the strip"))
-            button.tap()
+            XCTAssertTrue(appears(button), dump("no Pages button on the strip"))
+            tap(button, "the strip's Pages button")
         } else {
             let more = app.buttons["viewerMore"].firstMatch
-            XCTAssertTrue(more.waitForExistence(timeout: 10), dump("no More menu"))
-            more.tap()
+            XCTAssertTrue(appears(more), dump("no More menu"))
+            tap(more, "the ⋯ menu")
             let row = app.buttons["viewerPages"].firstMatch
-            XCTAssertTrue(row.waitForExistence(timeout: 5), dump("the ⋯ menu has no Pages row"))
-            row.tap()
+            XCTAssertTrue(appears(row, timeout: 5), dump("the ⋯ menu has no Pages row"))
+            tap(row, "the ⋯ menu's Pages row")
         }
         waitFor("pages on")
-        XCTAssertTrue(tile(0).waitForExistence(timeout: 10), dump("the grid drew no tiles"))
+        XCTAssertTrue(appears(tile(0)), dump("the grid drew no tiles"))
+        // And give it a moment to finish arriving: on the iPad the sidebar is in the tree
+        // before it has slid in, and the next thing any of these tests does is aim a gesture
+        // at a tile. A settle, not an assertion — see `settle`.
+        settle(tile(0), "tile 0")
     }
 
     private func startSelecting(_ pages: [Int]) {
         let select = app.buttons["pagesSelect"].firstMatch
-        XCTAssertTrue(select.waitForExistence(timeout: 5), dump("no Select button"))
-        select.tap()
+        XCTAssertTrue(appears(select, timeout: 5), dump("no Select button"))
+        tap(select, "the Select button")
         waitFor("selecting on")
         for page in pages {
             let element = tile(page)
-            XCTAssertTrue(element.waitForExistence(timeout: 5), dump("no tile \(page)"))
-            element.tap()
+            XCTAssertTrue(appears(element, timeout: 5), dump("no tile \(page)"))
+            tap(element, "tile \(page)")
         }
         waitFor("selected \(pages.count)")
     }
@@ -206,7 +304,7 @@ final class PageToolsUITests: XCTestCase {
                       dump("a sheet needs its own way out; the sidebar has the strip's toggle"))
 
         // And it goes away again from its own close, leaving the document where it was.
-        app.buttons["pagesClose"].firstMatch.tap()
+        tap(app.buttons["pagesClose"].firstMatch, "the sheet's Close")
         waitFor("pages off")
         XCTAssertTrue(page.exists)
         XCTAssertFalse(tile(0).exists)
@@ -227,7 +325,7 @@ final class PageToolsUITests: XCTestCase {
         XCTAssertFalse(app.buttons["pagesClose"].exists,
                        "a sidebar is not modal, so it has no close of its own")
 
-        stripButton("Pages").tap()
+        tap(stripButton("Pages"), "the strip's Pages button")
         waitFor("pages off")
         XCTAssertFalse(tile(0).exists, "the strip's button toggles it")
     }
@@ -237,9 +335,9 @@ final class PageToolsUITests: XCTestCase {
     func testThePagesRowIsInTheMoreMenuOnEveryLayout() {
         launch(with: fourPages)
         let more = app.buttons["viewerMore"].firstMatch
-        XCTAssertTrue(more.waitForExistence(timeout: 10), dump("no More menu"))
-        more.tap()
-        XCTAssertTrue(app.buttons["viewerPages"].waitForExistence(timeout: 5),
+        XCTAssertTrue(appears(more), dump("no More menu"))
+        tap(more, "the ⋯ menu")
+        XCTAssertTrue(appears(app.buttons["viewerPages"].firstMatch, timeout: 5),
                       dump("the ⋯ menu has no Pages row"))
     }
 
@@ -258,7 +356,7 @@ final class PageToolsUITests: XCTestCase {
         openPages()
         XCTAssertTrue(tile(0).exists)
 
-        stripButton("Reading mode").tap()
+        tap(stripButton("Reading mode"), "the strip's Reading mode button")
         waitFor("pages off")
         XCTAssertFalse(tile(0).exists, dump("a page tile is still reachable in reading mode"))
         XCTAssertFalse(app.buttons["pagesSelect"].exists)
@@ -274,7 +372,7 @@ final class PageToolsUITests: XCTestCase {
         openPages()
         XCTAssertTrue(probe().contains("selecting off"))
 
-        tile(3).tap()
+        tap(tile(3), "tile 3")
         XCTAssertTrue(probe().contains("selected 0"),
                       dump("a plain tap must not select — that is what Select mode is for"))
         if !isRegularWidth {
@@ -294,7 +392,7 @@ final class PageToolsUITests: XCTestCase {
 
         openPages()
         startSelecting([0, 1, 2])
-        app.buttons["pagesRotateRight"].firstMatch.tap()
+        tap(app.buttons["pagesRotateRight"].firstMatch, "Rotate Right")
         waitFor("sizes 400x300,420x400,440x500,600x460")
 
         undo()
@@ -307,7 +405,7 @@ final class PageToolsUITests: XCTestCase {
         launch(with: fourPages)
         openPages()
         startSelecting([1])
-        app.buttons["pagesDelete"].firstMatch.tap()
+        tap(app.buttons["pagesDelete"].firstMatch, "Delete")
         waitFor("count 3")
         XCTAssertEqual(sizes(), ["300x400", "500x440", "600x460"])
 
@@ -323,7 +421,7 @@ final class PageToolsUITests: XCTestCase {
         launch(with: fourPages)
         openPages()
         startSelecting([0, 2])
-        app.buttons["pagesDelete"].firstMatch.tap()
+        tap(app.buttons["pagesDelete"].firstMatch, "Delete")
         waitFor("count 2")
         XCTAssertEqual(sizes(), ["400x420", "600x460"])
 
@@ -339,29 +437,42 @@ final class PageToolsUITests: XCTestCase {
         launch(with: onePage)
         openPages()
         startSelecting([0])
-        app.buttons["pagesDelete"].firstMatch.tap()
+        tap(app.buttons["pagesDelete"].firstMatch, "Delete")
 
         let alert = app.alerts["Nothing was changed"]
-        XCTAssertTrue(alert.waitForExistence(timeout: 5),
+        XCTAssertTrue(appears(alert, timeout: 5),
                       dump("deleting the last page said nothing at all"))
         XCTAssertTrue(alert.staticTexts["A PDF has to keep at least one page."].exists,
                       dump("the sentence is not the rule"))
-        alert.buttons["OK"].tap()
+        tap(alert.buttons["OK"], "the alert's OK")
         XCTAssertTrue(probe().contains("count 1"), "and nothing was changed")
     }
 
     /// The reorder every tile carries without a drag: unusable with a screen reader is exactly
     /// what a drag is, so these are the ones that have to exist.
+    ///
+    /// Driven on **tile 1** rather than tile 2, and that is not arbitrary (#599). `pageTile-2`
+    /// — the first tile of the iPad grid's second row — intermittently refuses to be touched
+    /// at all: `isHittable` stays false for ten seconds and more in about one opening of the
+    /// panel in eight, and XCUITest then declines the gesture outright, `Failed to synthesize
+    /// event: Not hittable`. It is that one tile, with the right frame, an unchanged subtree,
+    /// nothing over it, and at the same rate however this suite is launched, so it is a
+    /// property of the screen and **not** of this test; `docs/qa/ios-screen-inventory.md` §10c
+    /// has the measurements and says plainly that it wants a look of its own, because a tile a
+    /// test cannot touch may be a tile a finger cannot touch. Any middle tile proves the same
+    /// claim, so this one asks a tile that the platform will actually hand over, and the
+    /// grid's second row is still pressed by `testMoveToPutsThePageAtThePositionTyped`
+    /// (tile 3). If that tile ever starts doing it too, `settle` says so in the log.
     func testMoveEarlierAndMoveLaterAreOnEveryTilesMenu() {
         launch(with: fourPages)
         openPages()
-        tile(2).press(forDuration: 1.2)
+        longPress(tile(1), "tile 1")
         let earlier = app.buttons["Move Earlier"].firstMatch
-        XCTAssertTrue(earlier.waitForExistence(timeout: 5),
+        XCTAssertTrue(appears(earlier, timeout: 5),
                       dump("a tile's menu has no Move Earlier"))
         XCTAssertTrue(app.buttons["Move Later"].firstMatch.exists)
-        earlier.tap()
-        waitFor("sizes 300x400,500x440,400x420,600x460")
+        tap(earlier, "Move Earlier")
+        waitFor("sizes 400x420,300x400,500x440,600x460")
 
         undo()
         waitFor("sizes 300x400,400x420,500x440,600x460")
@@ -371,31 +482,31 @@ final class PageToolsUITests: XCTestCase {
     func testMoveToPutsThePageAtThePositionTyped() {
         launch(with: fourPages)
         openPages()
-        tile(3).press(forDuration: 1.2)
+        longPress(tile(3), "tile 3")
         let moveTo = app.buttons["Move to…"].firstMatch
-        XCTAssertTrue(moveTo.waitForExistence(timeout: 5), dump("a tile's menu has no Move to…"))
-        moveTo.tap()
+        XCTAssertTrue(appears(moveTo, timeout: 5), dump("a tile's menu has no Move to…"))
+        tap(moveTo, "Move to…")
 
         // Through the alert rather than by identifier: a `TextField` inside an `alert` is built by
         // UIKit from the SwiftUI description and does not carry the identifier across.
         let alert = app.alerts.firstMatch
-        XCTAssertTrue(alert.waitForExistence(timeout: 5), dump("no Move to… box"))
+        XCTAssertTrue(appears(alert, timeout: 5), dump("no Move to… box"))
         let field = alert.textFields.firstMatch
-        XCTAssertTrue(field.waitForExistence(timeout: 5), dump("the Move to… box has no field"))
-        field.tap()
+        XCTAssertTrue(appears(field, timeout: 5), dump("the Move to… box has no field"))
+        tap(field, "the Move to… field")
         field.typeText("1")
-        alert.buttons["Move"].tap()
+        tap(alert.buttons["Move"], "the Move to… alert's Move")
         waitFor("sizes 600x460,300x400,400x420,500x440")
     }
 
     func testInsertingABlankPageAddsOneAndUndoRemovesIt() {
         launch(with: fourPages)
         openPages()
-        tile(0).press(forDuration: 1.2)
+        longPress(tile(0), "tile 0")
         let insert = app.buttons["Insert Blank Page"].firstMatch
-        XCTAssertTrue(insert.waitForExistence(timeout: 5),
+        XCTAssertTrue(appears(insert, timeout: 5),
                       dump("a tile's menu has no Insert Blank Page"))
-        insert.tap()
+        tap(insert, "Insert Blank Page")
 
         waitFor("count 5")
         XCTAssertEqual(sizes(), ["300x400", "300x400", "400x420", "500x440", "600x460"],
@@ -411,9 +522,9 @@ final class PageToolsUITests: XCTestCase {
         launch(with: fourPages)
         openPages()
         let add = app.buttons["pagesAdd"].firstMatch
-        XCTAssertTrue(add.waitForExistence(timeout: 5), dump("no + menu"))
-        add.tap()
-        XCTAssertTrue(app.buttons["pagesInsertFromFile"].waitForExistence(timeout: 5),
+        XCTAssertTrue(appears(add, timeout: 5), dump("no + menu"))
+        tap(add, "the + menu")
+        XCTAssertTrue(appears(app.buttons["pagesInsertFromFile"].firstMatch, timeout: 5),
                       dump("the + menu has no Insert Pages from File…"))
         XCTAssertTrue(app.buttons["Save Pages As…"].firstMatch.exists,
                       dump("the + menu has no Save Pages As…"))
@@ -433,9 +544,9 @@ final class PageToolsUITests: XCTestCase {
 
     private func undo() {
         let button = undoButton()
-        XCTAssertTrue(button.waitForExistence(timeout: 5), dump("no Undo anywhere on this layout"))
+        XCTAssertTrue(appears(button, timeout: 5), dump("no Undo anywhere on this layout"))
         XCTAssertTrue(button.isEnabled, dump("Undo is disabled after a page change"))
-        button.tap()
+        tap(button, "Undo")
     }
 
     func testTheSheetCarriesItsOwnUndoAndTheIPadDoesNot() {

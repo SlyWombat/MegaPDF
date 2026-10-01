@@ -1229,8 +1229,9 @@ tests = [
   "ios/MegaPDFTests/PageToolsTests.swift::testImportingPagesInsertsThemAndUndoTakesExactlyThoseOff",
   "ios/MegaPDFTests/PageShiftTests.swift::testInsertedPagesMoveEverythingFromThereUp",
   "ios/MegaPDFTests/PageToolsModelTests.swift::testABlankPageTakesTheSizeOfThePageInFrontOfIt",
+  "ios/MegaPDFTests/PageTileDragTests.swift::class",
 ]
-note = "reorder by dragging is a by-hand gate on this platform: PageDragUITests exists and CI does not run it."
+note = "reorder by dragging is a by-hand gate on this platform: PageDragUITests exists and CI does not run it, and since #599 the CI lane's app has no tile drag for it to run \u2014 PageToolsUITests passes -uiTestNoTileDrag, because a tile that is both a drag source and a context-menu host leaves a synthesised long press with a drag in flight and costs XCUITest a sixty-second idle timeout on every event until the menu closes (551 s to 83 s for that suite on the iPad), and that window is where this lane's flakes lived. PageTileDragTests pins the flag's matching, since a flag that silently stopped matching would take the stalls back without failing anything. The menu rows, Move Earlier / Move Later and Move to\u2026 are driven in both lanes as before; the drag itself is the by-hand gate it already was."
 [feature.android]
 presence = "present"
 entry = "android/app/src/main/java/com/megapdf/android/PagesScreen.kt::R.string.pages_add_from_file"
@@ -2360,4 +2361,4 @@ why = "a regression guard for the zero-tab window chrome (#617: busy strip, Stop
 
 [[exempt]]
 ref = "ios/MegaPDFUITests/PageDragUITests.swift"
-why = "dragging a page tile onto another is a by-hand gate (#570): the drag is unreliable to synthesise on the simulator, so CI does not run this and no cell may count it"
+why = "dragging a page tile onto another is a by-hand gate (#570): the drag is unreliable to synthesise on the simulator, so CI does not run this and no cell may count it. It is also the only suite that launches the app *with* the tile drag: PageToolsUITests passes -uiTestNoTileDrag since #599"
