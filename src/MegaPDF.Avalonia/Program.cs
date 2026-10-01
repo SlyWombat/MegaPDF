@@ -2199,6 +2199,37 @@ internal static class Program
             failures++;
         }
 
+        // --- Linux's own route to About and the third-party notices (#571) ---
+        //
+        // CheckAboutWindow above proves the window and the notices it leads to are
+        // correct; it does not prove a Linux person can ever get there. It drives the
+        // application menu's logical NativeMenu object directly — built on every
+        // platform, so the headless check above passes on Linux CI too — but nothing
+        // hosts that menu on screen off macOS (the same reason BindLinuxWindowShortcuts
+        // exists for Close and Quit, #158). Before this fix there was no toolbar button,
+        // More entry or key binding that reached either window on Linux at all: a person
+        // could not find their version number, which is the first thing the support page
+        // (#418) asks for, and had no way to read the third-party licences the app ships.
+        //
+        // Linux only, and not because the check is awkward elsewhere: the route itself is
+        // Linux-only, added to More because the Mac already has it in the application
+        // menu (CheckAboutWindow's own first assertion). Keeping the block inside the
+        // same guard as the Close/Quit checks is what leaves the Mac's run exactly as
+        // many checks as before.
+        if (OperatingSystem.IsLinux())
+        {
+            Console.WriteLine("Linux's own route to About and the third-party notices (#571):");
+            try
+            {
+                CheckLinuxAboutRoute(dir, state, Check);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"::error::Linux About route: {ex.GetType().Name}: {ex.Message}");
+                failures++;
+            }
+        }
+
         // --- Reading mode (#505 tier 1, #511 tier 2) ---
         //
         // Every Windows defect in 2.2 that CI missed was found by hand afterwards, so
@@ -3664,6 +3695,78 @@ internal static class Program
         check("and Help reaches the notices without going through About",
               window.MenuBarItem("Notices") is not null);
 
+        window.Close();
+        MenuProbe.Pump();
+    }
+
+    /// <summary>
+    /// The Linux route to About and the third-party notices (#571): through the real
+    /// More menu, by a real click, exactly as a person on X11 or Wayland has to reach
+    /// it — unlike <see cref="CheckAboutWindow"/>, which raises the application menu
+    /// item's click handler directly and so proves nothing about whether anything on
+    /// screen can reach it.
+    /// </summary>
+    private static void CheckLinuxAboutRoute(string dir, string state, Action<string, bool> check)
+    {
+        EnsureHeadlessPlatform();
+
+        using var shell = new ShellViewModel(state);
+        var vm = shell.CreateDocument();
+        vm.Open(Path.Combine(dir, "fixture.pdf"));
+        shell.AddTab(vm);
+        var window = new Views.MainWindow { DataContext = shell, Width = 1280, Height = 800 };
+        window.Show();
+        MenuProbe.Pump();
+
+        // 1. More — the same place Options already lives — carries About MegaPDF.
+        var more = MenuProbe.Open(window, window.MoreButton);
+        check($"More carries About MegaPDF ({more.Detail})", more.Headers.Contains(Strings.AboutMegaPDF));
+
+        // 2. A real click on the presented entry opens the real window — not a direct
+        //    call to App.ShowAbout(), which would pass whether or not the menu built it.
+        more.Click(Strings.AboutMegaPDF);
+        var about = App.CurrentAbout;
+        check("clicking it opens About MegaPDF", about is { IsVisible: true });
+        if (about is null)
+        {
+            window.Close();
+            MenuProbe.Pump();
+            return;
+        }
+
+        // 3. What it shows is the running build's own version, not a stale literal —
+        //    the first fact the support page (#418) asks a person to report.
+        var texts = about.GetLogicalDescendants().OfType<global::Avalonia.Controls.TextBlock>()
+            .Select(t => t.Text ?? "").ToList();
+        check($"it shows the real version ({AppInfo.VersionLabel})",
+              texts.Contains(AppInfo.VersionLabel) && AppInfo.VersionLabel.Any(char.IsDigit));
+
+        // 4. From there, the third-party notices are one click away and are not an
+        //    empty pane — a compliance obligation, not a convenience (#571).
+        about.NoticesButton.RaiseEvent(new global::Avalonia.Interactivity.RoutedEventArgs(
+            global::Avalonia.Controls.Button.ClickEvent));
+        MenuProbe.Pump();
+        var notices = App.CurrentNotices;
+        check("its notices button opens the notices window", notices is { IsVisible: true });
+        if (notices is not null)
+        {
+            // Loaded synchronously, as CheckAboutWindow's own notices check does: the
+            // headless pump does not run the window's loading Task to completion in any
+            // bounded number of frames.
+            notices.LoadNow();
+            MenuProbe.Pump();
+            var text = notices.Notices ?? "";
+            check($"which holds real licence text, not an empty pane ({text.Length:N0} characters)",
+                  text.Length > 10_000);
+            check($"  naming the libraries this build actually ships",
+                  new[] { "PDFium", "Avalonia", "SkiaSharp", "HarfBuzzSharp" }
+                      .All(name => text.Contains(name, StringComparison.Ordinal)));
+            notices.Close();
+            MenuProbe.Pump();
+        }
+
+        about.Close();
+        MenuProbe.Pump();
         window.Close();
         MenuProbe.Pump();
     }

@@ -54,6 +54,9 @@
        pair Safari's and Chrome's find bars draw. -->
   <StreamGeometry x:Key="IconChevronUp">M6,15 L12,9 L18,15</StreamGeometry>
   <StreamGeometry x:Key="IconMore">M6,10 A2,2 0 1 0 6,14 A2,2 0 1 0 6,10 Z M12,10 A2,2 0 1 0 12,14 A2,2 0 1 0 12,10 Z M18,10 A2,2 0 1 0 18,14 A2,2 0 1 0 18,10 Z</StreamGeometry>
+  <!-- About MegaPDF, in the More menu on platforms with no application menu to carry
+       it (#571): the circled "i" every desktop uses for an about/info panel. -->
+  <StreamGeometry x:Key="IconInfo">M12,4 A8,8 0 1 1 12,20 A8,8 0 1 1 12,4 M12,8 A1,1 0 1 1 12,8.01 M12,11 L12,16</StreamGeometry>
 
   <!--
     Icon above label, which is how the Windows toolbar reads. The label stays:
