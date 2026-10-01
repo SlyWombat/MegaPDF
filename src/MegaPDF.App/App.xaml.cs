@@ -159,8 +159,14 @@ public partial class App : Application
         mainWindow.Activate();
 
         var ok = true;
-        var pdf = Environment.GetCommandLineArgs()
-            .FirstOrDefault(a => a.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase) && File.Exists(a));
+        var state = Screenshot.ArgumentAfter("--screenshot-state");
+        // #617: `empty` is the one state that checks what the window looks like with zero
+        // tabs — the harness still passes a fixture.pdf on the command line (Run-Check always
+        // does), so this is the one case that must not open it.
+        var pdf = state == "empty"
+            ? null
+            : Environment.GetCommandLineArgs()
+                .FirstOrDefault(a => a.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase) && File.Exists(a));
         // A single tab, opened directly (not through the router): --screenshot always runs
         // standalone, its own process, never redirected (#348 phase 1, plan §6.10).
         if (pdf is not null)
@@ -172,7 +178,7 @@ public partial class App : Application
         await Task.Delay(TimeSpan.FromSeconds(3));
         Console.Error.WriteLine(mainWindow.DescribeToolbar());
 
-        if (Screenshot.ArgumentAfter("--screenshot-state") is { } state)
+        if (state is not null)
             ok = await Screenshot.ApplyStateAsync(mainWindow, state);
 
         if (ok)

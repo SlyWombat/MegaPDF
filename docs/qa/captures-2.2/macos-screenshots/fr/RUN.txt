@@ -1,0 +1,7 @@
+app:      /Users/claude/app-613mac/MegaPDF.app
+binary:   e1090f7ae2d326e961609e90ea811ea1d97f1b301f9bd11f66053d87351aeae3
+language: fr (fr-FR)
+window:   1440x900
+document: Contrat de location.pdf (from demo-fr-FR.pdf)
+pages doc: Contrat de location.pdf (from demo-fr-FR-pages.pdf), slots 01-reading and 04-pages
+taken:    2026-10-01T16:11:57Z

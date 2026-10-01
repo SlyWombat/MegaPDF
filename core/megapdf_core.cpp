@@ -869,6 +869,27 @@ bool IsDynamicXfaPlaceholder(const megapdf_document* d) {
     return false;
 }
 
+// #476 §5b/#576: is there a signature in this signature field, or only the field?
+//
+// FPDF_GetSignatureCount() counts every `/FT /Sig` entry in the AcroForm's field tree,
+// signed or not, so a document prepared for signing and not yet signed read as signed and
+// the app warned that saving would invalidate a signature it does not have. Measured in
+// #476 at 3 documents in 5,636 -- all synthetic conformance files, none of the 4,337
+// private documents and none of the 33 genuinely signed government ones -- which is why
+// this is a correctness fix and not a release-blocking one.
+//
+// The test is whether the field's `/V` carries signature data at all. Every one of
+// PDFium's per-signature accessors reads through `/V` and answers 0 without one, so either
+// the byte range or the contents settles it; both are asked because a real signature has
+// both and the point is never to drop one that does. This is the same thing #476 measured
+// against the decompressed bytes rather than the raw ones, so the two agree by
+// construction.
+bool SignatureHasValue(FPDF_SIGNATURE sig) {
+    if (sig == nullptr) return false;
+    if (FPDFSignatureObj_GetByteRange(sig, nullptr, 0) > 0) return true;
+    return FPDFSignatureObj_GetContents(sig, nullptr, 0) > 0;
+}
+
 // #476/#481: does `d` carry an existing digital signature, and is any of them a
 // certification (/DocMDP) signature? PDFium's own read (FPDF_GetSignatureCount /
 // FPDF_GetSignatureObject), not a raw-bytes search for `/Sig` or `/ByteRange` — the same
@@ -876,24 +897,107 @@ bool IsDynamicXfaPlaceholder(const megapdf_document* d) {
 // AcroForm dictionary's own keys. Sets `*out_signed` and `*out_certified`; both start false
 // so a caller may pass a subset of them (out_certified may be null when the caller only
 // wants MEGAPDF_DOC_SIGNED, though megapdf_document_flags always wants both).
-void DetectSignature(const megapdf_document* d, bool* out_signed, bool* out_certified) {
+//
+// `*out_count` is how many signatures there really are, which megapdf_signature_count()
+// reports and megapdf_signature_info() indexes into; it is counted here rather than beside
+// it so the flag and the count can never disagree about what a signature is.
+void DetectSignature(const megapdf_document* d, bool* out_signed, bool* out_certified,
+                     int* out_count = nullptr) {
     *out_signed = false;
     if (out_certified != nullptr) *out_certified = false;
+    if (out_count != nullptr) *out_count = 0;
     const int count = FPDF_GetSignatureCount(d->doc);
     if (count <= 0) return;   // 0: no signature. -1: PDFium error, treated the same as none.
-    *out_signed = true;
-    if (out_certified == nullptr) return;
     // A certification signature's /DocMDP permission (1: no changes, 2: form-fill and
     // signing only, 3: also annotations) is cheap -- one call per signature, no page load,
     // no text search -- so every signature is checked rather than stopping at the first.
+    // Nothing stops at the first now in any case: an empty signature field at index 0 must
+    // not decide what the document is (#576).
     for (int i = 0; i < count; i++) {
         FPDF_SIGNATURE sig = FPDF_GetSignatureObject(d->doc, i);
-        if (sig == nullptr) continue;
-        if (FPDFSignatureObj_GetDocMDPPermission(sig) != 0) {
+        if (!SignatureHasValue(sig)) continue;   // a signature field, not a signature
+        *out_signed = true;
+        if (out_count != nullptr) (*out_count)++;
+        if (out_certified != nullptr && FPDFSignatureObj_GetDocMDPPermission(sig) != 0) {
             *out_certified = true;
-            break;
+        }
+        // Neither answer can change once both are known, and the count is the only reason
+        // to keep walking.
+        if (out_count == nullptr && (out_certified == nullptr || *out_certified)) return;
+    }
+}
+
+// The `index`-th signature of the population DetectSignature counts, which is not PDFium's
+// indexing when the document carries an empty signature field as well. NULL for a bad index.
+FPDF_SIGNATURE SignatureAt(const megapdf_document* d, int index) {
+    if (index < 0) return nullptr;
+    const int count = FPDF_GetSignatureCount(d->doc);
+    int seen = 0;
+    for (int i = 0; i < count; i++) {
+        FPDF_SIGNATURE sig = FPDF_GetSignatureObject(d->doc, i);
+        if (!SignatureHasValue(sig)) continue;
+        if (seen == index) return sig;
+        seen++;
+    }
+    return nullptr;
+}
+
+// `/M`, a PDF date string: D:YYYYMMDDHHmmSSOHH'mm, every part after the year optional
+// (ISO 32000-2, 7.9.4). Fills what is there and leaves the rest at zero; answers false
+// when there is no date, or nothing a year can be read from, so the caller reports no date
+// at all rather than a year 0 that formats as something.
+//
+// Hand-parsed rather than handed to the C library: strptime is not on Windows, the format
+// is fixed and trivial, and what the apps need is the signer's own stated local time and
+// offset, which a conversion to a time_t would throw away.
+bool ParseSignatureDate(const char* s, size_t len, megapdf_signature* out) {
+    // "D:" is required by the specification and written by every producer, but a few
+    // documents omit it; accept the digits either way rather than lose a real date.
+    size_t i = 0;
+    if (len >= 2 && s[0] == 'D' && s[1] == ':') i = 2;
+    auto digits = [&](size_t n, int* into) {
+        if (i + n > len) return false;
+        int value = 0;
+        for (size_t k = 0; k < n; k++) {
+            const char c = s[i + k];
+            if (c < '0' || c > '9') return false;
+            value = value * 10 + (c - '0');
+        }
+        i += n;
+        *into = value;
+        return true;
+    };
+    int year = 0;
+    if (!digits(4, &year) || year < 1 || year > 9999) return false;
+    out->year = year;
+    // Each part is optional, and a part that is present but out of range stops the walk
+    // rather than being corrected: whatever follows it cannot be trusted to be where the
+    // format says, and a date half-read is reported as the part that did read.
+    struct Part { int lo, hi; int* into; };
+    const Part parts[] = {
+        {1, 12, &out->month}, {1, 31, &out->day},
+        {0, 23, &out->hour}, {0, 59, &out->minute}, {0, 59, &out->second},
+    };
+    bool complete = true;
+    for (const Part& part : parts) {
+        int value = 0;
+        if (!digits(2, &value)) break;
+        if (value < part.lo || value > part.hi) { complete = false; break; }
+        *part.into = value;
+    }
+    // The offset, when the date read cleanly as far as it went: "Z", or "+HH'mm" / "-HH'mm"
+    // with the minutes and either apostrophe optional in the wild.
+    if (complete && i < len && (s[i] == '+' || s[i] == '-')) {
+        const int sign = s[i] == '-' ? -1 : 1;
+        i++;
+        int oh = 0, om = 0;
+        if (digits(2, &oh) && oh <= 23) {
+            if (i < len && s[i] == '\'') i++;
+            if (!digits(2, &om) || om > 59) om = 0;
+            out->utc_offset_minutes = sign * (oh * 60 + om);
         }
     }
+    return true;
 }
 
 }  // namespace
@@ -6663,6 +6767,145 @@ MEGAPDF_API int megapdf_pages_extract(const megapdf_document* d, const int* page
     }
     SetError(0, "");
     return MEGAPDF_OK;
+}
+
+}  // extern "C"
+
+// --------------------------------------------------------------------------
+// Digital signatures (#576). What can honestly be said about an existing signature,
+// and removing one when the person asks. The detection itself — SignatureHasValue,
+// DetectSignature, SignatureAt, ParseSignatureDate — is up beside
+// megapdf_document_flags(), because the MEGAPDF_DOC_SIGNED bit is counted from exactly
+// the same population and the two must not be able to drift apart. The removal is down
+// here because it walks pages' widget annotations, which needs the page-tools section's
+// helpers above.
+// --------------------------------------------------------------------------
+
+namespace {
+
+// Takes every signature field off `page`, with its widget. Returns how many went.
+//
+// Backwards through the annotations, because FPDFPage_RemoveAnnot renumbers the ones after
+// the one it removes and a forward walk would step over the next signature. The handle is
+// closed before the removal: the index is what identifies the annotation to PDFium, and
+// the handle must not outlive the thing it points at.
+// Is this widget the widget of a signature that actually holds a signature? The field type
+// alone is not enough: an empty signature field is a /FT /Sig widget too, and it is the
+// author's — a document prepared for signing, which someone may still sign. Removing it
+// would throw that away, and it is not what the person was asked about (#576 fixes the
+// false positive exactly so they are never asked).
+//
+// `/V` is the signature value, and for every signature we have met it sits on the widget's
+// own dictionary: in all 33 of #476's genuinely signed documents the field dictionary *is*
+// the annotation (measured for #576), as in both fixtures. A `/Parent` is accepted as well
+// because a field split across a parent and its kid widgets keeps `/V` on the parent, where
+// FPDFAnnot_HasKey cannot see it; that shape appears nowhere in the corpus, so it is covered
+// rather than observed, and the cover errs towards removing the signature the person asked
+// about rather than silently keeping it.
+bool IsSignatureWidgetWithValue(const megapdf_document* d, FPDF_ANNOTATION annot) {
+    if (FPDFAnnot_GetSubtype(annot) != FPDF_ANNOT_WIDGET) return false;
+    if (FPDFAnnot_GetFormFieldType(d->form, annot) != FPDF_FORMFIELD_SIGNATURE) return false;
+    return FPDFAnnot_HasKey(annot, "V") || FPDFAnnot_HasKey(annot, "Parent");
+}
+
+int RemovePageSignatures(megapdf_document* d, int page_index) {
+    ScopedPage sp(d, page_index);
+    if (sp.page == nullptr) return 0;
+    int removed = 0;
+    for (int i = FPDFPage_GetAnnotCount(sp.page->page) - 1; i >= 0; i--) {
+        FPDF_ANNOTATION annot = FPDFPage_GetAnnot(sp.page->page, i);
+        if (annot == nullptr) continue;
+        const bool is_signature = IsSignatureWidgetWithValue(d, annot);
+        // Two calls, not one. FPDFPage_RemoveAnnot takes the widget off the page and leaves
+        // the field dictionary reachable from /AcroForm /Fields with its /V intact — so the
+        // signature would still be in the saved file and FPDF_GetSignatureCount() would
+        // still count it, which is the whole bug. FPDFDoc_RemoveFormField (PDFium patch
+        // 0028) is what takes the field and its value out of the field tree.
+        const bool was_field = is_signature && FPDFDoc_RemoveFormField(d->doc, annot) == 1;
+        FPDFPage_CloseAnnot(annot);
+        if (!is_signature) continue;
+        FPDFPage_RemoveAnnot(sp.page->page, i);
+        if (was_field) removed++;
+    }
+    return removed;
+}
+
+}  // namespace
+
+extern "C" {
+
+MEGAPDF_API int megapdf_signature_count(const megapdf_document* d) {
+    if (d == nullptr) return -1;
+    Guard guard(CoreLock());
+    bool is_signed = false;
+    int count = 0;
+    DetectSignature(d, &is_signed, nullptr, &count);
+    return count;
+}
+
+MEGAPDF_API int megapdf_signature_info(const megapdf_document* d, int index, megapdf_signature* out) {
+    if (d == nullptr || out == nullptr) return MEGAPDF_ERR_ARGUMENT;
+    Guard guard(CoreLock());
+    *out = megapdf_signature{};
+    FPDF_SIGNATURE sig = SignatureAt(d, index);
+    if (sig == nullptr) { SetError(0, "no signature at that index"); return MEGAPDF_ERR_ARGUMENT; }
+    out->docmdp_permission = static_cast<int>(FPDFSignatureObj_GetDocMDPPermission(sig));
+    out->has_reason = FPDFSignatureObj_GetReason(sig, nullptr, 0) > 2 ? 1 : 0;   // > the UTF-16 NUL
+    // /M is 7-bit ASCII with a trailing NUL, PDFium's own documented contract for it.
+    const unsigned long bytes = FPDFSignatureObj_GetTime(sig, nullptr, 0);
+    if (bytes > 1 && bytes < 128) {
+        std::vector<char> date(bytes);
+        if (FPDFSignatureObj_GetTime(sig, date.data(), bytes) == bytes) {
+            // Not the terminator: the parser reads digits and would stop there anyway, but
+            // a length that counts it would make "len >= 2" true for an empty string.
+            ParseSignatureDate(date.data(), bytes - 1, out);
+        }
+    }
+    SetError(0, "");
+    return MEGAPDF_OK;
+}
+
+MEGAPDF_API size_t megapdf_signature_reason(const megapdf_document* d, int index,
+                                            unsigned short* out, size_t capacity) {
+    if (d == nullptr) return 0;
+    Guard guard(CoreLock());
+    FPDF_SIGNATURE sig = SignatureAt(d, index);
+    if (sig == nullptr) return 0;
+    // UTF-16LE with a UTF-16 NUL, length in bytes: ReadAnnotWide's contract exactly, so the
+    // same reader rather than a second one that rounds the terminator differently.
+    const U16 reason = ReadAnnotWide([&](FPDF_WCHAR* buf, unsigned long len) {
+        return FPDFSignatureObj_GetReason(sig, buf, len);
+    });
+    if (out != nullptr) {
+        const size_t n = reason.size() < capacity ? reason.size() : capacity;
+        for (size_t i = 0; i < n; i++) out[i] = reason[i];
+    }
+    return reason.size();
+}
+
+MEGAPDF_API int megapdf_signatures_remove(megapdf_document* d) {
+    if (d == nullptr) return -1;
+    Guard guard(CoreLock());
+    // A document with no signature is left entirely alone, including its signature fields:
+    // nothing walks its pages and nothing is removed. Without this a second call, or a call
+    // on a document prepared for signing but never signed, could reach a /Parent-split
+    // signature field that holds no signature (see IsSignatureWidgetWithValue).
+    bool is_signed = false;
+    DetectSignature(d, &is_signed, nullptr);
+    if (!is_signed) { SetError(0, ""); return 0; }
+    // Form edits in flight would be written into fields that are about to go.
+    if (d->form != nullptr) FORM_ForceToKillFocus(d->form);
+    int removed = 0;
+    const int pages = FPDF_GetPageCount(d->doc);
+    for (int i = 0; i < pages; i++) removed += RemovePageSignatures(d, i);
+    if (removed > 0) {
+        // The interactive form keeps a field object per name from when it was built, so a
+        // page met later would rejoin a field whose dictionary is gone — the same reason
+        // contract 10 rebuilds it after a delete or an import.
+        ResetFormEnvironment(d);
+    }
+    SetError(0, "");
+    return removed;
 }
 
 }  // extern "C"

@@ -2,6 +2,8 @@
 # Play Store screenshot capture — run inside android-emulator-runner with a
 # booted emulator. Installs the debug APK, sets a clean demo status bar, and
 # captures the marketing states to /tmp/shots.
+#
+# Eight states since #613; the list and the reasons are at the loop below.
 set -euo pipefail
 
 adb install app/build/outputs/apk/debug/app-debug.apk
@@ -17,6 +19,23 @@ for _ in $(seq 1 60); do
 done
 
 adb shell settings put global sysui_demo_allowed 1
+
+# Android's own first-run lesson in immersive mode: the first time an app hides the
+# system bars, SystemUI puts a teal panel over the top half of the screen — "Viewing
+# full screen / To exit, swipe down from the top / GOT IT" — and dims everything
+# under it. Reading mode (#507) hides the bars, so the #613 reading pose is the first
+# capture in this script's history to meet it, and the first run of the new set came
+# back with that panel over all three languages' lead image, in English in the French
+# sets because the string is SystemUI's and the emulator's system language is English.
+# The capture gate could not see it: the panel is not the posed status bar, so the
+# "no status bar in this pose" check passed on a frame that was three-quarters system
+# dialog.
+#
+# Confirming it up front is the same kind of thing as the demo status bar and the
+# disabled launcher below: a first-run affordance of the device, not of the app,
+# removed so the image is the app. The setting is per-device and this emulator is
+# thrown away with the run.
+adb shell settings put secure immersive_mode_confirmations confirmed
 
 # MEGAPDF_LANG=fr-CA (or fr-FR) switches the app's language through Android 13's
 # per-app locale (#91): the app then loads demo-fr.pdf (fr-CA) or demo-fr-FR.pdf
@@ -72,7 +91,20 @@ fi
 OUT="/tmp/shots/$LANG_TAG"
 mkdir -p "$OUT"
 MISSED=""
-for state in home viewer search sign draw text text-edit redact; do
+# The eight Play listing slots, in the order Dave settled on 2026-10-01 (#613): signing,
+# editing and reading are what people come for and lead; redaction moves back. Two changes
+# to the set itself, not just to its order:
+#
+#   reading  replaces `viewer` at the front rather than joining it. Both are a picture of a
+#            page, and this one says something as well.
+#   pages    is new, and `draw` comes out to make room: Google Play takes eight phone
+#            screenshots and this would have been the ninth. Draw is the secondary half of
+#            signing and the `sign` shot already carries that story.
+#
+# Shot in listing order, and only these eight. A folder with more images in it than the
+# listing has slots is how a review shot reaches a store page (the iOS set's own lesson,
+# docs/app-store-listing.md § Screenshots).
+for state in reading text-edit sign pages text search redact home; do
     adb shell am force-stop ca.electricrv.megapdf || true
     # The pose's verdict on itself, in the app's own log: cleared before the launch and read
     # after the capture, so anything found can only have come from this state. This is the
@@ -83,6 +115,15 @@ for state in home viewer search sign draw text text-edit redact; do
     adb shell am start -n ca.electricrv.megapdf/com.megapdf.android.MainActivity --es screenshot "$state"
     sleep 10
     demo_status_bar
+    # A beat between the last broadcast and the shutter. `am broadcast` returns when the
+    # broadcast has been *dispatched*, not when SystemUI has redrawn the bar from it, and
+    # the 2026-10-01 fr-CA leg of this set came back with the emulator's real clock
+    # (4:13), a settings-gear notification, a mobile-signal triangle and a charging
+    # battery in seven of its eight shots while en and fr-FR were clean — the #49 race,
+    # one leg of a matrix at a time. The capture gate caught it across the languages
+    # ("the status bar differs from en's by 322 % of its ink"); this is what stops it
+    # reaching the gate.
+    sleep 2
     adb exec-out screencap -p > "$OUT/android-$state.png"
     if adb logcat -d -s megapdf-screenshot:E 2>/dev/null | grep -q '::error::'; then
         echo "FAILED $state — the pose reported an error:" >&2

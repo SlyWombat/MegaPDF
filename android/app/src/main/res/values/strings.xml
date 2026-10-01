@@ -253,6 +253,13 @@
          The asset names a bundled PDF; the recents are file names on the home
          screen; the search term must occur in the demo page. -->
     <string name="screenshot_demo_asset">demo.pdf</string>
+    <!-- The same agreement with the four sections it names and a landscape rate schedule
+         behind it (#613). Two poses need a document that has more than one page in it: a
+         page grid of one thumbnail is a picture of nothing, and reading mode's floating
+         bar would read "Page 1 of 1". Page 1 is byte-identical to the one every other
+         pose shows, and it is opened under the same document name, so the set is still
+         one document from end to end. -->
+    <string name="screenshot_demo_pages_asset">demo-pages.pdf</string>
     <string name="screenshot_document_name">Rental Agreement.pdf</string>
     <string name="screenshot_recent_2">Field Trip Permission.pdf</string>
     <string name="screenshot_recent_3">Insurance Claim Form.pdf</string>

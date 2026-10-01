@@ -623,14 +623,29 @@ public static partial class Strings
     /// <summary>This document has a digital signature</summary>
     public static string SignedSaveWarningTitle => Get("SignedSaveWarningTitle");
 
-    /// <summary>Saving over this document will invalidate its digital signature. Save a copy instead to keep the signed original intact.</summary>
+    /// <summary>Saving will leave that signature invalid. MegaPDF rewrites the whole file when it saves, so the signature no longer describes the file it signed, and no way of saving can keep it valid. Save a copy to keep the signed original intact.</summary>
     public static string SignedSaveWarningBody => Get("SignedSaveWarningBody");
 
     /// <summary>This document is certified against changes</summary>
     public static string CertifiedSaveWarningTitle => Get("CertifiedSaveWarningTitle");
 
-    /// <summary>This document's digital signature certifies it — its author declared that it should not be changed at all. Saving over it will invalidate that signature. Save a copy instead to keep the signed original intact.</summary>
+    /// <summary>This document's digital signature certifies it — its author declared that it should not be changed at all. Saving will leave that signature invalid: MegaPDF rewrites the whole file when it saves, so the signature no longer describes the file it signed, and no way of saving can keep it valid. Save a copy to keep the signed original intact.</summary>
     public static string CertifiedSaveWarningBody => Get("CertifiedSaveWarningBody");
+
+    /// <summary>Signed on {0}.</summary>
+    public static string SignedSaveSignedOn(object? arg0) => string.Format(CultureInfo.CurrentCulture, Get("SignedSaveSignedOn"), arg0);
+
+    /// <summary>The signer gave this reason: “{0}”</summary>
+    public static string SignedSaveSignerReason(object? arg0) => string.Format(CultureInfo.CurrentCulture, Get("SignedSaveSignerReason"), arg0);
+
+    /// <summary>This document has {0} digital signatures.</summary>
+    public static string SignedSaveSeveralSignatures(object? arg0) => string.Format(CultureInfo.CurrentCulture, Get("SignedSaveSeveralSignatures"), arg0);
+
+    /// <summary>Also remove the signature, which will no longer be valid</summary>
+    public static string SignedSaveRemoveSignature => Get("SignedSaveRemoveSignature");
+
+    /// <summary>Left in, it travels with the file being saved and goes on claiming to describe a file it no longer describes, so MegaPDF and other readers report that file as signed. The document you opened is not changed either way — this reaches only the file being written. And a digital signature says a file has not changed since it was signed: it has never kept anyone from opening this document, so a file saved without it is readable by exactly the same people.</summary>
+    public static string SignedSaveRemoveOffer => Get("SignedSaveRemoveOffer");
 
     /// <summary>Save a copy</summary>
     public static string SaveACopyButton => Get("SaveACopyButton");
@@ -638,8 +653,11 @@ public static partial class Strings
     /// <summary>Overwrite the original</summary>
     public static string OverwriteSignedButton => Get("OverwriteSignedButton");
 
-    /// <summary>The original's digital signature doesn't carry over to this copy.</summary>
+    /// <summary>The copy carries the original's digital signature, and it is no longer valid.</summary>
     public static string SignatureNotCarriedNotice => Get("SignatureNotCarriedNotice");
+
+    /// <summary>Saved without the document's digital signature. The document you opened is unchanged.</summary>
+    public static string SignatureRemovedNotice => Get("SignatureRemovedNotice");
 
     /// <summary>This PDF uses a kind of protection MegaPDF can't open.</summary>
     public static string UnsupportedProtection => Get("UnsupportedProtection");

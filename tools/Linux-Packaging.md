@@ -43,7 +43,7 @@ by their environment. `MegaPDF --install-kind` prints the decision, and `package
 | `website/megapdf/apt/` | the public half of the repository: `megapdf.gpg`, `megapdf.asc`, `megapdf.sources`, `FINGERPRINT`. |
 | `tools/linux/flatpak/ca.electricrv.MegaPDF.yml` | the manifest. |
 | `tools/linux/flatpak/ca.electricrv.MegaPDF.metainfo.xml` | the AppStream data a software centre shows. |
-| `tools/linux/store-captures.sh` | the six listing screenshots the metainfo points at, one language per run, under its own Xvfb. |
+| `tools/linux/store-captures.sh` | the seven listing screenshots the metainfo points at, one language per run, under its own Xvfb. |
 | `tools/linux/check-metainfo.sh` | the listing, through both the tools a Flathub reviewer runs: `appstreamcli validate` and `flatpak-builder-lint`. In CI on every push. |
 | `tools/linux/make-release-tarball.sh` | `megapdf-linux-x64-<ver>.tar.gz` and its sha256 — the archive the Flathub manifest fetches. |
 | `tools/linux/flatpak/flathub/…yml.in` | the manifest as Flathub would build it, with the `sources:` block left to be filled in. |
@@ -652,8 +652,9 @@ following can be decided here.
 2. **A Flathub account** (a GitHub account, added to the Flathub organisation on
    acceptance) and the decision to submit at all.
 3. **Screenshots — taken; the site deploy is what is left.** The metainfo now points at
-   eighteen Linux captures of this app: the six listing slots the Mac listing uses
-   (viewer, text, search, sign, redact, home) at 1280x800, in en, fr-CA and fr-FR.
+   twenty-one Linux captures of this app: the seven listing slots (reading, text, sign,
+   pages, search, redact, home — the order Dave settled on 2026-10-01, #613) at
+   1280x800, in en, fr-CA and fr-FR.
    `tools/linux/store-captures.sh <lang>` shoots a language in one command, under its own
    Xvfb, and `tools/capture-gate/gate.py` with the `linux` store profile reviews the
    result. The files are staged in this repo under
@@ -661,7 +662,7 @@ following can be decided here.
 
    **They have to be deployed to electricrv.ca before a submission, not after.** AppStream
    screenshots are URLs, and both Flathub's linter and `appstreamcli validate` fetch every
-   one of them: run today, validation fails with eighteen `screenshot-image-not-found`
+   one of them: run today, validation fails with twenty-one `screenshot-image-not-found`
    warnings, and passes with `--no-net`. Two things have to happen first, in this order:
 
    - `website/deploy.py` has to upload them, which it now does: it walks subdirectories
@@ -669,19 +670,19 @@ following can be decided here.
      when these captures were staged, and would have uploaded nothing at all.
    - Then the site has to actually be deployed, which is Dave's call under the release
      hold (#146). `deploy.py --dry-run` lists what would go where without contacting
-     anything; the eighteen screenshots should be in that list. The exact check
+     anything; the twenty-one screenshots should be in that list. The exact check
      afterwards, from any machine:
 
      ```sh
-     for l in en fr-CA fr-FR; do for s in 01-viewer 02-text 03-search 04-sign 05-redact 06-home; do
+     for l in en fr-CA fr-FR; do for s in 01-reading 02-text 03-sign 04-pages 05-search 06-redact 07-home; do
        printf '%s/%s ' "$l" "$s"
        curl -s -o /dev/null -w '%{http_code}\n' \
          "https://electricrv.ca/megapdf/screenshots/linux/$l/$s.png"
      done; done
      ```
 
-     Eighteen `200`s, and then `appstreamcli validate --pedantic` (no `--no-net`) passes
-     on its own.
+     Twenty-one `200`s, and then `appstreamcli validate --pedantic` (no `--no-net`)
+     passes on its own.
 4. **The summary and description — rewritten for this platform; the French needs a
    reader.** They were adapted from the App Store copy in `docs/app-store-listing.md`,
    which talks about tapping, about "your device", and about opening files from Mail and

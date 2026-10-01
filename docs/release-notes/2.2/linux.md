@@ -39,6 +39,22 @@ than either consistent answer. `<summary>` is unchanged and stays translated.
 characters and is still true; it was part of the copy a francophone signed off for
 2.0, in all three languages, and 2.2 gives no reason to spend that review again.
 
+**The screenshots are already in, unlike everything else here (#613).** The
+`<screenshots>` block names files, not a version, so it had to change in the same
+pull request as the captures themselves or the metainfo would point at images this
+repository no longer holds. Seven slots now — reading, text, sign, pages, search,
+redact, home — in the order Dave settled on 2026-10-01, with captions in all three
+locales, which is the one part of this file that was always translated.
+
+> **One consequence, for whoever tags next.** Those `<image>` URLs are
+> `01-reading.png` … `07-home.png`, and electricrv.ca is still serving the old
+> `01-viewer.png` … `06-home.png` until `website/deploy.py` runs. A **2.1.x** Linux
+> package cut from `main` before that deploy would ship metainfo naming screenshots
+> that are not on the server, where today it names ones that are. Nothing refuses
+> the build — `check-metainfo.sh` accepts `screenshot-image-not-found` as the
+> expected state before a deploy — so this is a thing to know rather than a thing
+> that will stop you. Deploy the site, or tag 2.1.x from before this change.
+
 ---
 
 ## Description — the two paragraphs to add

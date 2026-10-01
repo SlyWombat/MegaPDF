@@ -163,7 +163,9 @@ class LinuxTabUnderline(unittest.TestCase):
     rows the way Mac's did (#400), so the 2026-10-01 re-shoot's viewer, text,
     search and sign slots — whose only accent pixels are this underline —
     came back from the gate flagged as a stray selection. Same fixture shape
-    as MacTabUnderline, at the Linux listing set's own size and file names."""
+    as MacTabUnderline, at the Linux listing set's own size and file names
+    (`01-viewer` was dropped as a slot by #613; `03-sign` has the same
+    underline and nothing else in the accent)."""
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -176,7 +178,7 @@ class LinuxTabUnderline(unittest.TestCase):
         underline = f"rectangle 13,{rows[0]} 247,{rows[1] - 1}"
         subprocess.run(["convert", "-size", "1280x800", "xc:white",
                         "-fill", stores.ACCENT, "-draw", underline,
-                        os.path.join(self.shots, "01-viewer.png")],
+                        os.path.join(self.shots, "03-sign.png")],
                        check=True, capture_output=True)
         # The same, plus a selection border around a word on the page.
         subprocess.run(["convert", "-size", "1280x800", "xc:white",
@@ -194,7 +196,7 @@ class LinuxTabUnderline(unittest.TestCase):
         return next(f for f in image["findings"] if f["check"] == "accent")
 
     def test_the_underline_alone_passes_by_name(self):
-        finding = self._accent("01-viewer.png")
+        finding = self._accent("03-sign.png")
         self.assertEqual(finding["status"], "pass", finding["note"])
         self.assertIn("active tab's underline", finding["note"])
         self.assertNotIn("elsewhere", finding["note"])
@@ -203,6 +205,227 @@ class LinuxTabUnderline(unittest.TestCase):
         finding = self._accent("02-text.png")
         self.assertEqual(finding["status"], "flag", finding["note"])
         self.assertIn("elsewhere", finding["note"])
+
+
+@unittest.skipUnless(shutil.which("convert"), "ImageMagick is not installed")
+class LinuxReadingPose(unittest.TestCase):
+    """#613: reading mode (#505) is a listing slot now, and it is the first
+    pose the gate has met that has no chrome at all — no toolbar, no tab
+    strip, no status bar. The toolbar check measured the whole 200 px search
+    depth as the band and flagged it ("the toolbar band is 200 px; expected
+    32-90"). The profile names the pose instead, and the check is inverted
+    there: a band found in this pose means reading mode did not turn on and
+    the slot is wearing an ordinary viewer shot."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        # Two sets of one image, because both are the *same* slot — the pose a
+        # file name parses to is what the profile keys on, so the good and the
+        # bad reading shot cannot share a folder without becoming each other's
+        # siblings.
+        self.good = os.path.join(self.tmp.name, "good", "en")
+        self.bad = os.path.join(self.tmp.name, "bad", "en")
+        os.makedirs(self.good)
+        os.makedirs(self.bad)
+        # The mode as it is: the page host to the top of the window, with the
+        # page's own ink on it and nothing above it.
+        subprocess.run(["convert", "-size", "1280x800", "xc:white",
+                        "-fill", "black", "-draw", "rectangle 320,120 740,150",
+                        os.path.join(self.good, "01-reading.png")],
+                       check=True, capture_output=True)
+        # The failure it has to catch: the same slot with the toolbar still on
+        # screen — a band of chrome across the top, as every other pose has.
+        subprocess.run(["convert", "-size", "1280x800", "xc:white",
+                        "-fill", "#cccccc", "-draw", "rectangle 0,0 1279,99",
+                        "-fill", "black", "-draw", "rectangle 320,300 740,330",
+                        os.path.join(self.bad, "01-reading.png")],
+                       check=True, capture_output=True)
+
+    def _toolbar(self, root):
+        with tempfile.TemporaryDirectory() as out:
+            result = gate.run(root, "linux", out, thumb_width=32)
+        image = next(i for i in result["images"]
+                     if os.path.basename(i["path"]) == "01-reading.png")
+        return next(f for f in image["findings"] if f["check"] == "toolbar")
+
+    def test_no_chrome_is_what_this_pose_is(self):
+        finding = self._toolbar(self.good)
+        self.assertEqual(finding["status"], "pass", finding["note"])
+        self.assertIn("no chrome band", finding["note"])
+
+    def test_chrome_left_on_is_flagged(self):
+        """The pose is named in the profile, so the check still has teeth: it
+        is the presence of a band that is the defect here, not its height."""
+        finding = self._toolbar(self.bad)
+        self.assertEqual(finding["status"], "flag", finding["note"])
+        self.assertIn("should have none", finding["note"])
+
+    def test_the_pose_name_is_the_one_the_rig_writes(self):
+        """tools/linux/store-captures.sh writes 01-reading.png, and the
+        profile's exemption is keyed on the parsed pose, not the file name."""
+        parsed = stores.STORES["linux"]["parse"]("01-reading.png")
+        self.assertIsNotNone(parsed)
+        self.assertEqual(parsed[1], "reading")
+        self.assertIn(
+            "reading",
+            stores.STORES["linux"]["toolbar"].get("chromeless_poses", ()))
+
+
+@unittest.skipUnless(shutil.which("convert"), "ImageMagick is not installed")
+class MacReadingPose(unittest.TestCase):
+    """#613: reading mode (#505) leads the Mac listing now, and it is the one
+    pose with no chrome at all — no toolbar, no tab strip, no status bar. The
+    toolbar check measured the whole 160 px search depth as the band. The Mac
+    profile takes the rule the Linux profile took for the same slot and the
+    same app: the pose is named, and the check is inverted there, because a
+    band found here means reading mode did not turn on and slot 1 is wearing an
+    ordinary viewer shot."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        # One image per folder: the pose a file name parses to is what the
+        # profile keys on, so the good and the bad reading shot cannot share a
+        # folder without becoming each other's siblings.
+        self.good = os.path.join(self.tmp.name, "good", "en")
+        self.bad = os.path.join(self.tmp.name, "bad", "en")
+        os.makedirs(self.good)
+        os.makedirs(self.bad)
+        # The mode as it is: the page host to the top of the window, with the
+        # page's own ink on it and nothing above it.
+        subprocess.run(["convert", "-size", "1440x900", "xc:white",
+                        "-fill", "black", "-draw", "rectangle 360,140 830,170",
+                        os.path.join(self.good, "light-01-reading.png")],
+                       check=True, capture_output=True)
+        # The failure it has to catch: the same slot with the toolbar still on
+        # screen — a band of chrome across the top, as every other pose has.
+        subprocess.run(["convert", "-size", "1440x900", "xc:white",
+                        "-fill", "#cccccc", "-draw", "rectangle 0,0 1439,79",
+                        "-fill", "black", "-draw", "rectangle 360,320 830,350",
+                        os.path.join(self.bad, "light-01-reading.png")],
+                       check=True, capture_output=True)
+
+    def _toolbar(self, root):
+        with tempfile.TemporaryDirectory() as out:
+            result = gate.run(root, "mac", out, thumb_width=32)
+        image = next(i for i in result["images"]
+                     if os.path.basename(i["path"]) == "light-01-reading.png")
+        return next(f for f in image["findings"] if f["check"] == "toolbar")
+
+    def test_no_chrome_is_what_this_pose_is(self):
+        finding = self._toolbar(self.good)
+        self.assertEqual(finding["status"], "pass", finding["note"])
+        self.assertIn("no chrome band", finding["note"])
+
+    def test_chrome_left_on_is_flagged(self):
+        finding = self._toolbar(self.bad)
+        self.assertEqual(finding["status"], "flag", finding["note"])
+        self.assertIn("should have none", finding["note"])
+
+    def test_the_slot_names_are_the_ones_the_rig_writes(self):
+        """tools/macos-store-captures.sh writes light-01-reading.png and
+        light-04-pages.png, and the profile's rules are keyed on the parsed
+        pose rather than on the file name."""
+        profile = stores.STORES["mac"]
+        for name, pose in (("light-01-reading.png", "reading"),
+                           ("light-04-pages.png", "pages")):
+            parsed = profile["parse"](name)
+            self.assertIsNotNone(parsed, name)
+            self.assertEqual(parsed[1], pose)
+        self.assertIn("reading", profile["toolbar"]["chromeless_poses"])
+        self.assertIn("pages", profile["accent_poses"])
+
+    def test_the_listing_order_is_the_order_the_rig_shoots(self):
+        """The seven slots #613 settled, in order, ahead of the pose that is no
+        longer a listing slot."""
+        self.assertEqual(
+            stores.STORES["mac"]["order"][:7],
+            ["reading", "text", "sign", "pages", "search", "redact", "home"])
+
+
+@unittest.skipUnless(shutil.which("convert"), "ImageMagick is not installed")
+class PlayReadingPose(unittest.TestCase):
+    """#613: reading mode is a Play listing slot now, and on Android the mode
+    puts the system bars into immersive mode — so the one pose in the set has
+    no status bar at all. `chrome_consistent` compares each shot's status band
+    with the rest of its own language set, which made the absence read as "a
+    badge, a notification, or the wrong demo-mode state".
+
+    The profile names the pose and the check is turned around for it: it is the
+    posed bar *appearing* in this pose that is the defect, because it means
+    immersive mode did not engage and the lead image carries the emulator's own
+    status bar."""
+
+    SIZE = "1080x2400"
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+
+    def _set(self, name: str, reading_has_bar: bool) -> str:
+        """One language set: three ordinary poses with the posed status bar on
+        them, and the reading pose with or without it."""
+        folder = os.path.join(self.tmp.name, name, "en")
+        os.makedirs(folder)
+        # The posed bar, as SystemUI demo mode draws it: a clock on the left and
+        # a battery on the right, inside the top 3.2 % (76 px of 2400). Thin on
+        # purpose — `im.ink_mask` calls any tone holding 2 % of a crop a flat,
+        # so a bar painted as solid blocks would be read as background and
+        # measure as no ink at all.
+        bar = ["-fill", "black",
+               "-draw", "rectangle 40,30 150,36",
+               "-draw", "rectangle 980,30 1040,36"]
+        for pose in ("sign", "text", "search"):
+            subprocess.run(["convert", "-size", self.SIZE, "xc:white", *bar,
+                            "-fill", "#333333",
+                            "-draw", "rectangle 60,400 1020,430",
+                            os.path.join(folder, f"android-{pose}.png")],
+                           check=True, capture_output=True)
+        reading = ["convert", "-size", self.SIZE, "xc:white"]
+        if reading_has_bar:
+            reading += bar
+        # The page, and the floating bar near the foot of the screen.
+        reading += ["-fill", "#333333", "-draw", "rectangle 60,500 1020,530",
+                    "-draw", "rectangle 240,2180 840,2260",
+                    os.path.join(folder, "android-reading.png")]
+        subprocess.run(reading, check=True, capture_output=True)
+        return folder
+
+    def _chrome(self, folder: str):
+        with tempfile.TemporaryDirectory() as out:
+            result = gate.run(folder, "play", out, thumb_width=32)
+        image = next(i for i in result["images"]
+                     if os.path.basename(i["path"]) == "android-reading.png")
+        return next(f for f in image["findings"] if f["check"] == "chrome")
+
+    def test_no_status_bar_is_what_this_pose_is(self):
+        finding = self._chrome(self._set("good", reading_has_bar=False))
+        self.assertEqual(finding["status"], "pass", finding["note"])
+        self.assertIn("no status bar", finding["note"])
+
+    def test_a_status_bar_left_on_is_flagged(self):
+        """Immersive mode not engaging is the failure this has to catch: the
+        same slot with the emulator's bar across the top of it."""
+        finding = self._chrome(self._set("bad", reading_has_bar=True))
+        self.assertEqual(finding["status"], "flag", finding["note"])
+        self.assertIn("immersive mode did not engage", finding["note"])
+
+    def test_the_pose_name_is_the_one_the_rig_writes(self):
+        """android/scripts/capture-screenshots.sh writes android-reading.png,
+        and the profile's rule is keyed on the parsed pose, not the file name."""
+        parsed = stores.STORES["play"]["parse"]("android-reading.png")
+        self.assertIsNotNone(parsed)
+        self.assertEqual(parsed[1], "reading")
+        self.assertIn("reading", stores.STORES["play"]["barless_poses"])
+
+    def test_the_listing_order_is_the_order_the_rig_shoots(self):
+        """The eight slots #613 settled, in order, ahead of the two poses that
+        are no longer listing slots but are still in the QA matrix."""
+        self.assertEqual(
+            stores.STORES["play"]["order"][:8],
+            ["reading", "text-edit", "sign", "pages", "text", "search",
+             "redact", "home"])
 
 
 @unittest.skipUnless(shutil.which("convert"), "ImageMagick is not installed")
@@ -217,6 +440,10 @@ class WindowsChromelessPoses(unittest.TestCase):
     that should be there is missing. The Linux profile had just cost a re-shoot
     twelve flagged images for the matching reason (its tab underline was never
     added), so these stand down **by name**, with the reason in the note.
+
+    `chromeless_poses` is the key the Linux profile uses for the same idea, and
+    `LinuxReadingPose` above covers the other half of it: where the band is
+    measured rather than pinned, finding one is the defect.
     """
 
     def setUp(self):
@@ -225,7 +452,7 @@ class WindowsChromelessPoses(unittest.TestCase):
         self.shots = os.path.join(self.tmp.name, "en")
         os.makedirs(self.shots)
         # The Windows frame, so the checks treat each one as a whole window.
-        for name in ("01-reading.png", "05-search.png", "07-home.png"):
+        for name in ("01-reading.png", "06-search.png", "08-home.png"):
             _solid(os.path.join(self.shots, name), "2482x1541", "white")
 
     def _finding(self, name, check):
@@ -236,9 +463,14 @@ class WindowsChromelessPoses(unittest.TestCase):
         return next(f for f in image["findings"] if f["check"] == check)
 
     def test_reading_has_no_toolbar_to_measure(self):
+        """Windows pins the band rather than measuring it (Mica has no edge to
+        find), so the inverted assertion the Linux profile gets — a band found
+        means the mode did not turn on — would be `depth < depth` here and could
+        never fire. It stands down with that reason instead of awarding a tick
+        nobody could have earned."""
         finding = self._finding("01-reading.png", "toolbar")
         self.assertEqual(finding["status"], "skip", finding["note"])
-        self.assertIn("page, not chrome", finding["note"])
+        self.assertIn("fixed at 112 px rather than measured", finding["note"])
 
     def test_reading_has_no_zoom_chip(self):
         finding = self._finding("01-reading.png", "zoom")
@@ -246,13 +478,13 @@ class WindowsChromelessPoses(unittest.TestCase):
         self.assertIn("no zoom chip to read", finding["note"])
 
     def test_home_has_no_zoom_chip(self):
-        finding = self._finding("07-home.png", "zoom")
+        finding = self._finding("08-home.png", "zoom")
         self.assertEqual(finding["status"], "skip", finding["note"])
         self.assertIn("no zoom chip to read", finding["note"])
 
     def test_a_pose_that_keeps_its_toolbar_is_still_measured(self):
         """The stand-down is by name, not a blanket one: search still counts rows."""
-        finding = self._finding("05-search.png", "toolbar")
+        finding = self._finding("06-search.png", "toolbar")
         self.assertNotEqual(finding["status"], "skip", finding["note"])
 
 

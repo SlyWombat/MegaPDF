@@ -116,55 +116,86 @@
 
        Per-language images because the whole interface translates: measured on this set,
        3.5-7.9 % of the pixels of every slot differ between the English and the French
-       captures. fr-CA and fr-FR are kept as separate complete sets even though five of
-       the six slots are byte-identical between them today (only the demo person's name
-       differs, 1,045 px of 1,024,000): a set that is complete per language is one a
-       person can look at and sign off, and a partial one goes stale without saying so. -->
+       captures. fr-CA and fr-FR are kept as separate complete sets: a set that is
+       complete per language is one a person can look at and sign off, and a partial one
+       goes stale without saying so. Since #310 they differ in the document too, not only
+       in the demo person's name — Quebec usage in one, France's in the other.
+
+       Seven slots since #613 (Dave, 2026-10-01): reading, text, sign, pages, search,
+       redact, home. Signing, editing and reading are what people open a PDF app for and
+       they lead; redaction and whiteout are minor and moved back. Reading *replaced* the
+       old viewer shot at the front rather than joining it — both are a picture of a page,
+       and the reading one says something as well.
+
+       The captions are read as a sequence, not as seven independent labels: slot 2 says
+       added text is real text "not a sticker on the page" and slot 6 says a redaction is
+       "removed, not covered over", which is the same argument twice and in that order.
+       Slot 6 opens with "Then" because slot 5 is the search that finds the line. -->
+
+  <!-- The first screenshot is what a software centre puts on the app's tile, and this
+       one is a page with the chrome taken off: a clean white image that carries less at
+       tile size than the six behind it, every one of which has a grey toolbar across the
+       top. That is the feature, not a defect in the capture, and the alternative — shoot
+       reading mode in sepia, which makes the tile unmistakable — was left for Dave: a
+       set whose first image is the only tinted one reads as a different app.
+
+       Decided (Dave, 2026-10-01, during the #613/#616/#618/#621/#623 reconciliation):
+       stays blank, as the tile image and everywhere else. The blankness is the point —
+       reading mode is a feature about removing things — so do not switch this capture to
+       sepia and do not reorder the slots to move it off the tile. Settled; do not reopen. -->
   <screenshots>
     <screenshot type="default">
-      <image type="source" width="1280" height="800">https://electricrv.ca/megapdf/screenshots/linux/en/01-viewer.png</image>
-      <image type="source" width="1280" height="800" xml:lang="fr-CA">https://electricrv.ca/megapdf/screenshots/linux/fr-CA/01-viewer.png</image>
-      <image type="source" width="1280" height="800" xml:lang="fr">https://electricrv.ca/megapdf/screenshots/linux/fr-FR/01-viewer.png</image>
-      <caption>The form open, ticked and signed — the page exactly as it will print</caption>
-      <caption xml:lang="fr-CA">Le formulaire ouvert, coché et signé — la page exactement telle qu'elle sera imprimée</caption>
-      <caption xml:lang="fr">Le formulaire ouvert, coché et signé — la page exactement telle qu'elle sera imprimée</caption>
+      <image type="source" width="1280" height="800">https://electricrv.ca/megapdf/screenshots/linux/en/01-reading.png</image>
+      <image type="source" width="1280" height="800" xml:lang="fr-CA">https://electricrv.ca/megapdf/screenshots/linux/fr-CA/01-reading.png</image>
+      <image type="source" width="1280" height="800" xml:lang="fr">https://electricrv.ca/megapdf/screenshots/linux/fr-FR/01-reading.png</image>
+      <caption>Reading mode puts the tools away and leaves the page — this one filled in and signed</caption>
+      <caption xml:lang="fr-CA">Le mode lecture range les outils et laisse la page — celle-ci remplie et signée</caption>
+      <caption xml:lang="fr">Le mode lecture range les outils et laisse la page — celle-ci remplie et signée</caption>
     </screenshot>
     <screenshot>
       <image type="source" width="1280" height="800">https://electricrv.ca/megapdf/screenshots/linux/en/02-text.png</image>
       <image type="source" width="1280" height="800" xml:lang="fr-CA">https://electricrv.ca/megapdf/screenshots/linux/fr-CA/02-text.png</image>
       <image type="source" width="1280" height="800" xml:lang="fr">https://electricrv.ca/megapdf/screenshots/linux/fr-FR/02-text.png</image>
       <caption>Typing a name on the line: real, searchable text, not a sticker on the page</caption>
-      <caption xml:lang="fr-CA">Taper un nom sur la ligne : du vrai texte, consultable, et non une vignette posée sur la page</caption>
-      <caption xml:lang="fr">Taper un nom sur la ligne : du vrai texte, consultable, et non une vignette posée sur la page</caption>
+      <caption xml:lang="fr-CA">Taper un nom sur la ligne : du vrai texte, consultable, et non une vignette posée sur la page</caption>
+      <caption xml:lang="fr">Taper un nom sur la ligne : du vrai texte, consultable, et non une vignette posée sur la page</caption>
     </screenshot>
     <screenshot>
-      <image type="source" width="1280" height="800">https://electricrv.ca/megapdf/screenshots/linux/en/03-search.png</image>
-      <image type="source" width="1280" height="800" xml:lang="fr-CA">https://electricrv.ca/megapdf/screenshots/linux/fr-CA/03-search.png</image>
-      <image type="source" width="1280" height="800" xml:lang="fr">https://electricrv.ca/megapdf/screenshots/linux/fr-FR/03-search.png</image>
-      <caption>Searching the whole document as you type, with every match counted</caption>
-      <caption xml:lang="fr-CA">Rechercher dans tout le document à mesure que vous tapez, chaque occurrence comptée</caption>
-      <caption xml:lang="fr">Rechercher dans tout le document à mesure que vous tapez, chaque occurrence comptée</caption>
-    </screenshot>
-    <screenshot>
-      <image type="source" width="1280" height="800">https://electricrv.ca/megapdf/screenshots/linux/en/04-sign.png</image>
-      <image type="source" width="1280" height="800" xml:lang="fr-CA">https://electricrv.ca/megapdf/screenshots/linux/fr-CA/04-sign.png</image>
-      <image type="source" width="1280" height="800" xml:lang="fr">https://electricrv.ca/megapdf/screenshots/linux/fr-FR/04-sign.png</image>
+      <image type="source" width="1280" height="800">https://electricrv.ca/megapdf/screenshots/linux/en/03-sign.png</image>
+      <image type="source" width="1280" height="800" xml:lang="fr-CA">https://electricrv.ca/megapdf/screenshots/linux/fr-CA/03-sign.png</image>
+      <image type="source" width="1280" height="800" xml:lang="fr">https://electricrv.ca/megapdf/screenshots/linux/fr-FR/03-sign.png</image>
       <caption>The signature library, kept on this computer and nowhere else</caption>
       <caption xml:lang="fr-CA">La bibliothèque de signatures, conservée sur cet ordinateur et nulle part ailleurs</caption>
       <caption xml:lang="fr">La bibliothèque de signatures, conservée sur cet ordinateur et nulle part ailleurs</caption>
     </screenshot>
     <screenshot>
-      <image type="source" width="1280" height="800">https://electricrv.ca/megapdf/screenshots/linux/en/05-redact.png</image>
-      <image type="source" width="1280" height="800" xml:lang="fr-CA">https://electricrv.ca/megapdf/screenshots/linux/fr-CA/05-redact.png</image>
-      <image type="source" width="1280" height="800" xml:lang="fr">https://electricrv.ca/megapdf/screenshots/linux/fr-FR/05-redact.png</image>
-      <caption>Marking a line to be redacted — the words are removed, not covered over</caption>
-      <caption xml:lang="fr-CA">Marquer une ligne à caviarder — les mots sont supprimés, et non recouverts</caption>
-      <caption xml:lang="fr">Marquer une ligne à caviarder — les mots sont supprimés, et non recouverts</caption>
+      <image type="source" width="1280" height="800">https://electricrv.ca/megapdf/screenshots/linux/en/04-pages.png</image>
+      <image type="source" width="1280" height="800" xml:lang="fr-CA">https://electricrv.ca/megapdf/screenshots/linux/fr-CA/04-pages.png</image>
+      <image type="source" width="1280" height="800" xml:lang="fr">https://electricrv.ca/megapdf/screenshots/linux/fr-FR/04-pages.png</image>
+      <caption>Rotate, reorder, delete or save pages out — and one undo puts the document back</caption>
+      <caption xml:lang="fr-CA">Faire pivoter, réordonner, supprimer ou extraire des pages — et une annulation remet le document en place</caption>
+      <caption xml:lang="fr">Faire pivoter, réordonner, supprimer ou extraire des pages — et une annulation remet le document en place</caption>
     </screenshot>
     <screenshot>
-      <image type="source" width="1280" height="800">https://electricrv.ca/megapdf/screenshots/linux/en/06-home.png</image>
-      <image type="source" width="1280" height="800" xml:lang="fr-CA">https://electricrv.ca/megapdf/screenshots/linux/fr-CA/06-home.png</image>
-      <image type="source" width="1280" height="800" xml:lang="fr">https://electricrv.ca/megapdf/screenshots/linux/fr-FR/06-home.png</image>
+      <image type="source" width="1280" height="800">https://electricrv.ca/megapdf/screenshots/linux/en/05-search.png</image>
+      <image type="source" width="1280" height="800" xml:lang="fr-CA">https://electricrv.ca/megapdf/screenshots/linux/fr-CA/05-search.png</image>
+      <image type="source" width="1280" height="800" xml:lang="fr">https://electricrv.ca/megapdf/screenshots/linux/fr-FR/05-search.png</image>
+      <caption>Searching the whole document as you type, with every match counted</caption>
+      <caption xml:lang="fr-CA">Rechercher dans tout le document à mesure que vous tapez, chaque occurrence comptée</caption>
+      <caption xml:lang="fr">Rechercher dans tout le document à mesure que vous tapez, chaque occurrence comptée</caption>
+    </screenshot>
+    <screenshot>
+      <image type="source" width="1280" height="800">https://electricrv.ca/megapdf/screenshots/linux/en/06-redact.png</image>
+      <image type="source" width="1280" height="800" xml:lang="fr-CA">https://electricrv.ca/megapdf/screenshots/linux/fr-CA/06-redact.png</image>
+      <image type="source" width="1280" height="800" xml:lang="fr">https://electricrv.ca/megapdf/screenshots/linux/fr-FR/06-redact.png</image>
+      <caption>Then marking a line to be redacted — the words are removed, not covered over</caption>
+      <caption xml:lang="fr-CA">Puis marquer une ligne à caviarder — les mots sont supprimés, et non recouverts</caption>
+      <caption xml:lang="fr">Puis marquer une ligne à caviarder — les mots sont supprimés, et non recouverts</caption>
+    </screenshot>
+    <screenshot>
+      <image type="source" width="1280" height="800">https://electricrv.ca/megapdf/screenshots/linux/en/07-home.png</image>
+      <image type="source" width="1280" height="800" xml:lang="fr-CA">https://electricrv.ca/megapdf/screenshots/linux/fr-CA/07-home.png</image>
+      <image type="source" width="1280" height="800" xml:lang="fr">https://electricrv.ca/megapdf/screenshots/linux/fr-FR/07-home.png</image>
       <caption>The empty window, with the documents you opened last</caption>
       <caption xml:lang="fr-CA">La fenêtre vide, avec les documents ouverts en dernier</caption>
       <caption xml:lang="fr">La fenêtre vide, avec les documents ouverts en dernier</caption>

@@ -292,6 +292,12 @@ fun ViewerScreen(
     readingMode: Boolean = false,
     onEnterReadingMode: () -> Unit = {},
     onExitReadingMode: () -> Unit = {},
+    /**
+     * Marketing capture only (#613): the floating bar does not count down to its fade. Set
+     * from `ViewerViewModel.screenshotPinsReadingBar`, which only the `screenshot` launch
+     * extra turns on — see the comment there for why the picture needs it.
+     */
+    pinReadingBar: Boolean = false,
     /** Page colours (#513): what the engine drew the pages under, and what the chrome follows. */
     pageTint: com.megapdf.engine.PageTint = com.megapdf.engine.PageTint.NORMAL,
     onOpenSettings: () -> Unit = {},
@@ -385,8 +391,10 @@ fun ViewerScreen(
     // The idle fade. Restarted by barShownTick; never armed while touch exploration is on,
     // so the one piece of chrome reading mode has cannot vanish from under a TalkBack user
     // (#507). Not a longer timeout — no timeout.
-    LaunchedEffect(barVisible, barShownTick, touchExploration) {
-        if (!barVisible || !readingBarAutoHides(touchExploration)) return@LaunchedEffect
+    LaunchedEffect(barVisible, barShownTick, touchExploration, pinReadingBar) {
+        if (!barVisible || pinReadingBar || !readingBarAutoHides(touchExploration)) {
+            return@LaunchedEffect
+        }
         kotlinx.coroutines.delay(READING_BAR_IDLE_MS)
         barVisible = false
     }

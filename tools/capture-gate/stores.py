@@ -117,14 +117,11 @@ STORES: dict[str, dict] = {
                     "rows_by_pose": {"search": 2},
                     # Reading mode (#504) collapses the busy strip, the toolbar
                     # and the tab strip, so rows 45–112 of that capture are the
-                    # top of the page, not a toolbar band. There is no toolbar to
-                    # count rows in and nothing honest to compare the band's
-                    # height against, so the check stands down *by name* and says
-                    # why. That the chrome is gone is the picture itself and is
-                    # read by eye; the harness asserts it at capture time instead
-                    # (Shot-Reading.ps1 fails the step unless the toolbar's Open
-                    # button has left the automation tree altogether).
-                    "absent_in_poses": ("reading",)},
+                    # top of the page, not a toolbar band. The same key the Linux
+                    # profile uses; `toolbar()` knows that a *fixed* band cannot
+                    # answer the question and stands down with the reason, because
+                    # this platform's depth is pinned rather than measured.
+                    "chromeless_poses": ("reading",)},
         "zoom": "100",
         # The zoom chip lives on the toolbar, so the poses with no toolbar have no
         # chip to read, and the empty state has no document to be zoomed. Without
@@ -190,14 +187,35 @@ STORES: dict[str, dict] = {
     "mac": {
         "title": "Mac App Store",
         "slots": {"desktop": [(1440, 900), (2880, 1800), (2560, 1600), (1280, 800)]},
-        "order": ["viewer", "text", "search", "sign", "redact", "home"],
+        # The seven listing slots since #613. `viewer` is behind them because it
+        # is no longer one — reading replaced it at the front — but the Mac
+        # screen inventory still shoots it, and a pose this list does not name
+        # sorts to the end of the sheet rather than beside its siblings.
+        "order": ["reading", "text", "sign", "pages", "search", "redact",
+                  "home", "viewer"],
         "parse": _pose(r"(?:light-|dark-)?(?:\d+[-_])?(?P<pose>[a-z][a-z0-9-]*)\.png$"),
         # The find bar is a legitimate second row, and only in the search pose
         # (#144 left one row of commands; Find opens its own bar under it).
         "toolbar": {"depth": 160, "rows": 1, "height": (36, 90),
-                    "rows_by_pose": {"search": 2}},
+                    "rows_by_pose": {"search": 2},
+                    # Reading mode (#505) hides the toolbar, the tab strip and
+                    # the status bar, so the page host runs to the top of the
+                    # window and there is no band to measure — the whole 160 px
+                    # search depth reads as one bar. The same rule the Linux
+                    # profile took for the same slot (#613), and inverted for
+                    # the same reason: chrome appearing here would mean the mode
+                    # did not turn on and the lead slot is wearing a viewer shot.
+                    "chromeless_poses": ("reading",)},
         "zoom": "100",
-        "accent_poses": {"redact": ("banner", "mark")},
+        "accent_poses": {"redact": ("banner", "mark"),
+                         # The Pages sidebar (#174, #613): the toolbar's Pages
+                         # button is a toggle and is filled with the accent
+                         # while the strip is open, and the strip's selected
+                         # rows are painted in a tint of it too light for the
+                         # exact-colour mask to see. Measured on the Linux set
+                         # of the same app at 1,633 px for the toggled button.
+                         "pages": ("the toggled Pages button",
+                                   "the selected rows in the strip")},
         "accent_strict": True,
         # Since 2.1.1 the tab strip (#348) sits under the toolbar, and the
         # active tab's title is underlined in the accent: a 2 px rule, rows
@@ -207,6 +225,16 @@ STORES: dict[str, dict] = {
         # of it. It is the only accent in slots 1–4, and without this the
         # gate read it as a selection left on (#400).
         "tab_underline": {"rows": (93, 95)},
+        # Words tesseract invents here out of a French label. The signature
+        # flyout's three buttons are an icon above a word (#99-101), and at
+        # this window's size the reader runs the pencil glyph into the label
+        # under it and returns "Done wes" for "Dessiner Taper". The flyout is
+        # French: the same build at the Linux set's 1280x800 reads "Dessiner
+        # Taper À partir d'une" correctly, and the 2.1.1 Mac set — before the
+        # picker was redesigned — read nothing from that row at all, which is
+        # why this only started flagging in 2.2 (#613). Excused by name and
+        # reported on the sheet, not dropped.
+        "ocr_misreads": {"sign": {"done": "'Dessiner', under its pencil glyph"}},
         "status_band": None,
         "notes": "tools/macos-store-captures.sh. Each image has a .log beside "
                  "it recording the toolbar mode and the menu-bar check.",
@@ -256,8 +284,13 @@ STORES: dict[str, dict] = {
             # was never meant for a store.
             "small": [(720, 1440)], "large": [(1440, 3200)],
         },
-        "order": ["home", "viewer", "search", "sign", "draw", "text",
-                  "text-edit", "redact"],
+        # The eight listing slots since #613, in listing order. `viewer` and
+        # `draw` are behind them because they are no longer listing slots —
+        # reading replaced the first and the second came out at Play's limit of
+        # eight — but the QA matrix still shoots both, and a pose this list does
+        # not name sorts to the end of the sheet rather than beside its siblings.
+        "order": ["reading", "text-edit", "sign", "pages", "text", "search",
+                  "redact", "home", "viewer", "draw"],
         "parse": _pose(
             r"(?P<device>small|tablet|large)__(?P<lang>en|fr-CA|fr-FR)__"
             r"(?:light|dark)__t\d+__(?P<pose>[A-Za-z0-9-]+)\.png$",
@@ -271,6 +304,18 @@ STORES: dict[str, dict] = {
         "accent_poses": {"redact": ("banner", "mark")},
         "accent_strict": False,
         "status_band": {"height_frac": 0.032},
+        # Reading mode (#507) puts the system bars into immersive mode, so the
+        # status bar is not drawn at all and the top 3.2 % of the frame is page
+        # and gutter. That is the feature, and the gate met it for the first
+        # time in #613: the band has none of the posed bar's ink in it, so the
+        # reading shot disagreed with every sibling about a status bar that is
+        # not there.
+        #
+        # Named rather than stood down, and the check is turned around for it:
+        # a *posed status bar* appearing in this pose means immersive mode did
+        # not engage, which is a defect worth a flag — the one thing that would
+        # put the emulator's own clock in the listing's lead image.
+        "barless_poses": ("reading",),
         "notes": "android/scripts/capture-screenshots.sh under SystemUI demo "
                  "mode. The aspect ratio and the tablet slot are Play Console "
                  "questions, written up in docs/qa/android-store-captures.md.",
@@ -343,7 +388,14 @@ STORES: dict[str, dict] = {
                     # put a banner there.
                     "rows_by_pose": {"find": 2, "search": 2, "mode": 2,
                                      "redact": 2, "busy": 2, "busy-line": 2,
-                                     "busy-page": 2, "more": 2}},
+                                     "busy-page": 2, "more": 2},
+                    # Reading mode (#505) hides the toolbar, the tab strip, the
+                    # status bar and the Pages sidebar, so the page host runs to
+                    # the top of the window and there is no band to measure. The
+                    # check is inverted for this pose rather than stood down:
+                    # chrome *appearing* here would mean the mode did not turn
+                    # on and the reading slot is wearing a viewer shot (#613).
+                    "chromeless_poses": ("reading",)},
         "zoom": "100",
         # The tab strip (#348): every document pose draws the active tab's
         # title underlined in the accent — the same rule Mac's profile has
@@ -359,6 +411,16 @@ STORES: dict[str, dict] = {
         # banner and its marks, the busy strip (a progress bar is accent by
         # definition) and the licence links in About.
         "accent_poses": {"redact": ("banner", "mark"), "mode": ("banner",),
+                         # The Pages sidebar (#174, #613): the toolbar's Pages
+                         # button is a toggle and is filled with the accent
+                         # while the strip is open, and the strip's selected
+                         # rows are painted in a tint of it. Measured on the
+                         # 2026-10-01 set: 1,633 px for the toggled button
+                         # beside the 472 px of tab underline, and the
+                         # selection's own tint is light enough that the exact
+                         # colour mask never sees it.
+                         "pages": ("the toggled Pages button",
+                                   "the selected rows in the strip"),
                          "busy": ("progress",), "busy-line": ("progress",),
                          "busy-page": ("progress",), "about": ("links",),
                          "about-dialog": ("links",), "notices": ("links",),

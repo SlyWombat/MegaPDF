@@ -136,7 +136,38 @@ internal static class SamplePdf
     /// </summary>
     public static byte[] BuildSignedCertified() => BuildSignatureDocument(certification: true);
 
-    private static byte[] BuildSignatureDocument(bool certification)
+    /// <summary>
+    /// An approval signature that records a /Reason and a /M in a timezone other than UTC
+    /// (#576): the two things the save question names when it asks whether to remove a
+    /// signature. Both are present on 33 of 33 of #476's genuinely signed documents
+    /// (measured for #576), so this is the real shape. The reason is long on purpose —
+    /// the real ones run to 86 and 118 characters. Mirrors
+    /// <c>tools/gen_signature_fixtures.py</c>'s <c>signed-reason.pdf</c>.
+    /// </summary>
+    public static byte[] BuildSignedWithReason() =>
+        BuildSignatureDocument(certification: false, reason: SignatureReason,
+                               signingTime: "D:20260304152055-04'00'");
+
+    /// <summary>The /Reason <see cref="BuildSignedWithReason"/> records, 118 characters.</summary>
+    public const string SignatureReason =
+        "Example Corporation attests that this document has not been altered since it "
+        + "was disseminated by Example Corporation";
+
+    /// <summary>
+    /// A /FT /Sig AcroForm field with NO /V at all (#576): a document prepared for signing
+    /// and never signed. PDFium's FPDF_GetSignatureCount() counts it anyway, which is the
+    /// false positive #476 §5b measured — 3 documents in 5,636, all synthetic, none of the
+    /// 4,337 private ones and none of the 33 genuinely signed government ones. Neither
+    /// <c>IsSigned</c> nor <c>IsSignedCertification</c> may be true, or the app asks about
+    /// removing a signature the document does not have. Mirrors
+    /// <c>tools/gen_signature_fixtures.py</c>'s <c>signature-field-unsigned.pdf</c>.
+    /// </summary>
+    public static byte[] BuildSignatureFieldUnsigned() =>
+        BuildSignatureDocument(certification: false, unsignedField: true);
+
+    private static byte[] BuildSignatureDocument(bool certification, string? reason = null,
+                                                 string signingTime = "D:20250101000000+00'00'",
+                                                 bool unsignedField = false)
     {
         const string content = "BT /F1 12 Tf 72 700 Td (signed) Tj ET\n";
         // Not a real digest or byte range: FPDFSignatureObj_GetDocMDPPermission and
@@ -148,7 +179,13 @@ internal static class SamplePdf
             ? " /Reference [ << /Type /SigRef /TransformMethod /DocMDP /DigestMethod /MD5 "
               + "/TransformParams << /Type /TransformParams /P 1 /V /1.2 >> >> ]"
             : "";
-        var catalogExtra = certification ? " /Perms << /DocMDP 7 0 R >>" : "";
+        if (reason is not null)
+            sigExtra += $" /Reason ({reason})";
+        var catalogExtra = certification && !unsignedField ? " /Perms << /DocMDP 7 0 R >>" : "";
+        // /V is the only difference between a signature and a signature field (#576): the
+        // field, the widget, the /Rect, the /SigFlags and the AcroForm entry are identical
+        // either way, which is exactly why FPDF_GetSignatureCount() cannot tell them apart.
+        var value = unsignedField ? "" : " /V 7 0 R";
         return Assemble(
         [
             $"1 0 obj\n<< /Type /Catalog /Pages 2 0 R /AcroForm 6 0 R{catalogExtra} >>\nendobj\n",
@@ -160,9 +197,9 @@ internal static class SamplePdf
             "6 0 obj\n<< /Fields [8 0 R] /SigFlags 3 >>\nendobj\n",
             $"7 0 obj\n<< /Type /Sig /Filter /Adobe.PPKLite /SubFilter /adbe.pkcs7.detached "
                 + $"/ByteRange [0 9 9 9] /Contents <{placeholderContents}> "
-                + $"/M (D:20250101000000+00'00'){sigExtra} >>\nendobj\n",
+                + $"/M ({signingTime}){sigExtra} >>\nendobj\n",
             "8 0 obj\n<< /FT /Sig /Type /Annot /Subtype /Widget /Rect [0 0 0 0] /F 132 "
-                + "/T (Signature1) /V 7 0 R >>\nendobj\n",
+                + $"/T (Signature1){value} >>\nendobj\n",
         ]);
     }
 
