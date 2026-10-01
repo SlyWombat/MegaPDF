@@ -1017,6 +1017,23 @@
         }
       }
     },
+    "Couldn't move that whiteout" : {
+      "comment" : "Whiteout (#3): a move or resize failed and the whiteout is where it was",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible de déplacer ce blanc de correction"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible de déplacer ce blanc de correction"
+          }
+        }
+      }
+    },
     "Couldn't move the signature." : {
       "localizations" : {
         "fr" : {
@@ -1061,6 +1078,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Impossible d'ouvrir ce fichier."
+          }
+        }
+      }
+    },
+    "Couldn't place that whiteout" : {
+      "comment" : "Whiteout (#3): the placement failed and the page is unchanged",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible de placer ce blanc de correction"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible de placer ce blanc de correction"
           }
         }
       }
@@ -1178,6 +1212,23 @@
         }
       }
     },
+    "Couldn't remove that whiteout" : {
+      "comment" : "Whiteout (#3): the removal failed and the whiteout is still on the page",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible de supprimer ce blanc de correction"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible de supprimer ce blanc de correction"
+          }
+        }
+      }
+    },
     "Couldn't remove this signature." : {
       "localizations" : {
         "fr" : {
@@ -1254,6 +1305,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Impossible de déverrouiller ce document."
+          }
+        }
+      }
+    },
+    "Cover an area without removing what is under it" : {
+      "comment" : "Whiteout (#3): the menu row's hint, said to a screen reader — the one sentence that separates it from Redact",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Masque une zone sans supprimer ce qui se trouve dessous"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Masque une zone sans supprimer ce qui se trouve dessous"
           }
         }
       }
@@ -1366,6 +1434,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Téléchargements"
+          }
+        }
+      }
+    },
+    "Drag across what should be covered" : {
+      "comment" : "Whiteout (#3): said while the tool is armed, because a drag is not a gesture anyone guesses at",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Faites glisser sur la zone à masquer"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Faites glisser sur la zone à masquer"
           }
         }
       }
@@ -3099,6 +3184,23 @@
         }
       }
     },
+    "Remove whiteout" : {
+      "comment" : "Whiteout (#3): what VoiceOver calls the selection's ✕ — the thing's own name, since a white rectangle over a page does not say what is going away",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Retirer le blanc de correction"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Retirer le blanc de correction"
+          }
+        }
+      }
+    },
     "Removing it would change the page outside the areas you marked." : {
       "localizations" : {
         "fr" : {
@@ -4541,6 +4643,23 @@
         }
       }
     },
+    "Whiteout" : {
+      "comment" : "Whiteout (#3): the ⋯ menu row that arms the tool. The same word on every platform",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Blanc de correction"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Blanc de correction"
+          }
+        }
+      }
+    },
     "Whiteout covers — it doesn't remove" : {
       "comment" : "First-use hint on the Whiteout tool (#173)",
       "localizations" : {
@@ -4554,6 +4673,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Le correcteur masque sans rien retirer"
+          }
+        }
+      }
+    },
+    "Whiteout removed." : {
+      "comment" : "Whiteout (#3): announced to a screen reader; the page already shows it, so there is no dialog",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Blanc de correction retiré."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Blanc de correction retiré."
           }
         }
       }

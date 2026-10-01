@@ -70,9 +70,12 @@ struct DocumentCapabilities: Equatable {
     func allows(_ operation: PdfEditOperation) -> Bool {
         switch operation {
         case is BodyTextEditOperation, is BodyTextDeleteOperation,
-             is RedactMarkOperation, is MoveRedactionMarkOperation, is ClearRedactionMarksOperation:
+             is RedactMarkOperation, is MoveRedactionMarkOperation, is ClearRedactionMarksOperation,
+             is WhiteoutOperation, is MoveWhiteoutOperation:
             // A redaction removes the document's own content, so it needs the same
-            // permission the Redact command itself does (#329).
+            // permission the Redact command itself does (#329). A whiteout rewrites the
+            // page's content stream to cover part of it (#3), which is the same `modify`
+            // permission -- covering is not annotating, whatever it looks like.
             return canEditContent
         case is TextBoxOperation, is EditTextBoxOperation, is MoveTextBoxOperation:
             return canAddText

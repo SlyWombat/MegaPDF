@@ -62,6 +62,18 @@ struct SelectedRedactionMark: Equatable {
     let rect: PdfRect
 }
 
+/// A whiteout selected for move, resize or removal (#3).
+///
+/// Unlike every other selection here this is anchored on a page-object **index**, because a
+/// whiteout is page content and the format gives it nothing else to be called by. The index
+/// is stale the moment the whiteout moves, so it is re-read from the operation that moved it
+/// (`ViewerModel.reselectWhiteout`) rather than carried across an edit.
+struct SelectedWhiteout: Equatable {
+    let pageIndex: Int
+    let objectIndex: Int
+    let rect: PdfRect
+}
+
 /// Sizes offered for added text (#43). A short list, not a free-entry number box:
 /// the job is "match the form I am filling in", and six presets cover it.
 let textSizes: [Double] = [8, 10, 12, 14, 18, 24]
@@ -250,11 +262,13 @@ final class ViewerModel: ObservableObject {
             // out, for the same reason an armed tool does not.
             setPagesOpen(false)
             redactMode = false
+            whiteoutMode = false
             isPlacingText = false
             pendingSignature = nil
             selectedStamp = nil
             selectedTextBox = nil
             deselectRedactionMark()
+            deselectWhiteout()
             // "Tap the page where the signature should go" and its siblings are
             // instructions for a tool that has just been put away.
             statusMessage = nil
@@ -360,6 +374,8 @@ final class ViewerModel: ObservableObject {
 
     func toggleRedactMode() {
         redactMode.toggle()
+        // Both tools want the next drag on the page (#3), so arming one puts the other away.
+        if redactMode { cancelWhiteoutMode() }
     }
 
     func cancelRedactMode() { redactMode = false }
@@ -410,9 +426,10 @@ final class ViewerModel: ObservableObject {
             return
         }
         guard let mark = redactionMarks[pageIndex]?.first(where: { $0.markId == markId }) else { return }
-        // One selection at a time, as with stamps and text boxes.
+        // One selection at a time, as with stamps, text boxes and covers.
         selectedStamp = nil
         selectedTextBox = nil
+        selectedWhiteout = nil
         selectedRedactionMark = SelectedRedactionMark(pageIndex: pageIndex, markId: markId,
                                                      rect: mark.rect)
     }
@@ -602,6 +619,169 @@ final class ViewerModel: ObservableObject {
             "\(page)")
         return body + " " + why
     }
+
+    // MARK: - Whiteout (#3, SDD §6.2 contract 5)
+    //
+    // A whiteout **covers**; a redaction **removes**. The two sit next to each other in the
+    // ⋯ menu and read nothing like each other, which is the whole of why this app has both.
+    //
+    // Everything here is page content: a white filled path, in the file, drawn by the
+    // renderer like any other object. So there is no overlay to draw (the raster already has
+    // it), the page-rewrite question applies (#139), and the handle is a page-object index
+    // rather than an id — see `SelectedWhiteout` and `WhiteoutOperation.currentObjectIndex`.
+
+    /// The Whiteout tool is armed: the next drag across a page covers that area.
+    @Published private(set) var whiteoutMode = false
+
+    /// The whiteout selected for move, resize or removal; nil the rest of the time.
+    @Published private(set) var selectedWhiteout: SelectedWhiteout?
+
+    /// Whether this open may cover anything — what the Whiteout row asks before it offers
+    /// itself. Covering rewrites the page's own content, so it needs `modify`, exactly as
+    /// Redact does.
+    var canWhiteout: Bool { capabilities.canEditContent }
+
+    /// Arms or disarms the tool. Redact and Add text put themselves away: all three want the
+    /// next gesture on the page, and two armed tools would make a drag ambiguous.
+    func toggleWhiteoutMode() {
+        whiteoutMode.toggle()
+        guard whiteoutMode else {
+            if statusMessage == Self.whiteoutPrompt { statusMessage = nil }
+            return
+        }
+        redactMode = false
+        isPlacingText = false
+        pendingSignature = nil
+        selectedWhiteout = nil
+        deselectRedactionMark()
+        statusMessage = Self.whiteoutPrompt
+    }
+
+    func cancelWhiteoutMode() {
+        guard whiteoutMode else { return }
+        whiteoutMode = false
+        if statusMessage == Self.whiteoutPrompt { statusMessage = nil }
+    }
+
+    /// Said while the tool is armed. A drag is not a gesture anyone guesses at, and the ⋯ menu
+    /// row cannot say it — the row is gone by the time the page is in front of you.
+    private static var whiteoutPrompt: String {
+        String(localized: "Drag across what should be covered")
+    }
+
+    /// Covers the dragged area: one drag, one whiteout, one undo step.
+    ///
+    /// The tool disarms itself, like Redact's drag and Add text's tap: a tool that stayed
+    /// armed would cover the next thing a scroll-gone-wrong touched.
+    func placeWhiteout(pageIndex: Int, rect: PdfRect) {
+        guard let doc = document, case let .viewing(_, pageSizes) = state,
+              pageIndex < pageSizes.count else { return }
+        whiteoutMode = false
+        if statusMessage == Self.whiteoutPrompt { statusMessage = nil }
+        guard permits(canWhiteout) else { return }
+        let bounds = clampToPage(rect, pageSize: pageSizes[pageIndex])
+        // A drag that collapsed to a line covers nothing anyone can see or get hold of again.
+        guard bounds.right - bounds.left >= 1, bounds.top - bounds.bottom >= 1 else { return }
+        guard let token = beginPageChange(pageIndex, near: bounds) else { return }
+        Task {
+            defer { busy.end(token) }
+            do {
+                guard await confirmPageRewrite(doc, pageIndex: pageIndex, token: token) else { return }
+                try await perform(WhiteoutOperation(pageIndex: pageIndex, rect: bounds, adding: true),
+                                  doc: doc)
+            } catch {
+                statusMessage = String(localized: "Couldn't place that whiteout")
+            }
+        }
+    }
+
+    /// Selects a whiteout, or clears the selection when it is the one already selected — the
+    /// same rule the marks, the stamps and the boxes follow. Removal is the ✕, never a bare
+    /// tap.
+    func selectWhiteout(pageIndex: Int, objectIndex: Int, rect: PdfRect) {
+        if selectedWhiteout?.pageIndex == pageIndex, selectedWhiteout?.objectIndex == objectIndex {
+            selectedWhiteout = nil
+            return
+        }
+        // One selection at a time.
+        selectedStamp = nil
+        selectedTextBox = nil
+        selectedRedactionMark = nil
+        selectedWhiteout = SelectedWhiteout(pageIndex: pageIndex, objectIndex: objectIndex, rect: rect)
+    }
+
+    func deselectWhiteout() { selectedWhiteout = nil }
+
+    /// Commits a drag or a corner resize from the selection overlay.
+    ///
+    /// Free-form, not aspect-locked: a whiteout is an area, and a wide strip over one line is
+    /// exactly the shape people want — the same choice Windows made for it (#564) and the one
+    /// a redaction mark already has here.
+    func commitWhiteoutRect(_ newRect: PdfRect) {
+        guard let sel = selectedWhiteout, let doc = document,
+              case let .viewing(_, pageSizes) = state, sel.pageIndex < pageSizes.count else { return }
+        // A drag while other work runs springs back: the overlay has already let go of it.
+        guard !busy.isBlocked else { return }
+        guard permits(canWhiteout) else { return }
+        let rect = clampToPage(newRect, pageSize: pageSizes[sel.pageIndex])
+        // A tap that slipped into a drag can land a sub-point move; don't put a no-op on the
+        // undo stack for it.
+        guard abs(rect.left - sel.rect.left) >= 0.01 || abs(rect.bottom - sel.rect.bottom) >= 0.01
+                || abs(rect.right - sel.rect.right) >= 0.01 || abs(rect.top - sel.rect.top) >= 0.01
+        else { return }
+        guard let token = beginPageChange(sel.pageIndex, near: sel.rect) else { return }
+        Task {
+            defer { busy.end(token) }
+            do {
+                guard await confirmPageRewrite(doc, pageIndex: sel.pageIndex, token: token) else {
+                    // Cancelled: the whiteout stays where it was, and republishing the
+                    // selection puts the overlay back on it.
+                    if selectedWhiteout == nil { selectedWhiteout = sel }
+                    return
+                }
+                let operation = MoveWhiteoutOperation(pageIndex: sel.pageIndex,
+                                                      objectIndex: sel.objectIndex,
+                                                      from: sel.rect, to: rect)
+                try await perform(operation, doc: doc)
+                // The move detached the object and appended a fresh one, so the index the
+                // selection started with points at nothing. Re-anchor on where it is now —
+                // without this, the very next Remove takes off the wrong rectangle.
+                reselectWhiteout(operation, rect: rect)
+            } catch {
+                statusMessage = String(localized: "Couldn't move that whiteout")
+            }
+        }
+    }
+
+    /// Takes the selected whiteout off the page, through the history so Undo puts it back.
+    func removeSelectedWhiteout() {
+        guard let sel = selectedWhiteout, let doc = document, !busy.isBlocked else { return }
+        guard permits(canWhiteout) else { return }
+        guard let token = beginPageChange(sel.pageIndex, near: sel.rect) else { return }
+        Task {
+            defer { busy.end(token) }
+            do {
+                guard await confirmPageRewrite(doc, pageIndex: sel.pageIndex, token: token) else { return }
+                try await perform(WhiteoutOperation(pageIndex: sel.pageIndex, rect: sel.rect,
+                                                   objectIndex: sel.objectIndex, adding: false),
+                                  doc: doc)
+                announce(String(localized: "Whiteout removed."))
+            } catch {
+                statusMessage = String(localized: "Couldn't remove that whiteout")
+            }
+        }
+    }
+
+    /// Keeps the overlay on a whiteout that has just moved, at the index the operation ended
+    /// up with. `afterHistoryChange` drops every selection, so this runs after it.
+    private func reselectWhiteout(_ operation: MoveWhiteoutOperation, rect: PdfRect) {
+        guard operation.currentObjectIndex >= 0 else { return }
+        selectedWhiteout = SelectedWhiteout(pageIndex: operation.pageIndex,
+                                            objectIndex: operation.currentObjectIndex,
+                                            rect: rect)
+    }
+
+
     private(set) var document: PdfDocument?
 
     /// Feedback while the app works (#145): what is running, and the indicators for it. Views
@@ -1181,6 +1361,7 @@ final class ViewerModel: ObservableObject {
 
         if isPlacingText {
             isPlacingText = false
+            whiteoutMode = false
             statusMessage = nil
             guard permits(caps.canAddText) else { return }
             // The page the text goes on is known now: check it while the text is typed.
@@ -1209,6 +1390,7 @@ final class ViewerModel: ObservableObject {
                     selectedStamp = SelectedStamp(pageIndex: index, annotIndex: sig.annotIndex,
                                                   id: sig.id, rect: sig.rect)
                     selectedTextBox = nil
+                    selectedWhiteout = nil
                     return
                 }
                 selectedStamp = nil
@@ -1245,6 +1427,7 @@ final class ViewerModel: ObservableObject {
                                                     fontName: box.fontName,
                                                     rect: box.rect)
                     selectedTextBox = selection
+                    selectedWhiteout = nil
                     // A selected box is a change about to happen: have the page's answer ready (#145).
                     startPageCheck(index)
                     if wasSelected {
@@ -1257,6 +1440,26 @@ final class ViewerModel: ObservableObject {
                     return
                 }
                 selectedTextBox = nil
+
+                // Whiteouts (#3) rank below the things placed *on* the page and above the
+                // document underneath, which is where a cover belongs: a text box or a
+                // signature dropped on top of one is still reachable, and a tap on the cover
+                // itself does not fall through to text nobody can see any more. Last match
+                // wins -- later page objects paint on top.
+                if let cover = try await engine.whiteouts(doc, pageIndex: index)
+                    .last(where: { $0.rect.contains(x: x, y: y) }) {
+                    guard permits(caps.canEditContent) else {
+                        selectedWhiteout = nil
+                        return
+                    }
+                    guard document === doc else { return }
+                    selectWhiteout(pageIndex: index, objectIndex: cover.objectIndex, rect: cover.rect)
+                    // A selected cover is a change about to happen: have the page's answer
+                    // ready (#145).
+                    startPageCheck(index)
+                    return
+                }
+                selectedWhiteout = nil
 
                 // Whichever edit the tap lands on, it goes through the history so
                 // it can be taken back (#34).
@@ -1423,8 +1626,10 @@ final class ViewerModel: ObservableObject {
         if isDynamicXfa { showDynamicXfaNotice(); return }
         guard permits(capabilities.canAddText) else { return }
         cancelPlacement()
+        cancelWhiteoutMode()
         selectedStamp = nil
         selectedTextBox = nil
+        selectedWhiteout = nil
         isPlacingText = true
         // Add text is armed: check the page in view now, so the answer is ready when the text is (#145).
         if let currentPage { startPageCheck(currentPage) }
@@ -1683,6 +1888,10 @@ final class ViewerModel: ObservableObject {
         canRedo = history.canRedo
         selectedStamp = nil
         selectedTextBox = nil
+        // A cover's handle is its page-object index, and any change to the page can move it
+        // (#3). Dropping the selection is the honest answer: the move path re-anchors on the
+        // index its own operation ended up with, and nothing else can know.
+        selectedWhiteout = nil
         // #174: a page change renumbers the document, so what follows it is not "re-render one
         // page" but "carry every index-keyed thing across". `applyPageShifts` does all of it,
         // including the unsaved flag and the re-render, and `reverted` is why it has to know
@@ -2325,6 +2534,7 @@ final class ViewerModel: ObservableObject {
         if isDynamicXfa { showDynamicXfaNotice(); return }
         guard permits(capabilities.canSign) else { return }
         selectedTextBox = nil
+        cancelWhiteoutMode()
         pendingSignature = entry
         statusMessage = String(localized: "Tap the page where the signature should go")
     }
@@ -2991,6 +3201,11 @@ final class ViewerModel: ObservableObject {
         redactionMarks = [:]
         selectedRedactionMark = nil
         redactMode = false
+        // A cover belongs to the document that carries it (#3). The selection is an object
+        // index into a page of the document being closed, which the next one would read as
+        // one of its own.
+        selectedWhiteout = nil
+        whiteoutMode = false
         redactionSummary = nil
         redactionRefusal = nil
         summaryForSave = nil
