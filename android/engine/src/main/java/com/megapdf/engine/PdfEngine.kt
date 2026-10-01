@@ -363,6 +363,22 @@ class PdfDocument internal constructor(
     }
 
     /**
+     * Removes every digital signature from the open document, in memory, on the person's
+     * explicit say-so (#576) — the same engine call Windows and the Avalonia desktops already
+     * make through their own bindings (`IPdfDocument.RemoveDigitalSignatures()`). The file on
+     * disk is untouched; this reaches only what a save writes next.
+     *
+     * Returns whether any signature went. Callers should re-read [documentFlags] afterwards
+     * rather than trust this alone, since it is [isSigned] that the rest of the app acts on.
+     * Nothing calls this on its own: a save nobody asked to remove the signature from behaves
+     * exactly as it did before #576.
+     */
+    suspend fun removeDigitalSignatures(): Boolean = withContext(engine.dispatcher) {
+        check(!closed) { "document is closed" }
+        PdfiumNative.nativeRemoveDigitalSignatures(handle) > 0
+    }
+
+    /**
      * Writes a copy encrypted with AES-256 under new passwords, in place of any security
      * the document had (#131). The owner password opens it with every permission; null
      * means the same as the user password. The copy no longer opens like this document:

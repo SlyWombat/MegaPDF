@@ -32,6 +32,14 @@ internal object PdfiumNative {
      * whole, read once at open the same way [nativePageCount] and [nativeSecurityInfo] are.
      */
     external fun nativeDocumentFlags(handle: Long): Int
+    /**
+     * megapdf_signatures_remove() (#576): removes every digital signature from the
+     * in-memory document, on the person's explicit say-so before a save that would leave it
+     * invalid anyway — the same engine call Windows and the Avalonia desktops already make.
+     * Returns the number of signatures removed; callers re-read [nativeDocumentFlags]
+     * afterwards rather than trusting this count alone.
+     */
+    external fun nativeRemoveDigitalSignatures(handle: Long): Int
     external fun nativeOpenPage(handle: Long, index: Int): Long
     external fun nativeClosePage(handle: Long)
     external fun nativePageWidth(handle: Long): Double
