@@ -115,15 +115,50 @@ class PageToolsProgressTest {
         intended(allOf(hasAction(Intent.ACTION_CREATE_DOCUMENT), hasType("application/pdf")))
 
         val stopLabel = str(R.string.stop)
-        rule.waitFor(hasText(stopLabel))
+        val launched = System.currentTimeMillis()
+        rule.waitUntilOrExplain(describe = { extractState(file, out, launched) }) {
+            rule.nodeExists(hasText(stopLabel))
+        }
         rule.onNodeWithText(stopLabel).performClick()
 
-        rule.waitUntil(SETTLE_MS) { rule.viewModel.statusMessage == str(R.string.work_stopped) }
+        rule.waitUntilOrExplain(describe = { extractState(file, out, launched) }) {
+            rule.viewModel.statusMessage == str(R.string.work_stopped)
+        }
         assertFalse("a stopped extract leaves nothing at the destination", out.exists() && out.length() > 0)
         // The document itself was only ever read from, never touched.
         assertFalse(rule.viewModel.isDirty)
         assertEquals(EXTRACT_PAGE_COUNT, (rule.viewModel.uiState as ViewerUiState.Viewing).pageSizes.size)
-        assertFalse("nothing is running any more, so Stop should not still be offered", rule.nodeExists(hasText(stopLabel)))
+        // Waited for, not asserted on the spot (#611): "Stopped." is set in the catch and the
+        // busy token is ended in the finally after it, so the instant the message is readable
+        // the Snackbar is still up — and it then has its own exit animation to play out. The
+        // claim is that Stop goes away, not that it has gone away by this line.
+        rule.waitForGone(hasText(stopLabel))
+    }
+
+    /**
+     * What the app was doing when a wait in [extractingALotOfPagesCanBeStoppedAndLeavesNothingBehind]
+     * ran out (#611). The three outcomes this tells apart, which a bare timeout cannot:
+     *
+     *  * `active=false` with a `status` already set — the extract finished before the test could
+     *    catch it, so there was never a Stop to press. This is the test racing the work.
+     *  * `active=true` with `visible=false` — the work is running but the busy strip has not
+     *    crossed its own 0.5 s threshold, so the Stop button is not on screen yet.
+     *  * `active=false` with no status at all — [ViewerViewModel.extractSelectedPagesTo] returned
+     *    before it began, e.g. on the permission question or a lock it did not expect.
+     */
+    private fun extractState(file: java.io.File, out: java.io.File, since: Long): String {
+        val vm = rule.viewModel
+        val strip = vm.busy.document
+        return "${System.currentTimeMillis() - since} ms after the picker answered; " +
+            "busy(active=${strip.isActive}, visible=${strip.isVisible}, label=${strip.label}, " +
+            "canCancel=${strip.canCancel}, cancelling=${strip.isCancelling}, " +
+            "locksDocument=${vm.busy.locksDocument}); " +
+            "status=${vm.statusMessage}; refusal=${vm.pageToolRefusal}; " +
+            "permissionQuestion=${vm.permissionQuestion}; " +
+            "stopOnScreen=${rule.nodeExists(hasText(str(R.string.stop)))}; " +
+            "fixture=${file.length()} bytes; " +
+            "destination=${if (out.exists()) "${out.length()} bytes" else "absent"}; " +
+            "pages=${(vm.uiState as? ViewerUiState.Viewing)?.pageSizes?.size}"
     }
 
     @Test
@@ -147,7 +182,8 @@ class PageToolsProgressTest {
 
         rule.waitUntil(SETTLE_MS) { !rule.viewModel.isSearching }
         assertEquals(str(R.string.search_stopped), rule.viewModel.statusMessage)
-        assertFalse("nothing is running any more, so Stop should not still be offered", rule.nodeExists(hasText(stopLabel)))
+        // The same wait the extract above needs, for the same reason (#611).
+        rule.waitForGone(hasText(stopLabel))
     }
 
     @Test
@@ -171,6 +207,15 @@ class PageToolsProgressTest {
          * threshold even on a slow, nested-virtualised CI emulator. Confirmed on CI: at this
          * count, opening the (content-light) primary document is fast — it is only ever a
          * 2-page file here — and the import itself is what takes the time.
+         *
+         * #611 note: "the import itself" is not what takes the time. Measured on the CI
+         * emulator, `megapdf_pages_import` of 5,000 content-light pages is **149 ms** — well
+         * under the threshold. What holds the busy token long enough is the rest of
+         * [ViewerViewModel.performPageEdit] inside it: re-reading 5,002 page sizes off the
+         * engine afterwards. That is why this one has never flaked where its two siblings did
+         * (36 runs of 36 during #611), and it is left alone — but the margin here is in a place
+         * the comment above did not know about, so re-measure before trusting this count if the
+         * page-size resync ever gets cheaper.
          */
         private const val HUGE_PAGE_COUNT = 5_000
 
@@ -182,11 +227,31 @@ class PageToolsProgressTest {
          * Stop to press. 800 pages of ~100 KB of content each is an 80 MB document: still quick
          * to open (opening reads only page sizes, never page content), and three orders of
          * magnitude more content than the measurement above, for a write that takes a while.
+         *
+         * #611 **measured** that write instead of reasoning about it, and found the reasoning
+         * wrong: with the old `q Q` padding the extract took 373 ms on the CI emulator — under
+         * the busy indicator's own 0.5 s threshold, so most runs had nothing to press Stop on.
+         * The padding is incompressible now (see [TestPdfs.multiPageBulky]) and the same
+         * 800 x 100 KB shape takes 1,893 ms there, which is the margin this count exists to
+         * buy. Extract runs at ~42 MB/s of *output* on that machine and barely cares about page
+         * count, so bytes are what this dial really sets: do not shrink it without re-measuring.
          */
         private const val EXTRACT_PAGE_COUNT = 800
         private const val EXTRACT_PAGE_BYTES = 100_000
 
-        /** Large enough that the per-page sweep's own count is caught mid-way. */
-        private const val SEARCH_PAGE_COUNT = 2_000
+        /**
+         * Large enough that the per-page sweep's own count is caught mid-way — and that the
+         * sweep outlasts the busy indicator's 0.5 s show threshold, which is what the Stop this
+         * test presses is gated on.
+         *
+         * #611 measured the sweep on the CI emulator rather than guessing at it, the same way it
+         * had to for extract: 2,000 pages took 679 ms there, a margin of 1.4x over the
+         * threshold, and it duly failed 3 times in 24 with no Stop ever offered. The sweep is
+         * ~0.24 ms a page and all but linear (4,000: 1,044 ms; 8,000: 1,904 ms), so this count
+         * is the one that buys the same 3.8x margin extract now has. The fixture is
+         * content-light, so 8,000 pages is still under 2 MB and opens in a few milliseconds —
+         * the cost here is the sweep, which is the point.
+         */
+        private const val SEARCH_PAGE_COUNT = 8_000
     }
 }

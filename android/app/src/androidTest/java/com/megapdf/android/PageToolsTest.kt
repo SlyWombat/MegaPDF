@@ -81,7 +81,18 @@ class PageToolsTest {
     }
 
     private fun waitForWidths(expected: List<Int>) {
-        rule.waitUntil(SETTLE_MS) { widths() == expected }
+        // #611: a bare timeout here says only "PageToolsTest.kt:84". Whether the operation is
+        // still running, already refused, or finished with the wrong answer are three different
+        // bugs, and the test report is the only place that survives a run.
+        rule.waitUntilOrExplain(
+            describe = {
+                val strip = rule.viewModel.busy.document
+                "widths=${widths()}, expected=$expected; " +
+                    "busy(active=${strip.isActive}, label=${strip.label}); " +
+                    "pageSpinner=${rule.viewModel.busy.page.isActive}; " +
+                    "status=${rule.viewModel.statusMessage}; refusal=${rule.viewModel.pageToolRefusal}"
+            },
+        ) { widths() == expected }
         assertEquals(expected, widths())
     }
 
@@ -125,7 +136,7 @@ class PageToolsTest {
         assertEquals(listOf(792, 610, 792), heights())
         assertTrue("turning a page is an edit", rule.viewModel.isDirty)
 
-        rule.undoButton().performClick()
+        rule.clickUndo()
         waitForWidths(listOf(600, 610, 620))
     }
 
@@ -145,7 +156,7 @@ class PageToolsTest {
         waitForWidths(listOf(610, 630))
         rule.waitForText(pageCountTitle(2))
 
-        rule.undoButton().performClick()
+        rule.clickUndo()
         // One press, all four back, in the order they were in: the pages themselves, kept by the
         // core for exactly this (`megapdf_page_restore`).
         waitForWidths(listOf(600, 610, 620, 630))
@@ -185,7 +196,7 @@ class PageToolsTest {
         // The page that moved is still the selected one, wherever it went.
         rule.waitForText(str(R.string.pages_selected, 1))
 
-        rule.undoButton().performClick()
+        rule.clickUndo()
         waitForWidths(listOf(600, 610, 620, 630))
     }
 
@@ -201,7 +212,7 @@ class PageToolsTest {
         // The new page is the size of the page it follows, so it fits a document of mixed sizes.
         waitForWidths(listOf(600, 610, 610, 620))
 
-        rule.undoButton().performClick()
+        rule.clickUndo()
         waitForWidths(listOf(600, 610, 620))
     }
 
@@ -220,12 +231,12 @@ class PageToolsTest {
         waitForWidths(listOf(600, 610, 620, 600, 610))
         assertTrue(rule.viewModel.isDirty)
 
-        rule.undoButton().performClick()
+        rule.clickUndo()
         waitForWidths(listOf(600, 610, 620))
 
         // And a redo puts back the pages that arrived, rather than reading the file again — which
         // is why this is safe even though the picked file's cached copy is long gone.
-        rule.onNodeWithContentDescription(str(R.string.redo)).performClick()
+        rule.clickRedo()
         waitForWidths(listOf(600, 610, 620, 600, 610))
     }
 
@@ -307,10 +318,10 @@ class PageToolsTest {
         rule.onNodeWithContentDescription(str(R.string.pages_delete)).performClick()
         waitForWidths(listOf(610, 792, 630))
 
-        rule.undoButton().performClick()             // the delete: page 1 comes back
+        rule.clickUndo()             // the delete: page 1 comes back
         waitForWidths(listOf(600, 610, 792, 630))
 
-        rule.undoButton().performClick()             // the rotation: off the page it went on
+        rule.clickUndo()             // the rotation: off the page it went on
         waitForWidths(listOf(600, 610, 620, 630))
         assertEquals(listOf(792, 792, 792, 792), heights())
     }
