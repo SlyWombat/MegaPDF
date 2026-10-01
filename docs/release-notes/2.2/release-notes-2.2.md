@@ -17,9 +17,10 @@ permission that explains itself instead of only refusing (#558, #581); a warning
 before saving destroys a document's own digital signature, with an option to strip
 one a save is about to break, so far on the Mac and Linux (#476, #481, #576, #610,
 behind #486 / #491 / #492 / #497); the iPad's own toolbar (#172, #435); the
-vocabulary fix that keeps the two meanings of "signature" apart (#602, #606); and a
+vocabulary fix that keeps the two meanings of "signature" apart (#602, #606); a
 fix to the Windows empty state, which had offered document commands with no
-document open (#617, #629).
+document open (#617, #629); and a fix to the Android toolbar, which briefly
+offered commands it was about to silently refuse (#611, #636).
 
 **Tabs, Save As Markdown and `megapdf-cli` are not in this release.** They shipped in
 2.1.1 (2026-09-21) and are unchanged here; see
@@ -188,6 +189,11 @@ instead of leaving a blank slot (#402, #428).
 - **Windows: a tab opened from outside the app** — File Explorer, a second launch —
   **reliably gets its toolbar wired up**, closing an intermittent miss from 2.1.1
   (#427).
+- **Android: the toolbar no longer offers a command it's about to silently
+  refuse.** For a few hundred milliseconds after every edit, Undo, Redo, the
+  page tools, the selection tools and Password stayed enabled although the app
+  would ignore a tap; eleven controls and two separate guards are now one
+  (#611, #636).
 
 ### What isn't here
 
@@ -271,6 +277,8 @@ instead of leaving a blank slot (#402, #428).
 - **The one platform where a withheld page permission explains itself and leaves
   the choice to you**, instead of only refusing (#558, #581).
 - Fix: a redaction mark keeps its identity when an undo brings it back (#429).
+- Fix: the toolbar no longer offers a command it's about to silently refuse in
+  the brief window right after an edit (#611, #636).
 
 ### iPhone and iPad
 
@@ -563,6 +571,8 @@ images manquent plutôt que de laisser un espace vide (#402, #428).
   laisse choisir**, au lieu de seulement refuser (#558, #581).
 - Correction : une marque de caviardage garde son identité quand une annulation
   la ramène (#429).
+- Correction : la barre d'outils n'offre plus une commande qu'elle s'apprête
+  à refuser en silence, dans l'instant qui suit une modification (#611, #636).
 
 ### iPhone et iPad
 
@@ -867,6 +877,8 @@ images manquent plutôt que de laisser un espace vide (#402, #428).
   laisse choisir**, au lieu de seulement refuser (#558, #581).
 - Correction : une marque de caviardage garde son identité quand une annulation
   la ramène (#429).
+- Correction : la barre d'outils n'offre plus une commande qu'elle s'apprête
+  à refuser en silence, dans l'instant qui suit une modification (#611, #636).
 
 ### iPhone et iPad
 
