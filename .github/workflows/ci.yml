@@ -563,20 +563,31 @@ jobs:
   # checked twice against a real windows-latest runner rather than assumed
   # (issue #462).
   #
-  # NON-BLOCKING as of 2026-09-29 (`continue-on-error: true`): a spike (issue
-  # #462) ran these same four checks against `windows-latest` twice and got a
-  # real composited window and every check passing both times — but twice is
-  # reproducible, not a guarantee across every datacenter GitHub's fleet might
-  # schedule this on. #515 and #544 are this project's own recent, paid-for
-  # lesson that a check red-lighting unrelated work costs more than the check
-  # is worth while it is still finding its feet. This job reports — it uploads
-  # its screenshots and logs either way — without failing a pull request.
-  # **Make it blocking once it has held green through a few weeks of ordinary
-  # pushes with no fleet-driven false red** (#462 tracks this).
+  # BLOCKING as of 2026-10-01 (#462). It was introduced non-blocking on
+  # 2026-09-29 because two green runs are reproducible, not a guarantee across
+  # GitHub's fleet, and because #515/#544 are this project's own paid-for lesson
+  # that a check red-lighting unrelated work costs more than it is worth while
+  # it is finding its feet. The record since says it has found its feet:
+  # **59 passes and one failure, and that failure was real** — it caught a
+  # genuine race in a branch's own new cancellation check (#568), on a runner
+  # fast enough to finish the work before the test could cancel it. Not one
+  # fleet-driven false red.
+  #
+  # This is also why the job exists at all. #462 was opened because every
+  # Windows defect in 2.2 was found by hand after CI was green, and the states
+  # here have since caught a brand token that threw on first use, a tab that
+  # never received its content, a selection the grid wiped during renumbering,
+  # two disposal call sites, a line break that became a control character, a
+  # notices dialog that had shown one line since it was written, and redaction
+  # marks that were never actually moved, removed or cleared. A reporting-only
+  # job would have found all of that and stopped none of it from landing again.
+  #
+  # One flake has been fixed rather than tolerated: #569, where a fixed scratch
+  # path let the app's own remember-where-you-left-it feature carry a scroll
+  # position between runs. Each state now gets a unique scratch directory.
   windows-ui-selftest:
     name: Windows UI self-test
     runs-on: windows-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
 
