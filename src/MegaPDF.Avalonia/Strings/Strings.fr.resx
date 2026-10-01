@@ -763,13 +763,28 @@
     <value>Ce document porte une signature numérique</value>
   </data>
   <data name="SignedSaveWarningBody" xml:space="preserve">
-    <value>L'enregistrement par-dessus ce document invalidera sa signature numérique. Enregistrez plutôt une copie pour garder l'original signé intact.</value>
+    <value>L'enregistrement rendra cette signature invalide. MegaPDF réécrit le fichier au complet lorsqu'il enregistre&#160;: la signature ne décrit donc plus le fichier qu'elle a signé, et aucune façon d'enregistrer ne peut la garder valide. Enregistrez une copie pour garder l'original signé intact.</value>
   </data>
   <data name="CertifiedSaveWarningTitle" xml:space="preserve">
     <value>Ce document est certifié contre toute modification</value>
   </data>
   <data name="CertifiedSaveWarningBody" xml:space="preserve">
-    <value>La signature numérique de ce document le certifie — son auteur a déclaré qu'il ne devait subir aucune modification. L'enregistrer par-dessus invalidera cette signature. Enregistrez plutôt une copie pour garder l'original signé intact.</value>
+    <value>La signature numérique de ce document le certifie — son auteur a déclaré qu'il ne devait subir aucune modification. L'enregistrement rendra cette signature invalide&#160;: MegaPDF réécrit le fichier au complet lorsqu'il enregistre, la signature ne décrit donc plus le fichier qu'elle a signé, et aucune façon d'enregistrer ne peut la garder valide. Enregistrez une copie pour garder l'original signé intact.</value>
+  </data>
+  <data name="SignedSaveSignedOn" xml:space="preserve">
+    <value>Signé le {0}.</value>
+  </data>
+  <data name="SignedSaveSignerReason" xml:space="preserve">
+    <value>Le signataire a donné cette raison&#160;: «&#160;{0}&#160;»</value>
+  </data>
+  <data name="SignedSaveSeveralSignatures" xml:space="preserve">
+    <value>Ce document a {0} signatures numériques.</value>
+  </data>
+  <data name="SignedSaveRemoveSignature" xml:space="preserve">
+    <value>Supprimer aussi la signature, qui ne sera plus valide</value>
+  </data>
+  <data name="SignedSaveRemoveOffer" xml:space="preserve">
+    <value>Si elle reste, elle suit le fichier enregistré et continue d'affirmer qu'elle décrit un fichier qu'elle ne décrit plus&#160;: MegaPDF et les autres lecteurs présenteront donc ce fichier comme signé. Le document que vous avez ouvert n'est modifié dans aucun cas — ce choix ne touche que le fichier enregistré. Et une signature numérique indique qu'un fichier n'a pas changé depuis sa signature&#160;: elle n'a jamais empêché qui que ce soit d'ouvrir ce document, alors un fichier enregistré sans elle est lisible par exactement les mêmes personnes.</value>
   </data>
   <data name="SaveACopyButton" xml:space="preserve">
     <value>Enregistrer une copie</value>
@@ -778,7 +793,10 @@
     <value>Remplacer l'original</value>
   </data>
   <data name="SignatureNotCarriedNotice" xml:space="preserve">
-    <value>La signature numérique de l'original ne s'applique pas à cette copie.</value>
+    <value>La copie porte la signature numérique de l'original, et celle-ci n'est plus valide.</value>
+  </data>
+  <data name="SignatureRemovedNotice" xml:space="preserve">
+    <value>Enregistré sans la signature numérique du document. Le document que vous avez ouvert est inchangé.</value>
   </data>
   <data name="UnsupportedProtection" xml:space="preserve">
     <value>Ce PDF utilise un type de protection que MegaPDF ne peut pas ouvrir.</value>

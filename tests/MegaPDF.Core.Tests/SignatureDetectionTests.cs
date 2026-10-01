@@ -68,6 +68,108 @@ public sealed class SignatureDetectionTests : IDisposable
         Assert.False(doc.IsSignedCertification);
     }
 
+    // #576 ------------------------------------------------------------------
+
+    [Fact]
+    public void SignatureFieldWithNoSignature_DoesNotReportSigned()
+    {
+        // #476 §5b: PDFium's FPDF_GetSignatureCount() counts a /FT /Sig field whether or
+        // not it holds a signature, so a document prepared for signing and never signed
+        // read as signed and the app warned that saving would invalidate a signature it
+        // does not have. Red before #576.
+        using var doc = _engine.Open(Write("field-unsigned.pdf", SamplePdf.BuildSignatureFieldUnsigned()));
+        Assert.False(doc.IsSigned);
+        Assert.False(doc.IsSignedCertification);
+        Assert.Empty(doc.DigitalSignatures);
+        // There is no signature, so there is nothing to remove — and the field itself is
+        // the author's and stays: a document prepared for signing is still a document
+        // prepared for signing.
+        Assert.Equal(0, doc.RemoveDigitalSignatures());
+    }
+
+    [Fact]
+    public void Signature_NamesItsSigningDateAndReason()
+    {
+        using var doc = _engine.Open(Write("signed-reason.pdf", SamplePdf.BuildSignedWithReason()));
+        var signature = Assert.Single(doc.DigitalSignatures);
+        Assert.NotNull(signature.SignedOn);
+        Assert.Equal(new DateTime(2026, 3, 4, 15, 20, 55), signature.SignedOn!.Value.DateTime);
+        // The signer's own stated offset, not converted: a signature says when its signer
+        // thought they signed, and -04:00 is part of that statement.
+        Assert.Equal(TimeSpan.FromHours(-4), signature.SignedOn!.Value.Offset);
+        Assert.Equal(SamplePdf.SignatureReason, signature.Reason);
+        Assert.False(signature.IsCertification);
+        Assert.True(signature.HasDetail);
+    }
+
+    [Fact]
+    public void SignatureWithNoReason_StillNamesItsDate()
+    {
+        using var doc = _engine.Open(Write("signed-approval.pdf", SamplePdf.BuildSignedApproval()));
+        var signature = Assert.Single(doc.DigitalSignatures);
+        Assert.Null(signature.Reason);
+        Assert.NotNull(signature.SignedOn);
+        Assert.True(signature.HasDetail);
+    }
+
+    [Fact]
+    public void CertificationSignature_ReportsItselfAsOne()
+    {
+        using var doc = _engine.Open(Write("signed-certified.pdf", SamplePdf.BuildSignedCertified()));
+        Assert.True(Assert.Single(doc.DigitalSignatures).IsCertification);
+    }
+
+    [Fact]
+    public void RemovingTheSignature_LeavesTheSavedFileReportingNoSignature()
+    {
+        // The defect #576 was opened on: our own saved output still counted the signature
+        // it had destroyed, on 98 of 98 rewritten documents (#476 §5a), so reopening a file
+        // MegaPDF wrote warned about a signature that was already gone.
+        var path = Write("signed-reason.pdf", SamplePdf.BuildSignedWithReason());
+        byte[] saved;
+        using (var doc = _engine.Open(path))
+        {
+            Assert.Equal(1, doc.RemoveDigitalSignatures());
+            Assert.False(doc.IsSigned);
+            Assert.Empty(doc.DigitalSignatures);
+            Assert.Equal(0, doc.RemoveDigitalSignatures());   // nothing left to remove
+            using var ms = new MemoryStream();
+            doc.Save(ms);
+            saved = ms.ToArray();
+        }
+        using var reopened = _engine.Open(Write("saved-without.pdf", saved));
+        Assert.Equal(1, reopened.PageCount);
+        Assert.False(reopened.IsSigned);
+        Assert.False(reopened.IsSignedCertification);
+        Assert.Empty(reopened.DigitalSignatures);
+    }
+
+    [Fact]
+    public void ASaveNobodyAskedToRemoveAnything_KeepsTheSignature()
+    {
+        // The twin, and the check that would catch a removal creeping into the save path
+        // itself — the one thing #576 decided against: the bytes are the author's until
+        // somebody says otherwise. It is still a dead signature (#476); it is still theirs.
+        byte[] saved;
+        using (var doc = _engine.Open(Write("signed-reason.pdf", SamplePdf.BuildSignedWithReason())))
+        {
+            using var ms = new MemoryStream();
+            doc.Save(ms);
+            saved = ms.ToArray();
+        }
+        using var reopened = _engine.Open(Write("saved-with.pdf", saved));
+        Assert.True(reopened.IsSigned);
+        Assert.NotNull(Assert.Single(reopened.DigitalSignatures).SignedOn);
+    }
+
+    [Fact]
+    public void RemovingFromAnUnsignedDocument_DoesNothing()
+    {
+        using var doc = _engine.Open(Write("plain.pdf", SamplePdf.Build()));
+        Assert.Equal(0, doc.RemoveDigitalSignatures());
+        Assert.Equal(1, doc.PageCount);   // SamplePdf.Build() is one page; nothing about it changed
+    }
+
     [Fact]
     public void HybridXfaDocument_DoesNotReportSigned()
     {

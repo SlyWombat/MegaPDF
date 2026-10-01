@@ -12,14 +12,23 @@
 # ./gradlew resolves the same way the old inline one-liner did.
 set -uo pipefail
 
-adb logcat -c
-adb logcat -v threadtime >"$GITHUB_WORKSPACE/instrumented-logcat.txt" &
-logcat_pid=$!
-
 # Rootable on the "default" (non-Google) system image this job uses; needed to pull
 # /data/tombstones and /data/anr below. Best-effort: a build that refuses it still runs
 # the tests, just without those two files.
+#
+# #611: this has to happen BEFORE the logcat capture starts, not after. `adb root` restarts
+# adbd on the device, which tears down every connection it was serving — including the
+# `adb logcat` started on the line above it, which then exits with nothing written. That is
+# why four of the six #611 failures uploaded a 0-byte instrumented-logcat.txt and only the
+# two that happened to lose the race uploaded a usable one: the diagnostics #545 added were
+# absent exactly when they were needed. `wait-for-device` is what makes the restart safe to
+# follow; without it the logcat below can attach to the dying adbd instead.
 adb root >/dev/null 2>&1
+adb wait-for-device
+
+adb logcat -c
+adb logcat -v threadtime >"$GITHUB_WORKSPACE/instrumented-logcat.txt" &
+logcat_pid=$!
 
 ./gradlew --no-daemon --continue :engine:connectedDebugAndroidTest :app:connectedDebugAndroidTest
 status=$?

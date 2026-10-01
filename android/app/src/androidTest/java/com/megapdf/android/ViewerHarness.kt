@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertIsEnabled
@@ -168,6 +169,27 @@ val AndroidComposeTestRule<ActivityScenarioRule<MainActivity>, MainActivity>.vie
 fun ComposeTestRule.nodeExists(matcher: SemanticsMatcher): Boolean =
     onAllNodes(matcher, useUnmergedTree = false).fetchSemanticsNodes().isNotEmpty()
 
+/**
+ * [waitUntil], but a timeout says what the app was actually doing (#611).
+ *
+ * A bare `ComposeTimeoutException: Condition still not satisfied after 20000 ms` names a line
+ * number and nothing else, which is how #611 cost three CI rounds before anyone could tell a test
+ * racing a deadline apart from an operation that never started. [describe] is read once, at the
+ * moment of the timeout, and appended to the message — so the state that explains the failure is
+ * in the test report itself rather than in a logcat capture that may not have survived.
+ */
+fun ComposeTestRule.waitUntilOrExplain(
+    timeoutMs: Long = SETTLE_MS,
+    describe: () -> String,
+    condition: () -> Boolean,
+) {
+    try {
+        waitUntil(timeoutMs, condition)
+    } catch (e: ComposeTimeoutException) {
+        throw AssertionError("${e.message}\n  state at the timeout: ${runCatching(describe).getOrElse { "unreadable: $it" }}", e)
+    }
+}
+
 fun ComposeTestRule.waitFor(matcher: SemanticsMatcher, timeoutMs: Long = SETTLE_MS) =
     waitUntil(timeoutMs) { nodeExists(matcher) }
 
@@ -237,6 +259,40 @@ fun ComposeTestRule.undoButton() = onNodeWithContentDescription(str(R.string.und
 
 fun ComposeTestRule.assertUndoEnabled() {
     waitUntil(SETTLE_MS) { runCatching { undoButton().assertIsEnabled() }.isSuccess }
+}
+
+/**
+ * Undo — pressed only once the view model will actually act on it (#611). **Every test presses
+ * Undo through this**, rather than clicking the button itself, and here is why.
+ *
+ * [ViewerViewModel.undo] goes through `launchEdit`, which returns immediately and silently — by
+ * design (#145: "a tap or commit while one runs is ignored", never queued) — whenever
+ * [ViewerViewModel.editingBlocked] is true. The button is greyed out on
+ * [ViewerViewModel.toolsDisabled] instead, which is a *different* condition: it deliberately
+ * leaves out `editsInFlight`, so that page work too quick to show a spinner does not make the
+ * whole toolbar flicker. And an operation's effect becomes visible *inside* `launchEdit`'s own
+ * block, while its `editsInFlight--` is in the `finally` after it.
+ *
+ * So for a moment after every edit the toolbar offers an Undo that will be thrown away, and a
+ * test that clicks as soon as the previous operation's effect shows up loses that moment some of
+ * the time — then waits out its whole 20 s for a change that was never going to happen. Three
+ * tests in two families lost it during #611:
+ * `PageToolsTest.moveToReordersOnePageAndUndoPutsItBack`,
+ * `PageToolsTest.undoAfterTakingBackADeleteStillTakesBackTheRotationBeforeIt` and
+ * `WhiteoutLifecycleTest.draggingTheSelectionMovesItAndUndoRedoTheMove`.
+ *
+ * Waiting on [ViewerViewModel.editingBlocked] asks the question the view model actually answers.
+ */
+fun AndroidComposeTestRule<ActivityScenarioRule<MainActivity>, MainActivity>.clickUndo() {
+    waitUntil(SETTLE_MS) { !viewModel.editingBlocked }
+    assertUndoEnabled()
+    undoButton().performClick()
+}
+
+/** Redo, once the view model will accept it — see [clickUndo], whose other half this is. */
+fun AndroidComposeTestRule<ActivityScenarioRule<MainActivity>, MainActivity>.clickRedo() {
+    waitUntil(SETTLE_MS) { !viewModel.editingBlocked }
+    clickLabelled(str(R.string.redo))
 }
 
 fun SemanticsNodeInteraction.isEnabled(): Boolean =

@@ -432,6 +432,75 @@ public partial class App : Application
                 }
                 return true;
 
+            // Reading mode (#505), for the listing's lead slot (#613). The hard part
+            // of this picture is that the feature's whole point is that there is
+            // nothing to photograph: the chrome is gone and what is left is a page.
+            // So two things are deliberate here.
+            //
+            // The floating pill is *pinned up* rather than left to its two-second
+            // idle fade. It is the only thing in the frame that says which app this
+            // is, and the fade would otherwise land on top of the capture: the state
+            // is applied at t=2 s and the window is rendered at t=4 s, which is
+            // exactly when the pill's own countdown expires.
+            //
+            // The page colour is left at Normal. Sepia and Night are reading mode's
+            // too, and both are better demonstrations of *a setting*; a listing set
+            // whose first image is the only tinted one reads as a different app from
+            // the six that follow it, and the tint is in the description where a
+            // reader meets it as a choice rather than as the way the app looks.
+            case "reading":
+                if (window is null || !viewModel.IsDocumentOpen)
+                {
+                    Console.Error.WriteLine(
+                        "::error::--screenshot-state reading needs a window and a document.");
+                    return false;
+                }
+                window.EnterReadingMode();
+                if (!window.IsReadingMode)
+                {
+                    Console.Error.WriteLine(
+                        "::error::--screenshot-state reading: the mode did not turn on, so this "
+                        + "would be an ordinary viewer shot wearing the reading slot's caption.");
+                    return false;
+                }
+                window.PinReadingPillForCapture();
+                Console.WriteLine($"screenshot-state reading: {window.DescribeReadingMode()}");
+                return true;
+
+            // The Pages sidebar with a selection (#174), for the listing's page-tools
+            // slot (#613). A strip of thumbnails with two of them picked out is the
+            // whole feature in one picture — which is also why the document opened
+            // for this one has six pages: the strip of a one-page document says
+            // nothing, and the demo agreement on its own is one page.
+            case "pages":
+                if (window is null || !viewModel.IsDocumentOpen)
+                {
+                    Console.Error.WriteLine(
+                        "::error::--screenshot-state pages needs a window and a document.");
+                    return false;
+                }
+                if (viewModel.Pages.Count < 3)
+                {
+                    Console.Error.WriteLine(
+                        $"::error::--screenshot-state pages: this document has {viewModel.Pages.Count} "
+                        + "page(s). The strip is the picture, so open one with several "
+                        + "(tools/gen_test_fixtures.py writes demo-pages.pdf).");
+                    return false;
+                }
+                viewModel.IsPageStripOpen = true;
+                window.ApplyPageStripVisibility();
+                // Two pages, not one: a single selected row reads as "the page you are
+                // on", and the commands this strip exists for act on a set.
+                viewModel.SelectedPageIndices = [1, 2];
+                DispatcherTimer.RunOnce(() =>
+                {
+                    viewModel.PrepareThumbnails(0, viewModel.Pages.Count);
+                    window.SyncPageStripSelection();
+                }, TimeSpan.FromMilliseconds(400));
+                Console.WriteLine($"screenshot-state pages: {viewModel.Pages.Count} pages, "
+                                  + $"{viewModel.SelectedPageIndices.Count} selected");
+                return true;
+
             // About MegaPDF and the licences it leads to (#176), each rendered beside
             // the window to <out>-dialog.png. The app menu that leads to About is
             // macOS's own NSMenu, which no window renderer can reach; that half is

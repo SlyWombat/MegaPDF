@@ -1591,13 +1591,40 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
     var isSaving: Boolean by mutableStateOf(false)
         private set
 
-    /** One-shot user-facing status ("Saved", errors); cleared by [consumeStatus]. */
-    var statusMessage: String? by mutableStateOf(null)
-        private set
+    private var statusText: String? by mutableStateOf(null)
+    private var statusCount: Int by mutableStateOf(0)
 
-    fun consumeStatus() {
-        statusMessage = null
-    }
+    /**
+     * The last user-facing status ("Saved", "Stopped.", errors). Shown as a toast, once each
+     * time it is set — and then **kept**, not erased (#611).
+     *
+     * It used to be a one-shot: the screen's `LaunchedEffect` showed the toast and called
+     * `consumeStatus()`, which put this back to `null` on the very next frame. That makes the
+     * app's own word on what just happened unreadable by anything that is not the toast, because
+     * a test asking "did it say Stopped.?" is racing a recomposition it cannot see — and a check
+     * that samples a value the app deliberately erases fails in a way indistinguishable from the
+     * operation never having happened. Half of #611 was exactly that: a cancelled extract that
+     * *had* stopped and *had* left nothing behind, failing because the sentence saying so was
+     * already gone by the time the assertion looked.
+     *
+     * The toast now keys on [statusSerial] instead, which is what makes it fire once per message
+     * rather than once per value-change, so nothing about what a person sees changed.
+     *
+     * Setting it to `null` still means "take back an instruction that is no longer true" ("Tap
+     * to place text"), and says nothing: only a message bumps the serial.
+     */
+    var statusMessage: String?
+        get() = statusText
+        private set(value) {
+            statusText = value
+            if (value != null) statusCount++
+        }
+
+    /**
+     * Bumped every time [statusMessage] is given a message — including the same message twice,
+     * so two saves are two toasts. Zero until the first one.
+     */
+    val statusSerial: Int get() = statusCount
 
     /** One-shot: a copy is ready to hand to the OS share sheet; cleared by [consumeShareFile]. */
     var shareFile: File? by mutableStateOf(null)
