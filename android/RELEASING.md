@@ -134,7 +134,7 @@ MegaPDF : remplir et signer
 Remplir, cocher et signer un PDF. Pas de compte, pas d'infonuagique.
 ```
 
-**Full description** [4000] (3982)
+**Full description** [4000] (3991)
 ```
 Ouvrir. Corriger. Enregistrer. Terminé.
 
@@ -152,7 +152,7 @@ Mauvaise date? Nom mal orthographié? Touchez la ligne et retapez-la. MegaPDF ga
 Caviardez, et c'est parti pour de bon
 Marquez ce qui doit disparaître — un nom, une adresse, une image — et MegaPDF le retire du fichier au lieu de le recouvrir. Ce qui était dessous n'y est plus : aucune autre application ne peut le copier ni le retrouver par une recherche.
 
-Signez pour de vrai
+Signez comme sur papier
 Dessinez votre signature du doigt, tapez votre nom ou utilisez une photo de celle sur papier : le fond blanc disparaît automatiquement. Vos signatures restent dans une bibliothèque privée sur votre appareil; déposez-en une sur un document, puis déplacez-la et redimensionnez-la jusqu'à ce qu'elle soit bien sur la ligne.
 
 Enregistrez sans crainte
@@ -165,7 +165,7 @@ Lisez le document, pas l'application
 Le mode lecture retire les barres d'outils de l'écran et laisse la page. Les couleurs de la page viennent avec : Sépia pour une longue lecture, Nuit pour une pièce sombre — et le mode nuit inverse aussi les images, à dessein. MegaPDF peut ouvrir chaque document ainsi.
 
 Mettez les pages en ordre
-Faites pivoter une page arrivée de travers, supprimez-en une, glissez les pages dans le bon ordre, insérez une page vierge, ajoutez les pages d'un autre PDF, ou extrayez quelques pages dans un fichier à part. Chaque geste est une seule étape, et une annulation le reprend.
+Faites pivoter une page arrivée de travers, supprimez-en une, glissez les pages dans le bon ordre, insérez une page vierge, ajoutez les pages d'un autre PDF, ou extrayez quelques pages dans un fichier à part. Chaque geste est une seule étape, et une seule annulation le défait.
 
 Confidentiel par conception
 MegaPDF ne vous demande aucune permission et n'établit aucune connexion réseau. Vos documents et votre signature ne quittent jamais votre appareil : il n'y a aucun serveur où ils pourraient aller. L'application est un logiciel libre; n'importe qui peut le vérifier.
@@ -176,15 +176,15 @@ Ouvrez un PDF depuis Fichiers, Google Drive, Gmail ou toute application qui en r
 MegaPDF est volontairement simple : il ne vous noie pas sous les barres d'outils. Il ouvre, il corrige, il enregistre. Terminé.
 ```
 
-**Release notes** [500] (470) — 2.2, from `docs/release-notes/2.2/google-play.md`
+**Release notes** [500] (497) — 2.2, from `docs/release-notes/2.2/google-play.md`
 ```
 Le mode lecture ne laisse que la page. Sépia pour lire longtemps, Nuit pour une pièce sombre — le mode nuit inverse aussi les images, et le dit.
 
 Pages : pivoter, supprimer, réordonner, insérer une page vierge, ajouter celles d'un autre PDF, extraire une sélection. Une annulation suffit.
 
-Le correcteur arrive : masquez une zone, puis déplacez-la et redimensionnez-la.
+Le correcteur arrive : masquez une zone, déplacez-la, redimensionnez-la. Le texte ajouté tient sur plus d'une ligne.
 
-Quand l'auteur a demandé qu'un document ne soit pas modifié, MegaPDF le dit et vous laisse choisir.
+Quand l'auteur a demandé qu'un document reste inchangé, MegaPDF le dit et laisse choisir.
 ```
 
 ### Français (France) — `fr-FR`
@@ -199,7 +199,7 @@ MegaPDF : remplir et signer
 Remplir, cocher et signer un PDF. Pas de compte, pas de cloud.
 ```
 
-**Full description** [4000] (3980)
+**Full description** [4000] (3989)
 ```
 Ouvrir. Corriger. Enregistrer. Terminé.
 
@@ -217,7 +217,7 @@ Mauvaise date ? Nom mal orthographié ? Touchez la ligne et retapez-la. MegaPD
 Caviardez, et c'est parti pour de bon
 Marquez ce qui doit disparaître — un nom, une adresse, une image — et MegaPDF le retire du fichier au lieu de le recouvrir. Ce qui était dessous n'y est plus : aucune autre application ne peut le copier ni le retrouver par une recherche.
 
-Signez pour de vrai
+Signez comme sur papier
 Dessinez votre signature du doigt, tapez votre nom ou utilisez une photo de celle sur papier : le fond blanc disparaît automatiquement. Vos signatures restent dans une bibliothèque privée sur votre appareil ; déposez-en une sur un document, puis déplacez-la et redimensionnez-la jusqu'à ce qu'elle soit bien sur la ligne.
 
 Enregistrez sans crainte
@@ -230,7 +230,7 @@ Lisez le document, pas l'application
 Le mode lecture retire les barres d'outils de l'écran et laisse la page. Les couleurs de la page viennent avec : Sépia pour une longue lecture, Nuit pour une pièce sombre — et le mode nuit inverse aussi les images, à dessein. MegaPDF peut ouvrir chaque document ainsi.
 
 Mettez les pages en ordre
-Faites pivoter une page arrivée de travers, supprimez-en une, glissez les pages dans le bon ordre, insérez une page vierge, ajoutez les pages d'un autre PDF, ou extrayez quelques pages dans un fichier à part. Chaque geste est une seule étape, et une annulation le reprend.
+Faites pivoter une page arrivée de travers, supprimez-en une, glissez les pages dans le bon ordre, insérez une page vierge, ajoutez les pages d'un autre PDF, ou extrayez quelques pages dans un fichier à part. Chaque geste est une seule étape, et une seule annulation le défait.
 
 Confidentiel par conception
 MegaPDF ne vous demande aucune permission et n'établit aucune connexion réseau. Vos documents et votre signature ne quittent jamais votre appareil : il n'y a aucun serveur où ils pourraient aller. L'application est un logiciel libre ; n'importe qui peut le vérifier.
@@ -241,15 +241,15 @@ Ouvrez un PDF depuis Fichiers, Google Drive, Gmail ou toute application qui en r
 MegaPDF est volontairement simple : il ne vous noie pas sous les barres d'outils. Il ouvre, il corrige, il enregistre. Terminé.
 ```
 
-**Release notes** [500] (470) — 2.2, from `docs/release-notes/2.2/google-play.md`
+**Release notes** [500] (497) — 2.2, from `docs/release-notes/2.2/google-play.md`
 ```
 Le mode lecture ne laisse que la page. Sépia pour lire longtemps, Nuit pour une pièce sombre — le mode nuit inverse aussi les images, et le dit.
 
 Pages : pivoter, supprimer, réordonner, insérer une page vierge, ajouter celles d'un autre PDF, extraire une sélection. Une annulation suffit.
 
-Le correcteur arrive : masquez une zone, puis déplacez-la et redimensionnez-la.
+Le correcteur arrive : masquez une zone, déplacez-la, redimensionnez-la. Le texte ajouté tient sur plus d'une ligne.
 
-Quand l'auteur a demandé qu'un document ne soit pas modifié, MegaPDF le dit et vous laisse choisir.
+Quand l'auteur a demandé qu'un document reste inchangé, MegaPDF le dit et laisse choisir.
 ```
 
 <!-- /copy-by-language -->

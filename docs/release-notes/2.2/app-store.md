@@ -50,12 +50,12 @@ Some documents arrive carrying a digital signature — the cryptographic kind, w
 
 ## Français (Canada) — `fr-CA`
 
-**Quoi de neuf** [4000] (2210)
+**Quoi de neuf** [4000] (2218)
 
 ```
 Mode lecture
 
-MegaPDF sait s'effacer. Le mode lecture retire les barres d'outils de l'écran et laisse la page. Une touche ramène une petite barre, et le numéro de page qu'elle porte ouvre une case pour aller n'importe où dans le document; une autre touche la fait repartir. Les couleurs de la page sont dans les Paramètres, sous Lecture : Normales, Sépia pour une longue lecture et Nuit pour une pièce sombre. Le mode nuit inverse la page, images comprises : c'est voulu, et le réglage le dit, parce qu'une photo lue la nuit est une photo en négatif. Si vous lisez un PDF plus souvent que vous ne le remplissez, Ouvrir les documents en mode lecture les ouvre tous ainsi.
+MegaPDF sait s'effacer. Le mode lecture retire les barres d'outils de l'écran et laisse la page. Une touche ramène une petite barre, et le numéro de page qu'elle porte ouvre un champ où taper la page voulue; une autre touche la fait repartir. Les couleurs de la page sont dans les Réglages, sous Lecture : Normales, Sépia pour une longue lecture et Nuit pour une pièce sombre. Le mode nuit inverse la page, images comprises : c'est voulu, et le réglage le dit, parce qu'une photo lue la nuit est une photo en négatif. Si vous lisez un PDF plus souvent que vous ne le remplissez, Ouvrir les documents en mode lecture les ouvre tous ainsi.
 
 Outils de page
 
@@ -63,7 +63,7 @@ Touchez Pages et les pages du document sont devant vous : une feuille sur l'iPh
 
 Une barre d'outils faite pour l'iPad
 
-Sur l'iPad, les outils de tous les jours occupent maintenant une rangée large qui leur appartient, sous la barre de navigation, chacun avec son titre à côté de son icône plutôt qu'une icône à deviner, et le sélecteur de chaque outil s'ouvre juste à côté de l'outil auquel il appartient. Les commandes au clavier y sont aussi.
+Sur l'iPad, les outils de tous les jours occupent maintenant une large rangée bien à eux, sous la barre de navigation, chacun avec son titre à côté de son icône plutôt qu'une icône à deviner, et le sélecteur de chaque outil s'ouvre juste à côté de l'outil auquel il appartient. Les raccourcis clavier y sont aussi.
 
 Le zoom là où vous regardez
 
@@ -71,17 +71,17 @@ Un pincement zoome maintenant sur le point entre vos doigts plutôt que sur le c
 
 Avant que la signature du document ne soit perdue
 
-Certains documents arrivent avec une signature numérique, celle du chiffrement, qui cesse d'être vérifiable dès que le fichier change. Enregistrer par-dessus un tel document le dit maintenant d'abord et propose d'enregistrer une copie, pour que l'original signé reste intact. Il s'agit d'une signature déjà présente dans le document; la signature que vous dessinez, tapez ou photographiez pour la poser sur la page est une image de votre nom, et la poser n'a pas changé.
+Certains documents arrivent avec une signature numérique — la signature cryptographique, adossée à un certificat — qui cesse d'être vérifiable dès que le fichier change. Enregistrer par-dessus un tel document le dit maintenant d'abord et propose d'enregistrer une copie, pour que l'original signé reste intact. Il s'agit d'une signature déjà présente dans le document; la signature que vous dessinez, tapez ou photographiez pour la poser sur la page est une image de votre nom, et rien n'a changé de ce côté.
 ```
 
 ## Français (France) — `fr`
 
-**Quoi de neuf** [4000] (2212)
+**Quoi de neuf** [4000] (2220)
 
 ```
 Mode lecture
 
-MegaPDF sait s'effacer. Le mode lecture retire les barres d'outils de l'écran et laisse la page. Une touche ramène une petite barre, et le numéro de page qu'elle porte ouvre une case pour aller n'importe où dans le document ; une autre touche la fait repartir. Les couleurs de la page sont dans les Paramètres, sous Lecture : Normales, Sépia pour une longue lecture et Nuit pour une pièce sombre. Le mode nuit inverse la page, images comprises : c'est voulu, et le réglage le dit, parce qu'une photo lue la nuit est une photo en négatif. Si vous lisez un PDF plus souvent que vous ne le remplissez, Ouvrir les documents en mode lecture les ouvre tous ainsi.
+MegaPDF sait s'effacer. Le mode lecture retire les barres d'outils de l'écran et laisse la page. Une touche ramène une petite barre, et le numéro de page qu'elle porte ouvre un champ où taper la page voulue ; une autre touche la fait repartir. Les couleurs de la page sont dans les Réglages, sous Lecture : Normales, Sépia pour une longue lecture et Nuit pour une pièce sombre. Le mode nuit inverse la page, images comprises : c'est voulu, et le réglage le dit, parce qu'une photo lue la nuit est une photo en négatif. Si vous lisez un PDF plus souvent que vous ne le remplissez, Ouvrir les documents en mode lecture les ouvre tous ainsi.
 
 Outils de page
 
@@ -89,7 +89,7 @@ Touchez Pages et les pages du document sont devant vous : une feuille sur l'iPh
 
 Une barre d'outils faite pour l'iPad
 
-Sur l'iPad, les outils de tous les jours occupent maintenant une rangée large qui leur appartient, sous la barre de navigation, chacun avec son titre à côté de son icône plutôt qu'une icône à deviner, et le sélecteur de chaque outil s'ouvre juste à côté de l'outil auquel il appartient. Les commandes au clavier y sont aussi.
+Sur l'iPad, les outils de tous les jours occupent maintenant une large rangée bien à eux, sous la barre de navigation, chacun avec son titre à côté de son icône plutôt qu'une icône à deviner, et le sélecteur de chaque outil s'ouvre juste à côté de l'outil auquel il appartient. Les raccourcis clavier y sont aussi.
 
 Le zoom là où vous regardez
 
@@ -97,7 +97,7 @@ Un pincement zoome maintenant sur le point entre vos doigts plutôt que sur le c
 
 Avant que la signature du document ne soit perdue
 
-Certains documents arrivent avec une signature numérique, celle du chiffrement, qui cesse d'être vérifiable dès que le fichier change. Enregistrer par-dessus un tel document le dit maintenant d'abord et propose d'enregistrer une copie, pour que l'original signé reste intact. Il s'agit d'une signature déjà présente dans le document ; la signature que vous dessinez, tapez ou photographiez pour la poser sur la page est une image de votre nom, et la poser n'a pas changé.
+Certains documents arrivent avec une signature numérique — la signature cryptographique, adossée à un certificat — qui cesse d'être vérifiable dès que le fichier change. Enregistrer par-dessus un tel document le dit maintenant d'abord et propose d'enregistrer une copie, pour que l'original signé reste intact. Il s'agit d'une signature déjà présente dans le document ; la signature que vous dessinez, tapez ou photographiez pour la poser sur la page est une image de votre nom, et rien n'a changé de ce côté.
 ```
 
 > Apple's French locale for France is `fr`, not `fr-FR`. The France block is
@@ -119,9 +119,11 @@ Certains documents arrivent avec une signature numérique, celle du chiffrement,
 > for both, `signature`, and distinguishes them only by `numérique` — and
 > `signature numérique` in everyday French also reads as *a signature made on a
 > screen*, which is exactly the thing it is here contrasted with. The copy
-> leans on `celle du chiffrement` to break the tie, and on naming the placed one
-> as `une image de votre nom`. **Worth a francophone's opinion before this
-> ships**: `signature numérique` is the shipped in-app term
-> (`docs/localisation-glossary.md`, #476/#481), so the listing follows it rather
-> than inventing a second term, but if a reviewer finds the sentence still
-> collapses, the in-app string is what has to change, not just the listing.
+> used to lean on `celle du chiffrement` to break the tie, but *chiffrement*
+> means encryption, not the cryptographic-signature sense intended, and Fable's
+> 2026-10-01 review caught it (#620 review, WRONG item W1): a reader would infer
+> the document itself is encrypted. It now reads `la signature cryptographique,
+> adossée à un certificat`, and still names the placed one `une image de votre
+> nom`. `signature numérique` itself is unchanged and confirmed correct — OQLF
+> and Adobe's own French interface both use it for the certificate-backed kind
+> — this was a wording fix around it, not a rename.

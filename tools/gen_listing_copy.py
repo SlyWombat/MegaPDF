@@ -142,7 +142,7 @@ CONFIDENTIEL PAR CONCEPTION — Pas de compte. Pas d'infonuagique. Pas d'abonnem
 MegaPDF est un logiciel libre (Apache-2.0) : github.com/SlyWombat/MegaPDF""",
     "features": [
         "Le mode lecture (Ctrl+H) masque les outils et laisse la page, avec les couleurs normales, sépia et nuit",
-        "Pivoter, supprimer et réordonner les pages, insérer une page vierge, ajouter celles d'un autre PDF ou extraire une sélection — chaque geste est une annulation",
+        "Faites pivoter, supprimez et réordonnez les pages, insérez une page vierge, ajoutez celles d'un autre PDF ou extrayez une sélection : une annulation par geste",
         "Modifiez le texte du document lui-même en cliquant et en tapant, comme dans un document Word",
         "Caviardez noms, adresses et images : retirés du fichier, pas seulement recouverts",
         "Ajoutez du texte sur une ligne vide, dans la taille et la police du formulaire",
@@ -251,7 +251,7 @@ Mauvaise date? Nom mal orthographié? Touchez la ligne et retapez-la. MegaPDF ga
 Caviardez, et c'est parti pour de bon
 Marquez ce qui doit disparaître — un nom, une adresse, une image — et MegaPDF le retire du fichier au lieu de le recouvrir. Ce qui était dessous n'y est plus : aucune autre application ne peut le copier ni le retrouver par une recherche.
 
-Signez pour de vrai
+Signez comme sur papier
 Dessinez votre signature du doigt, ou photographiez celle sur papier : le fond blanc disparaît automatiquement. Vos signatures restent dans une bibliothèque privée sur votre appareil; déposez-en une sur un document, puis déplacez-la et redimensionnez-la jusqu'à ce qu'elle soit bien sur la ligne.
 
 Enregistrez sans crainte
@@ -264,7 +264,7 @@ Lisez le document, pas l'application
 Le mode lecture retire les barres d'outils de l'écran et laisse la page. Les couleurs de la page viennent avec : Sépia pour une longue lecture, Nuit pour une pièce sombre — et le mode nuit inverse aussi les images, à dessein. MegaPDF peut ouvrir chaque document ainsi.
 
 Mettez les pages en ordre
-Faites pivoter une page arrivée de travers, supprimez-en une, glissez les pages dans le bon ordre, insérez une page vierge, ajoutez les pages d'un autre PDF, ou extrayez quelques pages dans un fichier à part. Chaque geste est une seule étape, et une annulation le reprend.
+Faites pivoter une page arrivée de travers, supprimez-en une, glissez les pages dans le bon ordre, insérez une page vierge, ajoutez les pages d'un autre PDF, ou extrayez quelques pages dans un fichier à part. Chaque geste est une seule étape, et une seule annulation le défait.
 
 Confidentiel par conception
 MegaPDF ne demande aucune permission et n'établit aucune connexion réseau. Vos documents et votre signature ne quittent jamais votre appareil : il n'y a aucun serveur où ils pourraient aller. L'application est un logiciel libre; n'importe qui peut le vérifier.
@@ -354,7 +354,7 @@ Mauvaise date? Nom mal orthographié? Cliquez sur la ligne et retapez-la. MegaPD
 Caviardez, et c'est parti pour de bon
 Marquez ce qui doit disparaître — un nom, une adresse, une image — et MegaPDF le retire du fichier au lieu de le recouvrir. Ce qui était dessous n'y est plus : aucune autre application ne peut le copier ni le retrouver par une recherche. Masquer est là aussi, et précise qu'il ne fait que recouvrir.
 
-Signez pour de vrai
+Signez comme sur papier
 Dessinez votre signature au pavé tactile ou à la souris, tapez-la, ou photographiez celle sur papier : le fond blanc disparaît automatiquement. Vos signatures restent dans une bibliothèque privée sur votre Mac; déposez-en une sur un document, puis déplacez-la et redimensionnez-la jusqu'à ce qu'elle soit bien sur la ligne.
 
 Enregistrez sans crainte
@@ -367,7 +367,7 @@ Lisez le document, pas l'application
 Le mode lecture (Maj-Commande-R) retire la barre d'outils et le panneau latéral, et laisse la page; Échap ramène la fenêtre. Les couleurs de la page sont à côté, dans les Options : Sépia pour une longue lecture, Nuit pour une pièce sombre — et le mode nuit inverse aussi les images, à dessein.
 
 Mettez les pages en ordre
-Le panneau Vignettes est maintenant un endroit où travailler : faites pivoter une page arrivée de travers, supprimez-en une, glissez les pages dans le bon ordre, insérez une page vierge, insérez celles d'un autre PDF, ou extrayez une sélection. Chaque geste est une étape, et une annulation le reprend.
+Le panneau Vignettes est maintenant un endroit où travailler : faites pivoter une page arrivée de travers, supprimez-en une, glissez les pages dans le bon ordre, insérez une page vierge, insérez celles d'un autre PDF, ou extrayez une sélection. Chaque geste est une étape, et une seule annulation le défait.
 
 Confidentiel par conception
 MegaPDF n'établit aucune connexion réseau (son bac à sable ne le lui permet même pas) et n'ouvre que les fichiers que vous choisissez. Vos documents et votre signature ne quittent jamais votre Mac. L'application est un logiciel libre; n'importe qui peut le vérifier.

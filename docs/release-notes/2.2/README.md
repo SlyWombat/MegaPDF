@@ -104,14 +104,14 @@ all four descriptions and all three generated docs; it is gone from all of them.
 | Slot | Locale | Count | Limit |
 |---|---|---|---|
 | App Store description | `en-CA` | 3214 | 4000 |
-| App Store description | `fr-CA` | 3943 | 4000 |
-| App Store description | `fr` | 3941 | 4000 |
+| App Store description | `fr-CA` | 3952 | 4000 |
+| App Store description | `fr` | 3950 | 4000 |
 | Mac App Store description | `en-CA` | 3279 | 4000 |
-| Mac App Store description | `fr-CA` | 3975 | 4000 |
-| Mac App Store description | `fr` | 3981 | 4000 |
+| Mac App Store description | `fr-CA` | 3984 | 4000 |
+| Mac App Store description | `fr` | 3990 | 4000 |
 | Play full description | `en-CA` | 3249 | 4000 |
-| Play full description | `fr-CA` | 3982 | 4000 |
-| Play full description | `fr-FR` | 3980 | 4000 |
+| Play full description | `fr-CA` | 3991 | 4000 |
+| Play full description | `fr-FR` | 3989 | 4000 |
 | Microsoft Store description | `en` | 2856 | 10000 |
 | Microsoft Store description | `fr-CA` | 3542 | 10000 |
 | App Store keywords | `en-CA` | 96 | 100 |
@@ -142,9 +142,10 @@ cross-platform sentence no longer lists the four platforms by name, and its
 password sentence is shorter.
 
 **The Play release notes are the tight one, as always.** English 489 of 500,
-French 470. The French drops the English's *Added text takes more than one line* —
-the one item of the four that is a refinement rather than a new thing — and
-shortens the page list. Anything added to the French has to come out of it first.
+French 497. The French now carries the English's *Added text takes more than one
+line* — it was dropped from an earlier draft, which Fable's 2026-10-01 review
+caught — by shortening the page list and the closing sentence further. Anything
+added to the French has to come out of it first.
 
 **The Microsoft Store what's new** is 1184 English, 1379 French of 1500. The
 French runs about 27 % longer than the English on this field (2.1.1: 1053 → 1341),
@@ -186,9 +187,11 @@ permission strings (#558) are all new French that nobody has read yet. The
 listing copy here follows `docs/localisation-glossary.md` and quotes the shipped
 labels: *Mode lecture*, *Couleurs de la page*, *Normales / Sépia / Nuit*, *Le mode
 nuit inverse la page, images comprises*, *Ouvrir les documents en mode lecture*,
-*Vignettes*, *Présentation* (the Mac's View menu), *Paramètres* on Windows and the
-phones, *Options* on the Mac, *Correcteur* / *Masquer*, *Annuler*, *Arrêter*. If a
-reviewer changes a label, this copy changes with it.
+*Vignettes*, *Présentation* (the Mac's View menu), *Paramètres* on Windows and
+Android, *Réglages* on iOS (Apple's own idiom — not the same word as Android's,
+`docs/localisation-glossary.md`'s Settings exception), *Options* on the Mac,
+*Correcteur* / *Masquer*, *Annuler*, *Arrêter*. If a reviewer changes a label,
+this copy changes with it.
 
 France French is derived, never hand-written: `check_copy.py` applies
 `to_france` plus France punctuation, exactly as `tools/gen_strings.py fr-fr` does
@@ -208,23 +211,27 @@ Nothing in any block says that placing a signature makes a document verifiable,
 tamper-evident, certified, legally binding or secure; *protected* and *secure* are
 left to the password feature, which 2.2 does not change.
 
-**One thing to raise rather than paper over.** In French both senses are
-`signature`, separated only by `numérique` — and `signature numérique` in everyday
-French also reads as *a signature made on a screen*, which is the very thing it is
-being contrasted with. `app-store.md` and `mac-app-store.md` lean on `celle du
-chiffrement` and on calling the placed one `une image de votre nom` to break the
-tie. `signature numérique` is the shipped in-app term (#476/#481), so the listing
-follows the app rather than inventing a second word — but if a francophone finds
-the sentence still collapses, the fix belongs in the app string first and in these
-blocks second.
+**Raised, and now fixed (Fable's 2026-10-01 review, W1/W2).** In French both
+senses are `signature`, separated only by `numérique` — and `signature
+numérique` in everyday French also reads as *a signature made on a screen*,
+which is the very thing it is being contrasted with. `app-store.md` and
+`mac-app-store.md` used to lean on `celle du chiffrement` to break the tie, but
+*chiffrement* means encryption: the French said "the encryption kind" where the
+English said "the cryptographic kind", which is exactly the confusion the
+glossary forbids. The sentence now reads `la signature cryptographique, adossée
+à un certificat`, and still names the placed one `une image de votre nom`.
+`signature numérique` is the shipped in-app term (#476/#481) and the review
+confirmed it holds the distinction on its own in both OQLF and Adobe usage, so
+it is unchanged; only the clause around it moved.
 
-**And one piece of pre-existing copy worth a look while you are here.** The
-description's signature heading is *Sign like you mean it* / **Signez pour de
-vrai**. The English is about conviction. The French *pour de vrai* can be read as
-*a signature that is legally real*, which is the inference #602 exists to prevent.
-It is 2.0 copy that a francophone signed off, so it has not been changed here —
-but it is the one existing sentence that the new rule would probably have worded
-differently.
+**And one piece of pre-existing copy that has also now changed.** The
+description's signature heading was *Sign like you mean it* / **Signez pour de
+vrai**. The English is about conviction. The French *pour de vrai* could be read
+as *a signature that is legally real*, which is the inference #602 exists to
+prevent. It was 2.0 copy that a francophone signed off before the rule existed;
+Fable's review flagged it (W4) and Dave decided, 2026-10-01, to apply the rule
+to it now rather than wait. The French-only heading is **Signez comme sur
+papier** — the English stays *Sign like you mean it* unchanged.
 
 ## Still to do before 2.2 is submitted
 
