@@ -86,14 +86,16 @@ lightweight PDF
 © 2026 Electric RV. Licensed under Apache-2.0.
 ```
 
-**Screenshot captions** — same six files, same order
+**Screenshot captions** — same 8 files, same order
 ```
-01-edit-text.png: Click the text and type — editing a PDF like a Word file.
-02-checkbox.png: Click an empty square to check it. Drawn checkboxes too, not just real form fields.
-03-signature.png: Drop a saved signature on the line, then nudge it into place.
-04-shrink.png: Shrink oversized scans to email-friendly sizes in one click.
-05-add-text.png: Type on a blank line, in the size and face that matches the form.
-06-redact.png: Redact, and it really is gone.
+01-reading.png: Press Ctrl+H and the tools come off the screen, leaving the page. A small floating bar keeps your place; Escape brings it all back.
+02-text.png: Click the document's own text and type — fixing a PDF the way you would fix a Word file.
+03-checkbox.png: Click an empty square and it is ticked — printed boxes that were never meant to be filled on screen, filled on screen.
+04-sign.png: Pick a signature from your library, click where it goes, then nudge it until it sits right on the line.
+05-pages.png: The Pages pane is somewhere to work: rotate a sideways scan, drop a page, reorder them, or save the ones you picked as a file of their own.
+06-search.png: Ctrl+F highlights every match at once and counts them, so the one clause you need is a couple of keys away.
+07-redact.png: Mark what has to come out. Saving takes it out of the file rather than covering it over — and says how much it removed.
+08-home.png: No account, no cloud, no subscription, no telemetry. Every document is opened and handled on your own PC.
 ```
 
 ### English (Canada) — `en-CA`
@@ -166,14 +168,16 @@ lightweight PDF
 © 2026 Electric RV. Licensed under Apache-2.0.
 ```
 
-**Screenshot captions** — same six files, same order
+**Screenshot captions** — same 8 files, same order
 ```
-01-edit-text.png: Click the text and type — editing a PDF like a Word file.
-02-checkbox.png: Click an empty square to check it. Drawn checkboxes too, not just real form fields.
-03-signature.png: Drop a saved signature on the line, then nudge it into place.
-04-shrink.png: Shrink oversized scans to email-friendly sizes in one click.
-05-add-text.png: Type on a blank line, in the size and face that matches the form.
-06-redact.png: Redact, and it really is gone.
+01-reading.png: Press Ctrl+H and the tools come off the screen, leaving the page. A small floating bar keeps your place; Escape brings it all back.
+02-text.png: Click the document's own text and type — fixing a PDF the way you would fix a Word file.
+03-checkbox.png: Click an empty square and it is ticked — printed boxes that were never meant to be filled on screen, filled on screen.
+04-sign.png: Pick a signature from your library, click where it goes, then nudge it until it sits right on the line.
+05-pages.png: The Pages pane is somewhere to work: rotate a sideways scan, drop a page, reorder them, or save the ones you picked as a file of their own.
+06-search.png: Ctrl+F highlights every match at once and counts them, so the one clause you need is a couple of keys away.
+07-redact.png: Mark what has to come out. Saving takes it out of the file rather than covering it over — and says how much it removed.
+08-home.png: No account, no cloud, no subscription, no telemetry. Every document is opened and handled on your own PC.
 ```
 
 ### Français (Canada) — `fr-CA`
@@ -244,14 +248,16 @@ PDF léger
 © 2026 Electric RV. Sous licence Apache-2.0.
 ```
 
-**Screenshot captions** — same six files, same order
+**Screenshot captions** — same 8 files, same order
 ```
-01-edit-text.png: Cliquez sur le texte et tapez : modifier un PDF comme un document Word.
-02-checkbox.png: Cliquez sur un carré vide pour le cocher. Les cases dessinées aussi, pas seulement les vrais champs de formulaire.
-03-signature.png: Déposez une signature enregistrée sur la ligne, puis ajustez-la en place.
-04-shrink.png: Réduisez les numérisations trop lourdes à une taille adaptée au courriel en un clic.
-05-add-text.png: Écrivez sur une ligne vide, dans la taille et la police qui correspondent au formulaire.
-06-redact.png: Caviardez, et c'est parti pour de bon.
+01-reading.png: Appuyez sur Ctrl+H : les outils quittent l'écran et laissent la page. Une petite barre flottante garde votre place; Échap ramène tout.
+02-text.png: Cliquez sur le texte du document et tapez : corriger un PDF comme on corrige un document Word.
+03-checkbox.png: Cliquez sur un carré vide et il est coché : des cases imprimées, jamais conçues pour être remplies à l'écran, remplies à l'écran.
+04-sign.png: Choisissez une signature dans votre bibliothèque, cliquez à l'endroit voulu, puis ajustez-la jusqu'à ce qu'elle soit bien sur la ligne.
+05-pages.png: Le volet Pages est un endroit où travailler : faites pivoter une page de travers, supprimez-en une, réordonnez-les ou extrayez celles que vous avez choisies.
+06-search.png: Ctrl+F surligne tous les résultats d'un coup et les compte : la seule clause utile est à deux touches.
+07-redact.png: Marquez ce qui doit disparaître. L'enregistrement le retire du fichier au lieu de le recouvrir, et dit ce qu'il a retiré.
+08-home.png: Pas de compte, pas d'infonuagique, pas d'abonnement, pas de télémétrie. Chaque document est ouvert et traité sur votre propre PC.
 ```
 
 ### Français (France) — `fr-FR`
@@ -322,14 +328,16 @@ PDF léger
 © 2026 Electric RV. Sous licence Apache-2.0.
 ```
 
-**Screenshot captions** — same six files, same order
+**Screenshot captions** — same 8 files, same order
 ```
-01-edit-text.png: Cliquez sur le texte et tapez : modifier un PDF comme un document Word.
-02-checkbox.png: Cliquez sur un carré vide pour le cocher. Les cases dessinées aussi, pas seulement les vrais champs de formulaire.
-03-signature.png: Déposez une signature enregistrée sur la ligne, puis ajustez-la en place.
-04-shrink.png: Réduisez les numérisations trop lourdes à une taille adaptée à l'e-mail en un clic.
-05-add-text.png: Écrivez sur une ligne vide, dans la taille et la police qui correspondent au formulaire.
-06-redact.png: Caviardez, et c'est parti pour de bon.
+01-reading.png: Appuyez sur Ctrl+H : les outils quittent l'écran et laissent la page. Une petite barre flottante garde votre place ; Échap ramène tout.
+02-text.png: Cliquez sur le texte du document et tapez : corriger un PDF comme on corrige un document Word.
+03-checkbox.png: Cliquez sur un carré vide et il est coché : des cases imprimées, jamais conçues pour être remplies à l'écran, remplies à l'écran.
+04-sign.png: Choisissez une signature dans votre bibliothèque, cliquez à l'endroit voulu, puis ajustez-la jusqu'à ce qu'elle soit bien sur la ligne.
+05-pages.png: Le volet Pages est un endroit où travailler : faites pivoter une page de travers, supprimez-en une, réordonnez-les ou extrayez celles que vous avez choisies.
+06-search.png: Ctrl+F surligne tous les résultats d'un coup et les compte : la seule clause utile est à deux touches.
+07-redact.png: Marquez ce qui doit disparaître. L'enregistrement le retire du fichier au lieu de le recouvrir, et dit ce qu'il a retiré.
+08-home.png: Pas de compte, pas de cloud, pas d'abonnement, pas de télémétrie. Chaque document est ouvert et traité sur votre propre PC.
 ```
 
 <!-- /copy-by-language -->
@@ -390,68 +398,155 @@ check there before assuming 300×300 is the only one.
 
 ## Screenshots
 `artifacts/store/screenshots/<lang>/` (2482×1541, well over the 1366×768 minimum; at
-least one required, up to nine allowed). Upload all six in this order, one
-caption each:
+least one required, **up to nine allowed — and the ninth is deliberately left
+empty**, see below). Upload all eight in this order, one caption each:
 
 | File | Caption (≤ 200 chars) |
 |---|---|
-| `01-edit-text.png` | Click the text and type — editing a PDF like a Word file. |
-| `02-checkbox.png` | Click an empty square to check it. Drawn checkboxes too, not just real form fields. |
-| `03-signature.png` | Drop a saved signature on the line, then nudge it into place. |
-| `04-shrink.png` | Shrink oversized scans to email-friendly sizes in one click. |
-| `05-add-text.png` | Type on a blank line, in the size and face that matches the form. |
-| `06-redact.png` | Redact, and it really is gone. |
+| `01-reading.png` | Press Ctrl+H and the tools come off the screen, leaving the page. A small floating bar keeps your place; Escape brings it all back. |
+| `02-text.png` | Click the document's own text and type — fixing a PDF the way you would fix a Word file. |
+| `03-checkbox.png` | Click an empty square and it is ticked — printed boxes that were never meant to be filled on screen, filled on screen. |
+| `04-sign.png` | Pick a signature from your library, click where it goes, then nudge it until it sits right on the line. |
+| `05-pages.png` | The Pages pane is somewhere to work: rotate a sideways scan, drop a page, reorder them, or save the ones you picked as a file of their own. |
+| `06-search.png` | Ctrl+F highlights every match at once and counts them, so the one clause you need is a couple of keys away. |
+| `07-redact.png` | Mark what has to come out. Saving takes it out of the file rather than covering it over — and says how much it removed. |
+| `08-home.png` | No account, no cloud, no subscription, no telemetry. Every document is opened and handled on your own PC. |
+
+The captions are authored in `tools/gen_listing_copy.py`, not here, and they are
+written to be read **in order, as one argument**: read it, fix it, fill it, sign it,
+put the pages in order, find anything in it, take something out of it for good, and
+none of it leaves your PC. Moving a slot without re-reading the rest breaks the run.
+
+### The 2.2 set, shot 2026-10-01 (#613)
+
+Dave settled the order on #613: *"Redaction and whiteout are minor features that
+move to the back, signing, editing and reading are common features."* The approved
+desktop set is **reading, text, sign, pages, search, redact, home**, with reading
+replacing the old front slot rather than joining it.
+
+**On Windows that was a bigger change than it reads**, and it was put to him rather
+than guessed at. The approved list was drawn up against the Mac set — viewer, text,
+search, sign, redact, home — and the Windows set was never those six. It was
+`edit-text`, `checkbox`, `signature`, `shrink`, `add-text`, `redact`. Applying the
+approved list here would have **added four** captures (reading, pages, search, home)
+and **retired three** (checkbox, shrink, add-text), rather than adding two and
+reordering.
+
+**Dave's ruling, 2026-10-01 — this is settled, not an open question.** The Windows
+set is **eight** slots:
+
+- **`checkbox` comes back**, because form filling is the one real capability the
+  approved seven never demonstrates, and the Linux reading-mode caption already leans
+  on a filled-in form — so the feature was part of the story on another platform
+  while being invisible on ours.
+- **It sits third, between `text` and `sign`.** That is where it belongs in the
+  argument the captions make (fix it, fill it, sign it) and where it happens on the
+  document itself: the name is corrected, the options are ticked, then it is signed.
+- **`shrink` and `add-text` stay retired**, because they are feature demos rather
+  than user outcomes. They are still shot on every run into the set's `work\` folder,
+  so nothing has to be re-shot if that is ever revisited.
+- **The ninth slot the Store allows is left empty on purpose.** Eight was chosen over
+  nine; do not fill it.
+
+**Three slots run on a new staging document.** `rental-terms.pdf`, twelve pages from
+`gen_store_docs.py`. The one-page agreement cannot carry them: reading mode's
+floating bar reads "1 / 1" on it, the Pages pane shows a single tile instead of the
+grid Windows draws, and Find highlights one hit. On the twelve-page document the bar
+reads "Page 4 of 12", the pane fills with tiles, and Find counts 29 matches.
+
+**Both documents are staged under display names in the set's own language**
+(`D:\Documents\Rentals\Equipment Rental Agreement.pdf`,
+`D:\Documents\Locations\Contrat de location.pdf`, and so on). Three places put a
+file name on camera — the title bar, the tab, and reading mode's floating bar — and
+the 2.0 and 2.1 sets shipped "blank-agreement.pdf" on their French images. This one
+does not.
+
+**Reading mode (slot 1) is the one that had to be designed rather than framed**, for
+the reason the feature exists: the chrome is gone, so the obvious capture is a page
+of a document and little else. Four decisions, all in `Shot-Reading.ps1`:
+
+- **Windowed, never F11.** Full screen is reachable from inside reading mode and is
+  wrong twice over here: it takes the title bar, which is the only thing left on
+  screen carrying the app's name and icon, and it changes the frame, so the image
+  would not be the 2482×1541 the other six share.
+- **The bar shown, not faded.** It fades two seconds after the last pointer move.
+- **Page colours left normal.** A set shot in sepia or night does not read as a
+  feature; it reads as a dark-mode screenshot.
+- **A page in the middle of a long document**, so the bar has a position worth
+  showing and the arrows either side of it have somewhere to go.
+
+**Slot 8 was blocked on #617 and is not any more** — see "What the home capture found" below.
+
+### What the home capture found
+
+`08-home.png` is the first Windows store capture ever taken of the empty state (the
+harness README had said "never shoot it", because it lists the machine's own recent
+documents). Posing that list exposed three defects on the zero-tab window, all of
+them visible in the first image:
+
+1. **The busy strip was up with no work running** — a progress bar under the toolbar
+   on an app that had just launched with no document.
+2. **Stop and "Stopping…" were painted on top of each other.** They share
+   `Grid.Column="1"` in `MainWindow.xaml` and are meant to be mutually exclusive.
+3. **Undo and Redo were enabled** with no document open, while every other command
+   was correctly disabled.
+
+One cause: with no tab, `Shell.Active` is null, so every `x:Bind` through it falls
+back to its target property's default — and `Visibility`'s default is **Visible**,
+while `Control.IsEnabled`'s is **true**. #348's null `Active` meeting #145's busy
+strip, on the one screen the Windows app has no self-test for (#462).
+
+**Filed as #617 and fixed in #629**, which found the defect to be far wider than the
+picture could show: **28** commands were live on that screen, including Save, Save
+As, Print, Password, Shrink, Redact, Find, both zoom buttons, the Pages menu and its
+eight flyout commands, and Clear marks. A screenshot reaches three of those. The slot
+was re-shot against the fix on 2026-10-01 and is uploadable.
+
+`Shot-Home.ps1` asserts the empty state from now on rather than leaving it to the
+eye: it walks the toolbar, the "…" overflow and the Pages menu by automation id and
+**fails the step** if anything but Open is enabled with no document open. On the
+re-shoot it reported *30 commands checked, 0 enabled* in all three languages. A
+picture cannot show a flyout, and that is where most of #617 was.
+
+One cosmetic thing the re-shoot leaves, not worth blocking on and recorded so the
+next person does not re-find it: with no document the zoom control is an empty
+combo — a drop-down chevron between − and + with no value in it. It is correctly
+disabled; it just reads as slightly unfinished at full size.
+
+### Before this set
 
 **The 2.0 set was shot 2026-09-18** on GPD-DAVE from the installed 2.0.0.0 package,
 one run per language with `tools/screenshots-windows/Shoot-Set.ps1`, and it passed
 `tools/capture-gate` with nothing to look at (docs/release-notes/2.0/capture-gate-report.md §5).
 The title bar reads MegaPDF, and the English customer is Jane Whitfield, as on every other store.
+`06-redact.png` was added 2026-09-19 because 2.0's copy led with redaction and the
+first five shots did not show it; the 2.0 set stood for 2.1 unchanged, which was a
+finding rather than an omission (2.1's Windows work was the redaction mark's
+lifecycle, and only that one image has anything to do with a mark). The sets before
+this one are kept in `artifacts/store/screenshots-pre2.0/`.
 
-**`06-redact.png` was added 2026-09-19**, because 2.0's copy leads with redaction and
-the first five shots don't show it (capture-gate-report.md §6). Same frame and package
-family, shot with `tools/screenshots-windows/Shot-Redact.ps1` on the finished
-agreement. It marks the customer's name, saves a redacted copy through the
-confirmation's *Save as a copy*, and shows the result: the name is a black bar and the
-summary bar reads "1 area redacted: 15 characters". The saved copy was read back
-outside the app with qpdf, and the name is gone from every decoded stream while the
-unredacted control still carries it.
+### How to shoot it again
 
-**The 2.0 set is still the set for 2.1, and that is a finding rather than an
-omission.** 2.1's work on Windows is the redaction *mark's* lifecycle (#329, #338):
-a mark can be selected, moved, reshaped and removed. Of the six images, the only one
-that has anything to do with a mark is `06-redact.png`, and that photographs the
-*result* of the save — the black bar and the summary bar — which 2.1 does not
-change. The marked state is `s6a-redact-marked` in the set's `work\` folder — shot
-on 2026-09-19, and `work\` is not uploaded. It is a mark *placed*, not selected:
-on Windows a finished drag adds the mark and returns
-(`MainWindow.xaml.cs:OnPagePointerReleased`), and the selection chrome is a
-separate click. Nothing else 2.1 does on Windows reaches the screen in these six
-states.
+It needs an interactive Windows desktop with the package installed: `Shoot-Set.ps1`
+photographs the screen with `CopyFromScreen` and drives it with the mouse, so neither
+CI (no compositor — the app writes a zero-byte PNG and the step still goes green) nor
+a headless or locked session (pure black, which the script's own brightness check
+reports) can shoot it. `Shoot-Set.ps1` refuses to start unless the installed
+package's version matches its `-Version`.
 
-Shot 6's flow still holds under the new code, which was worth checking before
-keeping the image: the redaction drag is released through the same handler that
-calls `ViewModel.CancelPlacementModes()`, so the tool disarms itself on release and
-the click that clears the focus ring afterwards
-(`MainWindow.xaml.cs:814`, `Shot-Redact.ps1:67`) can no longer mark anything.
+    # 150 %, in its OWN powershell process, then capture from a fresh one
+    tools\screenshots-windows\Set-Scale.ps1 150
+    python3 tools/screenshots-windows/gen_store_docs.py artifacts\store\screenshots\en --lang en
+    tools\screenshots-windows\Shoot-Set.ps1 -Lang en-US -Dir en `
+        -TileX1 82 -TileY1 527 -TileX2 223 -TileY2 527
+    # ... the same for fr-CA and fr-FR, then put the scale back to 200
 
-Re-shooting would need an interactive Windows desktop with the **2.1.0.0** package
-installed: `Shoot-Set.ps1` photographs the screen with `CopyFromScreen` and drives
-it with the mouse, so neither CI (no compositor — the app writes a zero-byte PNG and
-the step still goes green) nor a headless or locked session (pure black, which the
-script's own brightness check reports) can shoot it. `Shoot-Set.ps1` also refuses to
-start unless the installed package's version matches its `-Version`, which is
-`2.1.0.0` since the 2.1 bump. The 2.0 set was shot on GPD-DAVE.
-
-If a seventh image is wanted for 2.1, the one to add is a **selected redaction
-mark** — the affordance 2.1's copy leads with, the way `06-redact.png` was added for
-2.0's. `Shot-Redact.ps1` does not reach that state as it stands: it stops at
-`s6a-redact-marked`, and the chrome only appears when the mark is clicked, so the
-pose needs a click on the freshly drawn mark after the drag — either before the
-`-Save` branch, to replace s6a, or as a 07- step of the same capture run.
+The tile coordinates are read off `work\probe-pages.png` like every other coordinate
+in this harness — running `Shot-Pages.ps1` with none shoots the probe and stops.
 
 They are 2482×1541 rather than the old 3038×1989: that machine's display tops out
 at 2560×1600, and windows are hard-clamped to the display. Still roughly 1.8× the
-Store's minimum on both axes, and all six share one frame.
+Store's minimum on both axes, and all eight share one frame.
 
 **Display scale matters as much as resolution.** `ApplyToolbarLayout` switches on
 *effective* pixels, so at 200% scale a 2500 px window is only 1250 effective —
@@ -464,19 +559,18 @@ these captions and the description assume. Check the toolbar in the shots before
 uploading; if the labels are gone, the scale is wrong, not the resolution.
 
 **One set per language.** `artifacts/store/screenshots/en/`, `fr-CA/` and `fr-FR/`
-each hold the six files, from the same package with the Language setting switched,
+each hold the eight files, from the same package with the Language setting switched,
 over each language's staging documents (`gen_store_docs.py --lang fr-CA|fr-FR`).
-Same frame, same six files, same order — upload each set under its own listing
-language. The pre-2.0 set is kept in `artifacts/store/screenshots-pre2.0/`.
+Same frame, same eight files, same order — upload each set under its own listing
+language.
 
-Re-shooting needs a Windows desktop with the build installed; the harness is
-`tools/screenshots-windows/` (start with its README). It cannot be done from CI —
-unlike iOS and Android, whose screenshots come from the Actions workflows.
+The signature in the sign slot is **MegaWoman** (`tools/assets/megawoman-sig.png`),
+seeded by `Reset-SignatureLibrary.ps1`, which sets the machine's own library aside
+for the run. The recents in the home slot are posed by `Shot-Home.ps1`, which sets
+the machine's own `recent.json` aside the same way — that script **is** the privacy
+control for that slot, not a convenience: without it the image lists whatever the
+capture machine last opened.
 
-The signature in shot 3 is **MegaWoman** (`tools/assets/megawoman-sig.jpg`), seeded
-with `Add-SignatureToLibrary.ps1`. If the library on the capture machine has other
-entries, place the MegaWoman one — it is the brand signature for the listing.
-
-Shot 3 is click-to-place, not drag: picking a signature from the library arms
+The sign slot is click-to-place, not drag: picking a signature from the library arms
 placement and the next click on the page drops it there, selected for nudging.
 Don't write a caption that promises a drag.

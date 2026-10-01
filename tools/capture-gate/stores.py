@@ -86,9 +86,22 @@ STORES: dict[str, dict] = {
         # inside this floor passes; only the frame above is measured as a window.
         "min_size": (1366, 768),
         # Listing order is the file numbers (docs/microsoft-store-listing.md);
-        # the poses are the file names with the number taken off.
-        "order": ["edit-text", "checkbox", "signature", "shrink", "add-text", "redact"],
+        # the poses are the file names with the number taken off. Re-cut for 2.2
+        # (#613, Dave 2026-10-01): reading and the page tools are what the listing
+        # copy now opens with, redaction moves back, and reading replaces the old
+        # front slot rather than joining it. Applying that to Windows would have
+        # retired `checkbox`, `shrink` and `add-text` too, which the approved list
+        # did not say because it was drawn up against the Mac set; Dave settled it
+        # the same day at **eight** slots — checkbox back, between fixing the
+        # document and signing it, shrink and add-text retired, and the ninth slot
+        # the Store allows deliberately left empty. See Shoot-Set.ps1. The two
+        # retired poses are still shot, into the set's work\ folder.
+        "order": ["reading", "text", "checkbox", "sign", "pages", "search",
+                  "redact", "home"],
         "parse": _pose(r"(?:\d+[-_])?(?P<pose>[a-z][a-z0-9-]*)\.png$"),
+        # Shoot-Set.ps1 files every probe and in-between frame here at the end of
+        # a run. They are the record of the run, not the set, and are not uploaded.
+        "not_listing_folders": ("work",),
         # Measured on the 2.0 set: the title bar is its own strip, rows 0–45;
         # the command bar is ink from about 57 to 104, labels beside their
         # icons; the page's top edge is at 153. Mica runs from the title bar
@@ -101,17 +114,64 @@ STORES: dict[str, dict] = {
         # every capture reads as a two-row toolbar.
         "toolbar": {"depth": 112, "fixed": True, "title_bar": 45, "gap": 4,
                     "rows": 1, "height": (40, 130),
-                    "rows_by_pose": {"search": 2}},
+                    "rows_by_pose": {"search": 2},
+                    # Reading mode (#504) collapses the busy strip, the toolbar
+                    # and the tab strip, so rows 45–112 of that capture are the
+                    # top of the page, not a toolbar band. The same key the Linux
+                    # profile uses; `toolbar()` knows that a *fixed* band cannot
+                    # answer the question and stands down with the reason, because
+                    # this platform's depth is pinned rather than measured.
+                    "chromeless_poses": ("reading",)},
         "zoom": "100",
-        # Two poses show the inline editor open, and its focus underline is
+        # The zoom chip lives on the toolbar, so the poses with no toolbar have no
+        # chip to read, and the empty state has no document to be zoomed. Without
+        # this the check reports "no percentage found in the toolbar", which is a
+        # skip with a misleading reason rather than a known one.
+        "zoom_absent_poses": ("reading", "home"),
+        # Three poses show the inline editor open, and its focus underline is
         # drawn in the accent: that is the edit being shown, not a stray.
         "accent_poses": {"redact": ("banner", "mark"),
+                         "text": ("the inline editor's underline",),
                          "edit-text": ("the inline editor's underline",),
-                         "add-text": ("the inline editor's underline",)},
+                         "add-text": ("the inline editor's underline",),
+                         # New in 2.2 (#613). The Pages pane is a GridView, and a
+                         # selected tile is drawn with an accent border and an
+                         # accent fill behind its number — two tiles' worth, which
+                         # is a lot of accent for a pose that had none before.
+                         "pages": ("the selected page tiles",),
+                         # Find paints the current match in the accent and the
+                         # rest in a pale wash of it.
+                         "search": ("the current match",),
+                         # The recents list is HyperlinkButtons: the file names
+                         # are drawn in the accent, the way About's licence links
+                         # are on Linux.
+                         "home": ("the recent documents' links",),
+                         # Reading mode's floating bar is acrylic with no accent in
+                         # it, so this pose keeps the strict rule with nothing
+                         # allowed — which is worth having, because a selection or
+                         # an armed tool left on before Ctrl+H would survive into
+                         # the one capture with no chrome to notice it in.
+                         },
         # The app's own icon in the title bar is blue (about 400 px of accent
         # in every shot). Measured on the 2.0 set: a 24 px square at (13, 10).
         "accent_ignore": [(0, 0, 60, 45)],
         "accent_strict": True,
+        # The ring a click or a Tab leaves on a page region, measured off the 2.2
+        # checkbox capture (#613). It is a *lighter* blue than the brand accent,
+        # so `accent` matches not one pixel of it — which is how the ring reached
+        # the **shipped** Store screenshot: `02-checkbox.png` has carried it since
+        # 2.0, at an identical 341 px in all three languages, through every gate
+        # run. Escape is what takes it off; Shot-Checkboxes.ps1 does that now.
+        "focus_ring": "#4a93e2",
+        # Two poses draw in this blue on purpose, and both were found by adding
+        # the check rather than by being known about: a redaction mark's selection
+        # handles, and the find bar's *current* match — which the accent rule
+        # above calls "the current match" and had assumed was the brand accent.
+        "focus_ring_poses": ("redact", "search"),
+        # Measured: the ring this check exists for is 341 px. Every capture in
+        # every language carries 2–34 px of window furniture that falls inside the
+        # fuzz, and flagging that would make the check unreadable.
+        "focus_ring_tolerance": 60,
         # The DWM bounds include Windows 11's 1 px border, and the capture
         # reads the screen, so the outer two pixels on every side are border
         # over whatever wallpaper is behind the window — measured on the 2.0

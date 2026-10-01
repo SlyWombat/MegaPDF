@@ -13,7 +13,8 @@
 # X/Y are read off a probe shot, like every coordinate in this harness. The
 # editor's top-left lands ON the click, so aim ~60px above the rule you want the
 # text to sit on, at that rule's left end.
-param([int]$X = 1430, [int]$Y = 1080, [string]$Text = "March 18, 2026")
+param([int]$X = 1430, [int]$Y = 1080, [string]$Text = "March 18, 2026",
+      [string]$Name = "s-add-text")
 . (Join-Path $PSScriptRoot "lib.ps1")
 $h = (Get-Process -Name MegaPDF | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1).MainWindowHandle
 Front $h
@@ -24,7 +25,7 @@ Start-Sleep -Seconds 2
 [System.Windows.Forms.SendKeys]::SendWait($Text)
 Start-Sleep -Seconds 2
 Park $h
-Shot $h "05-add-text"
+Shot $h $Name
 # Commit the edit once the shot is taken. Leaving the editor open swallows the
 # Ctrl+S the Shrink step starts with, and Shrink then walks into "Save changes?"
 # with its toolbar disabled behind the dialog.

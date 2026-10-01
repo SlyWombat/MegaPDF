@@ -148,6 +148,16 @@ def discover(root: str, profile: dict, only: str | None = None) -> list[Shot]:
     shots = []
     for folder, subdirs, files in os.walk(root):
         subdirs.sort()
+        # A folder the capture rig files its *non*-listing frames in. The Windows
+        # harness moves every probe and in-between frame into `work\\` at the end
+        # of a run, precisely so that the set's own folder holds only the listing
+        # images, and reading them back in undoes that: four of them legitimately
+        # carry the accent the listing poses must not (an armed placement mode, an
+        # open inline editor, a modal), so every run came back with twelve images
+        # "to look at" that are never uploaded (#613). Named here rather than left
+        # to `--only`, because the gate should get this right unasked.
+        subdirs[:] = [d for d in subdirs
+                      if d not in profile.get("not_listing_folders", ())]
         if only and not any(part in os.path.abspath(folder)
                             for part in only.split(",")):
             continue

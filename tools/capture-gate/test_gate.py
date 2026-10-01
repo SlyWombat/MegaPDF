@@ -428,5 +428,65 @@ class PlayReadingPose(unittest.TestCase):
              "redact", "home"])
 
 
+@unittest.skipUnless(shutil.which("convert"), "ImageMagick is not installed")
+class WindowsChromelessPoses(unittest.TestCase):
+    """#613: reading mode has no toolbar and no zoom chip, and the empty state has
+    no zoom chip either.
+
+    Both checks used to answer a different question from the one they were asking
+    on those poses — `toolbar` counted rows of ink in a band that is page rather
+    than chrome and reported "no controls found", and `zoom` reported "no
+    percentage found in the toolbar", which is the same wording it uses when a chip
+    that should be there is missing. The Linux profile had just cost a re-shoot
+    twelve flagged images for the matching reason (its tab underline was never
+    added), so these stand down **by name**, with the reason in the note.
+
+    `chromeless_poses` is the key the Linux profile uses for the same idea, and
+    `LinuxReadingPose` above covers the other half of it: where the band is
+    measured rather than pinned, finding one is the defect.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.shots = os.path.join(self.tmp.name, "en")
+        os.makedirs(self.shots)
+        # The Windows frame, so the checks treat each one as a whole window.
+        for name in ("01-reading.png", "06-search.png", "08-home.png"):
+            _solid(os.path.join(self.shots, name), "2482x1541", "white")
+
+    def _finding(self, name, check):
+        with tempfile.TemporaryDirectory() as out:
+            result = gate.run(self.tmp.name, "microsoft", out, thumb_width=32)
+        image = next(i for i in result["images"]
+                     if os.path.basename(i["path"]) == name)
+        return next(f for f in image["findings"] if f["check"] == check)
+
+    def test_reading_has_no_toolbar_to_measure(self):
+        """Windows pins the band rather than measuring it (Mica has no edge to
+        find), so the inverted assertion the Linux profile gets — a band found
+        means the mode did not turn on — would be `depth < depth` here and could
+        never fire. It stands down with that reason instead of awarding a tick
+        nobody could have earned."""
+        finding = self._finding("01-reading.png", "toolbar")
+        self.assertEqual(finding["status"], "skip", finding["note"])
+        self.assertIn("fixed at 112 px rather than measured", finding["note"])
+
+    def test_reading_has_no_zoom_chip(self):
+        finding = self._finding("01-reading.png", "zoom")
+        self.assertEqual(finding["status"], "skip", finding["note"])
+        self.assertIn("no zoom chip to read", finding["note"])
+
+    def test_home_has_no_zoom_chip(self):
+        finding = self._finding("08-home.png", "zoom")
+        self.assertEqual(finding["status"], "skip", finding["note"])
+        self.assertIn("no zoom chip to read", finding["note"])
+
+    def test_a_pose_that_keeps_its_toolbar_is_still_measured(self):
+        """The stand-down is by name, not a blanket one: search still counts rows."""
+        finding = self._finding("06-search.png", "toolbar")
+        self.assertNotEqual(finding["status"], "skip", finding["note"])
+
+
 if __name__ == "__main__":
     unittest.main()

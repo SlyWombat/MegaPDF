@@ -177,15 +177,33 @@ def toolbar(shot, profile) -> list[Finding]:
     if not _is_frame(shot, profile):
         return [_skip("toolbar", "not a full window — a crop has no toolbar to "
                                  "measure")]
-    # Some poses are *supposed* to have no chrome at all: reading mode (#505)
-    # hides the toolbar, the tab strip and the status bar, and the page host it
-    # leaves behind reaches the top of the window. Measuring a toolbar there
-    # reports the whole search depth as a 200 px bar, which is how the #613
-    # reading slot came back flagged. Turned around instead: in a pose named
-    # here, finding a band is the defect, because a band means the mode did not
-    # turn on and the capture is an ordinary viewer shot in the reading slot.
+    # Some poses are *supposed* to have no chrome at all: reading mode (#504,
+    # #505) hides the toolbar, the tab strip and the status bar, and the page
+    # host it leaves behind reaches the top of the window. Measuring a toolbar
+    # there reports the whole search depth as a 200 px bar, which is how the
+    # #613 reading slot came back flagged on Linux.
+    #
+    # Turned around instead: in a pose named here, *finding* a band is the
+    # defect, because a band means the mode did not turn on and the capture is
+    # an ordinary viewer shot in the reading slot.
+    #
+    # Except where the band is fixed rather than measured. Windows draws Mica
+    # from the title bar into the canvas, so there is no edge to find and the
+    # profile pins the depth (`"fixed": True`); `toolbar_end` is then that same
+    # number whatever the image holds, the comparison below is `depth < depth`,
+    # and the assertion can never fire. Saying "no chrome band" there would be a
+    # tick nobody could have earned, so it is a skip that says why — and on that
+    # platform the harness asserts the same thing where it actually can, at
+    # capture time: Shot-Reading.ps1 fails the step unless the toolbar's Open
+    # button has left the automation tree altogether.
     if shot.pose in spec.get("chromeless_poses", ()):
         depth = spec["depth"]
+        if spec.get("fixed"):
+            return [_skip("toolbar", f"the {shot.pose} pose hides the toolbar on "
+                                     f"purpose, and this platform's band is fixed "
+                                     f"at {depth} px rather than measured, so the "
+                                     f"image cannot say whether it worked — the "
+                                     f"capture rig asserts it instead (#613)")]
         if shot.toolbar_end is not None and shot.toolbar_end < depth:
             return [_flag("toolbar", f"a {shot.toolbar_end} px band of chrome at "
                                      f"the top of a pose that should have none — "
@@ -424,6 +442,13 @@ def zoom(shot, profile) -> list[Finding]:
         return [_skip("zoom", "this platform has no zoom control in the posed "
                               "screens — Android opens at 1f, which is both the "
                               "container width and MIN_ZOOM")]
+    # The chip is on the toolbar and reads the open document's zoom, so a pose
+    # with no toolbar (reading mode) or no document (the empty state) has no chip
+    # to read. Named in the profile, because "no percentage found in the toolbar"
+    # is the same words this check uses when a chip that should be there is not.
+    if shot.pose in profile.get("zoom_absent_poses", ()):
+        return [_skip("zoom", f"the {shot.pose} pose has no zoom chip to read — "
+                              f"no toolbar, or no document to be zoomed")]
     if not im.have("tesseract"):
         return [_skip("zoom", "needs tesseract to read the chip")]
     w, h = shot.size
@@ -545,8 +570,63 @@ def against_reference(shot, reference: str | None) -> list[Finding]:
                                f"shot posed differently?")]
 
 
+def focus_ring(shot, profile) -> list[Finding]:
+    """A keyboard-focus ring left on the page.
+
+    `accent` already looks for selection chrome, and it did not catch this: on
+    Windows the ring a click leaves on a page region is drawn in a *lighter* blue
+    than the brand accent — #4a93e2 against the brand's #0e6fd8 — so the accent
+    mask does not match a pixel of it. The 2.2 checkbox capture went through the
+    whole gate with a ring round the last box it ticked and came back clean
+    (#613).
+
+    Measured rather than named: the ring is a thin rounded rectangle, so what is
+    looked for is *any* of that colour at all. Nothing in either desktop app
+    paints with it on purpose, which is what makes "none" the right threshold and
+    this a different question from `accent`'s "how much, and in what shape".
+    """
+    colour = profile.get("focus_ring")
+    if not colour:
+        return [_skip("focus ring", "this platform's focus ring colour is not in "
+                                    "the profile, so there is nothing to look for")]
+    mask = im.colour_mask(shot.path, colour)
+    # The same regions `accent` takes out before it counts: the app's own icon in
+    # the title bar is blue, and at this fuzz about a hundred of its antialiased
+    # pixels fall inside the ring colour too.
+    ignore = profile.get("accent_ignore", ())
+    found = 0
+    for y in range(mask.h):
+        row = mask.row(y)
+        hits = row.count(0)
+        for x0, y0, bw, bh in ignore:
+            if y0 <= y < y0 + bh:
+                hits -= row[x0:x0 + bw].count(0)
+        found += hits
+    # Poses whose own chrome is drawn in this blue rather than in the brand
+    # accent: the redaction mark's selection handles, and the find bar's current
+    # match. Both are what their slot exists to show.
+    allowed = profile.get("focus_ring_poses", ())
+    if found and shot.pose in allowed:
+        return [_ok("focus ring", f"{found} px, which in the {shot.pose} pose is "
+                                  f"the chrome this slot exists to show")]
+    # A ring is a rectangle around a control: the one this check was written for
+    # measured 341 px. Below the tolerance is antialiasing — a few pixels of the
+    # window's own furniture fall inside the fuzz — and calling that a ring would
+    # flag every image in every set, which is how a check stops being read.
+    tolerance = profile.get("focus_ring_tolerance", 0)
+    if 0 < found <= tolerance:
+        return [_ok("focus ring", f"{found} px, under the {tolerance} px a ring "
+                                  f"would draw — antialiasing, not chrome")]
+    if found:
+        return [_flag("focus ring", f"{found} px of the focus-ring colour "
+                                    f"({colour}) — a click or a Tab left a ring on "
+                                    f"the page. It is not the brand accent, so "
+                                    f"`accent` cannot see it (#613)")]
+    return [_ok("focus ring", "none")]
+
+
 PER_IMAGE = (size, edges, toolbar, accent, squiggle, person, zoom, privacy,
-             language_purity)
+             language_purity, focus_ring)
 
 
 # ------------------------------------------------------------ set-wide work

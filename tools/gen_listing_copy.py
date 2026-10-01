@@ -96,13 +96,22 @@ MegaPDF is open source (Apache-2.0): github.com/SlyWombat/MegaPDF""",
     ],
     "terms": ["PDF editor", "edit PDF", "sign PDF", "fill PDF form", "PDF signature", "compress PDF", "lightweight PDF"],
     "copyright": "© 2026 Electric RV. Licensed under Apache-2.0.",
+    # Eight slots since 2.2 (#613): reading and the page tools are what the
+    # description now opens with, redaction moves back, and checkbox is kept
+    # (Dave, 2026-10-01) because form filling is the one real capability the rest
+    # of the set never demonstrates. They are written to be read in order, as one
+    # argument — read it, fix it, fill it, sign it, put the pages in order, find
+    # anything in it, take something out of it for good, and none of it leaves
+    # your PC — so moving one without re-reading the rest breaks the run.
     "captions": [
-        ("01-edit-text.png", "Click the text and type — editing a PDF like a Word file."),
-        ("02-checkbox.png", "Click an empty square to check it. Drawn checkboxes too, not just real form fields."),
-        ("03-signature.png", "Drop a saved signature on the line, then nudge it into place."),
-        ("04-shrink.png", "Shrink oversized scans to email-friendly sizes in one click."),
-        ("05-add-text.png", "Type on a blank line, in the size and face that matches the form."),
-        ("06-redact.png", "Redact, and it really is gone."),
+        ("01-reading.png", "Press Ctrl+H and the tools come off the screen, leaving the page. A small floating bar keeps your place; Escape brings it all back."),
+        ("02-text.png", "Click the document's own text and type — fixing a PDF the way you would fix a Word file."),
+        ("03-checkbox.png", "Click an empty square and it is ticked — printed boxes that were never meant to be filled on screen, filled on screen."),
+        ("04-sign.png", "Pick a signature from your library, click where it goes, then nudge it until it sits right on the line."),
+        ("05-pages.png", "The Pages pane is somewhere to work: rotate a sideways scan, drop a page, reorder them, or save the ones you picked as a file of their own."),
+        ("06-search.png", "Ctrl+F highlights every match at once and counts them, so the one clause you need is a couple of keys away."),
+        ("07-redact.png", "Mark what has to come out. Saving takes it out of the file rather than covering it over — and says how much it removed."),
+        ("08-home.png", "No account, no cloud, no subscription, no telemetry. Every document is opened and handled on your own PC."),
     ],
 }
 
@@ -149,13 +158,16 @@ MegaPDF est un logiciel libre (Apache-2.0) : github.com/SlyWombat/MegaPDF""",
     ],
     "terms": ["éditeur PDF", "modifier PDF", "signer PDF", "remplir formulaire PDF", "signature PDF", "compresser PDF", "PDF léger"],
     "copyright": "© 2026 Electric RV. Sous licence Apache-2.0.",
+    # Huit emplacements depuis 2.2 (#613), dans l'ordre où ils sont téléversés et lus.
     "captions": [
-        ("01-edit-text.png", "Cliquez sur le texte et tapez : modifier un PDF comme un document Word."),
-        ("02-checkbox.png", "Cliquez sur un carré vide pour le cocher. Les cases dessinées aussi, pas seulement les vrais champs de formulaire."),
-        ("03-signature.png", "Déposez une signature enregistrée sur la ligne, puis ajustez-la en place."),
-        ("04-shrink.png", "Réduisez les numérisations trop lourdes à une taille adaptée au courriel en un clic."),
-        ("05-add-text.png", "Écrivez sur une ligne vide, dans la taille et la police qui correspondent au formulaire."),
-        ("06-redact.png", "Caviardez, et c'est parti pour de bon."),
+        ("01-reading.png", "Appuyez sur Ctrl+H : les outils quittent l'écran et laissent la page. Une petite barre flottante garde votre place; Échap ramène tout."),
+        ("02-text.png", "Cliquez sur le texte du document et tapez : corriger un PDF comme on corrige un document Word."),
+        ("03-checkbox.png", "Cliquez sur un carré vide et il est coché : des cases imprimées, jamais conçues pour être remplies à l'écran, remplies à l'écran."),
+        ("04-sign.png", "Choisissez une signature dans votre bibliothèque, cliquez à l'endroit voulu, puis ajustez-la jusqu'à ce qu'elle soit bien sur la ligne."),
+        ("05-pages.png", "Le volet Pages est un endroit où travailler : faites pivoter une page de travers, supprimez-en une, réordonnez-les ou extrayez celles que vous avez choisies."),
+        ("06-search.png", "Ctrl+F surligne tous les résultats d'un coup et les compte : la seule clause utile est à deux touches."),
+        ("07-redact.png", "Marquez ce qui doit disparaître. L'enregistrement le retire du fichier au lieu de le recouvrir, et dit ce qu'il a retiré."),
+        ("08-home.png", "Pas de compte, pas d'infonuagique, pas d'abonnement, pas de télémétrie. Chaque document est ouvert et traité sur votre propre PC."),
     ],
 }
 
@@ -475,7 +487,7 @@ def ms_section(title: str, tag: str, c: dict, note: str = "") -> str:
     parts.append(f"**App features** — one line per box, {len(c['features'])} boxes\n" + block("\n".join(c["features"])))
     parts.append("**Search terms** — one per box, seven boxes\n" + block("\n".join(c["terms"])))
     parts.append("**Copyright**\n" + block(c["copyright"]))
-    parts.append("**Screenshot captions** — same six files, same order\n"
+    parts.append(f"**Screenshot captions** — same {len(c['captions'])} files, same order\n"
                  + block("\n".join(f"{f}: {cap}" for f, cap in c["captions"])))
     return "\n".join(p for p in parts if p)
 

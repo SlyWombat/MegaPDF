@@ -16,7 +16,12 @@ Check every surface in en, fr-CA and fr-FR, light and dark, at effective widths 
 
 ## Windows
 - [ ] **Splash** (`SplashWindow`, 2.5 s at launch). M
-- [ ] **Main window, empty** (no document): toolbar, empty page area. R `empty`
+- [ ] **Main window, empty** (no document): toolbar, empty page area, and the recents
+  list. R `empty`. **Known broken (#617):** with no tab `Shell.Active` is null, so the
+  `x:Bind`s through it fall back to their property defaults — the busy strip shows with
+  no work running, its Stop button and "Stopping…" label are painted over each other,
+  and Undo and Redo are enabled. Found by the 2.2 store capture of this screen (#613);
+  it is a listing slot now, so this one is on camera.
 - [ ] **Main window, document open**: page stack, page indicator pill ("Page 1 of N"), title with the file name, and the unsaved dot on Save. R `doc`
 - [ ] **Windows print dialog** (system UI, opened by Print). M
 - [ ] **File pickers:** Open, Save as, and the Shrink save picker "Save a smaller copy" (system UI, packaged build only). H
@@ -95,6 +100,15 @@ Check every surface in en, fr-CA and fr-FR, light and dark, at effective widths 
   - "This file is too large for MegaPDF to open." (#147)
   
   M
+
+## Store captures taken of these surfaces
+
+The Microsoft Store set is eight of the surfaces above, shot by
+`tools/screenshots-windows/Shoot-Set.ps1` on a real desktop (#613): reading mode,
+the inline text editor, ticked check boxes, a placed signature, the Pages pane with
+a selection, the find bar, a selected redaction mark, and the empty state. Keeping this list in step
+matters in both directions — a surface that goes into the listing is a surface whose
+defects are published.
 
 ## Flows walked in the QA pass
 Open, scroll, zoom, find, tick, sign, add text, cover (whiteout), redact (#173, #329 — arm, mark, select a mark, move and resize it, remove it with the ✕ and Delete, Clear all marks, and undo each step: a mark is not a change, so none of it sets the unsaved dot, and a save with marks on the document carries none), edit text, undo and redo, save and save as, set and remove protection, shrink, print (to Microsoft Print to PDF), close with unsaved changes, and recovery after the app is killed.

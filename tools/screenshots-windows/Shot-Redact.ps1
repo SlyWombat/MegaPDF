@@ -10,7 +10,7 @@
 # 2500x1550 frame at 100 %. The drag is in screenshot coordinates, like every other
 # step: from just before the name to just past it, on the "Name:" line.
 param([int]$X1 = 850, [int]$Y1 = 520, [int]$X2 = 1040, [int]$Y2 = 556,
-      [switch]$Save, [string]$Out,
+      [switch]$Save, [string]$Out, [string]$Name = "07-redact",
       [ValidateSet('en-US', 'fr-CA', 'fr-FR')][string]$Lang = 'en-US')
 . (Join-Path $PSScriptRoot "lib.ps1")
 
@@ -42,7 +42,7 @@ Shot $h "s6a-redact-marked"
 Click-InShot $h ([int](($X1 + $X2) / 2)) ([int](($Y1 + $Y2) / 2))
 Start-Sleep -Milliseconds 800
 Park $h
-Shot $h "06-redact"
+Shot $h $Name
 if (-not $Save) { return }
 
 $resw = Join-Path $PSScriptRoot "..\..\src\MegaPDF.App\Strings\$Lang\Resources.resw"
