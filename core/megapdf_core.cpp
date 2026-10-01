@@ -147,6 +147,9 @@ struct megapdf_document {
 struct megapdf_removed_page {
     megapdf_document* owner = nullptr;
     FPDF_DOCUMENT scratch = nullptr;
+    // The document that held it has been closed and `scratch` is gone, but the caller may
+    // still hold this handle and still owes megapdf_discard_removed_page() (#551).
+    bool closed = false;
 };
 
 // Page objects taken off a page and kept for undo. One object for megapdf_detach_object();
@@ -170,12 +173,19 @@ struct megapdf_detached {
     // A redaction has been applied since this was detached, and the objects it held are
     // gone (#173): restoring them would put removed content back on the page.
     bool spent_by_redaction = false;
+    // The document that held it has been closed and the objects are gone, but the caller may
+    // still hold this handle and still owes megapdf_discard_detached() (#551). Separate from
+    // spent_by_redaction, which is also an empty handle but a different answer to the caller.
+    bool closed = false;
 };
 
 struct megapdf_page {
     megapdf_document* owner = nullptr;
     FPDF_PAGE page = nullptr;
     int index = -1;
+    // The document has been closed and `page` is gone, but the caller may still hold this
+    // handle and still owes megapdf_close_page() (#551).
+    bool closed = false;
     double crop_x = 0.0;
     double crop_y = 0.0;
     // The page's own size in user space, before /Rotate: the box PDFium renders, turned back
@@ -226,6 +236,34 @@ void SetError(unsigned long code, const char* message) {
     // PDFium's code is an unsigned long; the ABI narrows it (values are single digits).
     g_last_error = static_cast<unsigned int>(code);
     g_last_message = message ? message : "";
+}
+
+// --------------------------------------------------------------------------
+// The dead-handle contract (#551). megapdf_close() releases what a page, detached-object or
+// removed-page handle held and leaves the shell alive, so a late close or discard is harmless
+// in any order. The price is that a late *use* must not be: every entry point taking one of
+// these asks Dead() first and refuses loudly. One place decides what dead is, one place
+// decides what it reports, so no entry point can answer differently by accident.
+// --------------------------------------------------------------------------
+
+bool Dead(const megapdf_page* p) { return p->closed; }
+bool Dead(const megapdf_detached* x) { return x->closed; }
+bool Dead(const megapdf_removed_page* r) { return r->closed; }
+
+// Returns MEGAPDF_ERR_CLOSED for the entry points that have a status to return; the ones that
+// answer with a count, a size, a double or NULL call it for its side effect and return their
+// own nothing, which megapdf_last_error() == MEGAPDF_LAST_ERR_CLOSED then explains.
+int DeadPage() {
+    SetError(MEGAPDF_LAST_ERR_CLOSED, "the document this page belonged to has been closed");
+    return MEGAPDF_ERR_CLOSED;
+}
+int DeadDetached() {
+    SetError(MEGAPDF_LAST_ERR_CLOSED, "the document these detached objects belonged to has been closed");
+    return MEGAPDF_ERR_CLOSED;
+}
+int DeadRemovedPage() {
+    SetError(MEGAPDF_LAST_ERR_CLOSED, "the document this removed page belonged to has been closed");
+    return MEGAPDF_ERR_CLOSED;
 }
 
 void EnsureLibrary() {
@@ -760,7 +798,9 @@ megapdf_document* OpenLike(const megapdf_document* like, Loader load) {
 
 void ClosePageUnlocked(megapdf_page* p) {
     if (p->owner != nullptr && p->owner->form != nullptr) FORM_OnBeforeClosePage(p->page, p->owner->form);
-    FPDF_ClosePage(p->page);
+    // Nothing to close on a page whose document already released it (#551); the shell is all
+    // that is left, and freeing it is what the caller came here for.
+    if (p->page != nullptr) FPDF_ClosePage(p->page);
     delete p;
 }
 
@@ -1033,21 +1073,32 @@ MEGAPDF_API void megapdf_close(megapdf_document* d) {
     // to stop at its next stage, and wait until it has.
     d->closing = true;
     ChecksDone().wait(guard, [d] { return d->active_checks == 0; });
+    // The dead-handle contract (#551). Every handle still out there is emptied, not freed: the
+    // caller may hold any of them (a page a render has in flight, a detached object or a
+    // removed page sitting on an undo stack) and still owes its close or discard, which it may
+    // make before or after this call, from any thread. Freeing them here instead is #549: a
+    // use-after-free the core cannot see and four bindings each had to remember not to cause.
     for (megapdf_page* p : d->open_pages) {
-        p->owner = nullptr;   // the document is going; do not call back into its form handle
         if (d->form != nullptr) FORM_OnBeforeClosePage(p->page, d->form);
         FPDF_ClosePage(p->page);
-        delete p;
+        p->page = nullptr;
+        p->owner = nullptr;   // the document is going; do not call back into its form handle
+        p->closed = true;
     }
     d->open_pages.clear();
     for (megapdf_detached* x : d->detached) {
         for (const auto& part : x->parts) FPDFPageObj_Destroy(part.object);
-        delete x;
+        x->parts.clear();     // so a later discard does not destroy them twice
+        x->edited_index = -1;
+        x->owner = nullptr;
+        x->closed = true;
     }
     d->detached.clear();
     for (megapdf_removed_page* r : d->removed_pages) {
         if (r->scratch != nullptr) FPDF_CloseDocument(r->scratch);
-        delete r;
+        r->scratch = nullptr;
+        r->owner = nullptr;
+        r->closed = true;
     }
     d->removed_pages.clear();
     if (d->form != nullptr) FPDFDOC_ExitFormFillEnvironment(d->form);
@@ -1113,6 +1164,9 @@ MEGAPDF_API megapdf_page* megapdf_load_page(megapdf_document* d, int index) {
 MEGAPDF_API void megapdf_close_page(megapdf_page* p) {
     if (p == nullptr) return;
     Guard guard(CoreLock());
+    // A dead page (#551) has no owner to be listed on and no FPDF_PAGE to close: this frees the
+    // shell and nothing else, which is why it is safe before or after megapdf_close(), on any
+    // thread, and why it is still owed.
     if (p->owner != nullptr) {
         auto& pages = p->owner->open_pages;
         for (size_t i = 0; i < pages.size(); i++) {
@@ -1129,22 +1183,36 @@ MEGAPDF_API void megapdf_close_page(megapdf_page* p) {
 MEGAPDF_API double megapdf_page_width(const megapdf_page* p) {
     if (p == nullptr) return 0.0;
     Guard guard(CoreLock());
+    if (Dead(p)) { DeadPage(); return 0.0; }
     return static_cast<double>(FPDF_GetPageWidthF(p->page)) * p->unit;
 }
 
 MEGAPDF_API double megapdf_page_height(const megapdf_page* p) {
     if (p == nullptr) return 0.0;
     Guard guard(CoreLock());
+    if (Dead(p)) { DeadPage(); return 0.0; }
     return static_cast<double>(FPDF_GetPageHeightF(p->page)) * p->unit;
 }
 
 MEGAPDF_API void megapdf_page_crop_origin(const megapdf_page* p, double* out_x, double* out_y) {
-    if (out_x != nullptr) *out_x = p ? p->crop_x : 0.0;
-    if (out_y != nullptr) *out_y = p ? p->crop_y : 0.0;
+    // These two read fields that do not change after the page is loaded, and so took no lock.
+    // They take it now for `closed`, which megapdf_close() may set on another thread (#551).
+    bool live = p != nullptr;
+    if (live) {
+        Guard guard(CoreLock());
+        if (Dead(p)) { DeadPage(); live = false; }
+    }
+    if (out_x != nullptr) *out_x = live ? p->crop_x : 0.0;
+    if (out_y != nullptr) *out_y = live ? p->crop_y : 0.0;
 }
 
 MEGAPDF_API double megapdf_page_user_unit(const megapdf_page* p) {
-    return p ? p->unit : 1.0;
+    if (p == nullptr) return 1.0;
+    Guard guard(CoreLock());
+    // 1.0, as for a NULL page: the answer is a scale factor every coordinate is multiplied by,
+    // and 0.0 would quietly collapse a caller's geometry. megapdf_last_error() says why (#551).
+    if (Dead(p)) { DeadPage(); return 1.0; }
+    return p->unit;
 }
 
 // --------------------------------------------------------------------------
@@ -1154,6 +1222,7 @@ MEGAPDF_API double megapdf_page_user_unit(const megapdf_page* p) {
 MEGAPDF_API size_t megapdf_detect_checkbox_squares(const megapdf_page* p, megapdf_rect* out, size_t capacity) {
     if (p == nullptr) return 0;
     Guard guard(CoreLock());
+    if (Dead(p)) { DeadPage(); return 0; }
     FPDF_PAGE page = p->page;
     size_t found = 0;
     const int count = FPDFPage_CountObjects(page);
@@ -1187,6 +1256,7 @@ MEGAPDF_API size_t megapdf_search_page(const megapdf_page* p, const unsigned sho
                                        double* out, size_t capacity) {
     if (p == nullptr || term_utf16 == nullptr || term_utf16[0] == 0) return 0;
     Guard guard(CoreLock());
+    if (Dead(p)) { DeadPage(); return 0; }
 
     FPDF_TEXTPAGE text = FPDFText_LoadPage(p->page);
     if (text == nullptr) return 0;
@@ -1501,6 +1571,7 @@ MEGAPDF_API megapdf_text* megapdf_text_load(const megapdf_page* p, unsigned int 
     if (p == nullptr) return nullptr;
     const bool boxes_only = (flags & MEGAPDF_TEXT_BOXES_ONLY) != 0;
     Guard guard(CoreLock());
+    if (Dead(p)) { DeadPage(); return nullptr; }
     auto* t = new (std::nothrow) megapdf_text();
     if (t == nullptr) {
         SetError(FPDF_ERR_UNKNOWN, "out of memory");
@@ -1657,6 +1728,7 @@ extern "C" {
 MEGAPDF_API megapdf_form_fields* megapdf_form_fields_load(const megapdf_page* p) {
     if (p == nullptr) return nullptr;
     Guard guard(CoreLock());
+    if (Dead(p)) { DeadPage(); return nullptr; }
     auto* f = new (std::nothrow) megapdf_form_fields();
     if (f == nullptr) {
         SetError(FPDF_ERR_UNKNOWN, "out of memory");
@@ -1721,8 +1793,10 @@ MEGAPDF_API size_t megapdf_form_field_string(const megapdf_form_fields* f, size_
 }
 
 MEGAPDF_API int megapdf_form_click(const megapdf_page* p, double x, double y) {
-    if (p == nullptr || p->owner == nullptr || p->owner->form == nullptr) return MEGAPDF_ERR_ARGUMENT;
+    if (p == nullptr) return MEGAPDF_ERR_ARGUMENT;
     Guard guard(CoreLock());
+    if (Dead(p)) return DeadPage();
+    if (p->owner == nullptr || p->owner->form == nullptr) return MEGAPDF_ERR_ARGUMENT;
     if (p->index < 0) return MEGAPDF_ERR_ARGUMENT;   // a deleted page (#174): its widgets are off the form
     FPDF_FORMHANDLE form = p->owner->form;
     const SpacePoint at = InPoint(p, x, y);
@@ -1733,8 +1807,10 @@ MEGAPDF_API int megapdf_form_click(const megapdf_page* p, double x, double y) {
 }
 
 MEGAPDF_API int megapdf_form_set_text(const megapdf_page* p, double x, double y, const unsigned short* value_utf16) {
-    if (p == nullptr || p->owner == nullptr || p->owner->form == nullptr || value_utf16 == nullptr) return MEGAPDF_ERR_ARGUMENT;
+    if (p == nullptr || value_utf16 == nullptr) return MEGAPDF_ERR_ARGUMENT;
     Guard guard(CoreLock());
+    if (Dead(p)) return DeadPage();
+    if (p->owner == nullptr || p->owner->form == nullptr) return MEGAPDF_ERR_ARGUMENT;
     if (p->index < 0) return MEGAPDF_ERR_ARGUMENT;   // a deleted page (#174): its widgets are off the form
     FPDF_FORMHANDLE form = p->owner->form;
     const SpacePoint at = InPoint(p, x, y);
@@ -1924,6 +2000,7 @@ MEGAPDF_API int megapdf_add_check_mark(const megapdf_page* p, const megapdf_rect
                                        const unsigned short* id) {
     if (p == nullptr || square == nullptr || id == nullptr || id[0] == 0) return MEGAPDF_ERR_ARGUMENT;
     Guard guard(CoreLock());
+    if (Dead(p)) return DeadPage();
     // Mark at ~80% of the square, centred (SDD §3.2), in PDF user space.
     const double width = square->right - square->left;
     const double height = square->top - square->bottom;
@@ -2005,12 +2082,14 @@ MEGAPDF_API int megapdf_add_image_stamp(const megapdf_page* p, const unsigned ch
                                         const megapdf_rect* bounds, const unsigned short* id) {
     if (p == nullptr || bgra == nullptr || width <= 0 || height <= 0 || bounds == nullptr || id == nullptr || id[0] == 0) return MEGAPDF_ERR_ARGUMENT;
     Guard guard(CoreLock());
+    if (Dead(p)) return DeadPage();
     return AddImageStampUnlocked(p, bgra, width, height, bounds, id);
 }
 
 MEGAPDF_API megapdf_stamps* megapdf_stamps_load(const megapdf_page* p) {
     if (p == nullptr) return nullptr;
     Guard guard(CoreLock());
+    if (Dead(p)) { DeadPage(); return nullptr; }
     auto* s = new (std::nothrow) megapdf_stamps();
     if (s == nullptr) { SetError(FPDF_ERR_UNKNOWN, "out of memory"); return nullptr; }
     try {
@@ -2060,6 +2139,7 @@ MEGAPDF_API size_t megapdf_stamp_id(const megapdf_stamps* s, size_t index, unsig
 MEGAPDF_API megapdf_image* megapdf_stamp_image_load(const megapdf_page* p, int annot_index) {
     if (p == nullptr || annot_index < 0) return nullptr;
     Guard guard(CoreLock());
+    if (Dead(p)) { DeadPage(); return nullptr; }
     return LoadStampImageUnlocked(p, annot_index);
 }
 
@@ -2079,6 +2159,7 @@ MEGAPDF_API size_t megapdf_image_pixels(const megapdf_image* img, unsigned char*
 MEGAPDF_API int megapdf_remove_annotation(const megapdf_page* p, int annot_index) {
     if (p == nullptr || annot_index < 0) return MEGAPDF_ERR_ARGUMENT;
     Guard guard(CoreLock());
+    if (Dead(p)) return DeadPage();
     if (!FPDFPage_RemoveAnnot(p->page, annot_index)) { SetError(FPDF_ERR_UNKNOWN, "could not remove the annotation"); return MEGAPDF_ERR_PDFIUM; }
     return MEGAPDF_OK;
 }
@@ -2086,6 +2167,7 @@ MEGAPDF_API int megapdf_remove_annotation(const megapdf_page* p, int annot_index
 MEGAPDF_API int megapdf_remove_stamp(const megapdf_page* p, const unsigned short* id) {
     if (p == nullptr || id == nullptr) return MEGAPDF_ERR_ARGUMENT;
     Guard guard(CoreLock());
+    if (Dead(p)) return DeadPage();
     const int index = FindStamp(p->page, id);
     if (index < 0) { SetError(0, "no stamp with that id on the page"); return MEGAPDF_ERR_ARGUMENT; }
     if (!FPDFPage_RemoveAnnot(p->page, index)) { SetError(FPDF_ERR_UNKNOWN, "could not remove the stamp"); return MEGAPDF_ERR_PDFIUM; }
@@ -2095,6 +2177,7 @@ MEGAPDF_API int megapdf_remove_stamp(const megapdf_page* p, const unsigned short
 MEGAPDF_API int megapdf_move_image_stamp(const megapdf_page* p, const unsigned short* id, const megapdf_rect* bounds) {
     if (p == nullptr || id == nullptr || bounds == nullptr) return MEGAPDF_ERR_ARGUMENT;
     Guard guard(CoreLock());
+    if (Dead(p)) return DeadPage();
     const int index = FindStamp(p->page, id);
     if (index < 0) { SetError(0, "no stamp with that id on the page"); return MEGAPDF_ERR_ARGUMENT; }
     megapdf_image* img = LoadStampImageUnlocked(p, index);
@@ -2794,8 +2877,10 @@ MEGAPDF_API int megapdf_text_editable(const megapdf_page* p, int object_index) {
 }
 
 MEGAPDF_API int megapdf_text_editable_reason(const megapdf_page* p, int object_index, megapdf_layout_verdict* out) {
-    if (p == nullptr || p->owner == nullptr || p->index < 0 || object_index < 0 || out == nullptr) return MEGAPDF_ERR_ARGUMENT;
+    if (p == nullptr || object_index < 0 || out == nullptr) return MEGAPDF_ERR_ARGUMENT;
     Guard guard(CoreLock());
+    if (Dead(p)) return DeadPage();
+    if (p->owner == nullptr || p->index < 0) return MEGAPDF_ERR_ARGUMENT;
     FPDF_PAGEOBJECT obj = FPDFPage_GetObject(p->page, object_index);
     if (obj == nullptr || FPDFPageObj_GetType(obj) != FPDF_PAGEOBJ_TEXT) return MEGAPDF_ERR_ARGUMENT;
     *out = JudgeRewriteUnlocked(p->owner, p->index, std::vector<int>{object_index});
@@ -2814,8 +2899,10 @@ MEGAPDF_API int megapdf_page_regeneration_verdict(const megapdf_page* p, megapdf
 
 MEGAPDF_API int megapdf_page_regeneration_verdict_cancellable(const megapdf_page* p, const megapdf_cancel* cancel,
                                                              megapdf_layout_verdict* out) {
-    if (p == nullptr || p->owner == nullptr || p->page == nullptr || p->index < 0 || out == nullptr) return MEGAPDF_ERR_ARGUMENT;
+    if (p == nullptr || out == nullptr) return MEGAPDF_ERR_ARGUMENT;
     std::unique_lock<std::recursive_mutex> lock(CoreLock());
+    if (Dead(p)) return DeadPage();
+    if (p->owner == nullptr || p->page == nullptr || p->index < 0) return MEGAPDF_ERR_ARGUMENT;
     // The page handle may be closed while the run has let go of the lock: from here on only
     // the document (which megapdf_close() keeps alive until the run ends) and the index are used.
     megapdf_document* d = p->owner;
@@ -2863,8 +2950,10 @@ MEGAPDF_API int megapdf_page_regeneration_verdict_cancellable(const megapdf_page
 }
 
 MEGAPDF_API int megapdf_page_regeneration_verdict_cached(const megapdf_page* p, megapdf_layout_verdict* out) {
-    if (p == nullptr || p->owner == nullptr || p->index < 0 || out == nullptr) return MEGAPDF_ERR_ARGUMENT;
+    if (p == nullptr || out == nullptr) return MEGAPDF_ERR_ARGUMENT;
     Guard guard(CoreLock());
+    if (Dead(p)) return DeadPage();
+    if (p->owner == nullptr || p->index < 0) return MEGAPDF_ERR_ARGUMENT;
     const auto cached = p->owner->rewrite_keeps_page.find(std::make_pair(p->index, kPageVerdictKey));
     if (cached == p->owner->rewrite_keeps_page.end()) return MEGAPDF_ERR_NOT_JUDGED;
     *out = cached->second;
@@ -2872,8 +2961,10 @@ MEGAPDF_API int megapdf_page_regeneration_verdict_cached(const megapdf_page* p, 
 }
 
 MEGAPDF_API int megapdf_testing_compare_pages(const megapdf_page* was, const megapdf_page* now, megapdf_layout_verdict* out) {
-    if (was == nullptr || now == nullptr || was->page == nullptr || now->page == nullptr || out == nullptr) return MEGAPDF_ERR_ARGUMENT;
+    if (was == nullptr || now == nullptr || out == nullptr) return MEGAPDF_ERR_ARGUMENT;
     Guard guard(CoreLock());
+    if (Dead(was) || Dead(now)) return DeadPage();
+    if (was->page == nullptr || now->page == nullptr) return MEGAPDF_ERR_ARGUMENT;
     *out = CompareRewrite(was->page, now->page, std::vector<PageBox>{});
     return out->editable ? 1 : 0;
 }
@@ -3133,6 +3224,7 @@ extern "C" {
 MEGAPDF_API int megapdf_add_whiteout(const megapdf_page* p, const megapdf_rect* bounds, int* out_object_index) {
     if (p == nullptr || bounds == nullptr) return MEGAPDF_ERR_ARGUMENT;
     Guard guard(CoreLock());
+    if (Dead(p)) return DeadPage();
     const megapdf_rect box = InRect(p, bounds->left, bounds->bottom, bounds->right, bounds->top);
     const float left = static_cast<float>(box.left), right = static_cast<float>(box.right);
     const float bottom = static_cast<float>(box.bottom), top = static_cast<float>(box.top);
@@ -3158,6 +3250,7 @@ MEGAPDF_API int megapdf_add_whiteout(const megapdf_page* p, const megapdf_rect* 
 MEGAPDF_API size_t megapdf_whiteouts(const megapdf_page* p, megapdf_object_rect* out, size_t capacity) {
     if (p == nullptr) return 0;
     Guard guard(CoreLock());
+    if (Dead(p)) { DeadPage(); return 0; }
     size_t found = 0;
     const int count = FPDFPage_CountObjects(p->page);
     for (int i = 0; i < count; i++) {
@@ -3182,6 +3275,7 @@ MEGAPDF_API int megapdf_add_text_box(const megapdf_page* p, int object_index, co
         return MEGAPDF_ERR_ARGUMENT;
     }
     Guard guard(CoreLock());
+    if (Dead(p)) return DeadPage();
     return AddTextBoxUnlocked(p, object_index, text, font_name, font_size, baseline_x, baseline_y, id, out_object_index);
 }
 
@@ -3192,6 +3286,7 @@ MEGAPDF_API int megapdf_restyle_text_box(const megapdf_page* p, int object_index
         return MEGAPDF_ERR_ARGUMENT;
     }
     Guard guard(CoreLock());
+    if (Dead(p)) return DeadPage();
     // Place the baseline at the corner, then normalise onto the bounds anchor:
     // GetTextBoxes and MoveTextBox both speak bounds, and without this a 12 pt →
     // 18 pt restyle drops by the extra descender depth.
@@ -3204,18 +3299,21 @@ MEGAPDF_API int megapdf_restyle_text_box(const megapdf_page* p, int object_index
 MEGAPDF_API int megapdf_find_text_box(const megapdf_page* p, const unsigned short* id) {
     if (p == nullptr || id == nullptr) return -1;
     Guard guard(CoreLock());
+    if (Dead(p)) return DeadPage();   // not -1: closed is not "the page has no such box"
     return FindTextBoxUnlocked(p->page, id);
 }
 
 MEGAPDF_API int megapdf_page_object_count(const megapdf_page* p) {
     if (p == nullptr) return 0;
     Guard guard(CoreLock());
+    if (Dead(p)) return DeadPage();   // not 0: closed is not "the page draws nothing"
     return FPDFPage_CountObjects(p->page);
 }
 
 MEGAPDF_API int megapdf_object_type(const megapdf_page* p, int object_index) {
     if (p == nullptr || object_index < 0) return -1;
     Guard guard(CoreLock());
+    if (Dead(p)) return DeadPage();
     FPDF_PAGEOBJECT obj = FPDFPage_GetObject(p->page, object_index);
     return obj == nullptr ? -1 : FPDFPageObj_GetType(obj);
 }
@@ -3223,6 +3321,7 @@ MEGAPDF_API int megapdf_object_type(const megapdf_page* p, int object_index) {
 MEGAPDF_API int megapdf_object_bounds(const megapdf_page* p, int object_index, megapdf_rect* out) {
     if (p == nullptr || out == nullptr || object_index < 0) return MEGAPDF_ERR_ARGUMENT;
     Guard guard(CoreLock());
+    if (Dead(p)) return DeadPage();
     FPDF_PAGEOBJECT obj = FPDFPage_GetObject(p->page, object_index);
     float l = 0, b = 0, r = 0, t = 0;
     if (obj == nullptr || !FPDFPageObj_GetBounds(obj, &l, &b, &r, &t)) return MEGAPDF_ERR_ARGUMENT;
@@ -3233,12 +3332,16 @@ MEGAPDF_API int megapdf_object_bounds(const megapdf_page* p, int object_index, m
 MEGAPDF_API int megapdf_move_text_box(const megapdf_page* p, int object_index, double left, double bottom) {
     if (p == nullptr || object_index < 0) return MEGAPDF_ERR_ARGUMENT;
     Guard guard(CoreLock());
+    if (Dead(p)) return DeadPage();
     return MoveTextBoxUnlocked(p, object_index, left, bottom);
 }
 
 MEGAPDF_API int megapdf_remove_text_box(const megapdf_page* p, const unsigned short* id) {
     if (p == nullptr || id == nullptr) return MEGAPDF_ERR_ARGUMENT;
     Guard guard(CoreLock());
+    // Before the "already gone" MEGAPDF_OK below: a dead page has lost every box, and
+    // answering OK would make an undo believe it had removed one (#551).
+    if (Dead(p)) return DeadPage();
     const int index = FindTextBoxUnlocked(p->page, id);
     if (index < 0) return MEGAPDF_OK;   // already gone: an undo racing a re-render must not fail
     FPDF_PAGEOBJECT obj = FPDFPage_GetObject(p->page, index);
@@ -3249,8 +3352,10 @@ MEGAPDF_API int megapdf_remove_text_box(const megapdf_page* p, const unsigned sh
 
 MEGAPDF_API megapdf_detached* megapdf_detach_object(const megapdf_page* p, int object_index) {
     g_last_layout = EditableVerdict();
-    if (p == nullptr || p->owner == nullptr || object_index < 0) return nullptr;
+    if (p == nullptr || object_index < 0) return nullptr;
     Guard guard(CoreLock());
+    if (Dead(p)) { DeadPage(); return nullptr; }
+    if (p->owner == nullptr) return nullptr;
     FPDF_PAGEOBJECT obj = FPDFPage_GetObject(p->page, object_index);
     if (obj == nullptr) { SetError(0, "no page object at that index"); return nullptr; }
     if (FPDFPageObj_GetType(obj) == FPDF_PAGEOBJ_TEXT && !HasMark(obj, kTextBoxMark) &&
@@ -3273,6 +3378,8 @@ MEGAPDF_API megapdf_detached* megapdf_detach_object(const megapdf_page* p, int o
 MEGAPDF_API int megapdf_restore_object(const megapdf_page* p, megapdf_detached* x, int object_index) {
     if (p == nullptr || x == nullptr || object_index < 0) return MEGAPDF_ERR_ARGUMENT;
     Guard guard(CoreLock());
+    if (Dead(p)) return DeadPage();
+    if (Dead(x)) return DeadDetached();
     if (x->parts.size() != 1) {
         SetError(0, "this handle holds more than one object; restore it with megapdf_restore_detached");
         return MEGAPDF_ERR_ARGUMENT;
@@ -3294,6 +3401,9 @@ MEGAPDF_API int megapdf_restore_object(const megapdf_page* p, megapdf_detached* 
 MEGAPDF_API void megapdf_discard_detached(megapdf_detached* x) {
     if (x == nullptr) return;
     Guard guard(CoreLock());
+    // A dead handle (#551) is unlisted already and holds no objects: this frees the shell and
+    // nothing else, which is what makes a discard after megapdf_close() harmless. Bindings
+    // keep these on an undo stack, so that is the ordinary case rather than a mistake.
     Unlist(x);
     for (const auto& part : x->parts) FPDFPageObj_Destroy(part.object);
     delete x;
@@ -3301,11 +3411,16 @@ MEGAPDF_API void megapdf_discard_detached(megapdf_detached* x) {
 
 MEGAPDF_API megapdf_detached* megapdf_detach_text_runs(const megapdf_page* p, const int* indices, size_t count) {
     g_last_layout = EditableVerdict();
-    if (p == nullptr || p->owner == nullptr || indices == nullptr || count == 0) {
+    if (p == nullptr || indices == nullptr || count == 0) {
         SetError(0, "no text runs to remove");
         return nullptr;
     }
     Guard guard(CoreLock());
+    if (Dead(p)) { DeadPage(); return nullptr; }
+    if (p->owner == nullptr) {
+        SetError(0, "no text runs to remove");
+        return nullptr;
+    }
     std::vector<megapdf_detached::Part> parts;
     try {
         if (!PlanTextRuns(p, indices, count, &parts)) return nullptr;
@@ -3325,6 +3440,8 @@ MEGAPDF_API megapdf_detached* megapdf_detach_text_runs(const megapdf_page* p, co
 MEGAPDF_API int megapdf_restore_detached(const megapdf_page* p, megapdf_detached* x) {
     if (p == nullptr || x == nullptr) return MEGAPDF_ERR_ARGUMENT;
     Guard guard(CoreLock());
+    if (Dead(p)) return DeadPage();
+    if (Dead(x)) return DeadDetached();
     if (x->spent_by_redaction) {
         // The objects are freed, not merely unreachable: putting them back is what a
         // redaction has to make impossible (#173). The handle stays valid to discard.
@@ -3387,12 +3504,14 @@ MEGAPDF_API int megapdf_restore_detached(const megapdf_page* p, megapdf_detached
 MEGAPDF_API size_t megapdf_detached_count(const megapdf_detached* x) {
     if (x == nullptr) return 0;
     Guard guard(CoreLock());
+    if (Dead(x)) { DeadDetached(); return 0; }
     return x->parts.size();
 }
 
 MEGAPDF_API int megapdf_detached_get(const megapdf_detached* x, size_t index, megapdf_detached_part* out) {
     if (x == nullptr || out == nullptr) return MEGAPDF_ERR_ARGUMENT;
     Guard guard(CoreLock());
+    if (Dead(x)) return DeadDetached();
     if (index >= x->parts.size()) return MEGAPDF_ERR_ARGUMENT;
     out->object_index = x->parts[index].index;
     out->copy_of = x->parts[index].copy_of;
@@ -3855,6 +3974,9 @@ MEGAPDF_API int megapdf_render(const megapdf_page* p, void* buffer, int width, i
     }
     {
         Guard guard(CoreLock());
+        // The loud half of the contract (#551): a render on a page whose document has closed
+        // fails. It must never quietly succeed at drawing nothing.
+        if (Dead(p)) return DeadPage();
         FPDF_BITMAP bmp = FPDFBitmap_CreateEx(width, height, FPDFBitmap_BGRA, buffer, stride);
         if (bmp == nullptr) {
             SetError(FPDF_ERR_UNKNOWN, "PDFium refused the render bitmap");
@@ -4106,6 +4228,7 @@ MEGAPDF_API int megapdf_set_line_text(const megapdf_page* p, const int* indices,
         return MEGAPDF_ERR_ARGUMENT;
     }
     Guard guard(CoreLock());
+    if (Dead(p)) return DeadPage();
     const int object_index = indices[0];
     FPDF_PAGEOBJECT obj = FPDFPage_GetObject(p->page, object_index);
     if (obj == nullptr || FPDFPageObj_GetType(obj) != FPDF_PAGEOBJ_TEXT) {
@@ -4199,6 +4322,7 @@ MEGAPDF_API int megapdf_insert_text_run(const megapdf_page* p, int object_index,
                                         double font_size, double left, double baseline) {
     if (p == nullptr || object_index < 0 || text == nullptr || text[0] == 0 || font_name == nullptr) return MEGAPDF_ERR_ARGUMENT;
     Guard guard(CoreLock());
+    if (Dead(p)) return DeadPage();
     FPDF_DOCUMENT doc = p->owner ? p->owner->doc : nullptr;
     FPDF_FONT font = FPDFText_LoadStandardFont(doc, MapToStandard(font_name).c_str());
     if (font == nullptr) { SetError(0, "no substitute font could be loaded"); return MEGAPDF_ERR_NO_FONT; }
@@ -5335,12 +5459,14 @@ struct megapdf_redaction_report {
 extern "C" {
 
 MEGAPDF_API int megapdf_redaction_mark(const megapdf_page* p, const megapdf_rect* area, int* out_mark_id) {
-    if (p == nullptr || p->owner == nullptr || area == nullptr) return MEGAPDF_ERR_ARGUMENT;
+    if (p == nullptr || area == nullptr) return MEGAPDF_ERR_ARGUMENT;
     if (!(area->right > area->left) || !(area->top > area->bottom)) {
         SetError(0, "a redaction mark needs a rectangle with width and height");
         return MEGAPDF_ERR_ARGUMENT;
     }
     Guard guard(CoreLock());
+    if (Dead(p)) return DeadPage();
+    if (p->owner == nullptr) return MEGAPDF_ERR_ARGUMENT;
     megapdf_document* d = p->owner;
     try {
         const int id = d->next_redaction_id++;
@@ -5355,8 +5481,10 @@ MEGAPDF_API int megapdf_redaction_mark(const megapdf_page* p, const megapdf_rect
 
 MEGAPDF_API size_t megapdf_redaction_mark_text(const megapdf_page* p, const megapdf_rect* selection,
                                                int* out_mark_ids, size_t capacity) {
-    if (p == nullptr || p->owner == nullptr || selection == nullptr) return 0;
+    if (p == nullptr || selection == nullptr) return 0;
     Guard guard(CoreLock());
+    if (Dead(p)) { DeadPage(); return 0; }
+    if (p->owner == nullptr) return 0;
     FPDF_TEXTPAGE text_page = FPDFText_LoadPage(p->page);
     if (text_page == nullptr) return 0;
     // InRect normalises, so a drag recorded right-to-left or upwards is the same selection.
@@ -5413,8 +5541,10 @@ MEGAPDF_API size_t megapdf_redaction_mark_text(const megapdf_page* p, const mega
 }
 
 MEGAPDF_API size_t megapdf_redaction_marks(const megapdf_page* p, megapdf_redaction_area* out, size_t capacity) {
-    if (p == nullptr || p->owner == nullptr) return 0;
+    if (p == nullptr) return 0;
     Guard guard(CoreLock());
+    if (Dead(p)) { DeadPage(); return 0; }
+    if (p->owner == nullptr) return 0;
     size_t found = 0;
     for (const RedactionMark& mark : p->owner->redactions) {
         if (mark.page_index != p->index) continue;
@@ -5428,9 +5558,11 @@ MEGAPDF_API size_t megapdf_redaction_marks(const megapdf_page* p, megapdf_redact
 }
 
 MEGAPDF_API int megapdf_redaction_move_mark(const megapdf_page* p, int mark_id, const megapdf_rect* area) {
-    if (p == nullptr || p->owner == nullptr || area == nullptr) return MEGAPDF_ERR_ARGUMENT;
+    if (p == nullptr || area == nullptr) return MEGAPDF_ERR_ARGUMENT;
     if (!(area->right > area->left) || !(area->top > area->bottom)) return MEGAPDF_ERR_ARGUMENT;
     Guard guard(CoreLock());
+    if (Dead(p)) return DeadPage();
+    if (p->owner == nullptr) return MEGAPDF_ERR_ARGUMENT;
     for (RedactionMark& mark : p->owner->redactions) {
         if (mark.id == mark_id && mark.page_index == p->index) {
             mark.bounds = *area;
@@ -5442,8 +5574,10 @@ MEGAPDF_API int megapdf_redaction_move_mark(const megapdf_page* p, int mark_id, 
 }
 
 MEGAPDF_API int megapdf_redaction_remove_mark(const megapdf_page* p, int mark_id) {
-    if (p == nullptr || p->owner == nullptr) return MEGAPDF_ERR_ARGUMENT;
+    if (p == nullptr) return MEGAPDF_ERR_ARGUMENT;
     Guard guard(CoreLock());
+    if (Dead(p)) return DeadPage();
+    if (p->owner == nullptr) return MEGAPDF_ERR_ARGUMENT;
     auto& marks = p->owner->redactions;
     for (size_t i = 0; i < marks.size(); i++) {
         if (marks[i].id == mark_id && marks[i].page_index == p->index) {
@@ -6040,6 +6174,8 @@ extern "C" {
 MEGAPDF_API int megapdf_page_index(const megapdf_page* p) {
     if (p == nullptr) return -1;
     Guard guard(CoreLock());
+    // Not -1, which means "its page was deleted" and is a live answer a view acts on (#174).
+    if (Dead(p)) return DeadPage();
     return p->index;
 }
 
@@ -6141,6 +6277,7 @@ MEGAPDF_API int megapdf_page_delete(megapdf_document* d, int page, megapdf_remov
 MEGAPDF_API int megapdf_page_restore(megapdf_document* d, megapdf_removed_page* r, int at) {
     if (d == nullptr || r == nullptr) return MEGAPDF_ERR_ARGUMENT;
     Guard guard(CoreLock());
+    if (Dead(r)) return DeadRemovedPage();
     if (r->owner != d) {
         SetError(0, "the removed page belongs to another document");
         return MEGAPDF_ERR_ARGUMENT;
@@ -6166,6 +6303,8 @@ MEGAPDF_API int megapdf_page_restore(megapdf_document* d, megapdf_removed_page* 
 MEGAPDF_API void megapdf_discard_removed_page(megapdf_removed_page* r) {
     if (r == nullptr) return;
     Guard guard(CoreLock());
+    // A dead handle (#551) is unlisted already and its scratch document is gone: this frees the
+    // shell and nothing else, so a discard after megapdf_close() is harmless, and still owed.
     FreeRemovedPage(r);
 }
 
