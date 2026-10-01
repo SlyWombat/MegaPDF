@@ -132,6 +132,13 @@ struct megapdf_document {
     // A redaction that failed halfway: the document may no longer be saved, so a
     // half-redacted file can never be written.
     bool redaction_poisoned = false;
+    // #558: the person was told what the document's author asked and chose to continue
+    // anyway, so this open acts as though it held every *advisory* permission bit. Set by
+    // megapdf_security_override(); see PermissionsOf() for exactly what it reaches, and the
+    // header for what it deliberately does not (full access, and an import source's own
+    // copy bit). Memory only, for this open only — nothing is written to the document and
+    // megapdf_security_info() keeps reporting what the file actually carries.
+    bool security_override = false;
     // Contract 10 (#174): deleted pages kept alive for an undo, freed at megapdf_close()
     // if never restored or discarded — decision 1 of ADR-003 again, as for `detached`.
     std::vector<megapdf_removed_page*> removed_pages;
@@ -3631,8 +3638,24 @@ MEGAPDF_API int megapdf_security_info(const megapdf_document* d, megapdf_securit
     const int revision = FPDF_GetSecurityHandlerRevision(d->doc);
     out->encrypted = revision >= 0 ? 1 : 0;
     out->revision = revision >= 0 ? revision : -1;
+    // Deliberately OpenPermissions(), not PermissionsOf(): this reports what the *file*
+    // says, so an app can go on telling the person what its author asked even after they
+    // chose to continue past it (#558). An override that rewrote this would erase the very
+    // information the choice was made about.
     out->permissions = OpenPermissions(d);
     out->full_access = out->permissions == MEGAPDF_PERMIT_ALL ? 1 : 0;
+    return MEGAPDF_OK;
+}
+
+/**
+ * The person's informed choice to go on past an advisory permission (#558, ADR-004
+ * decision 11). See the header for the whole contract; in short, it reaches exactly the
+ * bits PermissionsOf() is consulted for and nothing else.
+ */
+MEGAPDF_API int megapdf_security_override(megapdf_document* d, int allow) {
+    if (d == nullptr) return MEGAPDF_ERR_ARGUMENT;
+    Guard guard(CoreLock());
+    d->security_override = allow != 0;
     return MEGAPDF_OK;
 }
 
@@ -5647,7 +5670,11 @@ MEGAPDF_API int megapdf_redact_apply(megapdf_document* d, const megapdf_redact_o
     }
     megapdf_redact_options opt{};
     if (options != nullptr) opt = *options;
-    if ((OpenPermissions(d) & MEGAPDF_PERMIT_MODIFY) == 0) {
+    // #558: the modify bit is advisory, and the person may have been told what the author
+    // asked and chosen to continue anyway (megapdf_security_override) — the same rule the
+    // page tools apply through PermissionsOf(), spelled out here because that helper lives
+    // in contract 10's section further down.
+    if (!d->security_override && (OpenPermissions(d) & MEGAPDF_PERMIT_MODIFY) == 0) {
         SetError(0, "the document's security does not allow it to be changed");
         return MEGAPDF_ERR_RESTRICTED;
     }
@@ -5816,9 +5843,14 @@ MEGAPDF_API int megapdf_redact_apply(megapdf_document* d, const megapdf_redact_o
 
 namespace {
 
-// The permission bits this open has, of the ones that mean something (as OpenPermissions()
-// in contract 6's section, which is not visible from here).
+// The permission bits this open is to *act* on, of the ones that mean something (as
+// OpenPermissions() in contract 6's section, which is not visible from here).
 unsigned int PermissionsOf(const megapdf_document* d) {
+    // #558: the advisory bits, as this open is to *act* on them. The person may have been
+    // told what the author asked and chosen to continue, which megapdf_security_override()
+    // records; megapdf_security_info() still reports the file's own bits, so nothing about
+    // the author's request is lost by saying yes to them.
+    if (d->security_override) return MEGAPDF_PERMIT_ALL;
     return static_cast<unsigned int>(FPDF_GetDocPermissions(d->doc) & MEGAPDF_PERMIT_ALL);
 }
 
@@ -6379,6 +6411,9 @@ MEGAPDF_API int megapdf_pages_import(megapdf_document* d, const char* other_path
         bool kept = false;
         ~CloseOther() { if (!kept) megapdf_close(doc); }
     } closer{other};
+    // `other`, not `d`: an override on this document says nothing about a second file
+    // (#558). The person chose about the document they opened; `other` is freshly opened
+    // here and carries no choice of its own, so this stays a refusal.
     if ((PermissionsOf(other) & MEGAPDF_PERMIT_COPY) == 0) {
         SetError(FPDF_ERR_SECURITY, "the other document's security does not allow copying from it");
         return MEGAPDF_ERR_RESTRICTED;

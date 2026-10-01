@@ -373,6 +373,26 @@ class PdfDocument internal constructor(
     }
 
     /**
+     * The person was told what this document's author asked and chose to continue anyway
+     * (#558, ADR-004 decision 11): from here on this open acts as though it held every
+     * *advisory* permission bit — the modify bit redaction needs, and the assemble-or-modify
+     * and copy bits the page tools need.
+     *
+     * It reaches nothing else. [security] goes on reporting the permissions the file
+     * actually carries, so the author's request is still there to show; [saveWithSecurity]
+     * and [saveWithoutSecurity] still need the owner password, because those are not
+     * advisory — without the real credential there is nothing to re-encrypt a copy with;
+     * and a document whose pages are imported from here keeps its own copy bit.
+     *
+     * In memory, for this open only. Nothing is written to the document and nothing is
+     * remembered: the next open of the same file starts by asking again.
+     */
+    suspend fun allowRestrictedChanges(allow: Boolean = true): Unit = withContext(engine.dispatcher) {
+        check(!closed) { "document is closed" }
+        PdfiumNative.nativeSecurityOverride(handle, allow)
+    }
+
+    /**
      * Writes a copy with no security (#131).
      * @throws PdfRestrictedException without full access
      */

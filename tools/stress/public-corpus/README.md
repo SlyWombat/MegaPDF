@@ -154,25 +154,78 @@ adding documents not reshuffle what is already measured). Regenerate or extend w
 
     tools/stress/public-corpus/build-manifest.py --add-source nonlatin-wiki
 
-**A reproducibility limitation worth stating plainly, found while re-verifying this batch
-(2026-09-28, kdocker3): Wikipedia's PDF export is rendered on demand, and is not always
+**A reproducibility limitation found while re-verifying this batch (2026-09-28, kdocker3),
+and fixed by #525 below: Wikipedia's PDF export is rendered on demand, and is not always
 byte-stable even minutes apart.** Two sequential fetches of the same article URL, seconds
 apart, matched each other; a `fetch.sh` run later the same day, fetching the same 280 URLs
 concurrently, produced different bytes for roughly a third of them (`MISMATCH-ON-FETCH`, a
 hard failure per `fetch.sh`'s own design). This is a real difference from every other
 source in this manifest: the git-pinned sources are true forever, and even the federal
-forms (pinned to "today's bytes", not a commit) are stable within a day. A `wiki-*`
-mismatch is disclosed here as an expected property of the source, not corruption or a
-network fault — re-run `--add-source nonlatin-wiki` to refresh a row's hash from whatever
-the wiki serves now, the same remedy a federal-forms revision gets.
+forms (pinned to "today's bytes", not a commit) are stable within a day. **This was fixed,
+not worked around** — see "Non-Latin scripts: hosted, not fetched live" immediately below.
 
 **Licence.** Wikipedia article text is dual-licensed CC BY-SA 4.0 / GFDL (confirmed against
 `Wikipedia:Reusing Wikipedia content`, 2026-09-28). CC BY-SA requires attribution (a
 hyperlink or URL to the article, or a list of authors), a licence notice, and — for a
 further-modified copy — an indication that changes were made; recorded per row as licence
-`CC-BY-SA-4.0`. Each row's own URL doubles as its attribution link (replace
-`/api/rest_v1/page/pdf/` with `/wiki/` for the human-readable article). See
-`NONLATIN_ATTRIBUTION` in `build-manifest.py` for the full notice text.
+`CC-BY-SA-4.0`. The human-readable article behind each hosted file (replace
+`/api/rest_v1/page/pdf/` with `/wiki/` in its original fetch URL) is now recorded in
+`nonlatin-wiki-attribution.tsv` rather than in the manifest's own `url` column — see
+"Non-Latin scripts: hosted, not fetched live" for why. See `NONLATIN_ATTRIBUTION` in
+`build-manifest.py` for the full notice text.
+
+### Non-Latin scripts: hosted, not fetched live (#525)
+
+The limitation stated above — Wikipedia's PDF export re-rendering, so a pinned hash for a
+`wiki-*` row stops verifying without the article itself changing — is a hole in what #455
+set out to guarantee: a row's identity is its URL plus a hash, and for a re-rendering source
+the hash cannot be relied on, so the row could not be refetched on a clean machine at all.
+**Dave's decision, 2026-09-30: fetch each of the 280 rows once and host the bytes
+ourselves**, on a GitHub release attached to this repository, fetched the exact way
+`tools/fetch-pdfium-linux.sh` already fetches MegaPDF's own patched PDFium build. Every
+`wiki-*` row's `url` column is now a `github.com/.../releases/download/...` URL pointing at
+that mirror, not `*.wikipedia.org`; its `sha256` is pinned to the exact bytes mirrored, which
+never re-render, so the row is reproducible again the same way every other source in this
+manifest already was. `fetch.sh` needed **no changes** for this — a `wiki-*` row is now an
+ordinary url+sha256 row like any other, fetched and verified the same way.
+
+**A consequence worth stating, because it is better than the problem it solved.** Only
+`raw.githubusercontent.com`-style GitHub asset URLs clear the Anthropic cloud sandbox's
+egress proxy; `irs.gov`, `uscis.gov`, `assets.publishing.service.gov.uk`, `govinfo.gov` and
+`*.wikipedia.org` all refuse it outright (see "Network reality" above, and TESTING.md's
+"Which corpus gates what"). Mirroring these 280 rows to this repository's own storage makes
+them reachable from that sandbox for the first time — 280 of the 614 opt-in rows that used
+to be unreachable from there, leaving 334 (`irs`/`uscis`/`uk-*`/`govinfo-*`) still behind
+hosts the sandbox cannot reach.
+
+**What this does and does not license.** Wikipedia article text is CC BY-SA 4.0 (dual
+GFDL), which permits redistribution provided attribution and share-alike travel with the
+copy — see "Licence" above and "Licences and attribution" below. A Wikipedia PDF export
+already carries its own licence and contributor statement inside the document, which is
+normally how that obligation is met; `nonlatin-wiki-attribution.tsv` (written by
+`mirror-nonlatin-wiki.py`, see "Files" below) additionally records, per hosted file, the
+exact article it came from and that article's own CC BY-SA 4.0 licence, so the attribution
+link survives even though the manifest's `url` column no longer points at Wikipedia itself.
+**This is not a licence to host anything else.** It applies to this one source because its
+licence explicitly permits redistribution. The Canadian Crown-copyright forms (#456) and the
+UN documents (investigated and declined above, "UN parallel-language documents") are local
+validation only and are **never** redistributed — Crown copyright and the UN's own terms of
+use do not grant third parties that permission, and nothing about hosting the Wikipedia
+mirror changes that. Do not read this section as precedent for either.
+
+**These are test fixtures, not a product release.** The GitHub release holding the mirror is
+marked a pre-release, named and described as a corpus mirror for MegaPDF's own test
+tooling (#434/#525), and carries no app binary — the same way the PDFium prebuilt releases
+this mechanism was borrowed from are not MegaPDF product releases either.
+
+**Mirrored once, not kept in sync.** `mirror-nonlatin-wiki.py` is a one-time migration: once
+a `wiki-*` row's `url` points at the mirror, a plain `build-manifest.py --add-source
+nonlatin-wiki` refuses rather than silently fetching live Wikipedia again and doubling the
+category (see that refusal's own message, and the comment above it in `build-manifest.py`,
+for the exact reasoning). Extending the non-Latin sample with new titles or languages after
+this point means adding them to `nonlatin_wiki_titles.py`, running `mirror-nonlatin-wiki.py`
+again (it only touches rows still pointed at live Wikipedia, so already-mirrored rows are
+left alone), and uploading the new assets to the release the same way.
 
 **Vertical Japanese is not in this table, and not in manifest.tsv at all.** #444 found its
 bug on a *vertical*-writing CMap, and none of the seven sources above are vertical — a
@@ -705,7 +758,7 @@ and keep the file.
 | IRS fillable forms (`www.irs.gov/pub/irs-pdf/`) | **public domain — 17 U.S.C. § 105** | no |
 | USCIS forms (`www.uscis.gov/.../document/forms/`) | **public domain — 17 U.S.C. § 105** | no |
 | GPO-signed documents (`www.govinfo.gov/content/pkg/`) | **public domain — 17 U.S.C. § 105** | no |
-| Wikipedia (`ar/he/zh/ja/ko/hi/th.wikipedia.org`) | **CC BY-SA 4.0** (dual GFDL) | **yes** — see below |
+| Wikipedia (mirrored from `ar/he/zh/ja/ko/hi/th.wikipedia.org` — #525, see below) | **CC BY-SA 4.0** (dual GFDL) | **yes** — see below |
 | UK HMRC/Home Office/DWP forms (`assets.publishing.service.gov.uk`) | **Open Government Licence v3.0** | **yes** — see below |
 | govinfo.gov Federal Register volumes (`www.govinfo.gov`) | **public domain — 17 U.S.C. § 105** | no |
 
@@ -728,6 +781,24 @@ never copyrighted at all. (govinfo.gov's own policies page notes one caveat, che
 applicable here: a government publication can incorporate copyrighted third-party material
 used with permission; the Federal Register issues fetched for #471 part 4 are the agency's
 own regulatory text, not a reprint of someone else's work.)
+
+**Wikipedia, CC BY-SA 4.0: attribution and share-alike travel with the mirrored copy** the
+same way they would with a live fetch — hosting the bytes ourselves (#525, "Non-Latin
+scripts: hosted, not fetched live" above) changes *where* the file comes from, not what its
+licence requires. The required credit, per `NONLATIN_ATTRIBUTION` in `build-manifest.py`:
+
+> Wikipedia contributors — article text is CC BY-SA 4.0
+> (https://creativecommons.org/licenses/by-sa/4.0/), dual-licensed GFDL; see
+> `nonlatin-wiki-attribution.tsv` for each file's source article. PDF rendering is the
+> wiki's own REST export, unmodified further here.
+
+Each hosted file also carries Wikipedia's own licence and contributor statement inside the
+document itself (the usual way this requirement is met for a wiki PDF export), and
+`nonlatin-wiki-attribution.tsv` records the specific article URL behind every row, since the
+manifest's own `url` column now names the mirror rather than Wikipedia. **This licence
+covers Wikipedia content alone** — see "Non-Latin scripts: hosted, not fetched live" above
+for why it is not a precedent for hosting the Canadian or UN sources discussed elsewhere in
+this file.
 
 **UK Crown copyright, under the Open Government Licence v3.0: attribution IS required**, the
 one real difference from every other source in this corpus. See "UK government forms" above
@@ -784,6 +855,12 @@ reachable from Anthropic's cloud sandbox, all reachable from an ordinary machine
     tools/stress/public-corpus/build-manifest.py --add-source uk-dwp
     tools/stress/public-corpus/build-manifest.py --add-source govinfo-large
 
+`nonlatin-wiki` is **not** in this list on purpose, even though it is a real, verified
+`--add-source` generator (see "Non-Latin scripts" above): since #525 it only runs against a
+manifest that still has live-Wikipedia `wiki-*` rows left to mirror, and refuses outright
+once they are all hosted — see "Non-Latin scripts: hosted, not fetched live" for why, and
+`mirror-nonlatin-wiki.py` for the actual extension path.
+
 Each merges its rows into the existing `manifest.tsv` (by URL: a matching sha256 is left
 alone, a changed one is refreshed, a new one is added) rather than rebuilding everything
 from nothing. `IRS_FORMS` / `USCIS_FORMS` / `GOVINFO_SIGNED_DOCS` / `HMRC_FORMS` /
@@ -820,4 +897,6 @@ key once someone writes it.
 | `fetch.sh` | reproduces the documents and proves every byte |
 | `build-manifest.py` | how the manifest was generated, so it can be regenerated and extended |
 | `nonlatin_wiki_titles.py` | the pinned per-language article titles for the `wiki-*` sources (#471 part 2) |
+| `mirror-nonlatin-wiki.py` | one-time migration that fetches the pinned wiki titles and points their manifest rows at MegaPDF's own release storage instead of live Wikipedia (#525) — see "Non-Latin scripts: hosted, not fetched live" |
+| `nonlatin-wiki-attribution.tsv` | CC BY-SA 4.0 attribution record for the hosted `wiki-*` files: which article each one came from, since the manifest's own `url` column no longer says (#525) |
 | `gen-ja-vertical.py` | bonus vertical-Japanese recipe, NOT part of manifest.tsv — see "Non-Latin scripts" above |

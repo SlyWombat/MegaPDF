@@ -38,6 +38,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -106,10 +108,6 @@ fun PagesScreen(
     pageSizes: List<PageSize>,
     thumbnails: Map<Int, Bitmap>,
     selection: Set<Int>,
-    /** The document's security allows pages to be rotated, deleted, moved, inserted, combined. */
-    canAssemble: Boolean,
-    /** …and allows a copy, which is what saving a selection as a new file is. */
-    canExtract: Boolean,
     canUndo: Boolean,
     canRedo: Boolean,
     busy: BusyState?,
@@ -133,7 +131,11 @@ fun PagesScreen(
     val pageCount = pageSizes.size
     var menuOpen by remember { mutableStateOf(false) }
     var moveToOpen by remember { mutableStateOf(false) }
-    val enabled = canAssemble && !toolsDisabled
+    // #558: the document's permissions no longer disable anything here. A greyed-out tool was
+    // the wall this replaced, and it cannot say what the author asked; the view model does, once
+    // per document, the first time one of these tools is used. What still disables them is a
+    // change or a save already going in (#145).
+    val enabled = !toolsDisabled
     // Everything selected cannot be deleted: a PDF must keep a page, and the engine refuses it
     // (MEGAPDF_ERR_ARGUMENT). Saying so by disabling the button is better than saying so in a
     // dialog after the tap — the refusal dialog is for what cannot be predicted from here.
@@ -155,7 +157,12 @@ fun PagesScreen(
     var dragFrom by remember { mutableIntStateOf(-1) }
     var dragTo by remember { mutableIntStateOf(-1) }
 
+    // #145: Stop for a cancellable page tool (extract) rides a Snackbar — see [BusyStopSnackbar].
+    val snackbarHostState = remember { SnackbarHostState() }
+    if (busy != null) BusyStopSnackbar(busy.document, snackbarHostState)
+
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             Column {
                 TopAppBar(
@@ -228,7 +235,7 @@ fun PagesScreen(
                             )
                             DropdownMenuItem(
                                 text = { Text(stringResource(R.string.pages_save_selection)) },
-                                enabled = selection.isNotEmpty() && canExtract && !toolsDisabled,
+                                enabled = selection.isNotEmpty() && !toolsDisabled,
                                 onClick = { menuOpen = false; onSaveSelectionAs() },
                             )
                             HorizontalDivider()

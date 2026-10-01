@@ -240,8 +240,6 @@ fun MegaPdfApp(viewModel: ViewerViewModel = viewModel(), screenshotState: String
                 pageSizes = state.pageSizes,
                 thumbnails = viewModel.pageThumbnails,
                 selection = viewModel.selectedPages,
-                canAssemble = viewModel.capabilities.canAssemblePages,
-                canExtract = viewModel.capabilities.canExtractPages,
                 canUndo = viewModel.canUndo,
                 canRedo = viewModel.canRedo,
                 busy = viewModel.busy,
@@ -387,8 +385,63 @@ fun MegaPdfApp(viewModel: ViewerViewModel = viewModel(), screenshotState: String
                 onOpenPages = viewModel::openPages,
             )
 
+            // What the document's author asked, and the person's call (#558, ADR-004 decision 11).
+            // Hosted here, beside the page-tool refusal below and for the same reason: it is asked
+            // from the Pages grid as often as from the viewer, and it has to be seen over either.
+            //
+            // The wording reports a *request*, never a lock: these bits are not enforceable — any
+            // tool with the owner password clears them, plenty of tools ignore them, and the person
+            // holding the phone may be the author. So it says what was asked and then gets out of
+            // the way. Continue is the confirm button because the question is "may I?", and it is
+            // plain rather than emphasised: the recommended thing is to respect the request, and
+            // going on is the deliberate second tap.
+            viewModel.permissionQuestion?.let { klass ->
+                androidx.compose.material3.AlertDialog(
+                    onDismissRequest = { viewModel.answerPermission(false) },
+                    title = {
+                        androidx.compose.material3.Text(
+                            stringResource(
+                                when (klass) {
+                                    PermissionClass.EDITING -> R.string.permission_ask_title_editing
+                                    PermissionClass.ASSEMBLY -> R.string.permission_ask_title_assembly
+                                    PermissionClass.EXTRACTION -> R.string.permission_ask_title_extraction
+                                }
+                            )
+                        )
+                    },
+                    text = {
+                        DialogBody {
+                            androidx.compose.material3.Text(
+                                stringResource(
+                                    when (klass) {
+                                        PermissionClass.EDITING -> R.string.permission_ask_editing
+                                        PermissionClass.ASSEMBLY -> R.string.permission_ask_assembly
+                                        PermissionClass.EXTRACTION -> R.string.permission_ask_extraction
+                                    }
+                                )
+                            )
+                            // One shared sentence rather than three: it says the same thing in
+                            // every case — that this is a request and that the answer is
+                            // remembered — and three copies of it in three languages would drift.
+                            androidx.compose.material3.Text(stringResource(R.string.permission_ask_note))
+                        }
+                    },
+                    confirmButton = {
+                        androidx.compose.material3.TextButton(
+                            onClick = { viewModel.answerPermission(true) },
+                        ) { androidx.compose.material3.Text(stringResource(R.string.action_continue)) }
+                    },
+                    dismissButton = {
+                        androidx.compose.material3.TextButton(
+                            onClick = { viewModel.answerPermission(false) },
+                        ) { androidx.compose.material3.Text(stringResource(R.string.cancel)) }
+                    },
+                )
+            }
+
             // A page tool refused (#174): what happened, why, and that nothing was changed — the
-            // shape the redaction refusal below already uses, because a refusal is information.
+            // shape the permission question above and the redaction refusal below both follow,
+            // because a refusal is information.
             // Hosted here rather than in either screen so it is shown over whichever is up.
             viewModel.pageToolRefusal?.let { refusal ->
                 androidx.compose.material3.AlertDialog(

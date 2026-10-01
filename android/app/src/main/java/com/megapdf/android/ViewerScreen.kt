@@ -42,6 +42,10 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -715,7 +719,13 @@ fun ViewerScreen(
         )
     }
 
+    // #145: Stop for a cancellable sweep (search) rides a Snackbar rather than a button in the
+    // strip — see [BusyStopSnackbar] for why.
+    val snackbarHostState = remember { SnackbarHostState() }
+    if (busy != null) BusyStopSnackbar(busy.document, snackbarHostState)
+
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         // In reading mode the top and bottom bars are *not composed* — not alpha-0, not
         // `Visibility.Gone`, not there at all (#507). Reading mode is meant to be the
         // screen-reader-friendly view of a document, and a bar that is invisible but still
@@ -866,7 +876,11 @@ fun ViewerScreen(
                                         stateDescription =
                                             if (redactMode) toolOn else toolOff
                                     },
-                                    enabled = capabilities.canEditContent && !toolsDisabled,
+                                    // #558: not gated on the document's permissions any more.
+                                    // A greyed-out row is the wall this replaced, and it cannot
+                                    // say what the author asked — the view model does, when the
+                                    // first mark is placed.
+                                    enabled = !toolsDisabled,
                                     onClick = { menuOpen = false; onToggleRedact() },
                                 )
                                 // Clearing is one action and one undo step (#329), and it only
@@ -874,7 +888,7 @@ fun ViewerScreen(
                                 if (hasMarks) {
                                     DropdownMenuItem(
                                         text = { Text(stringResource(R.string.redact_clear_marks)) },
-                                        enabled = capabilities.canEditContent && !toolsDisabled,
+                                        enabled = !toolsDisabled,
                                         onClick = { menuOpen = false; onClearRedactionMarks() },
                                     )
                                 }
@@ -896,7 +910,7 @@ fun ViewerScreen(
                                         stateDescription =
                                             if (whiteoutMode) toolOn else toolOff
                                     },
-                                    enabled = capabilities.canEditContent && !toolsDisabled,
+                                    enabled = !toolsDisabled,
                                     onClick = { menuOpen = false; onToggleWhiteout() },
                                 )
                                 HorizontalDivider()
@@ -933,18 +947,22 @@ fun ViewerScreen(
             // Not composed in reading mode — see the topBar note above.
             if (!readingMode) BottomAppBar(
                 actions = {
-                    // A restricted document disables what its owner did not allow (#131),
-                    // and a save or a slow change disables every editing tool (#145).
+                    // #131 disabled what a restricted document's owner did not allow. #558: it no
+                    // longer does — the tools stay reachable and the view model says what the
+                    // author asked, once, before the first change of each kind. A save or a slow
+                    // change still disables every editing tool (#145).
                     ToolbarAction(
                         icon = ToolbarIcons.Sign,
                         label = stringResource(R.string.sign),
-                        enabled = capabilities.canSign && !toolsDisabled,
+                        // #558: armable whatever the document's permissions say — arming is
+                        // not changing, and the view model asks before it changes anything.
+                        enabled = !toolsDisabled,
                         onClick = { signDialogOpen = true },
                     )
                     ToolbarAction(
                         icon = ToolbarIcons.AddText,
                         label = stringResource(R.string.add_text),
-                        enabled = capabilities.canAddText && !toolsDisabled,
+                        enabled = !toolsDisabled,
                         onClick = onStartTextPlacement,
                     )
                     // Redact is not here (#328). It moved into the ⋮ menu, where it says its
@@ -1376,9 +1394,11 @@ fun ViewerScreen(
                                 // Editing is off in reading mode (#507), so a mark is
                                 // something to look at there and not something to select:
                                 // no chrome, and no node for a TalkBack swipe to land on.
+                                // Selecting a mark is not changing it (#558), so the
+                                // document's permissions do not come into it; moving or
+                                // removing one asks, through the view model.
                                 selectable = !redactMode
                                     && !readingMode
-                                    && capabilities.canEditContent
                                     && !toolsDisabled,
                                 onSelect = { onSelectRedactionMark(index, it) },
                                 onRemove = { onRemoveRedactionMark(index, it) },
@@ -1561,20 +1581,37 @@ private fun DynamicXfaBanner() {
 }
 
 /**
- * The document-level busy strip (#145): an indeterminate bar and what is happening, directly
- * under the top app bar. It appears only after half a second, and its label is a polite live
- * region so TalkBack reads it without taking focus.
+ * The document-level busy strip (#145): a progress bar and what is happening, directly under the
+ * top app bar. It appears only after half a second, and its label is a polite live region so
+ * TalkBack reads it without taking focus.
+ *
+ * The bar is determinate when [BusyIndicator.progressDone]/[BusyIndicator.progressTotal] are
+ * known (a search counts pages) and indeterminate otherwise — every other operation, including
+ * every page tool. The count is its own line below the label, not folded into the live region:
+ * announcing "page 312 of 1,000" once per page is not what a polite live region is for.
+ *
+ * Stop is not drawn here (see [BusyStopSnackbar]): the strip stays what every one of these is —
+ * a label, and where a count exists, a number — and the action lives in its own control.
  */
 @Composable
 internal fun BusyStrip(indicator: BusyIndicator) {
     val label = indicator.label
     if (!indicator.isVisible || label == null) return
+    val done = indicator.progressDone
+    val total = indicator.progressTotal
     Column(
         Modifier
             .fillMaxWidth()
             .background(MaterialTheme.colorScheme.surface),
     ) {
-        LinearProgressIndicator(Modifier.fillMaxWidth())
+        if (done != null && total != null && total > 0) {
+            LinearProgressIndicator(
+                progress = { done.toFloat() / total },
+                modifier = Modifier.fillMaxWidth(),
+            )
+        } else {
+            LinearProgressIndicator(Modifier.fillMaxWidth())
+        }
         Text(
             stringResource(label.stringId),
             style = MaterialTheme.typography.labelMedium,
@@ -1582,6 +1619,57 @@ internal fun BusyStrip(indicator: BusyIndicator) {
                 .padding(horizontal = 16.dp, vertical = 4.dp)
                 .semantics { liveRegion = LiveRegionMode.Polite },
         )
+        if (done != null && total != null) {
+            Text(
+                stringResource(R.string.busy_progress_of_pages, done, total),
+                style = MaterialTheme.typography.labelSmall,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp),
+            )
+        }
+    }
+}
+
+/**
+ * Stop, for the newest cancellable piece of work the busy strip is showing (#145): a Snackbar's
+ * action rather than a button in the strip, because a phone's idiom for "something is running,
+ * here is a way to stop it" is already a Snackbar — Android raises its own "not responding"
+ * question after 5 s of an unresponsive UI thread, and a Snackbar is exactly the transient,
+ * dismissable control the platform offers for an action tied to something happening right now.
+ *
+ * The two alternatives this task asked to weigh were ruled out rather than overlooked. A
+ * notification is for work that may outlive the screen that started it — a foreground service's
+ * upload, a download — and nothing here does: every cancellable operation runs tied to the open
+ * document's `ViewModel` and finishes or is abandoned with it, well inside the couple of seconds
+ * these are measured at even on a slower phone. The back gesture already means something (leave
+ * this screen, or close the document), and neither the Pages screen's back arrow nor a search
+ * bar's close button waits on [BusyState.locksDocument] the way Save and the file commands do, so
+ * leaving mid-operation already works today, with no change made for it here — back and Stop stay
+ * two different actions rather than one gesture doing double duty. That is also why this is safe
+ * to leave unattended: a stopped (or simply abandoned) search keeps the matches it had, and a
+ * stopped (or abandoned, still-running) extract either finishes on its own or leaves nothing at
+ * its destination, never something half-written.
+ *
+ * The Snackbar dismisses itself the moment nothing can be stopped any more — whether the work
+ * finished on its own or Stop ended it — because [canCancel] going false cancels the
+ * [LaunchedEffect] showing it, which is what `showSnackbar`'s own cancellation does.
+ */
+@Composable
+internal fun BusyStopSnackbar(indicator: BusyIndicator, snackbarHostState: SnackbarHostState) {
+    // Gated on isVisible too, not canCancel alone: canCancel turns on the instant the operation
+    // begins, and work quicker than the strip's own showAfterMs should offer exactly as little
+    // chrome as it does today — nothing. Stop only exists once the strip itself has decided the
+    // work is worth saying anything about at all.
+    val show = indicator.canCancel && indicator.isVisible
+    val stopLabel = stringResource(R.string.stop)
+    val message = indicator.label?.let { stringResource(it.stringId) } ?: stopLabel
+    LaunchedEffect(show) {
+        if (!show) return@LaunchedEffect
+        val result = snackbarHostState.showSnackbar(
+            message = message,
+            actionLabel = stopLabel,
+            duration = SnackbarDuration.Indefinite,
+        )
+        if (result == SnackbarResult.ActionPerformed) indicator.requestCancel()
     }
 }
 

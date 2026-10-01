@@ -81,6 +81,35 @@ data class DocumentCapabilities(
     }
 
     /**
+     * Which of the author's requests [operation] runs into, when [allows] says no — the grain the
+     * person is asked at (#558, ADR-004 decision 11). See [PermissionClass] for why that grain is
+     * the permission bit.
+     *
+     * This mirrors [allows] group for group, and must keep doing so: an operation [allows] can
+     * refuse and this cannot name is an operation whose refusal has no way to explain itself.
+     *
+     * Null for an operation neither list knows, which [allows] sends to [canChangeSecurity]: full
+     * access is not advisory, so there is nothing to offer and it stays a refusal. Everything
+     * [allows] gates on modify, fill-forms or annotate is one class here — those are separate ISO
+     * bits, but "the author asked that this document not be changed" is one request as far as
+     * anyone using it is concerned, and splitting it would mean asking the same person the same
+     * question twice.
+     */
+    fun permissionClassOf(operation: PdfEditOperation): PermissionClass? = when (operation) {
+        is BodyTextEditOperation, is BodyTextDeleteOperation,
+        is RedactMarkOperation, is MoveRedactionMarkOperation, is ClearRedactionMarksOperation,
+        is TextBoxOperation, is AddTextBoxesOperation, is EditTextBoxOperation, is MoveTextBoxOperation,
+        is StampOperation, is MoveStampOperation, is MarkOperation,
+        is FieldToggleOperation,
+        is WhiteoutAddOperation, is WhiteoutRemoveOperation, is MoveWhiteoutOperation,
+        -> PermissionClass.EDITING
+        is RotatePagesOperation, is DeletePagesOperation, is MovePageOperation,
+        is InsertBlankPageOperation, is ImportPagesOperation,
+        -> PermissionClass.ASSEMBLY
+        else -> null
+    }
+
+    /**
      * Whether [operation] is one of the "fill this form" tools #457 explains rather than
      * performs on a dynamic-XFA document: signing/stamping, added text, a check mark, a form
      * field. Redaction and the document's own text ([allows]'s [canEditContent] group) are

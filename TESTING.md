@@ -298,6 +298,21 @@ Record the two separately.
     tools/stress/markdown-battery.sh      <cli> $(command -v cmark) ~/megapdf-public-corpus <out>
     tools/stress/structure-battery.sh     <structure_check> ~/megapdf-public-corpus <out> --reference --cli <cli>
 
+**#525, 2026-09-30: the 280 `wiki-*` rows are now reachable from the Anthropic cloud sandbox,
+and reproducible again.** Two separate problems, both fixed the same way. Wikipedia's PDF
+export re-renders on demand, so those rows' pinned hashes used to drift without the article
+changing (first found 2026-09-28, re-verifying this batch) — and, independently of that,
+`*.wikipedia.org` is one of the hosts the sandbox's egress proxy refuses outright (with
+`irs.gov`, `uscis.gov`, `assets.publishing.service.gov.uk` and `govinfo.gov` — see the Sixth
+run below). Both are fixed by mirroring the 280 documents once to a GitHub release on this
+repository, fetched the way `tools/fetch-pdfium-linux.sh` fetches PDFium (see
+`tools/stress/public-corpus/README.md`, "Non-Latin scripts: hosted, not fetched live"). A
+cloud-sandbox run after this change reaches 1,443 of 1,777 rows — the 1,163 git-sourced rows
+the Sixth run measured, plus these 280 — leaving 334 (`irs`/`uscis`/`uk-*`/`govinfo-signed`/
+`govinfo-large`) still behind hosts the sandbox cannot reach. The Sixth run's own 1,163
+figure is left as written below: it is what that run, on that manifest revision, actually
+measured, not a number to retrofit.
+
 ### Corpus staging on k3 (#470)
 
 k3 (kdocker3) is where batteries run repeatedly, so all three corpora are staged there

@@ -3,6 +3,10 @@
 **Status:** accepted, 2026-09-14. Dave asked for protected documents to be supported
 properly (#131) and for setting and removing passwords to be part of it.
 
+**Amended 2026-09-30** by decision 11 (#558): honouring a permission no longer means
+refusing. Decisions 1-10 stand as written; decision 11 changes what decision 2's "honoured"
+*does* — it explains and offers to continue, where it used to refuse.
+
 ## Context
 
 Before #131, all four apps could open a document that needs a password, and nothing
@@ -25,7 +29,10 @@ well as by PDFium itself.
 
 2. **Permissions are honoured.** Acrobat, Preview and Chrome all do this, and a document
    whose owner restricted it should not become an editing loophole. `megapdf_security_info()`
-   reports what the open may do, and every platform maps the bits to its tools:
+   reports what the open may do, and every platform maps the bits to its tools.
+   **Amended by decision 11 (#558):** honouring them means saying what the author asked and
+   then letting the person decide, not refusing. The table below is still the map; what a
+   withheld bit *does* is now decision 11's.
 
    | permission | what it gates |
    |---|---|
@@ -111,85 +118,93 @@ well as by PDFium itself.
     pdftotext — readers that are not PDFium — confirm each copy is not encrypted and still
     readable.
 
-## Proposed amendment: assemble and copy for page tools (pending Dave's decision — #558)
+11. **A permission the author withheld is an informed choice, not a wall** (#558, Dave's
+    decision 2026-09-30). When the document's permissions forbid what someone is about to
+    do, the app says that the author asked it not be done, and offers to continue anyway.
+    This replaces decision 2's flat refusal on editing and #554's new block on assembly.
 
-**Status: proposed, not accepted.** Decisions 1–10 above are settled; this section is a
-recommendation for Dave to approve, amend, or reject. Nothing below is implemented or
-changed because of this section — it is the write-up #558 asked for, so that whichever way
-it is decided, four platforms build the same rule instead of four readings of it.
+    **Why, in Dave's words:** these bits are unenforceable, and the person in front of the
+    app may well be the author. A refusal treats an advisory flag as a lock, which it is
+    not, and leaves someone stuck with their own document. Ignoring the flag throws away
+    information the author deliberately put there. Saying it out loud and then deferring to
+    the person does both jobs.
 
-### Where this comes from
+    Five things follow, settled here so four platforms build one rule rather than four
+    readings of it. Android built them first (#558, wip/558-permission-override); the issue
+    comment on #558 is the shape the other three copy.
 
-Page tools (§3.10 F9, #174) shipped on Android, then on Windows and Avalonia (Mac/Linux),
-over 2026-09-29 and -30. Decision 2's table above maps five permission bits to MegaPDF's
-existing tools; it has no row for **assemble** (P-bit 11) or for what **copy** (P-bit 5)
-governs beyond the word "copying," because nothing before #174 took pages out of, or
-rearranged pages within, a document. #558 was opened the moment Android's page tools
-landed, naming the gap: Android now reads the assemble bit and no other platform did.
+    **11a. Which bits we read.** Unchanged from what ships today — this decision changes the
+    *response*, not the set. Three bits are consulted, and nothing is added:
 
-That gap closed faster than #558 anticipated. By the time this is written, it is stale on
-three of the four platforms:
+    | permission bit | governs | since |
+    |---|---|---|
+    | **Modify** (P-bit 4), **Fill forms** (P-bit 9), **Annotate** (P-bit 6) | the document's own text, redaction, whiteout, text boxes, signatures, stamps, check marks, form fields | decision 2 (#131) |
+    | **Assemble** (P-bit 11) **or Modify** | rotate, delete, reorder, insert a blank page, combine | #174 / #554 |
+    | **Copy** (P-bit 5) | extract — save a selection of pages as a new file | #174 (core and Android both) |
 
-- The shared engine core already refuses the call. Contract 10's own header comment
-  (`core/megapdf_core.h`, the block above `megapdf_page_rotate`) states the rule it
-  enforces: every call that changes the document needs `MEGAPDF_PERMIT_ASSEMBLE` **or**
-  `MEGAPDF_PERMIT_MODIFY`; `megapdf_pages_extract` needs `MEGAPDF_PERMIT_COPY`; otherwise
-  `MEGAPDF_ERR_RESTRICTED`. This is not a proposal — it is what the C++ core has done since
-  #174's engine half landed, underneath every platform's page-tools UI.
-- Android's `DocumentCapabilities.kt`, and the shared `MegaPDF.Core`
-  `DocumentCapabilities.cs` that both Windows and Avalonia consume, each independently
-  added `canAssemblePages`/`CanAssemblePages` (assemble **or** modify) and
-  `canExtractPages`/`CanExtractPages` (copy), for the same reason: so a button is never
-  offered that the core would only refuse. The three files were written within about two
-  hours of each other and agree exactly, without anyone having stated the rule out loud
-  first — they read it off the core's own comment.
-- **iPhone and iPad have no page-tools UI yet** (tracked separately for 2.2/#174); the one
-  iOS function that calls contract 10 today (`extractPages`, `PdfEngine+Pages.swift`) exists
-  for a field-hierarchy test, not a shipped feature, and consults no permission at all. iOS
-  is not a fourth disagreement — it has nothing built to agree or disagree with.
+    **Print** (P-bit 3) is read where decision 2 already read it and gains nothing here:
+    MegaPDF's Print hands the document to the OS, which asks it again. **Accessibility**
+    (P-bit 10) is read nowhere: no MegaPDF operation can honestly claim to be acting for
+    assistive technology, so there is no correct place to grant its narrower exception.
+    **Print high quality** (P-bit 12) is read nowhere; there are no quality tiers to gate.
 
-So the four platforms already agree, in effect, except that nobody has written the rule
-down as a decision, and iOS still needs it stated before it builds page tools. What follows
-proposes making the accidental agreement the recorded rule, rather than inventing a new one.
+    On Copy, a correction to the question as #558 asked it: the copy bit is not currently
+    unconsulted. `megapdf_pages_extract` has required it since #174's engine half, and
+    Android's *Save pages as…* has been gated on it since. "Extraction stays ungated" would
+    therefore have meant deleting a shipped check, which is the one thing this decision's own
+    reasoning argues against — it would throw away what the author asked. So extraction keeps
+    the bit and gets the same question as the other two. That is not a widening: the set of
+    bits read is exactly what shipped, and only the response changed, which is what 11 says.
 
-### The recommendation
+    **11b. One rule for every bit read.** Explain, then offer to continue. No per-bit
+    variations, no "this one is more serious".
 
-| Permission bit (ISO 32000-2 Table 22) | Governs |
-|---|---|
-| **Assemble** (P-bit 11) **or Modify** (P-bit 4) | Rotate, delete, reorder, insert a blank page, combine (import pages from another file) — any operation that changes this document's own pages or page order. Either bit is sufficient, matching the spec's own text ("assemble the document … even if bit 4 is clear") and what the core and three platforms already enforce. |
-| **Copy** (P-bit 5) | Extract (save a selection of pages as a new file). Extraction changes nothing in the source; it manufactures a new file holding a copy of some of the original content, which is what the copy bit is for. A document may permit copying without permitting modification (a read-only handout, fine to excerpt but not to restructure) or the reverse (a form meant to be filled and reassembled but not copied from) — treating extraction as its own bit rather than folding it into assemble/modify is what keeps those two documents distinguishable. |
-| **Accessibility** (P-bit 10) | Nothing, deliberately. No MegaPDF operation identifies itself as acting on behalf of assistive technology, so there is no correct place to grant this bit's narrower exception. Extraction keeps needing the stronger Copy bit for everyone, screen reader or not, rather than adding a bit we have no reliable way to attribute. |
-| **Print, high quality** (P-bit 12) | Nothing separately. MegaPDF's Print command has no quality tiers; it continues to gate on **Print** (P-bit 3) alone, as decision 2 above already does. A separate high-quality path is not recommended unless a feature actually needs one. |
+    **11c. A class of operation is a permission bit** — not a command, and not the whole
+    document. That is the grain the person is asked at: once per document per class, kept in
+    memory for as long as the document is open and never persisted. The bit, because the bit
+    is what the author actually set, so it is the only thing the question can honestly name
+    and the only grain at which the answer transfers. Someone who has decided to go on
+    editing a restricted document has decided about *editing* — not about one keystroke,
+    which is why a prompt per change would be nagging rather than consent, and not about
+    rearranging its pages, which the author said separately and may have meant differently.
+    Three classes, matching 11a's three rows. A cancel is not an answer to remember.
 
-This is the whole rule: two new rows added to decision 2's table, nothing else. Once
-approved, it is small work per platform — the permission set is already read at open time
-on all four (decision 2), and Android/Windows/Avalonia already do exactly this.
+    **11d. The wording reports a request and never implies enforceability.** "The author of
+    this document asked that its contents not be changed", then "That's a request rather than
+    a lock, so it's your call." Never *restricted*, *locked*, *protected* or *not allowed*,
+    and no mention of the owner password — a password is not what is needed here, and naming
+    it was the old refusal's way of saying a wall was there. `docs/localisation-glossary.md`
+    carries the English and the French.
 
-### Said plainly, because it should be
+    **11e. What is *not* offered, because it is not advisory.** Setting, changing or removing
+    the password still needs full access and still says so (decision 3, decision 5): without
+    the real credential there is nothing to re-encrypt a copy with, so there is nothing to
+    continue *to*. Nor does a choice about this document reach a second file whose pages are
+    being imported into it — `megapdf_pages_import` keeps refusing a source that forbids
+    copying, because the person asserted something about the document they opened and may be
+    the author of, not about a file handed to it. And selecting something is not changing it:
+    a tap that only selects is neither refused nor asked about.
 
-These bits are advisory. Any tool holding the owner password can clear them outright, and
-plenty of PDF tools ignore them entirely — nothing about the standard security handler
-makes P-bit 11 or P-bit 5 into real access control. MegaPDF honours them because the
-document's author asked it to, the same reasoning decision 2 above already gives for
-modify, fill-forms, annotate, copy and print. This amendment does not make the bits
-enforceable; it extends the set of MegaPDF operations that ask the question before acting.
+    **The core carries it, so no platform can get it wrong on its own.** The C++ core enforces
+    the same advisory bits underneath all four apps (`PageToolsPreflight`, and the modify bit
+    `megapdf_redact_apply` needs), so a Continue that only an app knew about would come back
+    `MEGAPDF_ERR_RESTRICTED` — the wall again, one tap later. `megapdf_security_override()`
+    (#558) is how an app says the person was told and chose to continue: in memory, for that
+    open only, reaching exactly the bits `PermissionsOf()` is consulted for.
+    `megapdf_security_info()` goes on reporting the permissions the file carries, so the
+    author's request survives the override and survives a save — which keeps the document's
+    existing security. Nothing is written into the document, and nothing is remembered: the
+    next open asks again.
 
-The principle and its wording both already exist: MegaPDF already refuses to edit a
-document when modify is withheld, and says so — a typed refusal
-(`MEGAPDF_ERR_RESTRICTED`, decision 3) explained in the UI, never a silently disabled
-button. This proposal is that same behaviour, extended to two operations (assembly,
-extraction) that had not asked the question before #174 gave them something to ask about.
-
-### Out of scope here, flagged for a separate decision
+## Still open, flagged for a separate decision
 
 **F8 Text out (§3.9)** — the structure/Markdown/CLI extraction — also takes content out of
 an open document and consults no permission bit on any platform today. Whether that should
 require Copy (it is arguably "extract text and graphics," the same ISO 32000-2 wording the
-Copy bit uses) is a related question this proposal does not answer: F8 never writes a new
-PDF, has no equivalent of "the source is unaffected" to point to for reassurance the way
-page extraction does, and mixing that question into #558 risks blocking the smaller,
-already-converged-on page-tools rule while it is decided. Recommend a separate issue once
-this one is resolved.
+Copy bit uses) is a related question #558 did not answer and decision 11 does not
+either: F8 never writes a new PDF, and has no equivalent of "the source is unaffected" to
+point to the way page extraction does. Decision 11 settles the shape of the question for any
+bit MegaPDF reads; it does not make F8 read one. A separate issue when it is wanted.
 
 ## Consequences
 
@@ -204,3 +219,9 @@ this one is resolved.
   that #241's removal test compares against.
 - The stress harness counts protected documents as their own outcome, and can open them
   from a private unlock list.
+- Decision 11 adds one core export, `megapdf_security_override()`, and needs nothing of
+  PDFium that decisions 1-10 did not. Each platform's share is small and is listed on #558:
+  the question, the once-per-document-per-class remembering, the strings, and one call into
+  the core when the person says yes. Android is done (`PermissionPromptTest`,
+  `PermissionOverrideTest`, and the core's own `owner-only.pdf` assertions); iOS, Windows and
+  Avalonia are outstanding, and #558 stays open until all four have it.

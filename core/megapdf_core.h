@@ -763,6 +763,34 @@ typedef struct megapdf_security {
 MEGAPDF_API int megapdf_security_info(const megapdf_document* document, megapdf_security* out);
 
 /**
+ * The person chose to go on past an advisory permission the document's author
+ * withheld (#558, ADR-004 decision 11). `allow` non-zero makes this open act as
+ * though it had every advisory bit; zero puts it back.
+ *
+ * What it governs is exactly the advisory set: the modify bit that gates
+ * megapdf_redact_apply(), and the assemble-or-modify and copy bits that gate
+ * contract 10's page operations. It deliberately does NOT reach full access —
+ * megapdf_save_with_security() and megapdf_save_without_security() still need the
+ * owner password, because those two are not advisory: without the real credential
+ * there is nothing to re-encrypt a copy with. Nor does it reach the *source*
+ * document of megapdf_pages_import(): the choice is a statement about the document
+ * the person opened, not about a second file handed to it.
+ *
+ * In memory, for this open only. It is not written to the document, it is not
+ * remembered anywhere, and megapdf_security_info() keeps reporting the permissions
+ * the file actually carries — the author's request survives the override, and
+ * survives a save, which keeps the document's existing security.
+ *
+ * These bits were never access control: any tool holding the owner password can
+ * clear them and plenty of tools ignore them outright. The core honours them so an
+ * app can report the author's request; this call is how an app says the person was
+ * told and chose to continue anyway.
+ *
+ * MEGAPDF_OK, or MEGAPDF_ERR_ARGUMENT for a NULL document.
+ */
+MEGAPDF_API int megapdf_security_override(megapdf_document* document, int allow);
+
+/**
  * Writes a copy encrypted with AES-256 (the standard handler at revision 6)
  * under new passwords, in place of any security the document had. The user
  * password (UTF-8; NULL or empty for none) opens the copy with `permissions`
@@ -1521,8 +1549,11 @@ MEGAPDF_API int megapdf_write_text(megapdf_document* document, int first_page, i
  * Permission: every call that changes the document needs MEGAPDF_PERMIT_ASSEMBLE or
  * MEGAPDF_PERMIT_MODIFY (ISO 32000-2 Table 22: "assemble the document — insert, rotate
  * or delete pages"); megapdf_pages_extract needs MEGAPDF_PERMIT_COPY. MEGAPDF_ERR_RESTRICTED
- * otherwise (ADR-004). A document poisoned by a failed redaction refuses them all with
- * MEGAPDF_ERR_REDACT, as megapdf_save() does.
+ * otherwise (ADR-004) — unless the app has called megapdf_security_override(), which is how
+ * it says the person was told what the author asked and chose to continue anyway (#558,
+ * ADR-004 decision 11). The *source* document of megapdf_pages_import still needs its own
+ * MEGAPDF_PERMIT_COPY whatever this document was told. A document poisoned by a failed
+ * redaction refuses them all with MEGAPDF_ERR_REDACT, as megapdf_save() does.
  *
  * Page indices are the identity key of everything the core caches per page and of every
  * entry the apps' recovery journals record (#145), and delete, move, restore, insert and

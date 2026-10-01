@@ -49,6 +49,9 @@ internal object PdfiumNative {
     ): Int
     external fun nativeSaveWithoutSecurity(handle: Long, out: OutputStream): Int
 
+    /** #558: the person chose to go on past an advisory permission. For this open only. */
+    external fun nativeSecurityOverride(handle: Long, allow: Boolean)
+
     // Checkbox surface (#15). Packed arrays keep the JNI boundary simple:
     // form fields are [type, checked, l, b, r, t] per field; squares and annot
     // rects are [l, b, r, t] each, all in PDF points, bottom-left origin.

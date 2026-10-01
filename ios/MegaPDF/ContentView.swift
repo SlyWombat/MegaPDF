@@ -140,10 +140,13 @@ struct ContentView: View {
             contentType: .pdf,
             defaultFilename: exportName
         ) { result in
-            if case .success = result {
-                model.finishExport(saved: true)
-            } else {
-                model.finishExport(saved: false)
+            // #572: where the sheet put the copy, not merely that it did. The result is the
+            // only place that URL exists, and the model needs it: the copy becomes the open
+            // document, so Save from here on writes to it rather than to the file that was
+            // opened — which holds none of these edits.
+            switch result {
+            case let .success(url): model.finishExport(savedTo: url)
+            case .failure: model.finishExport(savedTo: nil)
             }
         }
         // #386: a second, independent file exporter for the Markdown export -- alongside the

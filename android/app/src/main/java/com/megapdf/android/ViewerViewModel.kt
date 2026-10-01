@@ -324,7 +324,11 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         whiteoutMode = false
     }
 
-    /** True when a restricted open forbids placing or changing a whiteout. */
+    /**
+     * Whether a whiteout may be placed or changed without asking first. #558: false is no longer a
+     * refusal — it is a question the view model puts before the change — so this says what the
+     * document asked for, not what the person may do.
+     */
     val canWhiteout: Boolean get() = capabilities.canEditContent
 
     /**
@@ -482,7 +486,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         selectedRedactionMark = null
     }
 
-    /** True when a restricted open forbids redaction, so the removal chrome can say so. */
+    /** The same for redaction — see [canWhiteout] on what false means since #558. */
     val canRedact: Boolean get() = capabilities.canEditContent
 
     /**
@@ -727,25 +731,24 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     /**
-     * True when this document's security allows pages to be rearranged; otherwise it says so and
-     * answers false.
+     * True when the pages may be rearranged: the document allows it, or the person was told that
+     * its author asked they not be and chose to continue (#558, ADR-004 decision 11).
      *
-     * The grid already disables what a restricted document does not allow, so this is the backstop
-     * — and it is a backstop that *speaks*, unlike [showRestricted], whose notice is drawn by the
-     * viewer and would be invisible behind the Pages screen.
+     * The grid no longer disables the tools for a restricted document — a greyed-out button is the
+     * wall #558 replaced, and it cannot explain itself — so this is where the asking happens for
+     * every one of them. The question is drawn by [MainActivity], over whichever screen is up,
+     * because this one is nearly always asked from the Pages grid.
      */
-    private fun assembleAllowed(): Boolean {
-        if (capabilities.canAssemblePages) return true
-        pageToolRefusal = com.megapdf.engine.PageToolRefusal.RESTRICTED
-        return false
-    }
+    private suspend fun assembleAllowed(): Boolean =
+        permitted(PermissionClass.ASSEMBLY, capabilities.canAssemblePages)
 
     /** Turns every selected page a quarter turn: clockwise for 1, anticlockwise for -1. */
     fun rotateSelectedPages(quarterTurns: Int) {
         val doc = document ?: return
         val pages = selectedPages.sorted()
-        if (pages.isEmpty() || !assembleAllowed()) return
+        if (pages.isEmpty()) return
         launchPageEdit {
+            if (!assembleAllowed()) return@launchPageEdit
             performPageEdit(RotatePagesOperation(pages, quarterTurns), doc)
             statusMessage =
                 if (pages.size == 1) str(R.string.page_turned) else str(R.string.pages_turned, pages.size)
@@ -759,8 +762,9 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         val pages = selectedPages.sorted()
         // A PDF must keep a page. The button is disabled for this, so reaching it means the
         // selection changed underneath; either way nothing is asked of the engine.
-        if (pages.isEmpty() || pages.size >= state.pageSizes.size || !assembleAllowed()) return
+        if (pages.isEmpty() || pages.size >= state.pageSizes.size) return
         launchPageEdit {
+            if (!assembleAllowed()) return@launchPageEdit
             selectedPages = emptySet()
             performPageEdit(DeletePagesOperation(pages), doc)
             statusMessage =
@@ -772,8 +776,9 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
     fun movePage(from: Int, to: Int) {
         val doc = document ?: return
         val count = (uiState as? ViewerUiState.Viewing)?.pageSizes?.size ?: return
-        if (from == to || from !in 0 until count || to !in 0 until count || !assembleAllowed()) return
+        if (from == to || from !in 0 until count || to !in 0 until count) return
         launchPageEdit {
+            if (!assembleAllowed()) return@launchPageEdit
             performPageEdit(MovePageOperation(from, to), doc)
             statusMessage = str(R.string.page_moved, to + 1)
         }
@@ -786,11 +791,11 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
     fun insertBlankPage() {
         val doc = document ?: return
         val state = uiState as? ViewerUiState.Viewing ?: return
-        if (!assembleAllowed()) return
         val after = selectedPages.maxOrNull() ?: (state.pageSizes.size - 1)
         val at = (after + 1).coerceIn(0, state.pageSizes.size)
         val model = state.pageSizes.getOrNull(after) ?: DEFAULT_PAGE_SIZE
         launchPageEdit {
+            if (!assembleAllowed()) return@launchPageEdit
             performPageEdit(
                 InsertBlankPageOperation(at, model.widthPoints, model.heightPoints), doc,
             )
@@ -810,11 +815,14 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
     fun importPagesFrom(uri: Uri) {
         val doc = document ?: return
         val state = uiState as? ViewerUiState.Viewing ?: return
-        if (!assembleAllowed()) return
         val at = (selectedPages.maxOrNull()?.plus(1) ?: state.pageSizes.size)
             .coerceIn(0, state.pageSizes.size)
         val app = getApplication<Application>()
         launchPageEdit {
+            // Asked before the pick is copied into the cache, so a Cancel copies nothing. The
+            // *source* file's own copy bit is a separate matter the core still refuses on: this
+            // choice is about the open document, which the person may be the author of.
+            if (!assembleAllowed()) return@launchPageEdit
             val copy = File(app.cacheDir, "import-${System.nanoTime()}.pdf")
             try {
                 withContext(Dispatchers.IO) {
@@ -844,20 +852,33 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         val doc = document ?: return
         val pages = selectedPages.sorted()
         if (pages.isEmpty() || busy.locksDocument) return
-        if (!capabilities.canExtractPages) {
-            // What an extract needs is the copy bit, which the menu row is already gated on; this
-            // is what says so if it is reached anyway.
-            pageToolRefusal = com.megapdf.engine.PageToolRefusal.RESTRICTED
-            return
-        }
         val app = getApplication<Application>()
-        // Locks like a save: the pages being copied are read off the document, so an edit going in
-        // underneath would put half of one into the new file.
-        val token = busy.beginDocument(BusyLabel.SAVING, locks = true)
+        // Stop only, no progress (#145): the engine has taken a cancel flag since #174, but it is
+        // one call with no interior to count against — the same reasoning the Mac and Windows
+        // passes followed for their own extract. A stopped extract leaves nothing at [uri], since
+        // the engine's own contract for a cancelled megapdf_pages_extract is that nothing is left
+        // at the temp path either, and [temp] is deleted below regardless.
+        val cancel = com.megapdf.engine.PdfCancelFlag()
+        var stoppedByUser = false
         viewModelScope.launch {
+            // What an extract needs is the copy bit (#174). #558: that too is a request rather
+            // than a lock, so it is said and then it is the person's call — its own class, because
+            // the author said it separately from "do not change this" and may have meant it
+            // differently (a handout fine to excerpt but not to restructure, or the reverse).
+            if (!permitted(PermissionClass.EXTRACTION, capabilities.canExtractPages)) return@launch
+            // Locks like a save: the pages being copied are read off the document, so an edit going
+            // in underneath would put half of one into the new file. Taken after the question (#558),
+            // so the document is not held locked, and no Stop appears in the busy strip, while a
+            // dialog waits — which also means the document and the selection have to still be the
+            // ones the question was asked about.
+            if (document !== doc || busy.locksDocument) return@launch
+            if (selectedPages.sorted() != pages) return@launch
+            val token = busy.beginDocument(
+                BusyLabel.SAVING, locks = true, cancel = { stoppedByUser = true; cancel.cancel() },
+            )
             val temp = File(app.cacheDir, "extract-${System.nanoTime()}.pdf")
             try {
-                doc.extractPages(pages, temp.path)
+                doc.extractPages(pages, temp.path, cancel)
                 withContext(Dispatchers.IO) {
                     val pfd = app.contentResolver.openFileDescriptor(uri, "wt")
                         ?: throw IllegalStateException("provider returned no descriptor")
@@ -871,6 +892,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                 statusMessage = if (pages.size == 1) str(R.string.page_saved_as)
                 else str(R.string.pages_saved_as, pages.size)
             } catch (e: CancellationException) {
+                if (stoppedByUser) statusMessage = str(R.string.work_stopped)
                 throw e
             } catch (e: com.megapdf.engine.PdfPagesException) {
                 pageToolRefusal = e.refusal
@@ -928,9 +950,14 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    /** [perform], with document-level busy feedback: the Pages screen draws no page spinners. */
+    /**
+     * [perform], with document-level busy feedback: the Pages screen draws no page spinners, so
+     * every structure operation reports in its own strip rather than at [PdfEditOperation.pageIndex]
+     * — which for a delete is a page the operation is about to remove, the defect the Mac and
+     * Windows passes found and fixed (#145). [busyLabel] names what the strip says while it runs.
+     */
     private suspend fun performPageEdit(operation: PdfEditOperation, doc: PdfDocument) {
-        val token = busy.beginDocument(BusyLabel.APPLYING)
+        val token = busy.beginDocument(operation.busyLabel)
         try {
             perform(operation, doc)
         } finally {
@@ -1416,6 +1443,43 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     /**
+     * What the person has chosen to go on past in this document (#558, ADR-004 decision 11).
+     *
+     * A permission the author withheld is not a wall here: it is said out loud and then it is the
+     * person's call, because these bits were never enforceable — any tool with the owner password
+     * clears them, plenty of tools ignore them, and the person holding the phone may well be the
+     * author. A refusal treats a request as a lock and leaves someone stuck with their own
+     * document; ignoring it throws away something the author put there deliberately. Saying it and
+     * then deferring does both jobs.
+     */
+    private val permissions = PermissionOverride()
+
+    /** The class whose question is on screen, or null — see [PermissionClass] (#558). */
+    val permissionQuestion: PermissionClass?
+        get() = permissions.asking
+
+    fun answerPermission(proceed: Boolean) {
+        permissions.answer(proceed)
+    }
+
+    /**
+     * True when work of [klass] may go ahead: the document allows it ([allowed]), or the person
+     * was told what its author asked and chose to continue — once per document per class (#558).
+     *
+     * The engine is told too. The core enforces the same advisory bits underneath every platform
+     * (`PageToolsPreflight`, and the modify bit redaction needs), so a Continue that only the app
+     * knew about would come back as `MEGAPDF_ERR_RESTRICTED` — the wall again, one tap later.
+     * Told before every operation rather than once at the grant: a reopen (an unlock, a save) puts
+     * a fresh handle in [document], and that handle starts restricted.
+     */
+    private suspend fun permitted(klass: PermissionClass, allowed: Boolean): Boolean {
+        if (allowed) return true
+        if (!permissions.permit(klass, allowed = false)) return false
+        document?.allowRestrictedChanges()
+        return true
+    }
+
+    /**
      * True while a change waits on its page check or on the warning (#139, #145): further edits
      * wait, and so do the tools. Never two warnings at once — the second change is refused rather
      * than queued, and this is what refuses it.
@@ -1457,7 +1521,10 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
     private fun preparePageCheck(pageIndex: Int) {
         val state = uiState as? ViewerUiState.Viewing ?: return
         if (document == null || pageIndex !in state.pageSizes.indices) return
-        if (!capabilities.canAddText) return
+        // ...or once the person has chosen to go on past what its author asked (#558) — otherwise
+        // the first text change on a restricted document pays for its own check at the keystroke
+        // instead of having had it run while the page was being looked at.
+        if (!capabilities.canAddText && !permissions.isGranted(PermissionClass.EDITING)) return
         pageChecks.prepare(pageIndex)
     }
 
@@ -1612,17 +1679,40 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
 
     private var searchJob: Job? = null
 
+    /**
+     * Set the moment [stopSearch] asks the running sweep to end, and reset by the next
+     * [startSearch] — so the one `CancellationException` a cancelled [searchJob] throws can tell
+     * "the person asked this to stop" from "a newer query superseded it", which cancels the same
+     * job the same way but says nothing (#145): the newer query owns the result from then on, and
+     * a status line about the query it just replaced would be a stale sentence about the wrong
+     * search.
+     */
+    private var searchStopRequested = false
+
     /** As-you-type search from the search bar; debounced against fast typing. */
     fun updateSearchQuery(query: String) = startSearch(query, SEARCH_DEBOUNCE_MS)
+
+    /**
+     * Stops the running sweep (#145): a per-page loop with nothing at stake in abandoning it, the
+     * same reasoning the Mac and Windows passes gave search. Unlike typing a new query, which
+     * clears [searchHits] because the newer term owns the result, this leaves them exactly as
+     * they stood the moment the sweep was asked to end.
+     */
+    private fun stopSearch() {
+        searchStopRequested = true
+        searchJob?.cancel()
+    }
 
     /**
      * The search itself: wait out [debounceMs], then sweep every page on the
      * engine thread and aggregate hits into one flat document-ordered list.
      * Case-insensitive literal substring — the cross-platform contract.
      * Screenshot mode passes a zero debounce for its one deliberate query.
-     * The sweep shows Searching… in the strip (#145) but never blocks editing.
+     * The sweep shows Searching… in the strip (#145) but never blocks editing, with the page it
+     * is on against the page count, and it may be stopped.
      */
     private fun startSearch(query: String, debounceMs: Long) {
+        searchStopRequested = false   // a new sweep supersedes any Stop still pending on the old one
         searchQuery = query
         searchJob?.cancel()
         searchHits = emptyList()
@@ -1638,8 +1728,9 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
             var token: BusyToken? = null
             try {
                 if (debounceMs > 0) delay(debounceMs)
-                token = busy.beginDocument(BusyLabel.SEARCHING)
+                token = busy.beginDocument(BusyLabel.SEARCHING, cancel = ::stopSearch)
                 val hits = ArrayList<SearchHit>()
+                val pageCount = state.pageSizes.size
                 for (pageIndex in state.pageSizes.indices) {
                     val page = doc.openPage(pageIndex)
                     try {
@@ -1647,10 +1738,14 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                     } finally {
                         page.close()
                     }
+                    // After the page, not before it: "page 1 of N" while page 1 is still being
+                    // read would be a count that finishes before the work does.
+                    token?.report(pageIndex + 1, pageCount)
                 }
                 searchHits = hits
                 currentHitIndex = if (hits.isEmpty()) -1 else 0
             } catch (e: CancellationException) {
+                if (searchStopRequested) statusMessage = str(R.string.search_stopped)
                 throw e
             } catch (e: Exception) {
                 statusMessage = str(R.string.search_failed)
@@ -1997,14 +2092,10 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                     .filter { it.id.startsWith("sig:") }
                     .firstOrNull { it.rect.contains(x, y) }
                 if (signature != null) {
-                    if (!capabilities.canSign) {
-                        // #131: moving or removing it is an edit the owner did not allow.
-                        selectedStamp = null
-                        selectedTextBox = null
-                        selectedWhiteout = null
-                        showRestricted()
-                        return@launchEdit
-                    }
+                    // #131 refused the tap here, because moving or removing it is an edit the
+                    // owner did not allow. #558: selecting changes nothing, so there is nothing to
+                    // refuse and nothing yet to ask about — the overlay's move and remove go
+                    // through [perform], which is where the author's request is put to the person.
                     // Selection only — move/resize/remove happen via the overlay.
                     selectedStamp = SelectedStamp(
                         pageIndex, signature.annotIndex, signature.id, signature.rect)
@@ -2023,12 +2114,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                     it.rect.grownBy(TAP_SLOP_POINTS).contains(x, y)
                 }
                 if (box != null) {
-                    if (!capabilities.canAddText) {
-                        selectedTextBox = null
-                        selectedWhiteout = null
-                        showRestricted()
-                        return@launchEdit
-                    }
+                    // Not gated — see the signature above (#558): selecting is not changing.
                     if (box.id.startsWith(UNTAGGED_TEXT_PREFIX)) {
                         // A box written by MegaPDF for Windows 1.6.x, before boxes
                         // carried an id. Its only handle is its page-object index,
@@ -2063,11 +2149,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                 // something the user put on the page. Last match wins, same reason.
                 val whiteout = page.whiteouts().lastOrNull { it.rect.contains(x, y) }
                 if (whiteout != null) {
-                    if (!capabilities.canEditContent) {
-                        selectedWhiteout = null
-                        showRestricted()
-                        return@launchEdit
-                    }
+                    // Not gated — see the signature above (#558): selecting is not changing.
                     selectedWhiteout = SelectedWhiteout(pageIndex, whiteout.objectIndex, whiteout.rect)
                     return@launchEdit
                 }
@@ -2100,10 +2182,11 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                     if (line != null) {
                         // #118: on pages PDFium cannot rewrite faithfully, say so now
                         // rather than after the user has typed.
-                        // #131: and on a document whose owner did not allow changes, say that.
-                        if (!capabilities.canEditContent) {
-                            showRestricted()
-                        } else {
+                        // #131 refused here when the owner did not allow changes. #558: it is put
+                        // to the person instead — and put *here*, before the editor opens, for
+                        // #118's own reason: better than asking once they have typed. Cancel opens
+                        // nothing, and the line is not selected.
+                        if (permitted(PermissionClass.EDITING, capabilities.canEditContent)) {
                             // #128: and say why — text elsewhere would move, or the page would look different.
                             // A run that is no longer text counts as refused, as it always has.
                             // #145: the check can take seconds on a heavy page, so the line shows a
@@ -2190,7 +2273,13 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         }
     )
 
-    /** The notice for an edit the document's owner did not allow (#131). */
+    /**
+     * The notice for the one thing a restricted open really cannot do (#131): set, change or
+     * remove the password. #558 turned every other refusal into a question, but not this one —
+     * it is not an advisory bit. Without the owner password there is no credential to write a new
+     * copy with, and the core refuses it too ([PdfRestrictedException]), so there is nothing to
+     * offer to continue *to*; the honest answer stays "unlock it first", which is what this says.
+     */
     private fun showRestricted() = showNotice(str(R.string.security_restricted_edit))
 
     /**
@@ -2206,10 +2295,15 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
     /** Arms the next tap to place text. Tapping the page opens the text field. */
     fun startTextPlacement() {
         if (editingBlocked) return
-        if (!capabilities.canAddText) {
-            showRestricted()
-            return
+        // #558: asked here, where #131 refused, so nobody aims a tool they are about to be asked
+        // about. On a document that allows it this neither suspends nor hops a frame.
+        viewModelScope.launch {
+            if (!permitted(PermissionClass.EDITING, capabilities.canAddText)) return@launch
+            armTextPlacement()
         }
+    }
+
+    private fun armTextPlacement() {
         // #457: arming Add text on a dynamic-XFA document explains rather than entering
         // placement mode — stamping text over Adobe's placeholder would not fill the form.
         if (capabilities.isDynamicXfa) {
@@ -2350,10 +2444,14 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
 
     private fun openTextBoxEditor(sel: SelectedTextBox) {
         selectedTextBox = null
-        if (!capabilities.canAddText) {
-            showRestricted()
-            return
+        viewModelScope.launch {
+            // #558: before the editor opens, not after the correction is typed.
+            if (!permitted(PermissionClass.EDITING, capabilities.canAddText)) return@launch
+            openTextBoxEditorNow(sel)
         }
+    }
+
+    private fun openTextBoxEditorNow(sel: SelectedTextBox) {
         pendingTextTap = PendingTextTap(
             sel.pageIndex, sel.rect.left, sel.rect.bottom,
             editingId = sel.id, fontSize = sel.fontSize, fontName = sel.fontName,
@@ -2421,9 +2519,18 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
             showDynamicXfaNotice()
             return
         }
+        // #558: what the author asked is said out loud, and then it is the person's call — once
+        // per document per class. Only an operation with no advisory bit behind it is still
+        // refused outright, which is [DocumentCapabilities.permissionClassOf]'s null: full access,
+        // where there is no credential to write with and so nothing to offer.
         if (!capabilities.allows(operation)) {
-            showRestricted()
-            return
+            val klass = capabilities.permissionClassOf(operation)
+            if (klass == null) {
+                showRestricted()
+                return
+            }
+            if (!permitted(klass, allowed = false)) return
+            if (document !== doc) return
         }
         busy.pageWork(BusyLabel.APPLYING, spot ?: BusySpot(operation.pageIndex)) {
             history.perform(operation, doc.asEditTarget())
@@ -2578,10 +2685,14 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
 
     fun startPlacement(entry: SignatureEntry) {
         if (editingBlocked) return
-        if (!capabilities.canSign) {
-            showRestricted()
-            return
+        // #558: asked here, where #131 refused — see [startTextPlacement].
+        viewModelScope.launch {
+            if (!permitted(PermissionClass.EDITING, capabilities.canSign)) return@launch
+            armPlacement(entry)
         }
+    }
+
+    private fun armPlacement(entry: SignatureEntry) {
         // #457: arming Sign on a dynamic-XFA document explains rather than arming placement.
         if (capabilities.isDynamicXfa) {
             showDynamicXfaNotice()
@@ -3203,6 +3314,9 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         // belonged to the document that just went away.
         pageChecks.reset()
         pageRewriteQuestion.abandon()
+        // And so does what the person chose to go on past (#558): the choice was about *this*
+        // document, which is now gone. It was never persisted, so there is nothing else to clear.
+        permissions.reset()
         // And its busy state (#145).
         busy.reset()
         currentPage = 0
@@ -3327,6 +3441,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         renderJob?.cancel()
         pageChecks.reset()
         pageRewriteQuestion.abandon()
+        permissions.reset()
         val doc = document
         document = null
         if (doc != null) {

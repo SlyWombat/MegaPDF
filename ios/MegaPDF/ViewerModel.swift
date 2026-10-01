@@ -639,7 +639,11 @@ final class ViewerModel: ObservableObject {
     /// being searched for.
     private var lastSearchTerm: String?
     private var pageRewriteContinuation: CheckedContinuation<Bool, Never>?
-    private var sourceURL: URL?
+    /// The file the open document came from and the file Save writes back to — the one fact
+    /// Save a copy's adoption changes (#572), so it is readable (never settable) from outside
+    /// rather than private: that it moved to the copy is the behaviour worth asserting, where
+    /// the cleared unsaved flag it used to be judged by was true of the bug as well.
+    private(set) var sourceURL: URL?
     /// The picked file whose security-scoped access is held while its document is open (#147):
     /// the document reads the file for as long as it is open, and Save writes it.
     private var scopedAccessURL: URL?
@@ -846,6 +850,28 @@ final class ViewerModel: ObservableObject {
 
     private var recentsRefresh: Task<Void, Never>?
 
+    /// Records `url` as a recent document under `displayName`, with the security-scoped
+    /// bookmark that is the way back to it — and where the file lives, for the line under its
+    /// name (#165). Both are read now, while the app holds the URL and the right to read around
+    /// it. Off the main actor for the stat: it reads the parent folder, and for a cloud file
+    /// that is a round trip. A URL no bookmark can be made for is simply not remembered.
+    ///
+    /// Shared by an open and by Save a copy adopting the file it wrote (#572) — the same two
+    /// callers Android's `recentsStore.add` has.
+    private func rememberRecent(_ url: URL, displayName: String) async {
+        guard let bookmark = try? url.bookmarkData() else { return }
+        let device = RecentLocation.deviceName()
+        let location = await Task.detached(priority: .utility) {
+            RecentLocation.of(url, deviceName: device)
+        }.value
+        recents.add(RecentEntry(
+            bookmarkBase64: bookmark.base64EncodedString(),
+            displayName: displayName,
+            lastOpenedEpochMs: Int64(Date().timeIntervalSince1970 * 1000),
+            location: location))
+        unavailableRecentIDs.remove(bookmark.base64EncodedString())
+    }
+
     /// What one pass over the stored entries found.
     private struct RecentsScan: Sendable {
         var unavailable: Set<String> = []
@@ -994,21 +1020,8 @@ final class ViewerModel: ObservableObject {
             if let sourceURL, sourceURL.startAccessingSecurityScopedResource() {
                 scopedAccessURL = sourceURL
             }
-            if let sourceURL,
-               let bookmark = try? sourceURL.bookmarkData() {
-                // Where the file lives, recorded now while the app holds the URL and the
-                // right to read around it (#165). Off the main actor: it stats the parent
-                // folder, and for a cloud file that is a round trip.
-                let device = RecentLocation.deviceName()
-                let location = await Task.detached(priority: .utility) {
-                    RecentLocation.of(sourceURL, deviceName: device)
-                }.value
-                recents.add(RecentEntry(
-                    bookmarkBase64: bookmark.base64EncodedString(),
-                    displayName: displayName,
-                    lastOpenedEpochMs: Int64(Date().timeIntervalSince1970 * 1000),
-                    location: location))
-                unavailableRecentIDs.remove(bookmark.base64EncodedString())
+            if let sourceURL {
+                await rememberRecent(sourceURL, displayName: displayName)
             }
             state = .viewing(displayName: displayName, pageSizes: sizes)
             // A fresh core carries no marks, and the refresh is what says so (#329): the map
@@ -2636,22 +2649,60 @@ final class ViewerModel: ObservableObject {
         return folder.appendingPathComponent(base).appendingPathExtension(ext)
     }
 
-    /// The exporter finished. When it wrote the copy, the document is marked saved, but only if
-    /// nothing changed since the copy was made (D3). The staged file goes either way.
-    func finishExport(saved: Bool) {
+    /// The exporter finished. `destination` is where it wrote the copy, or nil when nothing was
+    /// written — a cancelled sheet, or one that failed.
+    ///
+    /// A copy that was written **becomes the open document** (#572), the adoption every other
+    /// platform already does: Android's `saveAs` re-targets `currentUri`, the desktops' Save As
+    /// re-targets `DocumentPath`. Without it, the file the person opened still held none of
+    /// their edits while the app stopped warning them about unsaved changes, and the next Save
+    /// wrote to that original rather than to the copy they believed they were working in.
+    ///
+    /// Adoption does not wait on D3: the copy is where the document lives from here whatever the
+    /// edit count says. The unsaved flag is the only part D3 gates — it is cleared, last, and
+    /// only if nothing changed since the copy's bytes were made. The staged file goes either way.
+    func finishExport(savedTo destination: URL?) {
         discardExportFile()
         let summary = summaryForSave
         summaryForSave = nil
-        guard saved else {
+        guard let destination else {
             // Cancelled: nothing was written, but the redaction was applied to the open
             // document, so what it removed is still said.
             if let summary { redactionSummary = summary }
             return
         }
+        adopt(exportedCopy: destination)
         if exportEditCount == editCount { isDirty = false }
         exportEditCount = nil
         statusMessage = String(localized: "Saved")
         statusDetail = summary
+    }
+
+    /// Points the open document at the copy Save a copy just wrote (#572): everything an open
+    /// does for a picked file except the open itself, since the document already in memory is
+    /// the one those bytes hold. In Android `saveAs`'s order — the URL, the right to reach it,
+    /// Recents, then the name on screen; the caller clears the unsaved flag after.
+    ///
+    /// **Security scope.** A picked URL is only reachable while a scoped resource is held for it
+    /// (#147), and the one held for the file that was opened is no longer the document's file.
+    /// The new scope is taken *before* the old one is released, so a Replace onto the very file
+    /// that was open keeps access throughout rather than dropping to none in between. A false
+    /// from `startAccessingSecurityScopedResource` is not a failure — a URL in the app's own
+    /// container needs no scope — so adoption never depends on one: the copy already holds the
+    /// edits, which is what makes clearing the flag true even in the worst case, where a later
+    /// Save can only report that it cannot write there. Pointing at a file that has the edits
+    /// and may refuse the next write beats pointing at one that has none of them.
+    private func adopt(exportedCopy url: URL) {
+        guard document != nil else { return }   // closed while the sheet was up
+        let previous = scopedAccessURL
+        sourceURL = url
+        scopedAccessURL = url.startAccessingSecurityScopedResource() ? url : nil
+        previous?.stopAccessingSecurityScopedResource()
+        let name = url.lastPathComponent
+        if case let .viewing(_, pageSizes) = state {
+            state = .viewing(displayName: name, pageSizes: pageSizes)
+        }
+        Task { await rememberRecent(url, displayName: name) }
     }
 
     /// A Markdown export of the document's text, in a staged file for the same exporter shape

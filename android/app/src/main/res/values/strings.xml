@@ -87,7 +87,12 @@
     <string name="markdown_export_failed">Couldn\'t export as Markdown.</string>
 
     <!-- Document security (#131): restricted documents, the owner password, and the Password command. -->
-    <string name="security_restricted_notice">The owner of this document restricted changes to it. To edit it, unlock it with the owner password from the menu.</string>
+    <!-- #558: reworded. It used to read "The owner of this document restricted changes to it. To
+         edit it, unlock it with the owner password from the menu." — which said a wall was there
+         and named the password as the way through it. Neither is true: the bit is advisory, and
+         the way through it is to say so and go on. "asked" and "request", never "restricted",
+         "locked" or "protected". -->
+    <string name="security_restricted_notice">The author of this document asked that it not be changed. You can still change it — MegaPDF will say so first.</string>
     <string name="security_restricted_edit">This document\'s owner doesn\'t allow that change. Unlock it with the owner password first.</string>
     <string name="security_unlock_menu">Unlock with owner password…</string>
     <string name="security_unlock_title">Unlock document</string>
@@ -209,6 +214,21 @@
     <string name="busy_checking_page">Checking this page…</string>
     <string name="busy_applying">Applying…</string>
     <string name="busy_exporting">Exporting…</string>
+    <!-- The page tools (#145, #174): named for what each one does, rather than the generic
+         "Applying…" above, on the same reasoning the Mac and Windows passes used. -->
+    <string name="busy_turning_pages">Turning pages…</string>
+    <string name="busy_deleting_pages">Deleting pages…</string>
+    <string name="busy_moving_page">Moving page…</string>
+    <string name="busy_inserting_page">Inserting page…</string>
+    <string name="busy_adding_pages">Adding pages…</string>
+    <!-- The strip's count line for a cancellable, per-item sweep (#145): its own line rather than
+         folded into the label, so a screen reader is not asked to announce it once per item. -->
+    <string name="busy_progress_of_pages">Page %1$d of %2$d</string>
+    <!-- Busy strip Stop (#145): the word that abandons work in progress, as distinct from Cancel,
+         which abandons a question. -->
+    <string name="stop">Stop</string>
+    <string name="work_stopped">Stopped.</string>
+    <string name="search_stopped">Search stopped.</string>
     <string name="search_failed">Couldn\'t search this document.</string>
     <string name="edit_failed">Couldn\'t make that change.</string>
     <string name="signature_move_failed">Couldn\'t move this signature</string>
@@ -372,6 +392,22 @@
     <string name="pages_insert_blank">Insert blank page</string>
     <string name="pages_add_from_file">Add pages from file…</string>
     <string name="pages_save_selection">Save pages as…</string>
+
+    <!-- What the document's author asked, and the person's call (#558, ADR-004 decision 11).
+         One shape for every bit MegaPDF reads: say what was asked, then offer to continue.
+         The wording reports a REQUEST and never implies enforceability — these bits are cleared
+         by any tool holding the owner password and ignored outright by plenty of others, and the
+         person reading this may well be the author. So: "the author of this document asked",
+         never "restricted", "locked", "protected" or "not allowed"; and no mention of the owner
+         password, which is not what is needed here. Asked once per document per class of
+         operation, which is what the shared note promises. -->
+    <string name="permission_ask_title_editing">Change this document?</string>
+    <string name="permission_ask_title_assembly">Rearrange these pages?</string>
+    <string name="permission_ask_title_extraction">Copy these pages out?</string>
+    <string name="permission_ask_editing">The author of this document asked that its contents not be changed.</string>
+    <string name="permission_ask_assembly">The author of this document asked that its pages not be reordered, removed or added to.</string>
+    <string name="permission_ask_extraction">The author of this document asked that nothing be copied out of it.</string>
+    <string name="permission_ask_note">That\'s a request rather than a lock, so it\'s your call. The request stays in the document, and MegaPDF won\'t ask again while it\'s open.</string>
     <!-- Said after each page operation; every one of them can be undone -->
     <string name="page_turned">Page turned.</string>
     <string name="pages_turned">%1$d pages turned.</string>
