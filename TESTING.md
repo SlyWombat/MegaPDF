@@ -61,6 +61,22 @@ photo/scan (white background is removed automatically). Then click the signature
 click the page to place it. Click a placed signature to select it: drag to move,
 drag the round corner handle to resize, ✕ or Delete key to remove.
 
+What this places is an *electronic signature* — a picture of a name. It is **not**
+a *digital signature*, the cryptographic kind backed by a certificate, and nothing
+MegaPDF says around this feature may imply otherwise (#602). If a string you meet
+while testing suggests that placing a signature made the document verifiable,
+tamper-evident, certified, legally binding or secure, that is a bug worth filing.
+**A document that already has a digital signature** — open one of the genuinely
+signed PDFs — `signed-approval.pdf` and `signed-certified.pdf`, written by
+`python3 tools/gen_signature_fixtures.py <outdir>` — and press
+Ctrl+S. MegaPDF must warn **at that point**, not on open, and must say *digital
+signature* rather than just *signature*: *"This document has a digital signature"*,
+or *"This document is certified against changes"* when the signature certifies the
+document. **Save a copy** is the prominent choice and leaves the original untouched;
+**Overwrite the original** is the deliberate, secondary one. After Save a copy, a
+quiet line says the original's digital signature doesn't carry over. Nothing is ever
+refused, and nothing here is about the signatures you place yourself (#481, #602).
+
 **Whiteout** — the Whiteout button, then drag across anything (text, images, even a
 scan) to cover it with white. Click a whiteout to select it; ✕ or Delete removes it.
 Whiteout **covers**; it does not remove. What is underneath is still in the file, and
@@ -473,7 +489,7 @@ above is a transparent substitute for `~/megapdf-public-corpus`, not a different
 ### Third addition, 2026-09-28: 33 genuinely-signed documents (#471 part 1)
 
 Not a battery run — a targeted measurement, per the task brief, of what `megapdf_save()`'s
-full rewrite does to a signature already on a document. 33 documents from `www.govinfo.gov`
+full rewrite does to a digital signature already on a document. 33 documents from `www.govinfo.gov`
 (GPO Federal Register, Public Law, Congressional Record, CFR and Statutes at Large PDFs),
 every one independently verified `Signature is Valid` with poppler's `pdfsig` before any
 MegaPDF code touched it. The corpus is now **1,382 documents, 298.1 MB**; the new `signed`
@@ -483,7 +499,7 @@ category and the `govinfo-signed` source are documented in
     tools/stress/public-corpus/build-manifest.py --add-source govinfo-signed  # from a machine that can reach www.govinfo.gov
     tools/stress/public-corpus/fetch.sh --category signed                    # → ~/megapdf-public-corpus/govinfo-signed
 
-**Result: the signature does not survive a MegaPDF save, with or without an edit.**
+**Result: the digital signature does not survive a MegaPDF save, with or without an edit.**
 
 | stage | result (33/33) |
 |---|---|
@@ -491,8 +507,8 @@ category and the `govinfo-signed` source are documented in
 | after `megapdf_save()`, no edit at all | `Digest Mismatch` |
 | after `megapdf_save()` following one edit | `Digest Mismatch` |
 
-The two after-save rows are identical: saving invalidates the signature regardless of
-whether the content changed, because `FPDF_SaveAsCopy` re-serialises the whole file and
+The two after-save rows are identical: saving invalidates the digital signature regardless
+of whether the content changed, because `FPDF_SaveAsCopy` re-serialises the whole file and
 carries the original `/ByteRange` bounds over unchanged into a file whose length is now
 different. Filed as **#476** — a behaviour finding per the task brief, `core/` untouched, no
 gate adjusted. See the README section for the full detail (including the specific
@@ -1152,6 +1168,134 @@ not #567's own finding, but disclosed rather than folded silently into this run'
 With insert and import now both run at corpus scale, #174 has exercised its full contract-10
 surface: rotate, delete, move, extract, blank and import all ran clean except for #445's
 already-known, already-excused pair (and #574's two, also unrelated to #567).
+
+### Tenth run, 2026-10-01: all three batteries, all four corpora, main at c3cc720 (#537)
+
+A #537 release-candidate condition and a regression check, not an investigation: a day's worth
+of engine changes had each been tested on its own but never together at corpus scale --
+**#578** rewrote lifetime rules across 47 entry points behind the dead-handle contract, **#595**
+normalises a masked hyphen in the structure path, **#587** landed two new contract functions,
+and **#532** changed how line splitting scales off the drawn em rather than the raw `Tf`
+operand. Run on kdocker3 in a container (`megapdf:base`, PDFium still at 33 patches,
+`pdfium-7934-megapdf-2b3b415e86b1`), all four corpora through `structure-battery.sh --reference
+--cli`, then `markdown-battery.sh`, then `pages-battery.sh` (#567's full seven-operation shape:
+rotate, delete, move, extract, blank, importself, importpair) -- the same battery order the
+seventh, eighth and ninth runs used, each stage run with all four corpora concurrent (pages kept
+the eighth/ninth run's own split: private+public together at `--jobs 8`/`--jobs 6`, then
+Canadian+UN together at `--jobs 8`). Total wall time for all three batteries, all four corpora:
+about 30 minutes -- far short of "hours," worth noting for planning the next one.
+
+**Zero crashes and zero hangs, in every battery, on every corpus. 5,763 documents, nothing
+silently narrowed:**
+
+| corpus | on disk | visited | opened (structure/markdown) | the rest |
+|---|---:|---:|---:|---|
+| private | 4,158 | 4,158 | 4,084 | 12 encrypted, 62 unreadable format |
+| public | 1,381 | 1,381 | 1,368 | 5 encrypted, 8 unreadable format |
+| Canadian | 134 | 134 | 134 | — |
+| UN | 90 | 90 | 90 | — |
+
+Identical to the seventh run's own table on every corpus. `pages-battery.sh` opens through a
+different path and so counts differently, as every prior run has noted: private 4,084 opened (12
+protected, 62 did-not-open, matching the table above exactly), public 1,374 opened (4 protected,
+3 did-not-open, plus 5 of those 1,374 separately flagged `input already damaged` -- failing
+their own `qpdf --check` before `megapdf-cli` ever touched them, a #445-point-4 case, not a
+smaller opened count), Canadian and UN both 134/90 with nothing flagged.
+
+**Structure, against F1 >= 0.998 and order agreement tau >= 0.9:**
+
+| corpus | token F1, internal | token F1, CLI | tau median | CLI bad exits | |
+|---|---:|---:|---:|---:|---|
+| private | **0.998997** | 0.998997 | 0.951 | 0 | pass |
+| public | **0.974441** | 0.974441 | 0.977 | 0 | **fail — #498, confirmed** |
+| Canadian | **0.999932** | 0.999932 | 0.994 | 0 | pass |
+| UN | **0.999136** | 0.999136 | 0.967 | 0 | **pass — moved, see below** |
+
+Markdown: every gate passes on all four corpora (0 crashes, 0 hangs, 0 other bad exit codes, 0
+cmark parse failures, 0 cmark timeouts).
+
+**Pages** (0 crashes/hangs, 0 qpdf failures, 0 count mismatches, 0 write failures, 0 refusals
+outside the contract's own two: a security-forbidden operation, exit 8, and the field-`/Parent`-
+hierarchy refusal, exit 9 with that message, reachable from both `extract` and `import`):
+
+| corpus | crashes/hangs | QPDF FAILED | COUNT MISMATCH | WRITE FAILED | REFUSED, other | |
+|---|---:|---:|---:|---:|---:|---|
+| private | 0/0 | 0 | 0 | 0 | 0 | pass |
+| public | 0/0 | 0 | 0 | 0 | **9** | **fail — #445, confirmed** |
+| Canadian | 0/0 | 0 | 0 | 0 | 0 | pass |
+| UN | 0/0 | 0 | 0 | 0 | 0 | pass |
+
+Field-`/Parent`-hierarchy refusal, through `import` (the probe #567 established; `extract`
+structurally cannot reach it on this PDFium, per the ninth run):
+
+| corpus | importself refused-fields | rate | importpair refused-fields | rate |
+|---|---:|---:|---:|---:|
+| private | 37 / 4,084 | **0.91%** | 0 / 4,084 | 0% |
+| public | 212 / 1,374 | **15.43%** | 0 / 1,374 | 0% |
+| Canadian | 5 / 134 | 3.7% | 4 / 134 | 3.0% |
+| UN | 0 / 90 | 0% | 0 / 90 | 0% |
+
+Every one of these numbers matches the ninth run exactly, document-for-document count, not just
+in aggregate -- this is the instrument confirming the same known state, not coincidence.
+
+**Public's structure failure resolves to the same category #498 already named, confirmed rather
+than rediscovered.** The 33 `govinfo-signed` documents carry 95.6% of the corpus's tokens (the
+brief's "96%" holds) and score **0.973305** on their own (#498 recorded 0.970684); the remaining
+documents score 0.999206. Public's overall figure (0.974441) is up from the seventh run's
+0.971952 by almost exactly the same margin the signed category itself moved by (+0.0026 signed,
++0.0025 overall) -- one population moving, not two. Not fixed or gate-adjusted, per #471's own
+instruction. A plausible contributor is #595's masked-hyphen normalisation (fewer spurious token
+splits would read as a small, broad fidelity gain of exactly this shape), but that is offered as
+a plausible direction, not confirmed root cause -- nothing here isolates it from #532 or #587.
+
+**Public's nine `REFUSED, other` are #445's known pair, confirmed exactly, not re-filed.** This
+run used `pages-battery.sh`'s full seven-operation shape (#567), the same as the ninth run, not
+the five-operation shape the eighth run and the task brief's own "known results" both describe
+-- so nine, not five, is the right number to expect here. Resolved by path-hash (never by name)
+to the same shape the ninth run found: the same two primary documents refuse `rotate`/`move`/
+`extract`/`importself` on their own unloadable pages (7 instances between them), and two
+unrelated, otherwise-clean documents refuse `importpair` only because their fixed partner
+happens to be one of those two (2 instances) -- four distinct documents, nine refusals, matching
+the ninth run's own accounting of this exact pair down to the operation.
+
+**UN's gate moved from fail to pass, and it is #524 fixed, not a new result.** The seventh run
+measured UN at 0.996348 (fail); this run measures **0.999136** (pass). Re-deriving each
+document's own F1 from the battery log's per-document token counts (`fid_a`/`fid_b`/`fid_match`,
+keyed by the same path-hash id the log already uses) finds the previously-worst document -- the
+190-page one the seventh run's own text named as #524's and #496's -- improved from F1 0.9662 to
+**0.9935**; it is no longer even the corpus's worst (an unrelated 148-page document is, at
+0.9853, nowhere near failing the gate by itself). Excluding that formerly-worst document, UN
+reads 0.999295, itself slightly above the seventh run's own exclusion figure of 0.99960 -- a
+small, general improvement on top of the specific one. This is not a mystery: `git log` shows PR
+#532 (`wip/524-drawn-em-font-size`, merge commit `6e67296`) landed after the seventh run's commit
+(`88117b7`) and is present at this run's `c3cc720`; its own fix commit's message is `structure:
+lock the size-in-Tf/size-in-Tm invariant, and retire #496's caveat (#524)`. The brief's own
+"known results to confirm" section still named UN as failing at ~0.9963 because that is what the
+last full-corpus measurement (the seventh run) found, before #532 landed -- this run is simply
+the first full-corpus measurement taken after the fix, and it confirms the fix rather than
+finding a new problem. Worth Dave's attention as a candidate to close #524, not done here.
+
+**Large documents (#488) are not present in this run's public corpus and nothing here can move
+or reconcile against the other agent's figure.** This corpus's public-corpus mount is the
+1,381-document, seven-category state (`govinfo-signed`, `irs`, `nonlatin`, `pdfium`, `qpdf`,
+`uscis`, `verapdf`) that predates the `large`/`govinfo-large` addition TESTING.md records
+separately; there is no `large` population mounted here to measure. Noted so the absence is not
+mistaken for a silent pass on #488's own figure.
+
+**Dead-handle contract rewrite (#578, 47 entry points): no lifetime regression at corpus
+scale.** Zero crashes and zero hangs across all three batteries, all four corpora, 5,763
+documents, every `pages-battery.sh` operation including `blank` and both `import` variants --
+the broadest exercise of entry-point lifetimes this repository's battery has driven since #578
+landed.
+
+**#587's two new contract functions are not directly exercised by name in any of these three
+batteries** (no battery script calls either one), so this run speaks to the absence of a
+corpus-wide regression elsewhere after they landed, not to their own correctness -- that remains
+whatever #587's own tests already cover.
+
+No issue filed from this run: the one genuinely new finding (#524, via #532) is a fix confirmed,
+not a regression, and everything else measured is #445 or #498 confirmed exactly rather than
+rediscovered.
 
 ## Reporting
 

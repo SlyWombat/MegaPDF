@@ -762,16 +762,16 @@
     <value>Ce formulaire doit être rempli dans Adobe Reader.</value>
   </data>
   <data name="SignedSaveWarningTitle" xml:space="preserve">
-    <value>Ce document a une signature numérique</value>
+    <value>Ce document porte une signature numérique</value>
   </data>
   <data name="SignedSaveWarningBody" xml:space="preserve">
     <value>L'enregistrement rendra cette signature invalide. MegaPDF réécrit le fichier au complet lorsqu'il enregistre&#160;: la signature ne décrit donc plus le fichier qu'elle a signé, et aucune façon d'enregistrer ne peut la garder valide. Enregistrez une copie pour garder l'original signé intact.</value>
   </data>
   <data name="CertifiedSaveWarningTitle" xml:space="preserve">
-    <value>Ce document a une signature numérique qui le certifie contre toute modification</value>
+    <value>Ce document est certifié contre toute modification</value>
   </data>
   <data name="CertifiedSaveWarningBody" xml:space="preserve">
-    <value>La signature de ce document le certifie — son auteur a déclaré qu'il ne devait subir aucune modification. L'enregistrement rendra cette signature invalide&#160;: MegaPDF réécrit le fichier au complet lorsqu'il enregistre, la signature ne décrit donc plus le fichier qu'elle a signé, et aucune façon d'enregistrer ne peut la garder valide. Enregistrez une copie pour garder l'original signé intact.</value>
+    <value>La signature numérique de ce document le certifie — son auteur a déclaré qu'il ne devait subir aucune modification. L'enregistrement rendra cette signature invalide&#160;: MegaPDF réécrit le fichier au complet lorsqu'il enregistre, la signature ne décrit donc plus le fichier qu'elle a signé, et aucune façon d'enregistrer ne peut la garder valide. Enregistrez une copie pour garder l'original signé intact.</value>
   </data>
   <data name="SignedSaveSignedOn" xml:space="preserve">
     <value>Signé le {0}.</value>

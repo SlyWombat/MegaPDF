@@ -16,6 +16,51 @@ Conventions (OQLF, Canadian French):
 - Units: *Mo* for MB. Numbers take the platform's culture formatting (`1,4 Mo`).
 - Desktop says *cliquez*, mobile says *touchez*.
 
+## Signatures: two different things, and the words for each (#602)
+
+MegaPDF's own feature stamps a drawn, typed or photographed image on a page. A
+document can also carry a cryptographic signature, which MegaPDF detects and
+warns about before a save destroys it (#481). Same noun, same session, different
+things — so the vocabulary is **Adobe's**, not ours, because it is what the PDF
+specification calls these objects, what other viewers say when they report a
+broken signature, and what the 2.2 warning already says.
+
+| meaning | English | Français (Canada) |
+|---|---|---|
+| the drawn, typed or photographed mark someone places on a page | **electronic signature**, and in the interface simply *signature*, *sign*, *your signature* | **signature électronique**, et dans l'interface simplement *signature*, *signer*, *vos signatures* |
+| a cryptographic signature backed by a certificate | **digital signature** | **signature numérique** |
+| the certificate and private key behind one | **digital ID** | **ID numérique** (Adobe's own French interface; *identifiant numérique* if a sentence needs the long form) |
+
+Rules that follow, and they are wording rules, not a rename:
+
+- The graphic feature **keeps its friendly naming**: Signatures, sign, your
+  signature / Signatures, signer, vos signatures. That is the word people look
+  for in a toolbar.
+- Nothing may suggest that placing a signature makes a document verifiable,
+  tamper-evident, certified, legally binding or secure.
+- *Sign* must not sit beside *secure*, *verified*, *authenticated* or
+  *protected* in the same breath.
+- Where a document's own cryptographic signature is meant, write **digital
+  signature** / **signature numérique** on its first mention in that string; a
+  later back-reference inside the same string may say just *signature* /
+  *la signature*.
+- *Protected* and *secure* / *protégé* and *sécurité* belong to the password
+  feature. Keep them there.
+- A digital signature does not encrypt anything: it signs a hash with a private
+  key, and the document stays readable to anyone. Where that needs saying, say
+  it — *signed with a certificate so a reader can verify it has not changed*,
+  not *signed so nobody else can read it*.
+- **"Digital Encrypted Signature" is withdrawn** (#601, #602) and must not
+  appear in any string, listing, page or document. It is recorded here only so
+  nothing claims the term again.
+
+One thing to watch in French, raised rather than papered over: *signature
+électronique* carries eIDAS connotations in France (*simple / avancée /
+qualifiée*), so it is the right **glossary** word for the broad sense but not a
+phrase to put in shipped copy about the mark someone places — shipped copy says
+plain *signature*. *Signature numérique* has no such problem and is the
+established French for the cryptographic sense.
+
 | English | Français (Canada) | Notes |
 |---|---|---|
 | Open | Ouvrir | |
@@ -162,21 +207,25 @@ Conventions (OQLF, Canadian French):
 | This document has a digital signature. Saving here will invalidate it. Save a copy to keep the signed original intact. | Ce document porte une signature numérique. L'enregistrer ici invalidera la signature. Enregistrez une copie pour garder l'original signé intact. | #476, #481: the ordinary-signature wording — says what will happen, then the safe alternative |
 | This document is certified as closed to changes. Saving here will invalidate that certification. Save a copy to keep the signed original intact. | Ce document est certifié fermé aux modifications. L'enregistrer ici invalidera cette certification. Enregistrez une copie pour garder l'original signé intact. | #476, #481: the certification (`/DocMDP`) wording — measured as the common case, not the edge case (33/33 of #476's real corpus), so it says the document is *certified closed to changes*, not merely that a signature will stop verifying |
 | Overwrite the signed original | Écraser l'original signé | #481, the Save confirmation's destructive button, ordinary signature |
+| Save over the certified original? | Enregistrer par-dessus l'original certifié? | #481, found missing by #602's audit: the Password sheet's confirmation title when the document carries a certification (/DocMDP) signature — the twin of *Save over the signed original?*, which the sheet reuses for an ordinary one |
+| This document has a digital signature. Saving here will invalidate it. | Ce document porte une signature numérique. L'enregistrer ici invalidera la signature. | #481, found missing by #602's audit: the Password sheet's own message. Shorter than the Save confirmation's because the sheet offers Continue/Cancel, not Save a copy |
+| This document is certified as closed to changes. Saving here will invalidate that certification. | Ce document est certifié fermé aux modifications. L'enregistrer ici invalidera cette certification. | #481, found missing by #602's audit: the certification twin of the message above |
 | Overwrite the certified original | Écraser l'original certifié | #481, the same button, certification signature |
 | This document is also digitally signed; overwriting it will invalidate the signature too. | Ce document porte aussi une signature numérique; l'écraser invalidera aussi la signature. | #481: appended to the redaction confirmation's (#173) message when the document is also signed, rather than asking a second question for the same write |
 | This document is also certified as closed to changes; overwriting it will invalidate that certification too. | Ce document est aussi certifié fermé aux modifications; l'écraser invalidera aussi cette certification. | #481, the certification twin of the note above |
-| The signature on this document doesn't carry over to the copy. | La signature de ce document ne sera pas reportée dans la copie. | #481: the quiet, once-per-open note on Save a copy for a signed document — the common, already-safe path still deserves to know the copy isn't signed |
-| ~~This document is signed~~ | ~~Ce document est signé~~ | #476, #481; **retired by #576** — it is the one place the desktop could be read as talking about the picture someone places with the Signatures tool. #602's rule: say *digital signature* where the document's own cryptographic signature is meant. Replaced by the row below |
-| This document has a digital signature | Ce document a une signature numérique | #476, #481, #576, #602: Save's warning before overwriting a signed original (ordinary/approval signature), desktop |
+| This document's digital signature doesn't carry over to the copy. | La signature numérique de ce document ne sera pas reportée dans la copie. | #481, #602: the quiet, once-per-open note on Save a copy for a signed document — the common, already-safe path still deserves to know the copy isn't signed |
+| ~~This document is signed~~ | ~~Ce document est signé~~ | #476, #481; **retired by #602, and #576 arrived at the same replacement independently** — it was the one place the desktop could be read as talking about the picture someone places with the Signatures tool. #602's rule: say *digital signature* where the document's own cryptographic signature is meant |
+| This document has a digital signature | Ce document porte une signature numérique | #476, #481, #602: Save's warning before overwriting a signed original (ordinary/approval signature), desktop. Says *digital signature* so the title cannot be read as "you have signed this" in a session where the user also placed a signature from the library |
 | Saving will leave that signature invalid. MegaPDF rewrites the whole file when it saves, so the signature no longer describes the file it signed, and no way of saving can keep it valid. Save a copy to keep the signed original intact. | L'enregistrement rendra cette signature invalide. MegaPDF réécrit le fichier au complet lorsqu'il enregistre&nbsp;: la signature ne décrit donc plus le fichier qu'elle a signé, et aucune façon d'enregistrer ne peut la garder valide. Enregistrez une copie pour garder l'original signé intact. | #476, #481, #576: it says the save breaks the signature and that nothing can prevent it — #476 is closed as an accepted, permanent limitation, so "no way of saving" is a fact rather than a hedge |
-| This document has a digital signature certifying it against changes | Ce document a une signature numérique qui le certifie contre toute modification | #476, #481, #576: shown instead of the row above when the signature carries a /DocMDP certification — measured as the common case, not the rare one, on real signed documents (33/33 of #476's corpus) |
-| This document's signature certifies it — its author declared that it should not be changed at all. Saving will leave that signature invalid: MegaPDF rewrites the whole file when it saves, so the signature no longer describes the file it signed, and no way of saving can keep it valid. Save a copy to keep the signed original intact. | La signature de ce document le certifie — son auteur a déclaré qu'il ne devait subir aucune modification. L'enregistrement rendra cette signature invalide&nbsp;: MegaPDF réécrit le fichier au complet lorsqu'il enregistre, la signature ne décrit donc plus le fichier qu'elle a signé, et aucune façon d'enregistrer ne peut la garder valide. Enregistrez une copie pour garder l'original signé intact. | #476, #481, #576 |
+| This document is certified against changes | Ce document est certifié contre toute modification | #476, #481, #602: shown instead of the row above when the signature carries a /DocMDP certification — measured as the common case, not the rare one, on real signed documents (33/33 of #476's corpus) |
+| This document's digital signature certifies it — its author declared that it should not be changed at all. Saving will leave that signature invalid: MegaPDF rewrites the whole file when it saves, so the signature no longer describes the file it signed, and no way of saving can keep it valid. Save a copy to keep the signed original intact. | La signature numérique de ce document le certifie — son auteur a déclaré qu'il ne devait subir aucune modification. L'enregistrement rendra cette signature invalide&nbsp;: MegaPDF réécrit le fichier au complet lorsqu'il enregistre, la signature ne décrit donc plus le fichier qu'elle a signé, et aucune façon d'enregistrer ne peut la garder valide. Enregistrez une copie pour garder l'original signé intact. | #476, #481, #576, #602 |
 | Signed on {0}. | Signé le {0}. | #576: names the signature by the date it records — the signer's own stated date, not converted to the reader's timezone, because a signature says when its signer thought they signed. Present on 33 of 33 of #476's real signed documents |
 | The signer gave this reason: “{0}” | Le signataire a donné cette raison&nbsp;: «&nbsp;{0}&nbsp;» | #576: the signature's own /Reason, in the signer's words — frequently the most identifying thing a document says about its signature, and present on 33 of 33 of #476's. Long: the real ones run to 86 and 118 characters |
 | This document has {0} digital signatures. | Ce document a {0} signatures numériques. | #576: said instead of naming one, when there is more than one — naming "the signature" beside four would name the first and imply it is the only one |
 | Also remove the signature, which will no longer be valid | Supprimer aussi la signature, qui ne sera plus valide | #576: Dave's tick in the dialog body rather than a fourth button, ticked by default. His own sketch said "the invalid signature"; before the save that invalidates it the tense is wrong, which is the only change from his wording. *Supprimer*, not *retirer*: the same verb the app uses everywhere else for removing something |
 | Left in, it travels with the file being saved and goes on claiming to describe a file it no longer describes, so MegaPDF and other readers report that file as signed. The document you opened is not changed either way — this reaches only the file being written. And a digital signature says a file has not changed since it was signed: it has never kept anyone from opening this document, so a file saved without it is readable by exactly the same people. | Si elle reste, elle suit le fichier enregistré et continue d'affirmer qu'elle décrit un fichier qu'elle ne décrit plus&nbsp;: MegaPDF et les autres lecteurs présenteront donc ce fichier comme signé. Le document que vous avez ouvert n'est modifié dans aucun cas — ce choix ne touche que le fichier enregistré. Et une signature numérique indique qu'un fichier n'a pas changé depuis sa signature&nbsp;: elle n'a jamais empêché qui que ce soit d'ouvrir ce document, alors un fichier enregistré sans elle est lisible par exactement les mêmes personnes. | #576, #602: what the tick means. Three things it must keep saying — the original file is untouched, the choice reaches only the file being written, and a digital signature is not encryption and never was. No *protégé*, *sécurisé*, *verrouillé* or *chiffré* anywhere near it: those belong to the password feature |
 | ~~The signature on the original doesn't carry over to this copy.~~ | ~~La signature de l'original ne s'applique pas à cette copie.~~ | #476, #481; **retired by #576, as untrue rather than as a rewording.** The signature dictionary does carry over — `FPDF_SaveAsCopy` re-serialises it, measured on 98 of 98 saved files in #476 §5a, and confirmed for #576 with poppler's `pdfsig` on a real GPO document: the copy is still listed as signed, byte ranges and all. Only the validity does not carry over |
+| ~~The original's digital signature doesn't carry over to this copy.~~ | ~~La signature numérique de l'original ne s'applique pas à cette copie.~~ | #602's rewording of the row above, **retired by #576 for the same reason the row above is: it is not true.** The signature dictionary does carry over — `FPDF_SaveAsCopy` re-serialises it, measured on 98 of 98 saved files in #476 §5a and confirmed for #576 with poppler's `pdfsig` on a real GPO document, which still lists the copy as signed. #602 made the sentence clearer without knowing it was false; only the *validity* fails to carry over |
 | The copy carries the original's digital signature, and it is no longer valid. | La copie porte la signature numérique de l'original, et celle-ci n'est plus valide. | #476, #481, #576: said once, quietly, after a Save a copy that kept the signature — never a dialog to dismiss |
 | Saved without the document's digital signature. The document you opened is unchanged. | Enregistré sans la signature numérique du document. Le document que vous avez ouvert est inchangé. | #576: said once, quietly, after a save that removed the signature. It repeats that the opened document is untouched, because that is the promise the tick made |
 | Change this page? | Modifier cette page? | #139, title of the warning below |
@@ -266,11 +315,11 @@ Conventions (OQLF, Canadian French):
 | This form is designed to be filled in using Adobe Reader. MegaPDF can't fill it in, but you can still view, save, share and export it. | Ce formulaire est conçu pour être rempli avec Adobe Reader. MegaPDF ne peut pas le remplir, mais vous pouvez quand même le consulter, l'enregistrer, le partager et l'exporter. | #456/#457, the banner's body — says plainly what still works, rather than implying the document is unusable |
 | Get Adobe Reader | Obtenir Adobe Reader | #456/#457, the banner's link — the same address (adobe.com/go/reader_download) the form's own placeholder page names |
 | This form can only be filled in using Adobe Reader. | Ce formulaire ne peut être rempli qu'avec Adobe Reader. | #456/#457, shown when Sign or Add text is armed on a dynamic-XFA document: explains rather than silently doing nothing |
-| This will invalidate the signature | Ceci invalidera la signature | #476/#481, the overwrite-warning dialog's title for an ordinary (non-certification) signature — asked only at the point of Save, never a banner on open |
+| This will invalidate the digital signature | Ceci invalidera la signature numérique | #476/#481/#602, the overwrite-warning dialog's title for an ordinary (non-certification) signature — asked only at the point of Save, never a banner on open |
 | MegaPDF rewrites the whole file when it saves, so the document's digital signature will no longer verify once you save here. Save a copy instead to leave the signed original untouched. | MegaPDF réécrit le fichier au complet lors de l'enregistrement, donc la signature numérique du document ne sera plus valide une fois que vous aurez enregistré ici. Enregistrez plutôt une copie pour laisser l'original signé intact. | #476/#481, the ordinary case's body — Save a copy is offered as the prominent, already-safe choice |
 | This document does not allow changes | Ce document n'autorise aucune modification | #476/#481, the certification (/DocMDP) case's title — stronger wording: a DocMDP permission can forbid modification outright, not merely be invalidated by it. Measured as the common case on real signed documents (33/33 in the #476 corpus), not the edge case |
-| This document was certified not to be modified — its author declared that no changes are allowed at all. Saving here will break that certification as well as the signature. Save a copy instead to leave the signed original untouched. | Ce document a été certifié comme ne pouvant être modifié — son auteur a déclaré qu'aucune modification n'est permise. L'enregistrer ici brisera cette certification en plus de la signature. Enregistrez plutôt une copie pour laisser l'original signé intact. | #476/#481, the certification case's body |
-| Saved. The signature doesn't carry over to a copy. | Enregistré. La signature ne se transfère pas à une copie. | #476/#481, shown once and quietly after Save a copy of a signed document — the signed original is untouched, but the new copy is not itself signed either |
+| This document was certified not to be modified — its author declared that no changes are allowed at all. Saving here will break that certification as well as the digital signature. Save a copy instead to leave the signed original untouched. | Ce document a été certifié comme ne pouvant être modifié — son auteur a déclaré qu'aucune modification n'est permise. L'enregistrer ici brisera cette certification en plus de la signature numérique. Enregistrez plutôt une copie pour laisser l'original signé intact. | #476/#481, the certification case's body |
+| Saved. The digital signature doesn't carry over to a copy. | Enregistré. La signature numérique ne se transfère pas à une copie. | #476/#481/#602, shown once and quietly after Save a copy of a signed document — the signed original is untouched, but the new copy is not itself signed either |
 | Reading mode | Mode lecture | #168 decision 1 / #505 — the name on every platform. Not *Mode de lecture*: the shorter form is what the View menu and the mobile More menus carry, and it matches Acrobat's and Word's French |
 | Enter Full Screen / Exit Full Screen | Activer le mode plein écran / Désactiver le mode plein écran | #505, the View menu item — macOS's own French for this item, so it reads as the system's rather than as ours |
 | Reading mode on / Reading mode off | Mode lecture activé / Mode lecture désactivé | #505, announced to a screen reader on entering and leaving |

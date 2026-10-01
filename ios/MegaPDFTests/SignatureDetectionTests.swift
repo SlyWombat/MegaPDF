@@ -141,7 +141,7 @@ final class SignatureDetectionViewerModelTests: XCTestCase {
 
         XCTAssertNil(model.notice)
         _ = await model.exportFile(named: "copy.pdf")
-        XCTAssertEqual(model.notice, String(localized: "The signature on this document doesn't carry over to the copy."))
+        XCTAssertEqual(model.notice, String(localized: "This document's digital signature doesn't carry over to the copy."))
 
         // `showNotice` clears itself after four seconds (ViewerModel.showNotice) -- waited
         // out here so the second export's silence is distinguishable from the first

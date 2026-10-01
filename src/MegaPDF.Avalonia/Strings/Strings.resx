@@ -768,19 +768,19 @@
   </data>
   <data name="SignedSaveWarningTitle" xml:space="preserve">
     <value>This document has a digital signature</value>
-    <comment>#476, #481: Save's confirmation before overwriting a signed original (ordinary/approval signature). #602: "a digital signature", never bare "signed" — the app's own Signatures feature places a picture of a name, and these two sentences can appear in the same session</comment>
+    <comment>#476, #481, #602: Save's confirmation before overwriting a signed original (ordinary/approval signature). Says "digital signature", never bare "signed", so it cannot be read as "you have signed this" in a session where the user also placed a signature from the library</comment>
   </data>
   <data name="SignedSaveWarningBody" xml:space="preserve">
     <value>Saving will leave that signature invalid. MegaPDF rewrites the whole file when it saves, so the signature no longer describes the file it signed, and no way of saving can keep it valid. Save a copy to keep the signed original intact.</value>
     <comment>#476, #481, #576: it says the save breaks the signature and that nothing can prevent that (#476 is closed as an accepted, permanent limitation). The steer to Save a copy is in the buttons, not here</comment>
   </data>
   <data name="CertifiedSaveWarningTitle" xml:space="preserve">
-    <value>This document has a digital signature certifying it against changes</value>
-    <comment>#476, #481: shown instead of SignedSaveWarningTitle when the signature carries a /DocMDP certification — measured as the common case, not the rare one, on real signed documents</comment>
+    <value>This document is certified against changes</value>
+    <comment>#476, #481, #602: shown instead of SignedSaveWarningTitle when the signature carries a /DocMDP certification — measured as the common case, not the rare one, on real signed documents. The title states the certification, which nothing in the Signatures feature claims; the body names the digital signature</comment>
   </data>
   <data name="CertifiedSaveWarningBody" xml:space="preserve">
-    <value>This document's signature certifies it — its author declared that it should not be changed at all. Saving will leave that signature invalid: MegaPDF rewrites the whole file when it saves, so the signature no longer describes the file it signed, and no way of saving can keep it valid. Save a copy to keep the signed original intact.</value>
-    <comment>#476, #481, #576</comment>
+    <value>This document's digital signature certifies it — its author declared that it should not be changed at all. Saving will leave that signature invalid: MegaPDF rewrites the whole file when it saves, so the signature no longer describes the file it signed, and no way of saving can keep it valid. Save a copy to keep the signed original intact.</value>
+    <comment>#476, #481, #576, #602</comment>
   </data>
   <data name="SignedSaveSignedOn" xml:space="preserve">
     <value>Signed on {0}.</value>

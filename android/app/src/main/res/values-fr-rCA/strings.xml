@@ -117,11 +117,11 @@
     <string name="dynamic_xfa_fill_notice">Ce formulaire ne peut être rempli qu\'avec Adobe Reader.</string>
 
     <!-- Signature numérique (#476/#481) -->
-    <string name="signed_overwrite_title">Ceci invalidera la signature</string>
+    <string name="signed_overwrite_title">Ceci invalidera la signature numérique</string>
     <string name="signed_overwrite_body">MegaPDF réécrit le fichier au complet lors de l\'enregistrement, donc la signature numérique du document ne sera plus valide une fois que vous aurez enregistré ici. Enregistrez plutôt une copie pour laisser l\'original signé intact.</string>
     <string name="signed_overwrite_title_certified">Ce document n\'autorise aucune modification</string>
-    <string name="signed_overwrite_body_certified">Ce document a été certifié comme ne pouvant être modifié — son auteur a déclaré qu\'aucune modification n\'est permise. L\'enregistrer ici brisera cette certification en plus de la signature. Enregistrez plutôt une copie pour laisser l\'original signé intact.</string>
-    <string name="signed_copy_notice">Enregistré. La signature ne se transfère pas à une copie.</string>
+    <string name="signed_overwrite_body_certified">Ce document a été certifié comme ne pouvant être modifié — son auteur a déclaré qu\'aucune modification n\'est permise. L\'enregistrer ici brisera cette certification en plus de la signature numérique. Enregistrez plutôt une copie pour laisser l\'original signé intact.</string>
+    <string name="signed_copy_notice">Enregistré. La signature numérique ne se transfère pas à une copie.</string>
 
     <!-- Added text -->
     <string name="add_text">Ajouter du texte</string>

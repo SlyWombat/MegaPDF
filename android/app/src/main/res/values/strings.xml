@@ -136,15 +136,18 @@
          overwriting a signed original warns at the point of Save rather than on open, and
          steers to Save a copy, which is already safe (the signed original is untouched).
          Nothing is refused: overwriting is still offered, one deliberate tap away. -->
-    <string name="signed_overwrite_title">This will invalidate the signature</string>
+    <string name="signed_overwrite_title">This will invalidate the digital signature</string>
     <string name="signed_overwrite_body">MegaPDF rewrites the whole file when it saves, so the document\'s digital signature will no longer verify once you save here. Save a copy instead to leave the signed original untouched.</string>
     <!-- The stronger case (#481): a certification (/DocMDP) signature can forbid modification
-         outright, not merely be invalidated by it — the common case on real signed documents. -->
+         outright, not merely be invalidated by it — the common case on real signed documents.
+         #602: where this is the document's own cryptographic signature, the words are
+         "digital signature", never bare "signature" — the Signatures feature places a
+         picture of a name and must not be confused with it. -->
     <string name="signed_overwrite_title_certified">This document does not allow changes</string>
-    <string name="signed_overwrite_body_certified">This document was certified not to be modified — its author declared that no changes are allowed at all. Saving here will break that certification as well as the signature. Save a copy instead to leave the signed original untouched.</string>
+    <string name="signed_overwrite_body_certified">This document was certified not to be modified — its author declared that no changes are allowed at all. Saving here will break that certification as well as the digital signature. Save a copy instead to leave the signed original untouched.</string>
     <!-- Shown once, quietly, after Save a copy of a signed document (#481): the copy is not
          itself signed, but the original this came from was never touched. -->
-    <string name="signed_copy_notice">Saved. The signature doesn\'t carry over to a copy.</string>
+    <string name="signed_copy_notice">Saved. The digital signature doesn\'t carry over to a copy.</string>
 
     <!-- Added text -->
     <string name="add_text">Add text</string>

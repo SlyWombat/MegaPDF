@@ -626,10 +626,10 @@ public static partial class Strings
     /// <summary>Saving will leave that signature invalid. MegaPDF rewrites the whole file when it saves, so the signature no longer describes the file it signed, and no way of saving can keep it valid. Save a copy to keep the signed original intact.</summary>
     public static string SignedSaveWarningBody => Get("SignedSaveWarningBody");
 
-    /// <summary>This document has a digital signature certifying it against changes</summary>
+    /// <summary>This document is certified against changes</summary>
     public static string CertifiedSaveWarningTitle => Get("CertifiedSaveWarningTitle");
 
-    /// <summary>This document's signature certifies it — its author declared that it should not be changed at all. Saving will leave that signature invalid: MegaPDF rewrites the whole file when it saves, so the signature no longer describes the file it signed, and no way of saving can keep it valid. Save a copy to keep the signed original intact.</summary>
+    /// <summary>This document's digital signature certifies it — its author declared that it should not be changed at all. Saving will leave that signature invalid: MegaPDF rewrites the whole file when it saves, so the signature no longer describes the file it signed, and no way of saving can keep it valid. Save a copy to keep the signed original intact.</summary>
     public static string CertifiedSaveWarningBody => Get("CertifiedSaveWarningBody");
 
     /// <summary>Signed on {0}.</summary>

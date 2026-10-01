@@ -2705,12 +2705,30 @@ internal static class Program
             vm.SaveCommand.Execute(null);
             PumpUntil(() => window.SignedSaveAsked > 0, TimeSpan.FromSeconds(5));
             MenuProbe.Pump();
-            check("a certified document says its author declared it closed to changes",
-                  asked?.Title.Contains("certifying", StringComparison.OrdinalIgnoreCase) == true
-                  && asked.Body.Contains("certifies it", StringComparison.OrdinalIgnoreCase));
+            // The title states the certification and the body names the digital signature
+            // (#602): "certified" is a word the Signatures feature never claims, so the
+            // title does not have to carry the noun as well, and stays one line.
+            check($"a certified document's title states the certification (\"{asked?.Title}\")",
+                  asked?.Title.Contains("certified", StringComparison.OrdinalIgnoreCase) == true);
+            check("  and its body says the author declared it closed to changes, naming the "
+                  + "digital signature",
+                  asked?.Body.Contains("digital signature certifies it", StringComparison.OrdinalIgnoreCase) == true
+                  && asked.Body.Contains("should not be changed at all", StringComparison.OrdinalIgnoreCase));
+            check("  and still says no way of saving can keep the signature valid",
+                  asked?.Body.Contains("no way of saving", StringComparison.OrdinalIgnoreCase) == true);
             check("  and still offers the removal, with the same promises",
                   asked?.RemoveTicked == true
                   && asked.RemoveOffer.Contains("not changed", StringComparison.OrdinalIgnoreCase));
+            // The certified case is the one real signed documents hit (#476: 33 of 33), so
+            // it is held to the same rule as the approval case: nothing in it may be read
+            // as the document being encrypted or protected.
+            var certifiedText = $"{asked?.Title} {asked?.Signature} {asked?.Body} "
+                                + $"{asked?.RemoveLabel} {asked?.RemoveOffer}";
+            var certifiedFound = new[] { "encrypt", "password", "protect", "secure", "lock", "unlock" }
+                .Where(w => certifiedText.Contains(w, StringComparison.OrdinalIgnoreCase)).ToList();
+            check($"  and nothing in it can be read as the document being encrypted or protected "
+                  + $"({(certifiedFound.Count == 0 ? "no such word" : string.Join(", ", certifiedFound))})",
+                  certifiedFound.Count == 0);
             window.SkipCloseConfirmation();
             window.Close();
             MenuProbe.Pump();
