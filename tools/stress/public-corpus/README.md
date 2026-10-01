@@ -35,8 +35,8 @@ marker even in this mode, which failed — harmlessly, since the shell does not 
 
 As of 2026-10-01 (#609) it holds **1,494 of the manifest's 1,777 rows, 4.3 GB** — the UK
 forms and the seven very large documents were staged on Dave's decision, 112 of the 115
-arrived, and three `uk-hmrc` rows are #625. The remaining 280 are the `wiki-*` non-Latin
-rows, deferred by decision.
+arrived. The remaining 283 are stated exclusions: 280 `wiki-*` non-Latin rows deferred by
+decision, plus 3 `uk-hmrc` rows HMRC has made permanently unfetchable (#625 — see below).
 
 ## Saying what is staged, and what is deliberately not (#609)
 
@@ -61,12 +61,37 @@ per source that is meant to be missing:
     # one <manifest source> TAB <reason> per line; '#' comments
     wiki-ar	non-Latin (Arabic): deferred by Dave decision, 2026-10-01 (#609)
     wiki-he	non-Latin (Hebrew): deferred by Dave decision, 2026-10-01 (#609)
+    uk-hmrc	3 of 62 rows permanently unavailable (#625): P53_0622.pdf/P55_2025.pdf retired by HMRC (online-only claim service now), VAT2.pdf's URL 302s to guidance instead of a PDF; confirmed 2026-10-01, reproducible on every edge, UA and HTTP version tried. The other 59 uk-hmrc rows are unaffected.
+
+Each line is a single record — a wrapped reason like the one above has to stay on one
+line in the real file; it is only wrapped here for the README's own line length.
 
 Those rows are then reported as a recorded decision, with the reason, in every battery
 summary; everything else absent is reported as "NOT accounted for", by source. Nothing
 about coverage gates a battery — a partial corpus is a fact about the machine, not a
 regression in the code under test, and a battery that refused to run on a partial corpus
 would simply stop being run, which is how a reporting problem turns into a testing one.
+
+**Why #625 is an exclusion, not a re-pin.** The obvious alternative — rebuild the manifest
+over `uk-hmrc` so the three sha256s match whatever HMRC serves now — only works if HMRC is
+still serving a PDF of the same form at that URL (a reissue, the way `wiki-*`'s PDF export
+re-renders the same article). It is not: P53 and P55 are retired (their guidance pages are
+now online-only, no PDF mentioned at all), and VAT2's own guidance page still *advertises*
+the same URL as a PDF download but the URL itself redirects away from one. There is no
+current PDF at any of the three URLs to re-pin to, so re-hashing is not available as an
+option today. If HMRC later serves a real, stable PDF at these URLs again, re-pin with
+`build-manifest.py` then and drop the three rows from the exclusions file; until then they
+are permanently unavailable, not merely momentarily so, and the manifest keeps the sha256
+of the form HMRC actually published rather than a hash of a redirect target.
+
+**Note on granularity.** The exclusion file keys on `<source>`, not on an individual
+`path`, so the `uk-hmrc` line above only ever subtracts rows that are *actually* absent
+from a given corpus directory — the 59 other `uk-hmrc` rows that are present are counted
+as present regardless of this line (see `corpus_coverage.sh`'s per-row logic: a row present
+on disk is never routed through the exclusion check). The cost is that a *different*,
+unrelated `uk-hmrc` row going missing later would also be silently covered by this same
+reason string. That is a pre-existing limitation of the one-reason-per-source shape, not
+something #625 changes.
 
 ## Network reality — two different machines, two different answers
 
