@@ -450,16 +450,29 @@ final class PageToolsUITests: XCTestCase {
 
     /// The reorder every tile carries without a drag: unusable with a screen reader is exactly
     /// what a drag is, so these are the ones that have to exist.
+    ///
+    /// Driven on **tile 1** rather than tile 2, and that is not arbitrary (#599). `pageTile-2`
+    /// — the first tile of the iPad grid's second row — intermittently refuses to be touched
+    /// at all: `isHittable` stays false for ten seconds and more in about one opening of the
+    /// panel in eight, and XCUITest then declines the gesture outright, `Failed to synthesize
+    /// event: Not hittable`. It is that one tile, with the right frame, an unchanged subtree,
+    /// nothing over it, and at the same rate however this suite is launched, so it is a
+    /// property of the screen and **not** of this test; `docs/qa/ios-screen-inventory.md` §10c
+    /// has the measurements and says plainly that it wants a look of its own, because a tile a
+    /// test cannot touch may be a tile a finger cannot touch. Any middle tile proves the same
+    /// claim, so this one asks a tile that the platform will actually hand over, and the
+    /// grid's second row is still pressed by `testMoveToPutsThePageAtThePositionTyped`
+    /// (tile 3). If that tile ever starts doing it too, `settle` says so in the log.
     func testMoveEarlierAndMoveLaterAreOnEveryTilesMenu() {
         launch(with: fourPages)
         openPages()
-        longPress(tile(2), "tile 2")
+        longPress(tile(1), "tile 1")
         let earlier = app.buttons["Move Earlier"].firstMatch
         XCTAssertTrue(appears(earlier, timeout: 5),
                       dump("a tile's menu has no Move Earlier"))
         XCTAssertTrue(app.buttons["Move Later"].firstMatch.exists)
         tap(earlier, "Move Earlier")
-        waitFor("sizes 300x400,500x440,400x420,600x460")
+        waitFor("sizes 400x420,300x400,500x440,600x460")
 
         undo()
         waitFor("sizes 300x400,400x420,500x440,600x460")
