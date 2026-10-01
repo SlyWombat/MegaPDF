@@ -1,7 +1,7 @@
 # Windows Store screenshots — capture harness
 
 Drives the installed MegaPDF package from WSL (via `powershell.exe`) with UI
-Automation and synthetic input, and captures the four screenshots the Microsoft
+Automation and synthetic input, and captures the seven screenshots the Microsoft
 Store listing uses. The iOS and Android equivalents run in CI
 (`.github/workflows/ios-screenshots.yml`, `android/scripts/capture-screenshots.sh`);
 this one needs a real Windows desktop, so it runs locally.
@@ -24,46 +24,76 @@ PowerShell, but `Click-InShot`, `^o` and the pickers work (2026-09-13).
 ## Run order
 
 `Shoot-Set.ps1 -Lang <en-US|fr-CA|fr-FR> -Dir <en|fr-CA|fr-FR>` runs the whole
-sequence below for one language: it refuses unless the installed package is the
-version to be shot (2.0.0.0 by default), and afterwards it moves the probe and
-in-between frames into `work/`, so the language folder holds only the six listing
-images `tools/capture-gate` reads (`gate.py --store microsoft artifacts/store/screenshots`).
-It produced the 2.0 set. The steps, one at a time:
+sequence for one language: it refuses unless the installed package is the version
+to be shot, and afterwards it moves the probe and in-between frames into `work/`,
+so the language folder holds only the seven listing images `tools/capture-gate`
+reads (`gate.py --store microsoft artifacts/store/screenshots`).
 
-Each script drives one step against the already-running app, so you can inspect
-the result before continuing. Paths must be **Windows** paths. The whole set is
-shot once per listing language: `en-US`, `fr-CA`, `fr-FR`.
+**The seven slots, re-cut for 2.2 (#613):** reading, text, sign, pages, search,
+redact, home. Dave settled the order — *"Redaction and whiteout are minor features
+that move to the back, signing, editing and reading are common features"* — and
+reading replaced the old front slot rather than joining it. On Windows that retired
+`checkbox`, `shrink` and `add-text` as well, which the approved list did not say,
+because it was drawn up against the Mac set; see `docs/microsoft-store-listing.md`
+§ Screenshots. The retired three are still shot, into `work/`.
 
-    # 0. staging documents, per language (regenerate before EVERY re-shoot — see below)
+It runs in three phases, each a fresh launch, and `-Step` runs one at a time while
+coordinates are being read off the probes:
+
+- **`agreement`** — slots 2 (text), 3 (sign) and 6 (redact), on the one-page
+  agreement, in the order the story happens on it.
+- **`terms`** — slots 4 (pages), 5 (search) and 1 (reading), on `rental-terms.pdf`.
+  Reading is last because it is the one state that takes the whole window.
+- **`home`** — slot 7, a fresh launch with no document and a posed recents list.
+
+    # 0. the display at 150 %, in its OWN powershell process
+    .\Set-Scale.ps1 150
+
+    # 1. staging documents, per language (regenerate before EVERY re-shoot — see below)
     python3 tools/screenshots-windows/gen_store_docs.py <repo>\artifacts\store\screenshots\fr-CA --lang fr-CA
 
-    # 1. the machine's state: the app's language, and a signature library of exactly one
-    .\Set-Language.ps1 -Lang fr-CA -Theme Light
-    .\Reset-SignatureLibrary.ps1
+    # 2. the whole set
+    .\Shoot-Set.ps1 -Lang fr-CA -Dir fr-CA -TileX1 82 -TileY1 527 -TileX2 223 -TileY2 527
 
-    # 2. launch, size the window, open the agreement at 100%
-    .\Setup-Frame.ps1 -W 2500 -T 1550 -Pdf "<repo>\artifacts\store\screenshots\fr-CA\blank-agreement.pdf" `
-                      -Fit "ActualSizeItem" -ZoomIn 0 -Name probe-frame
+    # ... and put the scale back
+    .\Set-Scale.ps1 200
 
-    # 3. shot 1 — click the misspelled name, retype it (caret must be visible)
-    .\Shot-TextEdit.ps1 -X 880 -Y 598 -Text "Nom : Helene Belanger"   # with the accents
+`Shoot-Set.ps1` sets the machine's state itself: `Set-Language.ps1` writes the
+language, the theme, page colours **Normal**, "open in reading mode" **off** and the
+first-run default-app card **dismissed** (a freshly installed package otherwise puts
+that card over the page in the first shot of every run, including reading mode,
+where it is the only chrome left and lands in the middle of the picture);
+`Reset-SignatureLibrary.ps1` replaces the signature library with the one MegaWoman
+entry; and `Shot-Home.ps1` poses `recent.json`. Each sets the machine's own version
+aside and `-Restore` puts it back.
 
-    # 4. shot 2 — commit the edit, tick two of the three boxes
-    .\Shot-Checkboxes.ps1 -X 787 -Y1 767 -Y2 819
+### The three documents
 
-    # 5. shot 3 — arm the signature, drop it on the line, let go of it
-    .\Open-SignatureFlyout.ps1        # once, to locate the library item
-    .\Arm-Signature.ps1 -Notches 0 -X 510 -Y 248
-    .\Place-Signature.ps1 -X 1022 -Y 1460
+`blank-agreement.pdf` and `scanned-agreement.pdf` are as they were.
+**`rental-terms.pdf` is new (#613):** twelve pages of the same company's terms,
+because three of the seven slots cannot be shot on a one-page form — reading mode's
+floating bar reads "1 / 1", the Pages pane shows a single tile instead of the grid
+Windows draws, and Find highlights one hit.
 
-    # 6. shot 5 — Add text with the size and face pickers showing (#43)
-    .\Shot-AddText.ps1 -X 1390 -Y 1420 -Text "18 mars 2026"
+All three are copied to a staging folder under **display names in the set's own
+language** before anything is shot (`D:\Documents\Rentals` in English,
+`D:\Documents\Locations` in French). Three places put a file name on camera — the
+title bar, the tab, and reading mode's floating bar — and the 2.0 and 2.1 sets
+shipped "blank-agreement.pdf" on their French images. The folder is on camera too,
+in the home slot's recents list, which is why it is a drive and two plain folders
+and never a user profile or OneDrive.
 
-    # 7. shot 4 — save, open the scan, Shrink for email (last: it replaces the document)
-    .\Shot-Shrink.ps1 -Pdf "<repo>\...\fr-CA\scanned-agreement.pdf" -Lang fr-CA
-    # 8. shot 6 — reopen the finished agreement, mark the name, save a redacted copy
-    .\Setup-Frame.ps1 -W 2500 -T 1550 -Pdf "<repo>\...\fr-CA\blank-agreement.pdf" -Fit "ActualSizeItem" -ZoomIn 0 -Name probe-frame-redact
-    .\Shot-Redact.ps1 -Lang fr-CA -Save -Y1 580 -Y2 616
+### Reading mode is the hard one
+
+`Shot-Reading.ps1`, and the reasoning is in its header. Four decisions: windowed
+and never F11 (full screen takes the title bar, which is the only thing left
+carrying the app's name, and changes the frame); the bar shown rather than faded;
+page colours left normal; and a page in the middle of a long document, so the bar
+has a position worth showing.
+
+It **asserts it arrived**, because the failure mode is silent: a Ctrl+H that did not
+land leaves an ordinary viewer shot under the reading slot's file name, and no gate
+can tell you an image is of the wrong screen.
 
 **Shoot at 100%, not at a fit.** "Fit page then one zoom in" landed on 109% in every
 shot, and a listing image with a number like that in the toolbar reads like an
@@ -168,6 +198,26 @@ belongs only to shot 1's story.
 
 ## Landmines, each one paid for
 
+- **A cursor warp is not a pointer move.** `SetCursorPos` puts the cursor somewhere;
+  it does not reliably raise WinUI's `PointerMoved`, and reading mode's floating bar
+  is raised by exactly that event. Measured 2026-10-01 on the 2.2 build: after the
+  bar had faded, three `SetCursorPos` warps into the page area left it faded, and
+  twelve injected `MOUSEEVENTF_MOVE` steps brought it straight back. `lib.ps1` has
+  `Waggle` for this; anything that needs the app to *notice* the pointer has to
+  waggle it, not teleport it.
+- **The reading bar's buttons go `Collapsed` when it fades**, two seconds after the
+  last pointer move. A UIA check for `ReadingExitButton` run after a two-second wait
+  therefore finds nothing and reports that reading mode did not engage while the
+  window is plainly in it. Raise the bar first, then look.
+- **Invoking a reading-bar button through UIA leaves keyboard focus on it**, and
+  WinUI paints that button's tooltip above the bar. The first dry run of the reading
+  slot put the words "Next page" in the middle of the listing image, with a focus box
+  round the page control beside it. Click the gutter to drop focus and wait for the
+  tooltip before the shot.
+- **A step that leaves a pane open contaminates the next one.** The first dry run's
+  `Shot-Pages.ps1` probe path returned without pressing F4 again, and the find shot
+  came back with the Pages pane in it.
+
 - **The desktop must be unlocked.** `CopyFromScreen` on a locked session returns
   pure black. `Shot` prints a mean pixel value — near 0 means you captured nothing.
 - **Never use ALT to take foreground.** It puts WinUI into access-key mode and
@@ -262,13 +312,18 @@ it keeps any hover state out of the frame.
 
 Screenshots must contain no real user data:
 
-- The **empty state lists the user's own recent documents by filename**, so never
-  shoot it. Open a document first. Width testing uses `ShotStrip`, which crops to
+- The **empty state lists the user's own recent documents by filename.** Since #613
+  it *is* a listing slot, and the only thing that makes it safe is
+  `Shot-Home.ps1`, which sets the machine's own `recent.json` aside and writes a
+  posed one holding nothing but the run's own staging documents. Mac and iOS have an
+  app-side fixture for this (`--screenshot-state home` fills the list from
+  `DemoContent.Recents`); Windows has none, so that script is the privacy control.
+  Nothing else shoots the empty state: width testing uses `ShotStrip`. Width testing uses `ShotStrip`, which crops to
   the toolbar and never photographs the page area at all.
 - The **signature library holds the user's real signature.** Place the
   `megawoman-sig` demo instead, and don't put the library flyout on camera.
 - The **file picker shows the user's folder tree.** Never call `Shot` with one open.
-- Delete every intermediate frame that catches any of the above; ship only the four.
+- Delete every intermediate frame that catches any of the above; ship only the seven.
 
 What a session leaves behind, all under `%LOCALAPPDATA%\MegaPDF\`: `recent.json`
 (write `[]` to clear), `Signatures\` (including anything added for the shoot), and

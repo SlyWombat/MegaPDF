@@ -86,9 +86,18 @@ STORES: dict[str, dict] = {
         # inside this floor passes; only the frame above is measured as a window.
         "min_size": (1366, 768),
         # Listing order is the file numbers (docs/microsoft-store-listing.md);
-        # the poses are the file names with the number taken off.
-        "order": ["edit-text", "checkbox", "signature", "shrink", "add-text", "redact"],
+        # the poses are the file names with the number taken off. Re-cut for 2.2
+        # (#613, Dave 2026-10-01): reading and the page tools are what the listing
+        # copy now opens with, redaction moves back, and reading replaces the old
+        # front slot rather than joining it. On Windows that retired `checkbox`,
+        # `shrink` and `add-text` as well, which the approved list did not say,
+        # because it was drawn up against the Mac set — see Shoot-Set.ps1. The
+        # three retired poses are still shot, into the set's work\ folder.
+        "order": ["reading", "text", "sign", "pages", "search", "redact", "home"],
         "parse": _pose(r"(?:\d+[-_])?(?P<pose>[a-z][a-z0-9-]*)\.png$"),
+        # Shoot-Set.ps1 files every probe and in-between frame here at the end of
+        # a run. They are the record of the run, not the set, and are not uploaded.
+        "not_listing_folders": ("work",),
         # Measured on the 2.0 set: the title bar is its own strip, rows 0–45;
         # the command bar is ink from about 57 to 104, labels beside their
         # icons; the page's top edge is at 153. Mica runs from the title bar
@@ -101,13 +110,47 @@ STORES: dict[str, dict] = {
         # every capture reads as a two-row toolbar.
         "toolbar": {"depth": 112, "fixed": True, "title_bar": 45, "gap": 4,
                     "rows": 1, "height": (40, 130),
-                    "rows_by_pose": {"search": 2}},
+                    "rows_by_pose": {"search": 2},
+                    # Reading mode (#504) collapses the busy strip, the toolbar
+                    # and the tab strip, so rows 45–112 of that capture are the
+                    # top of the page, not a toolbar band. There is no toolbar to
+                    # count rows in and nothing honest to compare the band's
+                    # height against, so the check stands down *by name* and says
+                    # why. That the chrome is gone is the picture itself and is
+                    # read by eye; the harness asserts it at capture time instead
+                    # (Shot-Reading.ps1 fails the step unless the toolbar's Open
+                    # button has left the automation tree altogether).
+                    "absent_in_poses": ("reading",)},
         "zoom": "100",
-        # Two poses show the inline editor open, and its focus underline is
+        # The zoom chip lives on the toolbar, so the poses with no toolbar have no
+        # chip to read, and the empty state has no document to be zoomed. Without
+        # this the check reports "no percentage found in the toolbar", which is a
+        # skip with a misleading reason rather than a known one.
+        "zoom_absent_poses": ("reading", "home"),
+        # Three poses show the inline editor open, and its focus underline is
         # drawn in the accent: that is the edit being shown, not a stray.
         "accent_poses": {"redact": ("banner", "mark"),
+                         "text": ("the inline editor's underline",),
                          "edit-text": ("the inline editor's underline",),
-                         "add-text": ("the inline editor's underline",)},
+                         "add-text": ("the inline editor's underline",),
+                         # New in 2.2 (#613). The Pages pane is a GridView, and a
+                         # selected tile is drawn with an accent border and an
+                         # accent fill behind its number — two tiles' worth, which
+                         # is a lot of accent for a pose that had none before.
+                         "pages": ("the selected page tiles",),
+                         # Find paints the current match in the accent and the
+                         # rest in a pale wash of it.
+                         "search": ("the current match",),
+                         # The recents list is HyperlinkButtons: the file names
+                         # are drawn in the accent, the way About's licence links
+                         # are on Linux.
+                         "home": ("the recent documents' links",),
+                         # Reading mode's floating bar is acrylic with no accent in
+                         # it, so this pose keeps the strict rule with nothing
+                         # allowed — which is worth having, because a selection or
+                         # an armed tool left on before Ctrl+H would survive into
+                         # the one capture with no chrome to notice it in.
+                         },
         # The app's own icon in the title bar is blue (about 400 px of accent
         # in every shot). Measured on the 2.0 set: a 24 px square at (13, 10).
         "accent_ignore": [(0, 0, 60, 45)],

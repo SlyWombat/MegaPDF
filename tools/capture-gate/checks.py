@@ -177,6 +177,14 @@ def toolbar(shot, profile) -> list[Finding]:
     if not _is_frame(shot, profile):
         return [_skip("toolbar", "not a full window — a crop has no toolbar to "
                                  "measure")]
+    # A pose whose whole point is that the chrome is gone (#504 reading mode).
+    # The band this check measures is then the top of the page, so counting rows
+    # of ink in it answers a different question from the one it is asking, and
+    # the honest verdict is a skip that says so rather than a pass or a flag.
+    if shot.pose in spec.get("absent_in_poses", ()):
+        return [_skip("toolbar", f"the {shot.pose} pose hides the toolbar on "
+                                 f"purpose, so the band at the top of this "
+                                 f"image is page, not chrome (#504)")]
     raster = im.gray(shot.path)
     end = shot.toolbar_end
     # A title bar of its own (Windows) sits above the commands and is not a
@@ -409,6 +417,13 @@ def zoom(shot, profile) -> list[Finding]:
         return [_skip("zoom", "this platform has no zoom control in the posed "
                               "screens — Android opens at 1f, which is both the "
                               "container width and MIN_ZOOM")]
+    # The chip is on the toolbar and reads the open document's zoom, so a pose
+    # with no toolbar (reading mode) or no document (the empty state) has no chip
+    # to read. Named in the profile, because "no percentage found in the toolbar"
+    # is the same words this check uses when a chip that should be there is not.
+    if shot.pose in profile.get("zoom_absent_poses", ()):
+        return [_skip("zoom", f"the {shot.pose} pose has no zoom chip to read — "
+                              f"no toolbar, or no document to be zoomed")]
     if not im.have("tesseract"):
         return [_skip("zoom", "needs tesseract to read the chip")]
     w, h = shot.size

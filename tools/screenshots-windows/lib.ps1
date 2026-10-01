@@ -240,6 +240,22 @@ function Click-InShot($h, $x, $y) {
     if ([Win]::DwmGetWindowAttribute($h, 9, [ref]$r, 16) -ne 0) { [Win]::GetWindowRect($h, [ref]$r) | Out-Null }
     Click-At ([int]($r.Left + $x)) ([int]($r.Top + $y))
 }
+# A real pointer move, injected, rather than a cursor warp.
+#
+# `SetCursorPos` puts the cursor somewhere; it does not reliably raise WinUI's
+# PointerMoved, and reading mode's floating bar is raised by exactly that event
+# (DocumentView.ReadingMode.cs wires DocumentAreaRoot.PointerMovedEvent to
+# ShowReadingBar). Measured on 2026-10-01 against the 2.2 build: after the bar had
+# faded, three SetCursorPos warps into the page area left it faded, and twelve
+# injected MOUSEEVENTF_MOVE steps brought it straight back. Anything that needs the
+# app to *notice* the pointer has to waggle it, not teleport it.
+function Waggle($steps = 12, $dx = 4) {
+    for ($i = 0; $i -lt $steps; $i++) {
+        [Win]::mouse_event(0x0001, [uint32]$dx, 0, 0, [IntPtr]::Zero)   # MOUSEEVENTF_MOVE, relative
+        Start-Sleep -Milliseconds 50
+    }
+}
+
 function Park($h) {
     $r = New-Object Win+RECT
     if ([Win]::DwmGetWindowAttribute($h, 9, [ref]$r, 16) -ne 0) { [Win]::GetWindowRect($h, [ref]$r) | Out-Null }
