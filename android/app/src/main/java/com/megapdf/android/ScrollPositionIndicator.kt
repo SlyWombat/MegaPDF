@@ -182,7 +182,7 @@ fun ScrollPositionIndicator(
         modifier = modifier
             .fillMaxHeight()
             .width(INDICATOR_WIDTH + 8.dp)
-            .padding(end = 3.dp, vertical = 8.dp)
+            .padding(top = 8.dp, end = 3.dp, bottom = 8.dp)
             .clearAndSetSemantics {},
     ) {
         Column(

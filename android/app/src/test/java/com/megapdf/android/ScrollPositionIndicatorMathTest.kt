@@ -99,7 +99,11 @@ class ScrollPositionIndicatorMathTest {
 
     @Test
     fun theThumbStartsAtTheTopForAnUnscrolledLongDocument() {
-        val total = 50 * letterHeightPx
+        // 10 pages, not 50: long enough to scroll (total well past the viewport) but short
+        // enough that the natural viewport/total ratio (~0.14) clears MIN_THUMB_FRACTION
+        // (0.04) — this test is about the top-of-document case, not the floor, which
+        // theThumbNeverShrinksBelowTheMinimumFractionOnAHugeDocument covers on its own.
+        val total = 10 * letterHeightPx
         val viewport = 2000f
         val thumb = scrollThumb(total, viewport, scrolledPastPx = 0f)
         requireNotNull(thumb)
