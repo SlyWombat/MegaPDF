@@ -868,9 +868,14 @@ note = "same as macOS."
 [feature.ios]
 presence = "present"
 entry = "ios/MegaPDF/ViewerView.swift::Label(\"Add text\""
-coverage = "engine"
-tests = ["ios/MegaPDFTests/AddTextTests.swift::class"]
-note = "geometry, style and round-trip at the engine; no UI test places a box."
+coverage = "ui"
+tests = [
+  "ios/MegaPDFTests/AddTextTests.swift::class",
+  "ios/MegaPDFTests/MultilineTextTests.swift::class",
+  "ios/MegaPDFUITests/MultilineTextUITests.swift::testTheFieldHandsBackANewlineForAReturnAndNotACarriageReturn",
+  ".github/workflows/ios-ci.yml::-only-testing:MegaPDFUITests/MultilineTextUITests",
+]
+note = "geometry, style and round-trip at the engine; size chips since #43 and multi-line splitting since #4, with the UI test reading the code points the field actually hands back for a Return — the thing Windows and Android each got wrong by assuming it. No UI test places a box."
 [feature.android]
 presence = "present"
 entry = "android/app/src/main/java/com/megapdf/android/ViewerScreen.kt::R.string.add_text"
@@ -946,10 +951,17 @@ area = "Filling in and marking up"
 about = """
 The row that made the case for this map. Android had no whiteout tool at all until #3/#4
 landed on 2026-09-30, while the issue that produced them discussed improving its chrome on
-four platforms. iOS still has none, and the comment that explains why
-(ios/MegaPDF/Engine/PdfEngine+Redaction.swift: \"iOS has no whiteout — mobile's feature set
-is fill, check, sign, find and add text\") describes a mobile feature set that Android no
-longer has."""
+four platforms — and iOS turned out to be in the same position a day later, with the same
+cause: the core functions had been there since contract 5 and were never bound.
+
+What made the iOS one harder to notice than a gap was that a code comment stated the absence
+as a design position — ios/MegaPDF/Engine/PdfEngine+Redaction.swift said \"iOS has no
+whiteout — mobile's feature set is fill, check, sign, find and add text\" — and that had
+already stopped being true when Android got one. A stale intent asserted as fact answers the
+question before anyone asks it. Both platforms have the tool now.
+
+The lesson this row exists for: when an issue says a feature needs improving on four
+platforms, check first that it exists on four platforms."""
 [feature.windows]
 presence = "present"
 entry = "src/MegaPDF.App/MainWindow.xaml::WhiteoutButton"
@@ -972,10 +984,11 @@ coverage = "ui"
 tests = ["tests/MegaPDF.Core.Tests/WhiteoutAndTextBoxTests.cs::Whiteout"]
 note = "same as macOS."
 [feature.ios]
-presence = "absent"
-coverage = "n/a"
-absence = "gap"
-note = "no whiteout tool. The reason given in the engine source is that mobile's feature set excludes it — which stopped being true when Android got one on 2026-09-30."
+presence = "present"
+entry = "ios/MegaPDF/ViewerView.swift::viewerWhiteout"
+coverage = "ui"
+tests = ["ios/MegaPDFTests/WhiteoutTests.swift::class"]
+note = "the whole lifecycle through the view model — arm, drag to place, tap to select, move, resize, remove, undo — plus the engine binding and both history operations (#3). The placement gesture is Redact's own drag, which no UI test drives on this platform either."
 [feature.android]
 presence = "present"
 entry = "android/app/src/main/java/com/megapdf/android/ViewerScreen.kt::R.string.whiteout"
@@ -1685,13 +1698,16 @@ tests = [
 ]
 [feature.ios]
 presence = "present"
-entry = "ios/MegaPDF/ViewerView.swift::busy"
-coverage = "engine"
+entry = "ios/MegaPDF/ViewerView.swift::busyStop"
+coverage = "ui"
 tests = [
   "ios/MegaPDFTests/BusyStateTests.swift::class",
   "ios/MegaPDFTests/NoticeLifetimeTests.swift::class",
+  "ios/MegaPDFTests/ProgressAndStopTests.swift::class",
+  "ios/MegaPDFUITests/ProgressStripUITests.swift::testAScanShowsItsCountAndCanBeStoppedFromTheStrip",
+  ".github/workflows/ios-ci.yml::-only-testing:MegaPDFUITests/ProgressStripUITests",
 ]
-note = "the timing state machine only; no UI test sees a busy strip or presses Stop."
+note = "the timing state machine, the progress and Stop layer, and a UI test that reads the count line and presses the Stop in a running app — which is how the Stop's hit area was found to be 15.7 points tall. Search has progress and Stop, extract has Stop, a save has neither on purpose (#145); shrink does not exist on this platform."
 [feature.android]
 presence = "present"
 entry = "android/app/src/main/java/com/megapdf/android/ViewerScreen.kt::BusyStopSnackbar"
