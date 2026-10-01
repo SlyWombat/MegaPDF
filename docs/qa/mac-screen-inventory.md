@@ -185,5 +185,4 @@ Use the review test form (`tools/gen_review_form.py`), the fixtures
 - The zoom −/+ stops include 67 %, the zoom **menu** presets do not, so the button can read "67%" with nothing ticked.
 - `--screenshot-state unsaved` opens the dialog **non-modally**, unlike the real flow.
 - Helvetica / Times / Courier are untranslated on purpose — they are brand names.
-- There is no About window and no Help menu on the Mac app.
 - Retina is out of scope for 2.0 (Dave, 2026-09-16): the Mac mini has a 1× display.

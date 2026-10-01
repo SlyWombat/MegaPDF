@@ -70,7 +70,7 @@ the second desktop is for is everything around the window — see §10.
 | 2.11 | **Rename signature** | Cancel / **Rename** | signature card ⋯ ▸ Rename… | real window | hands |
 | 2.12 | **Delete signature** | Cancel / Delete (danger) | signature card ⋯ ▸ Delete… | real window | hands |
 | 2.13 | **Print** — which printer, how many copies | Cancel / **Print** | Print, with a CUPS queue present | real window | hands; the CUPS route is §8 |
-| 2.14 | **About MegaPDF** — icon, version, copyright, GitHub link, Third-party notices… | — | Help ▸ About | `--screenshot-state about` | ✅ |
+| 2.14 | **About MegaPDF** — icon, version, copyright, GitHub link, Third-party notices… | — | toolbar **More** ▸ About MegaPDF (#571; nothing reached it before) | `--screenshot-state about` | ✅ |
 | 2.15 | **Third-party notices** — the licence text | — | About ▸ Third-party notices… | `--screenshot-state notices` | ✅ |
 
 ## 3. Menus
@@ -79,7 +79,7 @@ the second desktop is for is everything around the window — see §10.
 |---|---|---|---|
 | 3.1 | The menu bar — **built but not drawn on Linux** | File / Edit / View / Tools / Window / Help (`MainWindow.MenuBar.cs`) | ✅ the structure is asserted by `--self-test`; **no menu bar appears in the window** |
 | 3.2 | Every toolbar, More and zoom command reachable from it | 22 commands | ✅ asserted by `--self-test` |
-| 3.3 | **More** (•••) — Save As, Password…, Print, Shrink, Options, plus anything overflowed | | ✅ at 1280/1000/800/480 |
+| 3.3 | **More** (•••) — Save As, Password…, Print, Shrink, Options, About MegaPDF, plus anything overflowed | | ✅ at 1280/1000/800/480 |
 | 3.4 | Zoom menu — the presets, Fit width, Fit page, Actual size | | hands (the flyout is its own window) |
 | 3.5 | Signature card ⋯ — Rename…, Delete… | | hands |
 | 3.6 | Recent item context menu — Show in file manager | | hands |
@@ -89,7 +89,12 @@ the second desktop is for is everything around the window — see §10.
 `MainWindow.axaml` carries no `NativeMenuBar`, so `NativeMenu.SetMenu` builds a
 structure that `--self-test` can walk and that nothing draws. Every command in it is
 still reachable, because each one also has a toolbar button or an entry in
-`Window.KeyBindings` — see §3.1.
+`Window.KeyBindings` — see §3.1 — with one exception found and closed by #571: About
+MegaPDF lived only as the application menu's first item, which nothing on X11 hosts,
+and the third-party notices were reachable only from that unreachable About window.
+Both are in **More** now (§3.3, §2.14), the same place a Linux person already finds
+Options; the notices stay one click further in, from the About window's own button
+(§2.15), rather than a second More entry for the same licences.
 
 ## 3.1 Keyboard shortcuts
 

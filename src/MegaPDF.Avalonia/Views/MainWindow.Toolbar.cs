@@ -25,6 +25,11 @@ namespace MegaPDF.Avalonia.Views;
 /// contextual: they join the Tools group only while Add text is armed or an added
 /// text box is selected or being edited.
 ///
+/// More also carries About MegaPDF, but only off macOS (#571): the Mac already has it
+/// in the application menu, and a second route there would be a second place the same
+/// window could come from. Everywhere else it is the only route to the version number
+/// and, one click further through the About window, the third-party notices.
+///
 /// As the window narrows the row sheds detail in the Mac toolbar's order:
 ///
 ///   1. Full: icon over label, when every item fits.
@@ -341,6 +346,15 @@ public partial class MainWindow
             vm?.HasRedactionMarks == true, () => vm?.ClearRedactionMarksCommand.Execute(null)));
         entries.Add(new Separator());
         entries.Add(CommandEntry(Strings.Options, "IconOptions", OptionsGesture, true, ShowOptions));
+        // About MegaPDF, and from there the third-party notices (#571). On the Mac this
+        // lives in the application menu, which Avalonia exports to a real menu bar only
+        // there (see the NativeMenu note atop MainWindow.MenuBar.cs); on Linux nothing
+        // hosts that menu, so without this a person had no way to see which version they
+        // were running or to read the licences the app ships. More is where a Linux
+        // person already finds the app's other settings (Options, just above), which is
+        // why it lives here rather than inventing a new surface for it.
+        if (!OperatingSystem.IsMacOS())
+            entries.Add(CommandEntry(Strings.AboutMegaPDF, "IconInfo", null, true, () => App.ShowAbout()));
         return entries;
     }
 
