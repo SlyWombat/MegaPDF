@@ -212,3 +212,15 @@ class ImportPagesOperation(
         held = emptyList()
     }
 }
+
+/**
+ * The busy strip's label for this operation (#145): named for what it is doing rather than the
+ * generic [BusyLabel.APPLYING], the way the Mac and Windows passes named theirs
+ * (`BusyTurningPages`, `BusyDeletingPages`, …) once they gave every page tool a strip to report
+ * in at all. A pure mapping — no engine call, no busy state — so it is tested on the JVM rather
+ * than needing a device.
+ */
+val PdfEditOperation.busyLabel: BusyLabel
+    // STUB-FOR-RED (#145): not implemented yet — every page tool still reports the generic
+    // label. Restored to the real mapping in the next commit; see that diff for the real body.
+    get() = BusyLabel.APPLYING
