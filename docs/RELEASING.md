@@ -372,11 +372,22 @@ stays on edge. This is a click in the Snap Store dashboard's Releases tab, on
 Dave's snapcraft credentials, so it cannot be automated from here — do it after
 2.2's edge build above is verified, before the website `--snap` deploy step below.
 
-**Website** — after the go-lives, never before (`website/README.md` § Launch runbook):
-run the 200 check, `python3 website/deploy.py --dry-run --privacy`, then
-`--privacy` (with `--linux` once the APT repository is up, `--snap` once the snap is on
-**stable** — never while it is only on edge, or the page prints an install command that
-does not work).
+**Website** — after the go-lives, never before (`website/README.md` § Launch runbook).
+**A bare `deploy.py` downgrades the live site**: without `--linux` it takes `linux/`
+and `apt/` off the server and resolves every page back to "coming soon" — correct
+before Linux shipped, wrong now that it's live and linked from the landing page.
+`--linux` is therefore part of the command every release from here on, not an
+occasional extra. `--snap` cuts both ways too: add it only once the promotion above
+is done — the live page has no Snap section yet, so `--snap` before that links one
+that isn't there, and leaving it off after hides one that is. This deploy is also
+what fixes 2.2's Linux screenshots, renamed by #616: the new files 404 on the
+server until it runs. `--privacy` and `--support` stay opt-in as before;
+`--support` refuses without `--privacy` (#418 is Dave's, not shipped).
+
+```
+python3 website/deploy.py --dry-run --linux --privacy    # add --snap once promoted
+python3 website/deploy.py --linux --privacy              # add --snap once promoted
+```
 
 ## 4. Read-backs and close-out
 
