@@ -430,15 +430,31 @@ Three things to keep:
 - **It is a hosted-runner cost.** The same first test measures 14 s on our own Mac mini against
   98–105 s hosted. That is not the 2–4 % spread §10c records for the quiescence stalls: this one
   really is the machine, because it is I/O and first-launch services rather than a timeout.
-- **The remedy is a step, not a bigger number.** `ios-ci.yml` now boots, installs and launches
-  the app once on *both* simulators before any test runs. The iPad had never been booted at all,
-  which is why its lane was caught mid-"Opening…" where the iPhone's only timed out at launch.
+- **Warming the simulator does not fix it, and that is worth knowing.** Installing the app and
+  launching it once on both simulators was tried: on a hosted dispatch (36937838115) it cost
+  **10 m 22 s** and the first test of the iPhone lane still took **76.6 s**. Forty of the sixty
+  seconds above are XCTest's own *Setting up automation session*, which belongs to the test
+  runner and which `simctl` cannot touch. The install-and-launch half was removed again. What
+  stays is the **boot**, for both devices, because only the iPhone was ever booted here and
+  leaving the iPad's first boot inside its own lane's first assertion was a real gap.
+- **A budget is the wrong instrument, so the wait stops using one alone.** The same run measured
+  `testDeletingAPageAndUndoingItPutsThePageBack` at **530 s — passing**, against 98 s and 105 s
+  on two other hosted runners and 14 s on our own Mac. No single number is right for all four,
+  and picking one moves the threshold to the next slow runner (#515). `launch(with:)` now renews
+  its deadline for as long as the app is *actively reporting* `busyOpening`, up to a cap, and
+  fails in thirty seconds when it is not. A wedged app still fails fast, because a wedged app
+  stops saying "Opening…".
 - **Ask the app what it is doing before concluding it failed.** `busyOpening` was in the
   accessibility tree throughout, and reading it turns "the test document did not open" into "the
   app is still busy: Opening…". A wait that gives up should report the app's own answer, the way
   §10c's waits report how many times they looked.
 
-A related sighting from the same hour, **not diagnosed and not fixed**: on another hosted run
+**Hosted runner variance is the background to all of this**, and it is not the 2-4 % §10c
+records for the quiescence stalls. Across four hosted runs on 2026-10-01 the same test measured
+98 s, 105 s, 530 s and (on our Mac) 14 s. A hosted verdict is not comparable with another hosted
+verdict, which is worth remembering before reading two runs as a trend.
+
+Two sightings from the same hour, **neither diagnosed nor fixed**. The first: on another hosted run
 `SaveACopyExportUITests.testBothExportsPresentTheirSheetInOneSession` failed because the
 *second* system export sheet never appeared in thirty seconds. The activity log shows the
 document picker's own remote process answering `kAXErrorServerNotResponding` and "Error getting
@@ -446,6 +462,15 @@ main window" during the *first* export, and the app then non-idle for 24 s. That
 service not answering, on the same runner that was taking a minute to launch an app, so
 starvation is the likeliest common cause rather than a second app defect — but it is a guess
 until someone catches it again. It passed on re-run.
+
+The second, from the hosted dispatch above: `PageToolsUITests.testMoveToPutsThePageAtThe-
+PositionTyped` failed with *"the app never reported 'pages on' in **32 looks over 10 s** — it
+says 'pages off …'"*. Thirty-two looks is not a wait that was starved of attempts, and the app
+had not opened the panel at all, so the tap on the ⋯ menu's **Pages** row did not take. That is
+the same family as #634's lost taps, on a `Menu` rather than a tile's context menu, and on a
+runner that was taking 530 s for a neighbouring test. Recorded rather than fixed; the message it
+produced is the one #634's instrumentation exists for, and it says plainly that this is a lost
+event rather than a slow one.
 
 ## 11. Things that look like defects but are not
 
