@@ -373,6 +373,17 @@ gate on this platform (#570, and the section above), so no CI lane ever drove it
   first fast run failed with `Failed to synthesize event: Not hittable: Button, …, identifier:
   'pageTile-2'` — the sidebar puts its tiles in the tree as it *begins* sliding in, and the old
   waits had been covering that by accident. Wait for `isHittable` before a gesture.
+- **One tile intermittently will not call itself hittable, and it is worth a look of its
+  own.** Measured over twenty-four openings of the iPad sidebar, `pageTile-2` — the first tile
+  of the grid's second row — reports `isHittable == false` for ten seconds and more in about
+  one opening in eight. Its frame is right, its subtree is unchanged, nothing is over it, it is
+  only ever that one tile, and the rate is the same with the tile drag on (3 of 12) as off
+  (1 of 12), so it is not the test's doing. A gesture sent in that state usually lands —
+  `PageToolsUITests` pressed that tile twelve times out of twelve before #599 touched it — so
+  the suite treats hittability as a *settle* and lets XCUITest refuse the gesture itself if it
+  really must. **But a page tile that will not take a touch is a user's problem as well as a
+  test's**, and nothing here has yet looked at whether a finger on that tile is ignored too.
+  Found 2026-10-01 under #599; not diagnosed.
 - **`XCUIElement.waitForExistence` costs a flat second even when the element is already
   there.** Measured against the pages probe: 1.049 s asked for a one-second timeout, 1.067 s
   asked for thirty, against 0.021 s to read the same element through `snapshot()`. That is

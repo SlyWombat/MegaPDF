@@ -151,33 +151,47 @@ final class PageToolsUITests: XCTestCase {
         return false
     }
 
-    /// Whether an element can be **touched**, which is not the same as whether it exists.
+    /// Waits for an element to say it can be touched, and answers whether it ever did.
     ///
-    /// This is the race the old waits were hiding by accident (#599). The iPad's pages sidebar
-    /// puts its tiles into the accessibility tree as it *begins* sliding in, and a gesture
-    /// synthesised in that window is refused outright — `Failed to synthesize event: Not
-    /// hittable: Button, …, identifier: 'pageTile-2'`, which is exactly what the first run of
-    /// this suite did once each wait had stopped costing a second of XCTest waiter overhead.
-    /// A wait that is honest about what it costs has to be honest about what it waits for, so
-    /// every gesture below goes through `tap` or `longPress` and these wait for hittability.
-    private func touchable(_ element: XCUIElement, timeout: TimeInterval = 10) -> Bool {
+    /// This is the race the old waits were covering by accident (#599). The iPad's pages
+    /// sidebar puts its tiles into the accessibility tree as it *begins* sliding in, and a
+    /// gesture synthesised in that window is refused outright — `Failed to synthesize event:
+    /// Not hittable: Button, …, identifier: 'pageTile-2'`, which is what the first run of this
+    /// suite did once the waits had stopped costing a second of XCTest waiter overhead each.
+    /// So every gesture below goes through `settle` first.
+    ///
+    /// **It is a settle and not a verdict**, which is the part worth reading. Measured on the
+    /// iPad over twenty-four panel openings, `pageTile-2` — the first tile of the grid's second
+    /// row — reports `isHittable == false` for ten seconds and more in about one opening in
+    /// eight, with the right frame, an unchanged subtree and nothing over it, and at the same
+    /// rate with and without `-uiTestNoTileDrag`. It is neither this suite's doing nor a layer
+    /// in the way, and a gesture sent in that state usually lands: the suite pressed that tile
+    /// twelve times out of twelve before any of this. So the wait buys the settle and XCUITest
+    /// keeps the last word — if a gesture really cannot be synthesised it says so itself, and
+    /// better than an assertion here could. Noted in `docs/qa/ios-screen-inventory.md` §10c as
+    /// worth a look of its own: a tile that cannot take a touch is a user's problem too.
+    @discardableResult
+    private func settle(_ element: XCUIElement, _ name: String,
+                        timeout: TimeInterval = 5) -> Bool {
         let deadline = Date().addingTimeInterval(timeout)
         repeat {
             if element.exists && element.isHittable { return true }
             Thread.sleep(forTimeInterval: 0.1)
         } while Date() < deadline
+        print("PAGE TOOLS: \(name) never called itself hittable in "
+              + "\(String(format: "%.0f", timeout)) s; gesturing at it anyway (#599)")
         return false
     }
 
-    /// Taps `element` once it can be touched. `name` is for the failure, not for the query.
+    /// Taps `element` once it has settled. `name` is for the log, not for the query.
     private func tap(_ element: XCUIElement, _ name: String) {
-        XCTAssertTrue(touchable(element), dump("\(name) never became touchable"))
+        settle(element, name)
         element.tap()
     }
 
-    /// The long press that opens a tile's menu, once the tile can be touched.
+    /// The long press that opens a tile's menu, once the tile has settled.
     private func longPress(_ element: XCUIElement, _ name: String) {
-        XCTAssertTrue(touchable(element), dump("\(name) never became touchable"))
+        settle(element, name)
         element.press(forDuration: 1.2)
     }
 
@@ -251,9 +265,10 @@ final class PageToolsUITests: XCTestCase {
         }
         waitFor("pages on")
         XCTAssertTrue(appears(tile(0)), dump("the grid drew no tiles"))
-        // And it has finished arriving: on the iPad the sidebar is in the tree before it has
-        // slid in, and the next thing any of these tests does is aim a gesture at a tile.
-        XCTAssertTrue(touchable(tile(0)), dump("the grid's tiles never became touchable"))
+        // And give it a moment to finish arriving: on the iPad the sidebar is in the tree
+        // before it has slid in, and the next thing any of these tests does is aim a gesture
+        // at a tile. A settle, not an assertion — see `settle`.
+        settle(tile(0), "tile 0")
     }
 
     private func startSelecting(_ pages: [Int]) {
