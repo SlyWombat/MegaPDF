@@ -563,6 +563,27 @@ class PdfPage internal constructor(
         check(PdfiumNative.nativeRenderPage(handle, bitmap, tint.renderFlag)) { "render failed" }
     }
 
+    /**
+     * Renders ONE crop-space region of the page into [bitmap] (must be ARGB_8888), scaled to fill
+     * it — contract 7's `megapdf_render_clip` (#514, the reflow spike). Same recipe as [render]:
+     * white ground, content, live field values, then [tint].
+     *
+     * [rect] is crop space, the space every rectangle this engine reports is in, so a
+     * `megapdf_block`'s own bounds can be handed straight over. The rectangle is mapped onto the
+     * whole bitmap: size the bitmap in the rectangle's own proportions, or it stretches. A
+     * rectangle reaching past the page edge is legal; the uncovered part stays white.
+     */
+    suspend fun renderClip(bitmap: Bitmap, rect: PdfRect, tint: PageTint = PageTint.NORMAL): Unit =
+        withContext(engine.dispatcher) {
+            check(!closed) { "page is closed" }
+            require(bitmap.config == Bitmap.Config.ARGB_8888) { "bitmap must be ARGB_8888" }
+            check(
+                PdfiumNative.nativeRenderClip(
+                    handle, bitmap, rect.left, rect.bottom, rect.right, rect.top, tint.renderFlag,
+                ),
+            ) { "clip render failed" }
+        }
+
     /** Checkbox and radio widgets on this page. */
     suspend fun formFields(): List<FormField> = withContext(engine.dispatcher) {
         check(!closed) { "page is closed" }

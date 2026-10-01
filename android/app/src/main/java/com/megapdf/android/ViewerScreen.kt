@@ -293,6 +293,7 @@ fun ViewerScreen(
     onOpenSettings: () -> Unit = {},
     /** Page tools (#174): opens the Pages grid over the document. */
     onOpenPages: () -> Unit = {},
+    onOpenReflow: () -> Unit = {},
 ) {
     var zoom by remember { mutableFloatStateOf(1f) }
     /**
@@ -838,6 +839,15 @@ fun ViewerScreen(
                                     text = { Text(stringResource(R.string.pages)) },
                                     onClick = { menuOpen = false; onOpenPages() },
                                 )
+                                // #514, the reflow spike: a debug-only way into the prototype. Not
+                                // a feature, not translated, and not present in a release build --
+                                // BuildConfig.DEBUG is false there, so this row does not exist.
+                                if (BuildConfig.DEBUG) {
+                                    DropdownMenuItem(
+                                        text = { Text("Reflow (debug)") },
+                                        onClick = { menuOpen = false; onOpenReflow() },
+                                    )
+                                }
                                 HorizontalDivider()
                                 // #328/#329: Redact is not an everyday tool — it removes
                                 // content for good — and its icon means nothing to someone who

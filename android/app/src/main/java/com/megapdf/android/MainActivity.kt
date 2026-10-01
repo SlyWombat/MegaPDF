@@ -236,7 +236,14 @@ fun MegaPdfApp(viewModel: ViewerViewModel = viewModel(), screenshotState: String
             // — the choice Settings makes, for its reason: a phone has no room for both, and
             // leaving the viewer composed underneath would leave its bars and its page in the
             // accessibility tree. Back returns to the document on the page it was left on.
-            if (viewModel.isPagesOpen) PagesScreen(
+            // #514's prototype first: it is a full-screen replacement like the Pages grid, and in
+            // a release build viewModel.isReflowOpen can never be true (openReflow returns early).
+            if (viewModel.isReflowOpen) ReflowScreen(
+                reflow = viewModel.reflow,
+                pageImages = viewModel.reflowPageImages,
+                figureImages = viewModel.reflowFigureImages,
+                onClose = viewModel::closeReflow,
+            ) else if (viewModel.isPagesOpen) PagesScreen(
                 pageSizes = state.pageSizes,
                 thumbnails = viewModel.pageThumbnails,
                 selection = viewModel.selectedPages,
@@ -385,6 +392,7 @@ fun MegaPdfApp(viewModel: ViewerViewModel = viewModel(), screenshotState: String
                 onOpenSettings = { settingsOpen = true },
                 // Page tools (#174).
                 onOpenPages = viewModel::openPages,
+                onOpenReflow = viewModel::openReflow,
             )
 
             // A page tool refused (#174): what happened, why, and that nothing was changed — the

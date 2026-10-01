@@ -17,6 +17,8 @@ import com.megapdf.engine.DocumentFlags
 import com.megapdf.engine.LayoutCause
 import com.megapdf.engine.PageCheck
 import com.megapdf.engine.PdfDocument
+import com.megapdf.engine.ReflowItem
+import com.megapdf.engine.readReflow
 import com.megapdf.engine.PdfEngine
 import com.megapdf.engine.PdfLoadException
 import com.megapdf.engine.PdfPasswordException
@@ -670,6 +672,113 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
      */
     var isPagesOpen: Boolean by mutableStateOf(false)
         private set
+
+    // --- #514: the reflow spike's prototype. Debug builds only (BuildConfig.DEBUG gates both the
+    // --- menu entry and openReflow below), never shipped, and nothing here is persisted.
+
+    /** The reflow screen is up. Like [isPagesOpen], it belongs to the open document. */
+    var isReflowOpen: Boolean by mutableStateOf(false)
+        private set
+
+    /** The document's blocks, mapped to what the reader sees; null while the load is in flight. */
+    var reflow: com.megapdf.engine.Reflow? by mutableStateOf(null)
+        private set
+
+    /** Rasters for the pages the reflow declined, keyed by page index. */
+    var reflowPageImages: Map<Int, Bitmap> by mutableStateOf(emptyMap())
+        private set
+
+    /** Rasters for FIGURE blocks, keyed by (page, object index) and drawn with megapdf_render_clip. */
+    var reflowFigureImages: Map<Pair<Int, Int>, Bitmap> by mutableStateOf(emptyMap())
+        private set
+
+    /** How long the structure load itself took, and how many blocks it produced — the spike's own
+     * criterion 3, measured where it actually matters rather than in a container. Milliseconds. */
+    var reflowLoadMillis: Long by mutableStateOf(0L)
+        private set
+
+    fun openReflow() {
+        if (!BuildConfig.DEBUG) return
+        val doc = document ?: return
+        // Same rule as openPages: a tool left armed behind this screen would fire on the way back.
+        redactMode = false
+        whiteoutMode = false
+        pendingSignature = null
+        isPlacingText = false
+        reflow = null
+        reflowPageImages = emptyMap()
+        reflowFigureImages = emptyMap()
+        isReflowOpen = true
+        viewModelScope.launch {
+            try {
+                val started = System.nanoTime()
+                // The whole document in one range: contract 9 is range-based, and the spike's
+                // criterion 3 is about exactly this call over a whole document. A chunked load is
+                // the design the spike delivers if the number misses, not what it measures.
+                val r = doc.readReflow(0, doc.pageCount())
+                reflowLoadMillis = (System.nanoTime() - started) / 1_000_000
+                reflow = r
+                // A declined page's own raster, and each FIGURE's, after the text is up: the reader
+                // can start reading while the pictures arrive, and a page that is never scrolled to
+                // is never rastered.
+                renderReflowImages(doc, r)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Throwable) {
+                // A prototype behind a debug flag owes the person nothing but not crashing.
+                reflow = null
+            }
+        }
+    }
+
+    fun closeReflow() {
+        isReflowOpen = false
+        reflow = null
+        reflowPageImages = emptyMap()
+        reflowFigureImages = emptyMap()
+    }
+
+    private suspend fun renderReflowImages(doc: PdfDocument, r: com.megapdf.engine.Reflow) {
+        val pages = mutableMapOf<Int, Bitmap>()
+        for (page in r.declined.keys) {
+            val p = runCatching { doc.openPage(page) }.getOrNull() ?: continue
+            try {
+                val (w, h) = PdfEngine.renderSize(900.0, 900.0 * p.heightPoints / p.widthPoints)
+                val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+                p.render(bmp)
+                pages[page] = bmp
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Throwable) {
+                // One page that will not draw is one missing picture, not a broken screen.
+            } finally {
+                runCatching { p.close() }
+            }
+            reflowPageImages = pages.toMap()
+        }
+        val figures = mutableMapOf<Pair<Int, Int>, Bitmap>()
+        for (item in r.items.filterIsInstance<ReflowItem.Figure>()) {
+            val b = item.block
+            val p = runCatching { doc.openPage(b.page) }.getOrNull() ?: continue
+            try {
+                val rectW = b.bounds.right - b.bounds.left
+                val rectH = b.bounds.top - b.bounds.bottom
+                if (rectW <= 0 || rectH <= 0) continue
+                // megapdf_render_clip (#514's other engine addition): the figure's own region, at
+                // the figure's own proportions, instead of a whole-page raster for a strip of it.
+                val (w, h) = PdfEngine.renderSize(900.0, 900.0 * rectH / rectW)
+                val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+                p.renderClip(bmp, b.bounds)
+                figures[b.page to b.objectIndex] = bmp
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Throwable) {
+            } finally {
+                runCatching { p.close() }
+            }
+            reflowFigureImages = figures.toMap()
+        }
+    }
 
     /**
      * Which pages the grid has selected. Page indices, so this is one of the things a page

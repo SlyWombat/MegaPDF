@@ -50,6 +50,10 @@ android {
     }
     buildFeatures {
         compose = true
+        // #514: the reflow spike's prototype is gated on BuildConfig.DEBUG, which AGP 8 does not
+        // generate unless asked. Nothing else in the app reads BuildConfig; this is here so a
+        // prototype can exist in the tree without reaching a release build.
+        buildConfig = true
     }
     testOptions {
         // System animation scales are set to 0 for a connected run, so a menu or a dialog

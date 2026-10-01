@@ -155,6 +155,34 @@ internal object PdfiumNative {
     external fun nativeStructureLoad(handle: Long, firstPage: Int, pageCount: Int, flags: Int): Long
     external fun nativeStructureFree(handle: Long)
 
+    // #514, the reflow spike's prototype: the rest of contract 9, read block by block. Packed
+    // arrays, one call per document (or per block for spans) rather than one per field — a
+    // 500-page document is thousands of blocks and the JNI crossing is what costs.
+    external fun nativeBlockCount(structure: Long): Int
+    external fun nativeStructureBodySize(structure: Long): Double
+    external fun nativeStructurePageConfidence(structure: Long, page: Int): Int
+    external fun nativeStructurePageSource(structure: Long, page: Int): Int
+    /** 8 ints per block: kind, level, page, objectIndex, continues, source, confidence, spanCount. */
+    external fun nativeBlocksPacked(structure: Long): IntArray?
+    /** 4 doubles per block: left, bottom, right, top (crop space on the block's page). */
+    external fun nativeBlockBounds(structure: Long): DoubleArray?
+    /** [which] is megapdf_block_field: 0 text, 1 marker, 2 alt. */
+    external fun nativeBlockString(structure: Long, index: Int, which: Int): String
+    /** 2 ints per span of [index]: flags, objectIndex. */
+    external fun nativeSpansPacked(structure: Long, index: Int): IntArray?
+    /** 6 doubles per span of [index]: fontSize, sizeRatio, left, bottom, right, top. */
+    external fun nativeSpanMetrics(structure: Long, index: Int): DoubleArray?
+    /** One string per span of [index]: its text, or ([font]) its font family (megapdf_block_span_font). */
+    external fun nativeSpanStrings(structure: Long, index: Int, font: Boolean): Array<String>?
+
+    /**
+     * megapdf_render_clip (#514): one crop-space region of the page, scaled to fill [bitmap].
+     * The bitmap must be ARGB_8888, like [nativeRenderPage]'s.
+     */
+    external fun nativeRenderClip(
+        handle: Long, bitmap: Bitmap, left: Double, bottom: Double, right: Double, top: Double, tintFlags: Int,
+    ): Boolean
+
     /**
      * megapdf_write_text(): [format] is [WRITE_FORMAT_TEXT] or [WRITE_FORMAT_MARKDOWN].
      * [options] is packed [keepLines, pageBreak, keepFurniture, fields, heuristicOnly]

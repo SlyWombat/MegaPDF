@@ -1193,6 +1193,187 @@ Java_com_megapdf_engine_PdfiumNative_nativeStructureFree(JNIEnv*, jobject, jlong
     megapdf_structure_free(reinterpret_cast<megapdf_structure*>(handle));
 }
 
+// --- #514, the reflow spike's prototype: the rest of contract 9, read block by block.
+//
+// Packed int arrays rather than a JNI struct per block, for the same reason nativeTextRunsPacked
+// does it: one JNI call per document instead of one per field per block. A 500-page document is
+// thousands of blocks, and the crossing is the cost. Doubles that must survive (bounds, font
+// size) are carried in a separate double array, index-aligned to the int one.
+//
+// This is prototype surface behind a debug flag, not a shipped Android API. It is bound here
+// rather than in a scratch module so the prototype measures the real JNI boundary -- a reflow
+// view's cost is partly this crossing, and a prototype that avoided it would measure nothing
+// useful.
+
+/** megapdf_block_count. */
+JNIEXPORT jint JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativeBlockCount(JNIEnv*, jobject, jlong structure) {
+    return static_cast<jint>(megapdf_block_count(reinterpret_cast<megapdf_structure*>(structure)));
+}
+
+/** megapdf_structure_body_size. */
+JNIEXPORT jdouble JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativeStructureBodySize(JNIEnv*, jobject, jlong structure) {
+    return megapdf_structure_body_size(reinterpret_cast<megapdf_structure*>(structure));
+}
+
+/** megapdf_structure_page_confidence; the core's own MEGAPDF_ERR_ARGUMENT passes straight through. */
+JNIEXPORT jint JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativeStructurePageConfidence(JNIEnv*, jobject, jlong structure, jint page) {
+    return megapdf_structure_page_confidence(reinterpret_cast<megapdf_structure*>(structure), static_cast<int>(page));
+}
+
+/** megapdf_structure_page_source. */
+JNIEXPORT jint JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativeStructurePageSource(JNIEnv*, jobject, jlong structure, jint page) {
+    return megapdf_structure_page_source(reinterpret_cast<megapdf_structure*>(structure), static_cast<int>(page));
+}
+
+/**
+ * Every block's scalar fields, 7 ints each in block order:
+ *   kind, level, page, objectIndex, continues, source, confidence
+ * plus spanCount as an 8th, so the caller knows how many spans to ask for without a call per
+ * block. null when the handle is not a structure.
+ */
+JNIEXPORT jintArray JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativeBlocksPacked(JNIEnv* env, jobject, jlong structure) {
+    auto* s = reinterpret_cast<megapdf_structure*>(structure);
+    const size_t n = megapdf_block_count(s);
+    std::vector<jint> out(n * 8, 0);
+    for (size_t i = 0; i < n; i++) {
+        megapdf_block b{};
+        if (megapdf_block_get(s, i, &b) != MEGAPDF_OK) continue;
+        jint* r = &out[i * 8];
+        r[0] = b.kind; r[1] = b.level; r[2] = b.page; r[3] = b.object_index;
+        r[4] = b.continues; r[5] = b.source; r[6] = b.confidence;
+        r[7] = static_cast<jint>(megapdf_block_span_count(s, i));
+    }
+    jintArray arr = env->NewIntArray(static_cast<jsize>(out.size()));
+    if (arr != nullptr && !out.empty()) env->SetIntArrayRegion(arr, 0, static_cast<jsize>(out.size()), out.data());
+    return arr;
+}
+
+/** Every block's bounds, 4 doubles each in block order: left, bottom, right, top (crop space). */
+JNIEXPORT jdoubleArray JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativeBlockBounds(JNIEnv* env, jobject, jlong structure) {
+    auto* s = reinterpret_cast<megapdf_structure*>(structure);
+    const size_t n = megapdf_block_count(s);
+    std::vector<jdouble> out(n * 4, 0.0);
+    for (size_t i = 0; i < n; i++) {
+        megapdf_block b{};
+        if (megapdf_block_get(s, i, &b) != MEGAPDF_OK) continue;
+        jdouble* r = &out[i * 4];
+        r[0] = b.bounds.left; r[1] = b.bounds.bottom; r[2] = b.bounds.right; r[3] = b.bounds.top;
+    }
+    jdoubleArray arr = env->NewDoubleArray(static_cast<jsize>(out.size()));
+    if (arr != nullptr && !out.empty()) env->SetDoubleArrayRegion(arr, 0, static_cast<jsize>(out.size()), out.data());
+    return arr;
+}
+
+// One block string, count-then-fill, exactly CoreString's shape above. `which` is
+// megapdf_block_field (0 text, 1 marker, 2 alt).
+JNIEXPORT jstring JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativeBlockString(JNIEnv* env, jobject, jlong structure, jint index, jint which) {
+    auto* s = reinterpret_cast<megapdf_structure*>(structure);
+    const auto field = static_cast<megapdf_block_field>(which);
+    const size_t n = megapdf_block_string(s, static_cast<size_t>(index), field, nullptr, 0);
+    std::vector<jchar> buf(n);
+    if (n > 0) megapdf_block_string(s, static_cast<size_t>(index), field, buf.data(), n);
+    return env->NewString(buf.data(), static_cast<jsize>(buf.size()));
+}
+
+/**
+ * One block's spans: 2 ints each (flags, objectIndex) in the int array, 6 doubles each
+ * (fontSize, sizeRatio, left, bottom, right, top) in `outBounds`, and the span texts and font
+ * family names as two parallel String arrays. Four arrays rather than one packed blob because a
+ * span carries two strings, and a String[] is the only shape that does not need a length table.
+ */
+JNIEXPORT jintArray JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativeSpansPacked(JNIEnv* env, jobject, jlong structure, jint index) {
+    auto* s = reinterpret_cast<megapdf_structure*>(structure);
+    const size_t n = megapdf_block_span_count(s, static_cast<size_t>(index));
+    std::vector<jint> out(n * 2, 0);
+    for (size_t k = 0; k < n; k++) {
+        megapdf_span sp{};
+        if (megapdf_block_span_get(s, static_cast<size_t>(index), k, &sp) != MEGAPDF_OK) continue;
+        out[k * 2] = sp.flags;
+        out[k * 2 + 1] = sp.object_index;
+    }
+    jintArray arr = env->NewIntArray(static_cast<jsize>(out.size()));
+    if (arr != nullptr && !out.empty()) env->SetIntArrayRegion(arr, 0, static_cast<jsize>(out.size()), out.data());
+    return arr;
+}
+
+JNIEXPORT jdoubleArray JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativeSpanMetrics(JNIEnv* env, jobject, jlong structure, jint index) {
+    auto* s = reinterpret_cast<megapdf_structure*>(structure);
+    const size_t n = megapdf_block_span_count(s, static_cast<size_t>(index));
+    std::vector<jdouble> out(n * 6, 0.0);
+    for (size_t k = 0; k < n; k++) {
+        megapdf_span sp{};
+        if (megapdf_block_span_get(s, static_cast<size_t>(index), k, &sp) != MEGAPDF_OK) continue;
+        jdouble* r = &out[k * 6];
+        r[0] = sp.font_size; r[1] = sp.size_ratio;
+        r[2] = sp.bounds.left; r[3] = sp.bounds.bottom; r[4] = sp.bounds.right; r[5] = sp.bounds.top;
+    }
+    jdoubleArray arr = env->NewDoubleArray(static_cast<jsize>(out.size()));
+    if (arr != nullptr && !out.empty()) env->SetDoubleArrayRegion(arr, 0, static_cast<jsize>(out.size()), out.data());
+    return arr;
+}
+
+// `font` picks which per-span string: 0 the span's text, 1 its font family (#514,
+// megapdf_block_span_font). One call per block, not per span.
+JNIEXPORT jobjectArray JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativeSpanStrings(JNIEnv* env, jobject, jlong structure, jint index,
+                                                      jboolean font) {
+    auto* s = reinterpret_cast<megapdf_structure*>(structure);
+    const size_t n = megapdf_block_span_count(s, static_cast<size_t>(index));
+    jclass string_class = env->FindClass("java/lang/String");
+    if (string_class == nullptr) return nullptr;
+    jobjectArray arr = env->NewObjectArray(static_cast<jsize>(n), string_class, nullptr);
+    if (arr == nullptr) return nullptr;
+    for (size_t k = 0; k < n; k++) {
+        size_t len = font == JNI_TRUE ? megapdf_block_span_font(s, static_cast<size_t>(index), k, nullptr, 0)
+                                      : megapdf_block_span_string(s, static_cast<size_t>(index), k, nullptr, 0);
+        std::vector<jchar> buf(len);
+        if (len > 0) {
+            if (font == JNI_TRUE) megapdf_block_span_font(s, static_cast<size_t>(index), k, buf.data(), len);
+            else megapdf_block_span_string(s, static_cast<size_t>(index), k, buf.data(), len);
+        }
+        jstring str = env->NewString(buf.data(), static_cast<jsize>(buf.size()));
+        if (str == nullptr) return nullptr;
+        env->SetObjectArrayElement(arr, static_cast<jsize>(k), str);
+        env->DeleteLocalRef(str);
+    }
+    return arr;
+}
+
+// megapdf_render_clip (#514) into a Bitmap, exactly as nativeRenderPage does for the whole page:
+// the rectangle is crop space, the bitmap is the window. The prototype shows a FIGURE, a form
+// region or a declined page's own pixels this way instead of rastering the whole page for a strip
+// of it.
+JNIEXPORT jboolean JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativeRenderClip(JNIEnv* env, jobject, jlong handle, jobject bitmap,
+                                                      jdouble left, jdouble bottom, jdouble right, jdouble top,
+                                                      jint tintFlags) {
+    auto* p = reinterpret_cast<Page*>(handle);
+    AndroidBitmapInfo info;
+    if (AndroidBitmap_getInfo(env, bitmap, &info) != ANDROID_BITMAP_RESULT_SUCCESS ||
+        info.format != ANDROID_BITMAP_FORMAT_RGBA_8888) {
+        return JNI_FALSE;
+    }
+    void* pixels = nullptr;
+    if (AndroidBitmap_lockPixels(env, bitmap, &pixels) != ANDROID_BITMAP_RESULT_SUCCESS) {
+        return JNI_FALSE;
+    }
+    const megapdf_rect rect{left, bottom, right, top};
+    const int status = megapdf_render_clip(p->core, &rect, pixels, static_cast<int>(info.width),
+                                           static_cast<int>(info.height), static_cast<int>(info.stride),
+                                           MEGAPDF_RENDER_RGBA | static_cast<unsigned>(tintFlags));
+    AndroidBitmap_unlockPixels(env, bitmap);
+    return status == MEGAPDF_OK ? JNI_TRUE : JNI_FALSE;
+}
+
 // megapdf_write_text() over a java.io.OutputStream, the same StreamWriter callback nativeSave
 // uses above. `options` is packed [keepLines, pageBreak, keepFurniture, fields, heuristicOnly]
 // (megapdf_write_options's own fields, in field order) so this call needs no separate JNI

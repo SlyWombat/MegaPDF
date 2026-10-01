@@ -49,6 +49,18 @@
 //            this tool prints.
 //         4. robustness — timing and memory; crashes and hangs are the caller's business
 //            (a segfault or a timeout means this process does not get to print anything).
+//       #514's reflow-spike columns: fourteen more index-aligned comma lists, one entry per page
+//            of the document (pg_n = the page count, so these are the only lists here that cover
+//            EVERY page, including the ones with no text) — pg_index, pg_conf (the page's real
+//            confidence), pg_text (1 when the page has a text layer at all), pg_field /
+//            pg_widget / pg_pageimg / pg_content (the counts plan §2 tier 3's "show this page as
+//            a picture" rule is written in terms of: FIELD blocks, widget annotations counted
+//            independently of them, PAGE_IMAGE blocks, and blocks that would become reflowed
+//            text), and a script census over the page's real characters — pg_latin, pg_cjk,
+//            pg_rtl, pg_cyrgrk, pg_brahmic, pg_other. The script columns exist because this
+//            file's tokenizer is Latin-only (see "Tokens" below and #523): they say, per page,
+//            how much of the page measures 1 and 3 could actually see, so a page they could not
+//            see can be excluded from a gate rather than silently averaged into it.
 //       --cli-reference <file> (#355): the same measure 1, but against megapdf-cli's own
 //            stdout for this document (run with --page-marker, not the default form feed — see
 //            split_on_page_markers()'s comment for why) instead of this process's own
@@ -89,6 +101,7 @@
 #include "megapdf_core.h"
 #include "fpdfview.h"
 #include "fpdf_text.h"
+#include "fpdf_annot.h"
 #include "fpdf_edit.h"
 #include "fpdf_structtree.h"
 
@@ -143,6 +156,87 @@ bool IsWordCodepoint(unsigned int c) {
     if (c >= 0xC0 && c <= 0xFF && c != 0xD7 && c != 0xF7) return true;  // Latin-1 Supplement letters
     if (c >= 0x100 && c <= 0x17F) return true;                          // Latin Extended-A
     return false;
+}
+
+// ---------------------------------------------------------------------------
+// #514 / #523: which script a page is written in.
+//
+// This does NOT widen the tokenizer -- that is #523's own job and Dave has deferred it. What it
+// does is make the blindness VISIBLE, so a number computed on a page the tokenizer cannot see is
+// not quoted as if it covered the page. IsWordCodepoint above admits ASCII, Latin-1 Supplement
+// and Latin Extended-A and silently drops everything else, so on a Japanese page measure 1 and
+// measure 3 both grade whatever Latin happens to be embedded in it (#523 measured 3,720 of
+// 24,541 characters on one such page). The #514 spike needs to EXCLUDE those pages from its
+// eligible set and report them separately -- which plan §7's RTL/CJK risk note already asked for
+// -- and that needs a per-page count of which script the characters are in.
+//
+// Groups are coarse on purpose: the question is only "can the gate see this page", so the
+// relevant split is Latin (seen) against each family of not-seen. Ranges are the Unicode blocks,
+// letters and syllables only; punctuation, digits and symbols shared between scripts are
+// deliberately NOT counted on either side, so a page of Japanese with ASCII digits in it does not
+// read as part Latin because of the digits.
+enum ScriptGroup {
+    kScriptNone = 0,
+    kScriptLatin = 1,
+    kScriptCjk = 2,       // Han, Hiragana, Katakana, Hangul, Bopomofo -- #482/#521's population
+    kScriptRtl = 3,       // Arabic, Hebrew, Syriac, Thaana, NKo
+    kScriptCyrGrk = 4,    // Cyrillic, Greek
+    kScriptBrahmic = 5,   // Devanagari..Sinhala, Thai, Lao, Tibetan, Myanmar, Khmer
+    kScriptOther = 6      // a letter in none of the above (Ethiopic, Cherokee, Georgian, ...)
+};
+
+int ScriptOf(unsigned int c) {
+    // Latin: exactly what IsWordCodepoint admits, minus the digits (shared, see above).
+    if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')) return kScriptLatin;
+    if (c >= 0xC0 && c <= 0xFF && c != 0xD7 && c != 0xF7) return kScriptLatin;
+    if (c >= 0x100 && c <= 0x24F) return kScriptLatin;              // Latin Extended-A/-B
+    if (c >= 0x1E00 && c <= 0x1EFF) return kScriptLatin;            // Latin Extended Additional
+    if (c >= 0xFF21 && c <= 0xFF5A) return kScriptLatin;            // fullwidth ASCII letters
+    // Greek and Cyrillic.
+    if ((c >= 0x370 && c <= 0x3FF) || (c >= 0x1F00 && c <= 0x1FFF)) return kScriptCyrGrk;
+    if (c >= 0x400 && c <= 0x52F) return kScriptCyrGrk;
+    // Right-to-left.
+    if (c >= 0x590 && c <= 0x5FF) return kScriptRtl;                // Hebrew
+    if (c >= 0x600 && c <= 0x6FF) return kScriptRtl;                // Arabic
+    if (c >= 0x700 && c <= 0x74F) return kScriptRtl;                // Syriac
+    if (c >= 0x750 && c <= 0x77F) return kScriptRtl;                // Arabic Supplement
+    if (c >= 0x780 && c <= 0x7BF) return kScriptRtl;                // Thaana
+    if (c >= 0x7C0 && c <= 0x7FF) return kScriptRtl;                // NKo
+    if (c >= 0x8A0 && c <= 0x8FF) return kScriptRtl;                // Arabic Extended-A
+    if (c >= 0xFB1D && c <= 0xFB4F) return kScriptRtl;              // Hebrew presentation forms
+    if (c >= 0xFB50 && c <= 0xFDFF) return kScriptRtl;              // Arabic presentation forms A
+    if (c >= 0xFE70 && c <= 0xFEFF) return kScriptRtl;              // Arabic presentation forms B
+    // Brahmic and south-east Asian.
+    if (c >= 0x900 && c <= 0xDFF) return kScriptBrahmic;            // Devanagari .. Sinhala
+    if (c >= 0xE00 && c <= 0xE7F) return kScriptBrahmic;            // Thai
+    if (c >= 0xE80 && c <= 0xEFF) return kScriptBrahmic;            // Lao
+    if (c >= 0xF00 && c <= 0xFFF) return kScriptBrahmic;            // Tibetan
+    if (c >= 0x1000 && c <= 0x109F) return kScriptBrahmic;          // Myanmar
+    if (c >= 0x1780 && c <= 0x17FF) return kScriptBrahmic;          // Khmer
+    // CJK.
+    if (c >= 0x1100 && c <= 0x11FF) return kScriptCjk;              // Hangul Jamo
+    if (c >= 0x2E80 && c <= 0x2EFF) return kScriptCjk;              // CJK radicals supplement
+    if (c >= 0x3040 && c <= 0x30FF) return kScriptCjk;              // Hiragana, Katakana
+    if (c >= 0x3100 && c <= 0x312F) return kScriptCjk;              // Bopomofo
+    if (c >= 0x3130 && c <= 0x318F) return kScriptCjk;              // Hangul compatibility Jamo
+    if (c >= 0x3400 && c <= 0x4DBF) return kScriptCjk;              // CJK Unified Extension A
+    if (c >= 0x4E00 && c <= 0x9FFF) return kScriptCjk;              // CJK Unified
+    if (c >= 0xA960 && c <= 0xA97F) return kScriptCjk;              // Hangul Jamo Extended-A
+    if (c >= 0xAC00 && c <= 0xD7FF) return kScriptCjk;              // Hangul syllables + Extended-B
+    if (c >= 0xF900 && c <= 0xFAFF) return kScriptCjk;              // CJK compatibility ideographs
+    if (c >= 0xFF66 && c <= 0xFF9F) return kScriptCjk;              // halfwidth Katakana
+    if (c >= 0x20000 && c <= 0x3FFFF) return kScriptCjk;            // CJK Unified Extensions B+
+    // A letter in no named group. Approximated by "not ASCII punctuation, digit or control, and
+    // not a symbol block" -- deliberately generous, because an unrecognised letter must land
+    // somewhere other than Latin or the exclusion under-counts.
+    if (c < 0x370) return kScriptNone;                              // ASCII/Latin-1 punctuation etc.
+    if (c >= 0x2000 && c <= 0x2BFF) return kScriptNone;             // general punctuation, symbols, arrows
+    if (c >= 0x3000 && c <= 0x303F) return kScriptNone;             // CJK punctuation (shared)
+    if (c >= 0xE000 && c <= 0xF8FF) return kScriptNone;             // private use: no script to claim
+    if (c >= 0xFE00 && c <= 0xFE6F) return kScriptNone;             // variation selectors, verticals
+    if (c >= 0xFF00 && c <= 0xFF20) return kScriptNone;             // fullwidth punctuation
+    if (c >= 0xFFF0) return kScriptNone;                            // specials
+    return kScriptOther;
 }
 
 using Token = std::u32string;
@@ -787,6 +881,34 @@ int RunCheck(const Options& opt) {
     // stand-in for it, correlates with tau_ref.
     std::vector<long long> tau_ref_page, tau_ref_tokens, tau_ref_area, tau_ref_jump, tau_ref_conf;
 
+    // #514 spike, criterion 4 ("scope honesty": how often reflow would decline and show a page
+    // as a picture) and criterion 1's eligibility rule (#523: a gate blind to a script must not
+    // be quoted over it). One entry per page of the document, EVERY page -- the lists below are
+    // filled before any branch that can skip a page, because the pages that matter most to
+    // criterion 4 are exactly the ones with no text to measure: a scan reaches none of the
+    // fidelity or tau code, and a decline count assembled inside that code would read zero for
+    // the whole textless population and look like good news.
+    //
+    // Raw inputs, not verdicts: the confidence GATE is derived from criterion 1 after the fact,
+    // so "low confidence" cannot be decided here. Post-processing applies plan §2 tier 3's rule
+    // (a page with FIELD blocks or any widget annotation shows as a page image; a page with no
+    // text layer shows as a page image; a page under the gate is refused) to these columns.
+    std::vector<long long> pg_index;      // page index, 0-based
+    std::vector<long long> pg_conf;       // megapdf_structure_page_confidence for the page
+    std::vector<long long> pg_text;       // 1 when FPDFText_CountChars > 0, else 0 (a scan is 0)
+    std::vector<long long> pg_field;      // FIELD blocks on the page (ALL_FIELDS, so empty fields count)
+    std::vector<long long> pg_widget;     // widget annotations on the page, counted independently
+    std::vector<long long> pg_pageimg;    // PAGE_IMAGE blocks on the page
+    std::vector<long long> pg_content;    // blocks that would become reflowed TEXT (not FIELD/PAGE_IMAGE)
+    // Script census over the page's real characters, letters and syllables only (ScriptOf).
+    std::vector<long long> pg_latin, pg_cjk, pg_rtl, pg_cyrgrk, pg_brahmic, pg_other;
+    // The census's own per-page column verdicts, which until #514 were only ever summed into
+    // multicol=/manycut=. Per page they answer the question a corpus-wide tau cannot: whether the
+    // pages that disagree with `pdftotext -layout` are the multi-column ones -- where -layout
+    // reads ACROSS columns by design and the disagreement may be the reference's, not ours (the
+    // #521 lesson: a measure can mark down an engine that was right).
+    std::vector<long long> pg_multicol, pg_manycut;
+
     for (int p = 0; p < pages; p++) {
         const auto page_t0 = std::chrono::steady_clock::now();
         confidences.push_back(megapdf_structure_page_confidence(s, p));
@@ -794,9 +916,72 @@ int RunCheck(const Options& opt) {
         const ColumnCensus cc = ColumnCensusForPage(blocks_by_page[static_cast<size_t>(p)], body_size);
         if (cc.multi_column) multicol_pages++;
         if (cc.many_cut) manycut_pages++;
+        pg_multicol.push_back(cc.multi_column ? 1 : 0);
+        pg_manycut.push_back(cc.many_cut ? 1 : 0);
 
         FPDF_PAGE raw_page = raw != nullptr ? FPDF_LoadPage(raw, p) : nullptr;
         FPDF_TEXTPAGE textpage = raw_page != nullptr ? FPDFText_LoadPage(raw_page) : nullptr;
+
+        // #514 criterion 4: the per-page columns, every page, before anything can `continue` or
+        // fall into the textless branch. Block kinds come from the blocks this page already has
+        // (blocks_by_page), so they are the shipped answer for this page, whichever path read it.
+        {
+            long long n_field = 0, n_pageimg = 0, n_content = 0;
+            for (const megapdf_block& b : blocks_by_page[static_cast<size_t>(p)]) {
+                if (b.kind == MEGAPDF_BLOCK_FIELD) n_field++;
+                else if (b.kind == MEGAPDF_BLOCK_PAGE_IMAGE) n_pageimg++;
+                else if (b.kind != MEGAPDF_BLOCK_FURNITURE) n_content++;
+            }
+            // Widget annotations, counted from PDFium rather than from FIELD blocks, because plan
+            // §2 tier 3's rule is "FIELD blocks OR any widget annotation" and the two can
+            // disagree: a page whose AcroForm PDFium will not load, or an XFA-only form, has
+            // widgets and no FIELD blocks. Counting both is what makes that disagreement show up
+            // in the numbers instead of being assumed away.
+            long long n_widget = 0;
+            if (raw_page != nullptr) {
+                const int annots = FPDFPage_GetAnnotCount(raw_page);
+                for (int a = 0; a < annots; a++) {
+                    FPDF_ANNOTATION an = FPDFPage_GetAnnot(raw_page, a);
+                    if (an == nullptr) continue;
+                    if (FPDFAnnot_GetSubtype(an) == FPDF_ANNOT_WIDGET) n_widget++;
+                    FPDFPage_CloseAnnot(an);
+                }
+            }
+            long long latin = 0, cjk = 0, rtl = 0, cyrgrk = 0, brahmic = 0, other = 0;
+            long long has_text = 0;
+            if (textpage != nullptr) {
+                const int n_chars = FPDFText_CountChars(textpage);
+                if (n_chars > 0) has_text = 1;
+                for (int i = 0; i < n_chars; i++) {
+                    if (FPDFText_IsGenerated(textpage, i) == 1) continue;
+                    const unsigned int u = FPDFText_GetUnicode(textpage, i);
+                    if (u == 0) continue;
+                    switch (ScriptOf(u)) {
+                        case kScriptLatin: latin++; break;
+                        case kScriptCjk: cjk++; break;
+                        case kScriptRtl: rtl++; break;
+                        case kScriptCyrGrk: cyrgrk++; break;
+                        case kScriptBrahmic: brahmic++; break;
+                        case kScriptOther: other++; break;
+                        default: break;
+                    }
+                }
+            }
+            pg_index.push_back(p);
+            pg_conf.push_back(confidences[static_cast<size_t>(p)]);
+            pg_text.push_back(has_text);
+            pg_field.push_back(n_field);
+            pg_widget.push_back(n_widget);
+            pg_pageimg.push_back(n_pageimg);
+            pg_content.push_back(n_content);
+            pg_latin.push_back(latin);
+            pg_cjk.push_back(cjk);
+            pg_rtl.push_back(rtl);
+            pg_cyrgrk.push_back(cyrgrk);
+            pg_brahmic.push_back(brahmic);
+            pg_other.push_back(other);
+        }
+
         if (textpage != nullptr) {
             const int chars = FPDFText_CountChars(textpage);
             if (chars <= 0) textless_pages++;
@@ -966,7 +1151,10 @@ int RunCheck(const Options& opt) {
                 "cli_fid_match=%lld cli_fid_a=%lld cli_fid_b=%lld "
                 "tau_tree_n=%zu tau_tree=%s tau_ref_n=%zu tau_ref=%s "
                 "tau_ref_page=%s tau_ref_tokens=%s tau_ref_area=%s tau_ref_jump=%s tau_ref_conf=%s "
-                "tree_cov_n=%zu tree_cov_page=%s tree_cov=%s tau_treeref=%s tau_heurref=%s\n",
+                "tree_cov_n=%zu tree_cov_page=%s tree_cov=%s tau_treeref=%s tau_heurref=%s "
+                "pg_n=%zu pg_index=%s pg_conf=%s pg_text=%s pg_field=%s pg_widget=%s pg_pageimg=%s "
+                "pg_content=%s pg_latin=%s pg_cjk=%s pg_rtl=%s pg_cyrgrk=%s pg_brahmic=%s pg_other=%s "
+                "pg_multicol=%s pg_manycut=%s\n",
                 pages, tagged_pages, tree_pages, textless_pages, multicol_pages, manycut_pages, ms_avg, PeakRssKb(),
                 ConfidenceDeciles(confidences).c_str(), blocks_field.str().c_str(), fidelity_total.matched,
                 fidelity_total.a, fidelity_total.b, fidelity_low09,
@@ -975,7 +1163,59 @@ int RunCheck(const Options& opt) {
                 JoinInts(tau_ref_x1000).c_str(), JoinInts(tau_ref_page).c_str(),
                 JoinInts(tau_ref_tokens).c_str(), JoinInts(tau_ref_area).c_str(), JoinInts(tau_ref_jump).c_str(),
                 JoinInts(tau_ref_conf).c_str(), tree_cov_page.size(), JoinInts(tree_cov_page).c_str(),
-                JoinInts(tree_cov_x1000).c_str(), JoinInts(tau_treeref_x1000).c_str(), JoinInts(tau_heurref_x1000).c_str());
+                JoinInts(tree_cov_x1000).c_str(), JoinInts(tau_treeref_x1000).c_str(), JoinInts(tau_heurref_x1000).c_str(),
+                pg_index.size(), JoinInts(pg_index).c_str(), JoinInts(pg_conf).c_str(), JoinInts(pg_text).c_str(),
+                JoinInts(pg_field).c_str(), JoinInts(pg_widget).c_str(), JoinInts(pg_pageimg).c_str(),
+                JoinInts(pg_content).c_str(), JoinInts(pg_latin).c_str(), JoinInts(pg_cjk).c_str(),
+                JoinInts(pg_rtl).c_str(), JoinInts(pg_cyrgrk).c_str(), JoinInts(pg_brahmic).c_str(),
+                JoinInts(pg_other).c_str(), JoinInts(pg_multicol).c_str(), JoinInts(pg_manycut).c_str());
+    return 0;
+}
+
+// #514 criterion 3: megapdf_structure_load over a whole document, timed and measured ALONE --
+// no per-page text pages, no reference, no fidelity pass, because the criterion is about that one
+// call. Peak RSS is reported before and after the load so the load's own share is visible rather
+// than inferred from a whole process that also built token multisets.
+//
+// This cannot be a phone number. It is the number of whatever machine it runs on, and the spike's
+// write-up says which machine that was: a container figure must never be presented as a device
+// figure (and an x86_64 figure is not an arm64 one either).
+int RunBench(const std::string& pdf, int repeats) {
+    std::vector<unsigned char> bytes;
+    {
+        std::ifstream in(pdf, std::ios::binary);
+        if (!in.good()) { std::printf("result=unreadable\n"); return 0; }
+        bytes.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+    }
+    megapdf_document* doc = megapdf_open(bytes.data(), bytes.size(), nullptr);
+    if (doc == nullptr) { std::printf("result=cannot-open\n"); return 0; }
+    const int pages = megapdf_page_count(doc);
+    const long long rss_before = PeakRssKb();
+    double best = 0, worst = 0, total = 0;
+    size_t blocks = 0;
+    for (int r = 0; r < repeats; r++) {
+        const auto t0 = std::chrono::steady_clock::now();
+        megapdf_structure* s = megapdf_structure_load(doc, 0, pages, MEGAPDF_STRUCTURE_DEFAULT, nullptr);
+        const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+        if (s == nullptr) { std::printf("result=load-failed pages=%d\n", pages); megapdf_close(doc); return 0; }
+        blocks = megapdf_block_count(s);
+        // Held, not freed, for the LAST repeat only, so the peak below includes a live structure:
+        // what a reflow view actually holds while the reader is reading.
+        if (r + 1 < repeats) megapdf_structure_free(s);
+        else {
+            std::printf("result=ok pages=%d blocks=%zu load_ms_best=%.1f load_ms_worst=%.1f load_ms_mean=%.1f "
+                        "rss_before_kb=%lld rss_peak_kb=%lld repeats=%d\n",
+                        pages, blocks, best == 0 ? ms : (std::min)(best, ms), (std::max)(worst, ms),
+                        (total + ms) / repeats, rss_before, PeakRssKb(), repeats);
+            megapdf_structure_free(s);
+            megapdf_close(doc);
+            return 0;
+        }
+        best = best == 0 ? ms : (std::min)(best, ms);
+        worst = (std::max)(worst, ms);
+        total += ms;
+    }
+    megapdf_close(doc);
     return 0;
 }
 
@@ -2329,6 +2569,14 @@ int main(int argc, char** argv) {
     if (argc >= 3 && std::strcmp(argv[1], "census") == 0) {
         return RunCensus(argv[2]);
     }
+    if (argc >= 3 && std::strcmp(argv[1], "bench") == 0) {
+        // #514 criterion 3: megapdf_structure_load alone, timed and measured (see RunBench).
+        int repeats = 3;
+        for (int i = 3; i < argc; i++) {
+            if (std::strcmp(argv[i], "--repeats") == 0 && i + 1 < argc) repeats = std::atoi(argv[++i]);
+        }
+        return RunBench(argv[2], repeats < 1 ? 1 : repeats);
+    }
     if (argc >= 3 && std::strcmp(argv[1], "check") == 0) {
         Options opt;
         opt.pdf = argv[2];
@@ -2391,6 +2639,7 @@ int main(int argc, char** argv) {
                 "  structure_check check <pdf> [--dump <dir> --dump-id <id>] [--reference <pdftotext-file>]\n"
                 "                              [--cli-reference <megapdf-cli-output-file>]\n"
                 "  structure_check census <pdf>\n"
+                "  structure_check bench <pdf> [--repeats N]   (#514: megapdf_structure_load alone)\n"
                 "  structure_check diag <pdf> [<pdf> ...]   (#363 investigation only)\n"
                 "  structure_check diagbaseline <pdf> [<pdf> ...]   (#363 follow-up investigation only)\n"
                 "  structure_check headingdiag <pdf> [<pdf> ...]   (#375 investigation only)\n"
