@@ -77,7 +77,10 @@ struct DocumentCapabilities: Equatable {
             // page's content stream to cover part of it (#3), which is the same `modify`
             // permission -- covering is not annotating, whatever it looks like.
             return canEditContent
-        case is TextBoxOperation, is EditTextBoxOperation, is MoveTextBoxOperation:
+        case is TextBoxOperation, is EditTextBoxOperation, is MoveTextBoxOperation,
+             is AddTextBoxesOperation:
+            // A note of several lines is several text boxes (#4), and needs exactly what one
+            // text box needs.
             return canAddText
         case is StampOperation, is MoveStampOperation, is MarkOperation:
             return canSign
@@ -101,6 +104,7 @@ struct DocumentCapabilities: Equatable {
     static func isFillingOperation(_ operation: PdfEditOperation) -> Bool {
         switch operation {
         case is TextBoxOperation, is EditTextBoxOperation, is MoveTextBoxOperation,
+             is AddTextBoxesOperation,
              is StampOperation, is MoveStampOperation, is MarkOperation,
              is FieldToggleOperation:
             return true

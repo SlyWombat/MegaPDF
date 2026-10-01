@@ -1653,8 +1653,11 @@ final class ViewerModel: ObservableObject {
         pendingText = nil
         draftText = ""
         guard permits(capabilities.canAddText) else { return }
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
+        // #4: one text box per line typed, with every form of line ending folded to one first
+        // -- `textBoxLines` says why that fold is not optional. Correcting a box already on
+        // the page comes through a single-line field, so this is one element there.
+        let lines = textBoxLines(text)
+        guard let trimmed = lines.first else { return }
         lastFontSize = fontSize
         lastFontName = fontName
         let style = TextBoxStyle(text: trimmed, fontSize: fontSize, fontName: fontName)
@@ -1678,6 +1681,16 @@ final class ViewerModel: ObservableObject {
                                              x: pending.x, y: pending.y),
                         doc: doc)
                     await reselectTextBox(doc, pageIndex: pending.pageIndex, id: editingId)
+                } else if lines.count > 1 {
+                    // A note of several lines (#4): that many ordinary text boxes, stacked
+                    // from the tapped baseline downwards, under one history entry. The ids are
+                    // minted here so a redo puts the same boxes back.
+                    guard await confirmPageRewrite(doc, pageIndex: pending.pageIndex, token: token) else { return }
+                    try await perform(
+                        AddTextBoxesOperation(pageIndex: pending.pageIndex, lines: lines,
+                                             ids: lines.map { _ in "text:\(UUID().uuidString)" },
+                                             style: style, x: pending.x, y: pending.y),
+                        doc: doc)
                 } else {
                     guard await confirmPageRewrite(doc, pageIndex: pending.pageIndex, token: token) else { return }
                     try await perform(

@@ -3265,6 +3265,23 @@
         }
       }
     },
+    "Return starts a new line." : {
+      "comment" : "Add text (#4): under the field, for a note of more than one line. A soft keyboard has no Shift to spare, so Return itself is this platform's Shift+Enter",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La touche Retour commence une nouvelle ligne."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La touche Retour commence une nouvelle ligne."
+          }
+        }
+      }
+    },
     "Rotate Left" : {
       "localizations" : {
         "fr" : {

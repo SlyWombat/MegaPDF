@@ -510,18 +510,52 @@ struct TextBoxSheet: View {
     private var title: LocalizedStringKey { isEditing ? "Edit text" : "Add text" }
     private var commitLabel: LocalizedStringKey { isEditing ? "Save" : "Add" }
 
+    static var probesRequested: Bool {
+        ProcessInfo.processInfo.arguments.contains("-uiTestTextProbes")
+    }
+
+    /// The field's contents as code points, which is the only way to tell a newline from a
+    /// carriage return or a LINE SEPARATOR by looking.
+    static func codePoints(_ text: String) -> String {
+        text.unicodeScalars.map { String(format: "%04X", $0.value) }.joined(separator: " ")
+    }
+
     var body: some View {
         NavigationStack {
             Form {
                 Section {
-                    TextField("Text", text: $text)
-                        .autocorrectionDisabled()
+                    // #4: a *new* note may be several lines, so the field grows with what is
+                    // typed and Return starts a line instead of closing anything. A soft
+                    // keyboard has no Shift to spare, which is why Return itself is this
+                    // platform's version of the desktops' Shift+Enter -- the same reading
+                    // Android arrived at (#565), for the same reason.
+                    //
+                    // Correcting a box already on the page stays **one** line, matching every
+                    // other platform's scoping: turning one box into several after the fact
+                    // replaces one object with many under one undo step, a different shape of
+                    // edit from "same id, new text, new size".
+                    //
+                    // Bounded to five lines, with its own scroll past that, so a long paste
+                    // cannot push the Size and Font pickers an arbitrary distance down.
+                    if isEditing {
+                        TextField("Text", text: $text)
+                            .autocorrectionDisabled()
+                            .accessibilityIdentifier("textBoxField")
+                    } else {
+                        TextField("Text", text: $text, axis: .vertical)
+                            .autocorrectionDisabled()
+                            .lineLimit(1...5)
+                            .accessibilityIdentifier("textBoxField")
+                    }
                 } footer: {
                     // Two literals, not a ternary, so the catalog sees both.
                     if isEditing {
                         Text("This replaces the text you tapped.")
                     } else {
-                        Text("This will be added where you tapped.")
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("This will be added where you tapped.")
+                            Text("Return starts a new line.")
+                        }
                     }
                 }
                 Picker("Size", selection: $fontSize) {
@@ -533,6 +567,19 @@ struct TextBoxSheet: View {
                     ForEach(PdfEngine.standardFonts, id: \.self) { face in
                         Text(textBoxFontLabel(face)).tag(face)
                     }
+                }
+                // #4's measurement, under `-uiTestTextProbes` and nothing else -- no ordinary
+                // launch and no capture has it in its accessibility tree.
+                //
+                // Windows handed back a lone "\r" for a line break and Android's field needed
+                // the same fold (#564, #565); both times a multi-line note silently stayed one
+                // object with a control character in it. Two platforms in a row is reason to
+                // *read* what this field returns rather than take a third guess at it. The
+                // probe is inside the sheet because a sheet takes the accessibility tree with
+                // it, so a probe behind it could not be queried while the field has focus.
+                if TextBoxSheet.probesRequested {
+                    Text(verbatim: TextBoxSheet.codePoints(text))
+                        .accessibilityIdentifier("textBoxDraftProbe")
                 }
             }
             .navigationTitle(title)
