@@ -50,6 +50,58 @@ final class SignatureDetectionEngineTests: XCTestCase {
         XCTAssertFalse(flags.contains(.signed))
         XCTAssertFalse(flags.contains(.signedCertification))
     }
+
+    // --- Removing a dead signature (#576): the Swift-bridging-layer counterpart of core's
+    // own behaviour (field tree + value + widget all removed, FPDFDoc_RemoveFormField),
+    // which core_tests.cpp already covers against the real GPO corpus -- this proves it
+    // crosses the bridging header intact, and that a reopened saved file genuinely stops
+    // reporting as signed when the removal was asked for.
+
+    func testRemovingSignaturesOnASignedDocumentClearsTheFlag() async throws {
+        let engine = PdfEngine.shared
+        let doc = try await engine.open(try fixture("signed-approval"))
+        defer { Task { await engine.close(doc) } }
+
+        XCTAssertTrue(await engine.documentFlags(doc).contains(.signed))
+        XCTAssertTrue(await engine.removeDigitalSignatures(doc))
+        XCTAssertFalse(await engine.documentFlags(doc).contains(.signed))
+    }
+
+    func testTheSavedFileGenuinelyCarriesNoSignatureOnceRemoved() async throws {
+        let engine = PdfEngine.shared
+        let doc = try await engine.open(try fixture("signed-approval"))
+        await engine.removeDigitalSignatures(doc)
+        let bytes = try await engine.save(doc)
+        await engine.close(doc)
+
+        let reopened = try await engine.open(bytes)
+        defer { Task { await engine.close(reopened) } }
+        XCTAssertFalse(await engine.documentFlags(reopened).contains(.signed),
+                        "a save nobody asked to keep the signature must not still report one")
+    }
+
+    /// #576's own worry, held here the same way the Windows and Android self-tests hold it:
+    /// a removal creeping into the ordinary save path is the one thing this feature decided
+    /// against.
+    func testASaveThatDoesNotAskToRemoveTheSignatureKeepsIt() async throws {
+        let engine = PdfEngine.shared
+        let doc = try await engine.open(try fixture("signed-approval"))
+        let bytes = try await engine.save(doc)
+        await engine.close(doc)
+
+        let reopened = try await engine.open(bytes)
+        defer { Task { await engine.close(reopened) } }
+        XCTAssertTrue(await engine.documentFlags(reopened).contains(.signed),
+                       "a save nobody asked to remove the signature from must still report one (now invalid)")
+    }
+
+    func testRemovingSignaturesOnAnUnsignedDocumentReportsNothingRemoved() async throws {
+        let engine = PdfEngine.shared
+        let doc = try await engine.open(try fixture("fixture"))
+        defer { Task { await engine.close(doc) } }
+
+        XCTAssertFalse(await engine.removeDigitalSignatures(doc))
+    }
 }
 
 /// The view-model half: the computed facts the Save/Save-a-copy/Password confirmations read,
