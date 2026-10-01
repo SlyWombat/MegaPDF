@@ -366,6 +366,12 @@ sudo snap install megapdf --edge                                                
 gh workflow run snap.yml -f promote=true -f promote_revision=<n> --ref main     # the exact revision, read off the Store or the upload's output
 ```
 
+**Promoting Snap to stable — 2.2 only.** Dave's decision, 1 October 2026: the Snap
+moves edge → stable once, as part of the 2.2 release; 2.1 was never promoted and
+stays on edge. This is a click in the Snap Store dashboard's Releases tab, on
+Dave's snapcraft credentials, so it cannot be automated from here — do it after
+2.2's edge build above is verified, before the website `--snap` deploy step below.
+
 **Website** — after the go-lives, never before (`website/README.md` § Launch runbook):
 run the 200 check, `python3 website/deploy.py --dry-run --privacy`, then
 `--privacy` (with `--linux` once the APT repository is up, `--snap` once the snap is on
