@@ -616,6 +616,11 @@ jobs:
       - name: Generate fixtures
         run: python tools/gen_test_fixtures.py "$env:RUNNER_TEMP/fixtures"
 
+      # #576: a genuinely signed document for `signed-save-remove` — fixture.pdf carries no
+      # signature at all, so that check needs its own fixture rather than the shared one.
+      - name: Generate signature fixtures
+        run: python tools/gen_signature_fixtures.py "$env:RUNNER_TEMP/fixtures"
+
       - name: Run every --screenshot-state check
         shell: pwsh
         run: |
@@ -632,13 +637,15 @@ jobs:
           # second one and fail for that reason — not a real defect, just the
           # wrong fixture name for this state.
           $fixture = "$env:RUNNER_TEMP/fixtures/fixture.pdf"
+          $signedFixture = "$env:RUNNER_TEMP/fixtures/signed-approval.pdf"
           $failed = @()
 
-          function Run-Check($state, $timeoutSec) {
+          function Run-Check($state, $timeoutSec, $fixtureOverride) {
             $outFile = "$env:RUNNER_TEMP/$state.out.txt"
             $errFile = "$env:RUNNER_TEMP/$state.err.txt"
             $png = "$env:RUNNER_TEMP/$state.png"
-            $argList = @('--screenshot', $png, '--screenshot-state', $state, $fixture)
+            $stateFixture = if ($fixtureOverride) { $fixtureOverride } else { $fixture }
+            $argList = @('--screenshot', $png, '--screenshot-state', $state, $stateFixture)
             Write-Output "::group::$state"
             # Start-Process -PassThru + $p.WaitForExit(timeoutMs), not
             # Start-Process -Wait: -Wait has no timeout, so a hang here -- the
@@ -713,6 +720,10 @@ jobs:
           # drives the save-with-a-password write path directly and reopens the result --
           # give it a little more room than the others.
           Run-Check "security" 75
+          # #576: the signed-save warning's removal tick, parity with Avalonia's desktops.
+          # Needs a genuinely signed document rather than fixture.pdf -- see "Generate
+          # signature fixtures" above -- so it is the one check here with a fixture override.
+          Run-Check "signed-save-remove" 60 $signedFixture
           Run-Check "about" 45
 
           if ($failed.Count -gt 0) {

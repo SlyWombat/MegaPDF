@@ -17,7 +17,7 @@ Each cell says two things and both are checked against the code:
 | `GAP` | the feature is **missing** where it should exist — the #571 shape |
 | `+m` | a by-hand step in `TESTING.md` / `docs/RELEASING.md` covers it too |
 
-230 pairings: 134 UI, 60 eng, 14 —, 14 n/a, 8 GAP.
+230 pairings: 135 UI, 59 eng, 14 —, 14 n/a, 8 GAP.
 
 This map is about *what is covered*, not whether the covering tests pass — that is the
 other jobs' business — and it does not replace the by-hand pass in `docs/RELEASING.md`
@@ -64,7 +64,7 @@ The feature is reachable and no test in CI touches it.
 | Print (`print`) | windows | nothing automated touches printing on Windows: no self-test state, no core test of PdfPrinter, and tools/windows-qa's print flow is manual. | — |
 | A small side indicator of scroll position, including in reading mode (`scroll-position-indicator`) | ios | pre-existing: SwiftUI's default fading scroll indicator, never overridden by `.scrollIndicators(...)` anywhere in the app, so reading mode (which hides only the nav/bottom bars and the tool strip) leaves it exactly as it is outside reading mode. The page list is one continuous ScrollView/LazyVStack over every page, so the indicator is whole-document position. Nothing automated asserts the indicator itself — it is not exposed to the accessibility tree XCUITest reads, the same reason ViewerZoomUITests has to sleep 1.5s for it to fade rather than assert on it directly. | — |
 
-### Engine only — this platform's own path is untested (60)
+### Engine only — this platform's own path is untested (59)
 
 The shared core proves the operation. Nothing proves this platform reaches it correctly, which is where #401 and #412 lived.
 
@@ -76,7 +76,6 @@ The shared core proves the operation. Nothing proves this platform reaches it co
 | The build a user installs (MSIX, App Store sandbox, .deb, Snap, Flatpak, tarball) (`packaged-install`) | macos | the App Store build runs --self-test out of the bundle; the sandboxed, signed, installed app is only ever run by hand on the Mac mini. | — |
 | The build a user installs (MSIX, App Store sandbox, .deb, Snap, Flatpak, tarball) (`packaged-install`) | windows | the MSIX's identity, architecture and resource map are checked; nothing runs the installed MSIX in CI, which is where #401 was. | — |
 | Screen-reader names and announcements (`screen-reader`) | android | touch-exploration arithmetic and notice formatting; no instrumented test reads a content description back, and TalkBack is by hand. | — |
-| Protected, restricted, XFA and damaged documents (`special-documents`) | windows | the gating rules are tested; no self-test state opens a restricted or XFA document in the UI. | — |
 | Light and dark app chrome (`theme`) | android | no instrumented test runs in dark mode. | — |
 | Light and dark app chrome (`theme`) | linux | as macOS. | — |
 | Light and dark app chrome (`theme`) | macos | --self-test never switches theme; the --theme flag exists for by-hand screenshot poses only. | — |
@@ -216,7 +215,7 @@ The shared core proves the operation. Nothing proves this platform reaches it co
 | **Screen-reader names and announcements** | UI | UI | UI | UI | eng |
 | **Keyboard-only operation** | UI | UI | UI | — | n/a |
 | **About, the version, and the third-party notices** | UI+m | UI | UI | —+m | eng |
-| **Protected, restricted, XFA and damaged documents** | eng | UI | UI | UI | UI |
+| **Protected, restricted, XFA and damaged documents** | UI | UI | UI | UI | UI |
 | **The build a user installs (MSIX, App Store sandbox, .deb, Snap, Flatpak, tarball)** | eng+m | eng+m | UI+m | —+m | —+m |
 
 ## Cell by cell
@@ -671,11 +670,11 @@ signature says so first. #576's is the other half: a signature our own save has 
 destroyed must not go on presenting itself, so the person is asked whether to leave it out
 of the file being written, and the file that is written then reports what it really is.
 
-- **Windows** — eng. coverage: engine only. reachable from `src/MegaPDF.App/DocumentViewModel.cs::DocumentCapabilities`. tests: `tests/MegaPDF.Core.Tests/DocumentCapabilitiesTests.cs::Capabilities`, `tests/MegaPDF.Core.Tests/DynamicXfaTests.cs::Xfa`, `tests/MegaPDF.Core.Tests/SignatureDetectionTests.cs::Detect`, `tests/MegaPDF.Core.Tests/CorpusTests.cs::corpus`. the gating rules are tested; no self-test state opens a restricted or XFA document in the UI.
+- **Windows** — UI. coverage: UI/VM. reachable from `src/MegaPDF.App/DocumentViewModel.cs::ConfirmOverwriteSignedAsync`. tests: `tests/MegaPDF.Core.Tests/DocumentCapabilitiesTests.cs::Capabilities`, `tests/MegaPDF.Core.Tests/DynamicXfaTests.cs::Xfa`, `tests/MegaPDF.Core.Tests/SignatureDetectionTests.cs::Detect`, `tests/MegaPDF.Core.Tests/CorpusTests.cs::corpus`, `src/MegaPDF.App/Screenshot.cs::CheckSignedSaveRemovalAsync`, `.github/workflows/ci.yml::Run-Check "signed-save-remove"`. the gating rules are tested; no self-test state opens a restricted or XFA document in the UI. #576: the signed-save warning's removal tick is now offered here too (parity with macOS/Linux), proved by the `signed-save-remove` self-test state — the dialog read back through DialogGate.Current, the write path driven directly, and the saved file reopened to check what it actually contains, both ticked and not.
 - **macOS** — UI. coverage: UI/VM. reachable from `src/MegaPDF.Avalonia/ViewModels/DocumentViewModel.cs::DocumentCapabilities`. tests: `tests/MegaPDF.Core.Tests/DocumentCapabilitiesTests.cs::Capabilities`, `tests/MegaPDF.Core.Tests/DynamicXfaTests.cs::Xfa`, `tests/MegaPDF.Core.Tests/SignatureDetectionTests.cs::Detect`, `src/MegaPDF.Avalonia/Program.cs::CheckDeadSignature`, `src/MegaPDF.Avalonia/Program.cs::CheckSignedSaveQuestion`. the self-test opens a dynamic-XFA document and a signed one and checks what the window offers (#457, #481); #576 adds the signed-save question itself, driven in a real window, and asserts on the wording the person would have read rather than only on what happened next.
 - **Linux** — UI. coverage: UI/VM. reachable from `src/MegaPDF.Avalonia/ViewModels/DocumentViewModel.cs::DocumentCapabilities`. tests: `tests/MegaPDF.Core.Tests/DocumentCapabilitiesTests.cs::Capabilities`, `tests/MegaPDF.Core.Tests/DynamicXfaTests.cs::Xfa`, `tests/MegaPDF.Core.Tests/SignatureDetectionTests.cs::Detect`, `src/MegaPDF.Avalonia/Program.cs::CheckDeadSignature`, `src/MegaPDF.Avalonia/Program.cs::CheckSignedSaveQuestion`. as macOS.
 - **iOS/iPadOS** — UI. coverage: UI/VM. reachable from `ios/MegaPDF/ViewerModel.swift::capabilities`. tests: `ios/MegaPDFTests/DynamicXfaTests.swift::class`, `ios/MegaPDFTests/DocumentCapabilitiesTests.swift::class`, `ios/MegaPDFTests/SignatureDetectionTests.swift::class`, `ios/MegaPDFTests/PagesFieldHierarchyTests.swift::class`. PdfEngineTests also feeds the engine invalid bytes.
-- **Android** — UI. coverage: UI/VM. reachable from `android/app/src/main/java/com/megapdf/android/ViewerScreen.kt::R.string.signed_overwrite_title`. tests: `android/app/src/androidTest/java/com/megapdf/android/DynamicXfaTest.kt::class`, `android/app/src/androidTest/java/com/megapdf/android/SignatureOverwriteTest.kt::class`, `android/engine/src/androidTest/java/com/megapdf/engine/DocumentFlagsTest.kt::class`. the signed-document overwrite question has an instrumented test here; #576's choice to remove a dead signature is on the Avalonia desktops only so far, so Android, Windows and iOS still warn about a signature our own save has already destroyed.
+- **Android** — UI. coverage: UI/VM. reachable from `android/app/src/main/java/com/megapdf/android/ViewerScreen.kt::R.string.signed_overwrite_title`. tests: `android/app/src/androidTest/java/com/megapdf/android/DynamicXfaTest.kt::class`, `android/app/src/androidTest/java/com/megapdf/android/SignatureOverwriteTest.kt::class`, `android/engine/src/androidTest/java/com/megapdf/engine/DocumentFlagsTest.kt::class`. the signed-document overwrite question has an instrumented test here; #576's choice to remove a dead signature now reaches macOS, Linux and Windows. Android and iOS still only warn about a signature our own save has already destroyed — each is its own pass, tracked by #576, in the idiom its own save flow already uses rather than a copy of the desktop checkbox.
 
 ### The build a user installs (MSIX, App Store sandbox, .deb, Snap, Flatpak, tarball) (`packaged-install`)
 
