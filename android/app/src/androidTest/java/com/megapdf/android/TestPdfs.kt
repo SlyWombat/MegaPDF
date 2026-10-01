@@ -51,6 +51,41 @@ object TestPdfs {
     }
 
     /**
+     * [count] pages, each with its content stream padded to roughly [contentBytes] (#145):
+     * reading a page's size (`megapdf_page_width`/`height`, what opening a document does for
+     * every page) only reads its `/MediaBox`, so it costs the same whatever this is — but
+     * *copying* a page, which is what extract and combine do, has to carry its content with it,
+     * so this is what makes one engine call over a modest page count take a real amount of wall
+     * time without making opening the document anywhere near as slow. `multiPage`'s own content
+     * is a few bytes; a test timing a single whole-document engine call against it would be
+     * timing something that finishes before the busy indicator's 0.5 s show threshold however
+     * many pages there are, which is the shape #145's own [PageToolsProgressTest.
+     * extractingALotOfPagesCanBeStoppedAndLeavesNothingBehind] found the hard way.
+     *
+     * The padding is `q Q` repeated — push and pop the graphics state, a complete no-op pair —
+     * so it parses as ordinary content and draws nothing extra.
+     */
+    fun multiPageBulky(count: Int, contentBytes: Int): ByteArray {
+        val objects = ArrayList<String>()
+        val firstPage = 4
+        fun pageObject(index: Int) = firstPage + index * 2
+        fun contentObject(index: Int) = firstPage + index * 2 + 1
+
+        val kids = (0 until count).joinToString(" ") { "${pageObject(it)} 0 R" }
+        objects += "<< /Type /Catalog /Pages 2 0 R >>"
+        objects += "<< /Type /Pages /Kids [$kids] /Count $count >>"
+        objects += "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"
+        val padding = buildString { while (length < contentBytes) append("q Q\n") }
+        for (index in 0 until count) {
+            objects += "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] " +
+                "/Resources << /Font << /F1 3 0 R >> >> /Contents ${contentObject(index)} 0 R >>"
+            val body = "BT /F1 36 Tf 72 700 Td (Page ${index + 1}) Tj ET\n$padding"
+            objects += "<< /Length ${body.length} >>\nstream\n$body\nendstream"
+        }
+        return assemble(objects)
+    }
+
+    /**
      * A one-page form whose two text widgets ("first", "last") are kids of a parent field
      * ("person"): the top-level name lives on the parent dictionary, not on the widgets. Importing
      * it into a document that already has a field called "person" is refused whole with

@@ -101,7 +101,12 @@ class BusyIndicator internal constructor(
 
     /** Asks the newest running piece of work to stop; does nothing if it cannot, or already was. */
     fun requestCancel() {
-        // STUB-FOR-RED (#145): not implemented yet. Restored in the next commit.
+        val latest = active.lastOrNull() ?: return
+        val cancel = latest.cancel ?: return
+        if (latest.isCancelling) return
+        latest.isCancelling = true
+        update()
+        cancel.invoke()
     }
 
     /** Drops every piece of work at once, without waiting out the minimum: its document is gone. */
@@ -130,8 +135,7 @@ class BusyIndicator internal constructor(
             spot = latest.spot
             progressDone = latest.progressDone
             progressTotal = latest.progressTotal
-            // STUB-FOR-RED (#145): not implemented yet. Restored in the next commit.
-            canCancel = false
+            canCancel = latest.cancel != null && !latest.isCancelling
             isCancelling = latest.isCancelling
             hideJob?.cancel()
             hideJob = null
@@ -214,7 +218,9 @@ class BusyToken internal constructor(
      * count that finishes before the work does.
      */
     fun report(done: Int, total: Int) {
-        // STUB-FOR-RED (#145): not implemented yet. Restored in the next commit.
+        progressDone = done
+        progressTotal = total
+        owner?.changed()
     }
 
     fun end() {

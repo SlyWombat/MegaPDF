@@ -221,6 +221,11 @@ class ImportPagesOperation(
  * than needing a device.
  */
 val PdfEditOperation.busyLabel: BusyLabel
-    // STUB-FOR-RED (#145): not implemented yet — every page tool still reports the generic
-    // label. Restored to the real mapping in the next commit; see that diff for the real body.
-    get() = BusyLabel.APPLYING
+    get() = when (this) {
+        is RotatePagesOperation -> BusyLabel.TURNING_PAGES
+        is DeletePagesOperation -> BusyLabel.DELETING_PAGES
+        is MovePageOperation -> BusyLabel.MOVING_PAGE
+        is InsertBlankPageOperation -> BusyLabel.INSERTING_PAGE
+        is ImportPagesOperation -> BusyLabel.ADDING_PAGES
+        else -> BusyLabel.APPLYING
+    }

@@ -92,13 +92,22 @@ class PageToolsProgressTest {
 
     @Test
     fun extractingALotOfPagesCanBeStoppedAndLeavesNothingBehind() {
-        val file = Fixtures.written("pages-progress-extract-145.pdf", TestPdfs.multiPage(HUGE_PAGE_COUNT))
+        // multiPage's pages are a handful of bytes each, which is the wrong shape for this test:
+        // reading a page's *size* (what opening a document does, for every page) only reads its
+        // MediaBox, but writing a page out (what extract does, once, for every selected page) has
+        // to carry its content — so a content-light fixture lets the one call finish before the
+        // busy indicator's 0.5 s threshold however many pages it has (found running this on CI:
+        // 5,000 content-light pages opened and extracted in well under a second put together).
+        // multiPageBulky's padding inflates the second cost without inflating the first.
+        val file = Fixtures.written(
+            "pages-progress-extract-145.pdf", TestPdfs.multiPageBulky(EXTRACT_PAGE_COUNT, EXTRACT_PAGE_BYTES),
+        )
         rule.open(file)
         val out = Fixtures.empty("pages-progress-extract-145-out.pdf")
 
-        openPages(HUGE_PAGE_COUNT)
+        openPages(EXTRACT_PAGE_COUNT)
         rule.menu(str(R.string.pages_select_all))
-        rule.waitForText(str(R.string.pages_selected, HUGE_PAGE_COUNT))
+        rule.waitForText(str(R.string.pages_selected, EXTRACT_PAGE_COUNT))
         intending(allOf(hasAction(Intent.ACTION_CREATE_DOCUMENT), hasType("application/pdf")))
             .respondWith(picked(Fixtures.uri(out)))
         rule.menu(str(R.string.pages_save_selection))
@@ -112,7 +121,7 @@ class PageToolsProgressTest {
         assertFalse("a stopped extract leaves nothing at the destination", out.exists() && out.length() > 0)
         // The document itself was only ever read from, never touched.
         assertFalse(rule.viewModel.isDirty)
-        assertEquals(HUGE_PAGE_COUNT, (rule.viewModel.uiState as ViewerUiState.Viewing).pageSizes.size)
+        assertEquals(EXTRACT_PAGE_COUNT, (rule.viewModel.uiState as ViewerUiState.Viewing).pageSizes.size)
         assertFalse("nothing is running any more, so Stop should not still be offered", rule.nodeExists(hasText(stopLabel)))
     }
 
@@ -157,14 +166,24 @@ class PageToolsProgressTest {
 
     companion object {
         /**
-         * Large enough that a single engine call over this many pages — combine's import, or
-         * extract's write — clears the busy indicator's 0.5 s show threshold even on a slow,
-         * nested-virtualised CI emulator. Combine and extract are each one PDFium call with no
-         * interior Kotlin can see progress through (contract 10's own reason there is no count
-         * for either), so unlike search's per-page sweep, the only way to give the assertions
-         * below a real window is to make the one call itself take a while.
+         * Large enough that combine's one import call clears the busy indicator's 0.5 s show
+         * threshold even on a slow, nested-virtualised CI emulator. Confirmed on CI: at this
+         * count, opening the (content-light) primary document is fast — it is only ever a
+         * 2-page file here — and the import itself is what takes the time.
          */
         private const val HUGE_PAGE_COUNT = 5_000
+
+        /**
+         * Extract's own fixture is [multiPageBulky], not [multiPage] (see the test for why):
+         * confirmed on CI that [HUGE_PAGE_COUNT] content-light pages open *and* extract in well
+         * under a second between them — a few hundred KB of real content, put together — so a
+         * content-light fixture at any page count this test could reasonably use never offers a
+         * Stop to press. 800 pages of ~100 KB of content each is an 80 MB document: still quick
+         * to open (opening reads only page sizes, never page content), and three orders of
+         * magnitude more content than the measurement above, for a write that takes a while.
+         */
+        private const val EXTRACT_PAGE_COUNT = 800
+        private const val EXTRACT_PAGE_BYTES = 100_000
 
         /** Large enough that the per-page sweep's own count is caught mid-way. */
         private const val SEARCH_PAGE_COUNT = 2_000
