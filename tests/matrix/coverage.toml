@@ -1614,13 +1614,15 @@ tests = [
 ]
 [feature.ios]
 presence = "present"
-entry = "ios/MegaPDF/ViewerView.swift::busy"
-coverage = "engine"
+entry = "ios/MegaPDF/ViewerView.swift::busyStop"
+coverage = "ui"
 tests = [
   "ios/MegaPDFTests/BusyStateTests.swift::class",
   "ios/MegaPDFTests/NoticeLifetimeTests.swift::class",
+  "ios/MegaPDFTests/ProgressAndStopTests.swift::class",
+  "ios/MegaPDFUITests/ProgressStripUITests.swift::testAScanShowsItsCountAndCanBeStoppedFromTheStrip",
 ]
-note = "the timing state machine only; no UI test sees a busy strip or presses Stop."
+note = "the timing state machine, the progress and Stop layer, and a UI test that reads the count line and presses the Stop in a running app — which is how the Stop's hit area was found to be 15.7 points tall. Search has progress and Stop, extract has Stop, a save has neither on purpose (#145); shrink does not exist on this platform."
 [feature.android]
 presence = "present"
 entry = "android/app/src/main/java/com/megapdf/android/ViewerScreen.kt::BusyStopSnackbar"
