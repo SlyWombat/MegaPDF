@@ -25,6 +25,14 @@ internal static class DialogGate
     public static bool IsShowing { get; private set; }
 
     /// <summary>
+    /// The dialog currently on screen through this gate, for a self-test that needs to read
+    /// or close it (#590). Every dialog here is built ad hoc with no field of its own to hold
+    /// it (<c>ShowNewPasswordDialogAsync</c>, the notices viewer, the signed-save warning), so
+    /// this is the one place a check can reach it without a bespoke seam per dialog.
+    /// </summary>
+    internal static ContentDialog? Current { get; private set; }
+
+    /// <summary>
     /// Raised as a dialog opens and closes. The main window disables its toolbar meanwhile
     /// (#169): the smoke layer stops the mouse, but a toolbar button that kept keyboard
     /// focus, or UI Automation, could still press it behind the dialog.
@@ -36,11 +44,13 @@ internal static class DialogGate
         await Turn.WaitAsync();
         try
         {
+            Current = dialog;
             SetShowing(true);
             return await dialog.ShowAsync();
         }
         finally
         {
+            Current = null;
             SetShowing(false);
             Turn.Release();
         }

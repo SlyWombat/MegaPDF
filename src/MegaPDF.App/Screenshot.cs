@@ -195,6 +195,39 @@ internal static class Screenshot
             case "progress":
                 return await CheckProgressAndCancelAsync(window);
 
+            // #590: a real AcroForm text field filled in, and a real AcroForm checkbox
+            // ticked — not the drawn square `click` already covers (fixture.pdf has no
+            // AcroForm fields at all). Needs formtext.pdf and forms.pdf beside the
+            // document on the command line (tools/gen_test_fixtures.py writes both next
+            // to fixture.pdf, so CI's "Generate fixtures" step already has them there).
+            // The exit code is the test.
+            case "fill":
+                return await CheckFillFormAsync(window);
+
+            // #590: a redaction mark drawn, selected, moved, resized, removed, cleared and
+            // undone — the #329 mark lifecycle, with no Windows self-test state to watch
+            // it. Needs a document; the exit code is the test.
+            case "redact":
+                return await CheckRedactMarkAsync(window);
+
+            // #590: pressing Save for real — the file on disk changes and
+            // HasUnsavedChanges clears. Needs a document; the exit code is the test.
+            case "save":
+                return await CheckSaveAsync(window);
+
+            // #590: the Password command raises the real Set Password dialog with its
+            // real fields, and the write path behind it (ApplySecurityAsync) actually
+            // encrypts the saved file. Needs a document; the exit code is the test.
+            case "security":
+                return await CheckSecurityDialogAsync(window);
+
+            // #590: About's version text and the third-party notices dialog — #571 was
+            // this exact shape on Linux (a route and a window, nothing leading to
+            // either). Needs a document (ApplyStateAsync's own guard); the exit code is
+            // the test.
+            case "about":
+                return await CheckAboutAsync(window);
+
             default:
                 Console.Error.WriteLine($"unknown --screenshot-state '{state}'");
                 return false;
@@ -2356,6 +2389,588 @@ internal static class Screenshot
     }
 
     /// <summary>
+    /// A real AcroForm text field filled in, and a real AcroForm checkbox ticked (#590).
+    /// `click` already drives the fixture's own text line and its drawn square, but
+    /// fixture.pdf has no AcroForm field of either kind — this is the row `form-fields`
+    /// and `checkboxes` actually describe. formtext.pdf and forms.pdf (tools/gen_test_fixtures.py)
+    /// are opened as copies beside the fixture the way `pages` opens its own extra tabs, so
+    /// nothing here ever writes back into the shared fixtures directory CI generates once for
+    /// every state (the #569 shape: a shared path remembers things a scratch copy must not).
+    /// Needs a document; the exit code is the test.
+    /// </summary>
+    private static async Task<bool> CheckFillFormAsync(MainWindow window)
+    {
+        if (window.Shell.Active is not { IsDocumentOpen: true } fixtureTab
+            || fixtureTab.DocumentPath is not { } fixturePath)
+        {
+            Console.Error.WriteLine("--screenshot-state fill needs a document.");
+            return false;
+        }
+
+        var passed = 0;
+        var failed = 0;
+        void Check(string what, bool ok)
+        {
+            Console.Error.WriteLine($"{(ok ? "PASS" : "FAIL")}: {what}");
+            if (ok)
+                passed++;
+            else
+                failed++;
+        }
+
+        // A GUID per run (#569): these are copies of fixtures this check never saves back
+        // over, but every other state here gives itself a fresh scratch directory and this
+        // one follows suit rather than being the one exception.
+        var scratch = Path.Combine(Path.GetTempPath(), $"megapdf-selftest-fill-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(scratch);
+        try
+        {
+            await RunFillFormChecksAsync(window, fixtureTab, fixturePath, scratch, Check);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"FAIL: the form-fill check threw: {ex}");
+            failed++;
+        }
+        finally
+        {
+            foreach (var tab in window.Shell.Documents.Where(t => !ReferenceEquals(t, fixtureTab)).ToList())
+            {
+                tab.HasUnsavedChanges = false;   // never ask about scratch (#145 D5's dialog)
+                await window.CloseTabAsync(tab);
+            }
+            try { Directory.Delete(scratch, recursive: true); } catch { /* best-effort scratch cleanup */ }
+        }
+
+        Console.Error.WriteLine($"fill: {passed} passed, {failed} failed ({passed + failed} checks)");
+        return failed == 0;
+    }
+
+    private static async Task RunFillFormChecksAsync(
+        MainWindow window, DocumentViewModel fixtureTab, string fixturePath, string scratch,
+        Action<string, bool> Check)
+    {
+        // Siblings of the fixture CI's "Generate fixtures" step already wrote — same
+        // directory derivation `reading` uses for demo.pdf. Hard failures below, not the
+        // lenient skip `reading` uses for its own optional multi-tab section: a state whose
+        // whole job is proving these two widgets work has nothing to report if they are not
+        // there to test.
+        var fixturesDir = Path.GetDirectoryName(fixturePath) ?? "";
+        var formTextSource = Path.Combine(fixturesDir, "formtext.pdf");
+        var formsSource = Path.Combine(fixturesDir, "forms.pdf");
+        if (!File.Exists(formTextSource) || !File.Exists(formsSource))
+        {
+            Check($"formtext.pdf and forms.pdf are beside {Path.GetFileName(fixturePath)}",
+                  false);
+            return;
+        }
+
+        // --- AcroForm text field: formtext.pdf's "fullname" widget, (100,600)-(300,620) in
+        // PDF space on a 792pt-tall page => 172..192 from the top (same fixture, same
+        // coordinates the Avalonia leg's own form-text-fields check uses). ---
+        var formTextWork = Path.Combine(scratch, "formtext-work.pdf");
+        File.Copy(formTextSource, formTextWork, overwrite: true);
+        var textTab = await window.Shell.OpenInTabAsync(formTextWork);
+        await Task.Delay(1000);
+        Check("a working tab opened on formtext.pdf", textTab.IsDocumentOpen && textTab.View is not null);
+        if (textTab.View is { } textView)
+        {
+            var inTheBox = new PdfPoint(200, 182);
+            var hit = textTab.HitTestPage(0, inTheBox);
+            Check("the widget reads as a form text field", hit.Kind == PageHitKind.FormTextField);
+            Check("and starts empty", hit.Field is { Value: "" });
+
+            Check("clicking it opens the inline editor",
+                  await textView.ActivatePageForTest(0, inTheBox) && textView.HasActiveEditorForTest);
+            textView.ActiveEditorTextForTest = "Pat Adams";
+            await textView.CommitActiveEditorForTest();
+            await Task.Delay(500);
+
+            Check("filling it marks the document dirty", textTab.HasUnsavedChanges);
+            Check("and the value is readable back",
+                  textTab.HitTestPage(0, inTheBox).Field is { Value: "Pat Adams" });
+
+            var savedForm = Path.Combine(scratch, "formtext-filled.pdf");
+            await textTab.SaveToPathForTestAsync(savedForm);
+            using (var engine = new PdfiumEngine())
+            using (var reopened = engine.Open(savedForm))
+            using (var page = reopened.GetPage(0))
+            {
+                var saved = page.GetFormFields().FirstOrDefault(f => f.Name == "fullname");
+                Check("the value survived save and reopen", saved is { Value: "Pat Adams" });
+            }
+
+            Check("undo empties it again", textTab.UndoCommand.CanExecute(null));
+            await textTab.UndoCommand.ExecuteAsync(null);
+            await Task.Delay(300);
+            Check("  back to empty", textTab.HitTestPage(0, inTheBox).Field is { Value: "" });
+        }
+
+        // --- AcroForm checkbox: forms.pdf's "agree" widget, same (107,184) the Avalonia
+        // leg's own AcroForm-checkbox check uses. ---
+        var formsWork = Path.Combine(scratch, "forms-work.pdf");
+        File.Copy(formsSource, formsWork, overwrite: true);
+        var boxTab = await window.Shell.OpenInTabAsync(formsWork);
+        await Task.Delay(1000);
+        Check("a working tab opened on forms.pdf", boxTab.IsDocumentOpen && boxTab.View is not null);
+        if (boxTab.View is { } boxView)
+        {
+            var widgetCentre = new PdfPoint(107, 184);
+            var hit = boxTab.HitTestPage(0, widgetCentre);
+            Check("the widget reads as a form checkbox", hit.Kind == PageHitKind.FormCheckbox);
+            Check("and starts unchecked", hit.Field is { IsChecked: false });
+
+            Check("clicking it ticks the field", await boxView.ActivatePageForTest(0, widgetCentre));
+            await Task.Delay(300);
+            Check("  the field now reads checked",
+                  boxTab.HitTestPage(0, widgetCentre).Field is { IsChecked: true });
+            Check("  and the document is dirty", boxTab.HasUnsavedChanges);
+
+            Check("undo unticks it", boxTab.UndoCommand.CanExecute(null));
+            await boxTab.UndoCommand.ExecuteAsync(null);
+            await Task.Delay(300);
+            Check("  back to unchecked", boxTab.HitTestPage(0, widgetCentre).Field is { IsChecked: false });
+        }
+    }
+
+    /// <summary>
+    /// A redaction mark through the whole lifecycle #329 fixed (#590): drawn, selected,
+    /// moved, resized, removed, undone, redone, cleared and undone again — the mark
+    /// lifecycle <c>RedactionMarkTests.cs</c> proves at the engine level, with no Windows
+    /// self-test state driving the window's own route to it until now. Mirrors
+    /// <see cref="RunWhiteoutAndTextChecksAsync"/>'s own shape, which proved the chrome
+    /// this shares with a whiteout. Needs a document; the exit code is the test.
+    /// </summary>
+    private static async Task<bool> CheckRedactMarkAsync(MainWindow window)
+    {
+        if (window.Shell.Active is not { IsDocumentOpen: true } fixtureTab
+            || fixtureTab.DocumentPath is not { } fixturePath)
+        {
+            Console.Error.WriteLine("--screenshot-state redact needs a document.");
+            return false;
+        }
+
+        var passed = 0;
+        var failed = 0;
+        void Check(string what, bool ok)
+        {
+            Console.Error.WriteLine($"{(ok ? "PASS" : "FAIL")}: {what}");
+            if (ok)
+                passed++;
+            else
+                failed++;
+        }
+
+        var scratch = Path.Combine(Path.GetTempPath(), $"megapdf-selftest-redact-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(scratch);
+        try
+        {
+            await RunRedactMarkChecksAsync(window, fixtureTab, fixturePath, scratch, Check);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"FAIL: the redaction-mark check threw: {ex}");
+            failed++;
+        }
+        finally
+        {
+            foreach (var tab in window.Shell.Documents.Where(t => !ReferenceEquals(t, fixtureTab)).ToList())
+            {
+                tab.HasUnsavedChanges = false;
+                await window.CloseTabAsync(tab);
+            }
+            try { Directory.Delete(scratch, recursive: true); } catch { /* best-effort scratch cleanup */ }
+        }
+
+        Console.Error.WriteLine($"redact: {passed} passed, {failed} failed ({passed + failed} checks)");
+        return failed == 0;
+    }
+
+    private static async Task RunRedactMarkChecksAsync(
+        MainWindow window, DocumentViewModel fixtureTab, string fixturePath, string scratch,
+        Action<string, bool> Check)
+    {
+        var work = Path.Combine(scratch, "work.pdf");
+        File.Copy(fixturePath, work, overwrite: true);
+        var tab = await window.Shell.OpenInTabAsync(work);
+        await Task.Delay(1000);
+        Check("a working tab opened", tab.IsDocumentOpen && tab.View is not null);
+        if (tab.View is not { } view)
+            return;
+
+        static bool Close(PdfRect a, PdfRect b, double tol = 1.5) =>
+            Math.Abs(a.X - b.X) < tol && Math.Abs(a.Y - b.Y) < tol
+            && Math.Abs(a.Width - b.Width) < tol && Math.Abs(a.Height - b.Height) < tol;
+
+        // Clear of both of fixture.pdf's text lines (top-space y 50..102) and its drawn
+        // checkbox (y 180..192, #439's top-left convention): a mark drawn over text grows to
+        // whatever whole glyphs it touches rather than keeping the raw drag (#329's own
+        // remark on MarkForRedactionOperation.Place) — a rect placed on blank page instead
+        // takes the plain-area path and keeps the exact rectangle this check asserts against,
+        // the same way `whiteout`'s own rect (which never text-snaps) gets to reuse (60,60).
+        var placedAt = new PdfRect(60, 400, 80, 40);
+        await tab.AddRedactionMarkAsync(0, placedAt);
+        await Task.Delay(300);
+        Check("a mark can be placed", tab.RedactionMarkAt(0, placedAt.Center) is { } m0 && Close(m0.Bounds, placedAt));
+        Check("placing a mark is undoable, not a write to the file (#329: never applied until Save)",
+              tab.UndoCommand.CanExecute(null));
+
+        Check("clicking it selects it", await view.ActivatePageForTest(0, placedAt.Center));
+        Check("  offering move", view.SelectionIsMovableForTest);
+        Check("  and a resize handle", view.SelectionIsResizableForTest);
+
+        var movedTo = new PdfRect(placedAt.X + 90, placedAt.Y + 50, placedAt.Width + 30, placedAt.Height - 10);
+        var dragged = await view.DragSelectionForTest(movedTo);
+        await Task.Delay(300);
+        Check("dragging and resizing it in one gesture lands",
+              dragged && view.SelectionBoundsForTest is { } landed && Close(landed, movedTo));
+        Check("  the old spot has no mark any more", tab.RedactionMarkAt(0, placedAt.Center) is null);
+        Check("  the new spot does", tab.RedactionMarkAt(0, movedTo.Center) is { } m1 && Close(m1.Bounds, movedTo));
+
+        await tab.UndoCommand.ExecuteAsync(null);
+        await Task.Delay(300);
+        Check("undo restores the prior rect",
+              tab.RedactionMarkAt(0, placedAt.Center) is not null && tab.RedactionMarkAt(0, movedTo.Center) is null);
+
+        await tab.RedoCommand.ExecuteAsync(null);
+        await Task.Delay(300);
+        Check("redo re-applies the move",
+              tab.RedactionMarkAt(0, movedTo.Center) is not null && tab.RedactionMarkAt(0, placedAt.Center) is null);
+
+        // Undo and redo above ran under the chrome the drag left showing — a click on an
+        // already-selected item deselects rather than reselects (pre-existing chrome
+        // behaviour, shared by every selectable kind — RunWhiteoutAndTextChecksAsync's own
+        // remark says the same), and neither Undo nor Redo clears a selection made before
+        // them. One throwaway click clears whatever that left before the real one below
+        // actually selects.
+        await view.ActivatePageForTest(0, movedTo.Center);
+        Check("re-selecting the moved mark", await view.ActivatePageForTest(0, movedTo.Center));
+        Check("removing it takes off the right mark",
+              await view.RemoveSelectionForTest() && tab.RedactionMarkAt(0, movedTo.Center) is null);
+        await tab.UndoCommand.ExecuteAsync(null);
+        await Task.Delay(300);
+        Check("  and undo puts that same one back", tab.RedactionMarkAt(0, movedTo.Center) is not null);
+
+        // A second mark, so Clear all has more than one to prove it clears every mark on
+        // the page rather than coincidentally the only one.
+        var secondAt = new PdfRect(300, 500, 60, 30);
+        await tab.AddRedactionMarkAsync(0, secondAt);
+        await Task.Delay(300);
+        Check("a second mark can be added beside the first",
+              tab.RedactionMarksOn(0).Count == 2);
+
+        Check("Clear all marks takes both off the page", await view.ClearRedactionMarksAsync());
+        await Task.Delay(300);
+        Check("  nothing left on the page", tab.RedactionMarksOn(0).Count == 0);
+
+        await tab.UndoCommand.ExecuteAsync(null);
+        await Task.Delay(300);
+        Check("undoing the clear puts both marks back, in one step", tab.RedactionMarksOn(0).Count == 2);
+
+        // Clean up: undo everything this check did, so the fixture is left as it opened.
+        // Bounded (the page-tools check's own "five page operations" cleanup sets the
+        // precedent): a Revert() that throws leaves CanExecute true forever — UndoStack.Undo
+        // re-pushes the failed op rather than drop it — and an unbounded drain here would
+        // hang the state rather than report the real failure.
+        for (var steps = 0; tab.UndoCommand.CanExecute(null) && steps < 10; steps++)
+            await tab.UndoCommand.ExecuteAsync(null);
+        await Task.Delay(300);
+        Check("fully undone, no marks remain", tab.RedactionMarksOn(0).Count == 0);
+    }
+
+    /// <summary>
+    /// Save, for real (#590): the Save command the toolbar button and Ctrl+S both run
+    /// (<see cref="DocumentViewModel.SaveCommand"/>), not <see cref="DocumentViewModel.SaveToPathForTestAsync"/>'s
+    /// direct call to <c>VerifiedSave</c> that `pages` and `whiteout-text` use to check
+    /// persistence without a file picker — this is the route itself. Proves the file on disk
+    /// actually changes and <see cref="DocumentViewModel.HasUnsavedChanges"/> clears, which is
+    /// the whole of what "Save worked" means to whoever pressed it. Needs a document; the
+    /// exit code is the test.
+    /// </summary>
+    private static async Task<bool> CheckSaveAsync(MainWindow window)
+    {
+        if (window.Shell.Active is not { IsDocumentOpen: true } fixtureTab
+            || fixtureTab.DocumentPath is not { } fixturePath)
+        {
+            Console.Error.WriteLine("--screenshot-state save needs a document.");
+            return false;
+        }
+
+        var passed = 0;
+        var failed = 0;
+        void Check(string what, bool ok)
+        {
+            Console.Error.WriteLine($"{(ok ? "PASS" : "FAIL")}: {what}");
+            if (ok)
+                passed++;
+            else
+                failed++;
+        }
+
+        var scratch = Path.Combine(Path.GetTempPath(), $"megapdf-selftest-save-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(scratch);
+        try
+        {
+            await RunSaveChecksAsync(window, fixturePath, scratch, Check);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"FAIL: the save check threw: {ex}");
+            failed++;
+        }
+        finally
+        {
+            foreach (var tab in window.Shell.Documents.Where(t => !ReferenceEquals(t, fixtureTab)).ToList())
+            {
+                tab.HasUnsavedChanges = false;
+                await window.CloseTabAsync(tab);
+            }
+            try { Directory.Delete(scratch, recursive: true); } catch { /* best-effort scratch cleanup */ }
+        }
+
+        Console.Error.WriteLine($"save: {passed} passed, {failed} failed ({passed + failed} checks)");
+        return failed == 0;
+    }
+
+    private static async Task RunSaveChecksAsync(
+        MainWindow window, string fixturePath, string scratch, Action<string, bool> Check)
+    {
+        var work = Path.Combine(scratch, "work.pdf");
+        File.Copy(fixturePath, work, overwrite: true);
+        var before = await File.ReadAllBytesAsync(work);
+
+        var tab = await window.Shell.OpenInTabAsync(work);
+        await Task.Delay(1000);
+        Check("a working tab opened", tab.IsDocumentOpen);
+        if (!tab.IsDocumentOpen)
+            return;
+
+        Check("a freshly opened document has nothing to save", !tab.HasUnsavedChanges);
+
+        await tab.AddTextBoxAsync(0, new PdfPoint(72, 500), "Saved for real");
+        await Task.Delay(500);
+        Check("adding a note marks the document dirty", tab.HasUnsavedChanges);
+        Check("Save is available once there is something to save", tab.SaveCommand.CanExecute(null));
+
+        await tab.SaveCommand.ExecuteAsync(null);
+        await Task.Delay(1000);
+
+        Check("Save clears the unsaved flag", !tab.HasUnsavedChanges);
+
+        var after = await File.ReadAllBytesAsync(work);
+        Check($"the file on disk actually changed ({before.Length} -> {after.Length} bytes)",
+              !before.AsSpan().SequenceEqual(after));
+
+        using (var engine = new PdfiumEngine())
+        using (var reopened = engine.Open(work))
+        using (var page = reopened.GetPage(0))
+        {
+            Check("what was added is in the saved file, independently reopened",
+                  page.GetTextBoxes().Any(t => t.Text == "Saved for real"));
+        }
+
+        // Clean up in memory, though the file on disk already carries the note and this
+        // check does not undo it there — the scratch copy is deleted with the directory.
+        // Bounded, not while(CanExecute) — see the redact check's own remark on why.
+        for (var steps = 0; tab.UndoCommand.CanExecute(null) && steps < 10; steps++)
+            await tab.UndoCommand.ExecuteAsync(null);
+    }
+
+    /// <summary>
+    /// The Password command's real dialog, and the write path behind it (#590). WinUI gives
+    /// this process no way to press an ad hoc <see cref="ContentDialog"/>'s Primary button
+    /// short of UI Automation on a live desktop session — the same honest limit
+    /// <see cref="DocumentView.DragSelectionForTest"/> already documents for a gesture this
+    /// process cannot synthesize either — so this proves the dialog itself is the real one,
+    /// with its real two password fields, reachable through <see cref="DialogGate.Current"/>,
+    /// cancels it exactly as pressing Escape would, and then drives the save-with-a-password
+    /// path it would have run (<see cref="DocumentViewModel.SetPasswordForTestAsync"/>)
+    /// directly — proving the saved file is genuinely encrypted by reopening it with no
+    /// password (refused) and with the password (opens). Needs a document; the exit code is
+    /// the test.
+    /// </summary>
+    private static async Task<bool> CheckSecurityDialogAsync(MainWindow window)
+    {
+        if (window.Shell.Active is not { IsDocumentOpen: true } fixtureTab
+            || fixtureTab.DocumentPath is not { } fixturePath)
+        {
+            Console.Error.WriteLine("--screenshot-state security needs a document.");
+            return false;
+        }
+
+        var passed = 0;
+        var failed = 0;
+        void Check(string what, bool ok)
+        {
+            Console.Error.WriteLine($"{(ok ? "PASS" : "FAIL")}: {what}");
+            if (ok)
+                passed++;
+            else
+                failed++;
+        }
+
+        var scratch = Path.Combine(Path.GetTempPath(), $"megapdf-selftest-security-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(scratch);
+        try
+        {
+            await RunSecurityChecksAsync(window, fixturePath, scratch, Check);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"FAIL: the security check threw: {ex}");
+            failed++;
+        }
+        finally
+        {
+            foreach (var tab in window.Shell.Documents.Where(t => !ReferenceEquals(t, fixtureTab)).ToList())
+            {
+                tab.HasUnsavedChanges = false;
+                await window.CloseTabAsync(tab);
+            }
+            try { Directory.Delete(scratch, recursive: true); } catch { /* best-effort scratch cleanup */ }
+        }
+
+        Console.Error.WriteLine($"security: {passed} passed, {failed} failed ({passed + failed} checks)");
+        return failed == 0;
+    }
+
+    private static async Task RunSecurityChecksAsync(
+        MainWindow window, string fixturePath, string scratch, Action<string, bool> Check)
+    {
+        const string password = "correct horse battery staple";
+        var work = Path.Combine(scratch, "work.pdf");
+        File.Copy(fixturePath, work, overwrite: true);
+        var tab = await window.Shell.OpenInTabAsync(work);
+        await Task.Delay(1000);
+        Check("a working tab opened", tab.IsDocumentOpen);
+        if (!tab.IsDocumentOpen)
+            return;
+
+        Check("Security is available on an unencrypted, fully-accessible document",
+              tab.SecurityCommand.CanExecute(null));
+
+        // --- The dialog itself: raised, real, and cancellable -------------------------
+        //
+        // DialogGate.Current is one static slot, not a stack: if anything else already had
+        // the gate (a leftover dialog from an earlier step in this same process), Current
+        // would be THAT dialog while this one waits its turn behind it, and this check would
+        // read, title-match and Hide() the wrong one — then wait forever below on a Set
+        // Password dialog nobody closes. Pumped rather than slept, and matched by title
+        // rather than trusted on sight, so a mismatch is a clear FAIL instead of a hang.
+        var showing = tab.SecurityCommand.ExecuteAsync(null);
+        await PumpUntilAsync(() => DialogGate.Current is not null, TimeSpan.FromSeconds(5));
+        Check("the toolbar is disabled while the password dialog shows", !window.IsToolbarEnabled);
+        if (DialogGate.Current is { } dialog && Equals(dialog.Title, Strings.SetPasswordTitle))
+        {
+            Check("it is the Set Password dialog", true);
+            var fields = (dialog.Content as Panel)?.Children.OfType<PasswordBox>().ToList() ?? [];
+            Check("it shows the two real password fields (new, confirm)", fields.Count == 2);
+            dialog.Hide(); // cancel — WinUI gives this process no way to press Primary itself
+        }
+        else
+        {
+            var found = DialogGate.Current is { } other ? $"found \"{other.Title}\" instead" : "nothing is open";
+            Check($"the Set Password dialog is actually the one open ({found})", false);
+        }
+        // Bounded: if the dialog found above was not really the one SecurityCommand raised
+        // (the mismatch branch just above), nothing ever closes it and an unconditional await
+        // here would hang until the state's own CI timeout kills it with no PASS/FAIL to show
+        // for the wait.
+        if (await Task.WhenAny(showing, Task.Delay(TimeSpan.FromSeconds(5))) != showing)
+            Check("the password command returned once the dialog closed (it did not, within 5s)", false);
+        await Task.Delay(300);
+        Check("cancelling leaves the document unencrypted", !tab.HasUnsavedChanges);
+        Check("  and the toolbar re-enabled", window.IsToolbarEnabled);
+
+        // --- The write path the dialog's Set button would have run ---------------------
+        await tab.SetPasswordForTestAsync(password);
+        await Task.Delay(1000);
+        Check("setting a password clears the unsaved flag (it is a save)", !tab.HasUnsavedChanges);
+        Check($"and announces it (\"{tab.SecurityNotice}\")", tab.IsSecurityNoticeOpen && tab.SecurityNotice == Strings.PasswordSetNotice);
+
+        using (var engine = new PdfiumEngine())
+        {
+            var openedWithoutPassword = false;
+            try
+            {
+                using var noPassword = engine.Open(work);
+                openedWithoutPassword = true;
+            }
+            catch (PdfLoadException ex)
+            {
+                Check("opening the saved file with no password is refused as a password error", ex.IsPasswordError);
+            }
+            Check("the saved file genuinely needs a password now", !openedWithoutPassword);
+
+            using var withPassword = engine.Open(work, password);
+            Check("and opens with the right one", withPassword.PageCount > 0);
+        }
+    }
+
+    /// <summary>
+    /// About's version line, and the third-party notices dialog (#590) — #571 was exactly
+    /// this shape on Linux: a window that had shipped for releases with nothing in any
+    /// self-test leading to it. Needs a document (<see cref="ApplyStateAsync"/>'s own guard,
+    /// not used otherwise here); the exit code is the test.
+    /// </summary>
+    private static async Task<bool> CheckAboutAsync(MainWindow window)
+    {
+        var passed = 0;
+        var failed = 0;
+        void Check(string what, bool ok)
+        {
+            Console.Error.WriteLine($"{(ok ? "PASS" : "FAIL")}: {what}");
+            if (ok)
+                passed++;
+            else
+                failed++;
+        }
+
+        try
+        {
+            var expectedVersion = typeof(MainWindow).Assembly.GetName().Version?.ToString(3) ?? "dev";
+            window.OpenSettingsFlyoutForTest();
+            await PumpUntilAsync(() => window.AboutVersionTextForTest.Length > 0, TimeSpan.FromSeconds(5));
+            Check($"About shows the real assembly version (\"{window.AboutVersionTextForTest}\", expected \"{expectedVersion}\")",
+                  window.AboutVersionTextForTest == Strings.AboutVersion(expectedVersion));
+
+            var notices = await MainWindow.LoadThirdPartyNoticesForTest();
+            Check("the bundled notices file loads", notices.Length > 0 && !notices.StartsWith(Strings.NoticesLoadFailed, StringComparison.Ordinal));
+            Check("  and actually lists a third-party component (PDFium)", notices.Contains("PDFium", StringComparison.Ordinal));
+
+            // DialogGate.Current is one slot, not a stack (see the `security` check's own
+            // remark) — matched by title, not trusted on sight, so a leftover dialog from
+            // anywhere else in this run cannot be misreported as the notices dialog.
+            window.OpenThirdPartyNoticesForTest();
+            await PumpUntilAsync(() => DialogGate.Current is not null, TimeSpan.FromSeconds(5));
+            if (DialogGate.Current is { } dialog && Equals(dialog.Title, Strings.NoticesTitle))
+            {
+                Check("the notices dialog is the real one", true);
+                Check("  showing the same text", dialog.Content is TextBox tb && tb.Text.Contains("PDFium", StringComparison.Ordinal));
+                dialog.Hide();
+            }
+            else
+            {
+                var found = DialogGate.Current is { } other ? $"found \"{other.Title}\" instead" : "nothing is open";
+                Check($"the notices dialog actually opened ({found})", false);
+            }
+            await Task.Delay(300);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"FAIL: the about check threw: {ex}");
+            failed++;
+        }
+        finally
+        {
+            window.CloseSettingsFlyoutForTest();
+        }
+
+        Console.Error.WriteLine($"about: {passed} passed, {failed} failed ({passed + failed} checks)");
+        return failed == 0;
+    }
+
+    /// <summary>
     /// The signature library with one card in it (#100). An empty library is seeded
     /// from tools/assets/megawoman-sig.jpg through the same cleanup the Add-from-photo
     /// button uses, so the shot shows what a user with a signature sees. The seed lands
@@ -2403,7 +3018,111 @@ internal static class Screenshot
             return false;
         }
         Console.WriteLine($"signature library shown with {vm.Signatures.Count} signature(s)");
-        return true;
+
+        // #590: the library opening is only ever photographed, never the act of placing one on
+        // a page — `signature-place` had no Windows self-test state at all. Same document, same
+        // window: a card is armed and dropped on page 1, checked against the geometry SDD §3.3
+        // promises (180pt wide, aspect preserved, centred on the click — the same numbers the
+        // Avalonia leg's own CheckSignaturePlacement proves), then every edit this adds is
+        // undone, so the library shot above is still what gets captured.
+        var placementOk = await RunSignaturePlacementChecksAsync(vm);
+        return placementOk;
+    }
+
+    private static async Task<bool> RunSignaturePlacementChecksAsync(DocumentViewModel vm)
+    {
+        var passed = 0;
+        var failed = 0;
+        void Check(string what, bool ok)
+        {
+            Console.Error.WriteLine($"{(ok ? "PASS" : "FAIL")}: {what}");
+            if (ok)
+                passed++;
+            else
+                failed++;
+        }
+
+        if (vm.View is not { } view || vm.Signatures.FirstOrDefault(s => !s.IsMissing) is not { } card)
+        {
+            Console.Error.WriteLine("--screenshot-state sign: no usable card to place, or no page view to drop it on.");
+            return false;
+        }
+
+        try
+        {
+            // Read independently of PlacePendingSignatureAsync's own call to the same loader
+            // (same reasoning as RunZoomAnchorChecksAsync's own remark: computing the expected
+            // geometry from the production code that is supposed to produce it would only prove
+            // the code agrees with itself) — this is the same file the placement is about to
+            // stamp, read a second time, from here.
+            var source = await SignatureImageProcessor.LoadPngAsync(card.PngPath);
+            var expectedWidth = 180.0;
+            var expectedHeight = expectedWidth * source.Height / source.Width;
+
+            vm.SelectSignatureForPlacement(card);
+            Check("selecting a card arms placement", ReferenceEquals(vm.PendingSignature, card));
+
+            var at = new PdfPoint(300, 400);
+            Check("clicking the page places it", await view.ActivatePageForTest(0, at));
+            // The commit re-renders the page (a new object index, a rebuilt PageCanvas) —
+            // the same settle `whiteout-text`'s own move/resize section waits out before
+            // the next ActivatePageForTest, which looks the canvas up fresh by page index
+            // and finds nothing mid-rebuild otherwise.
+            await Task.Delay(300);
+            var hit = vm.HitTestPage(0, at);
+            Check("it reads back as a signature stamp",
+                  hit.Kind == PageHitKind.StampAnnotation && hit.AnnotationId is { } id && id.StartsWith("sig:", StringComparison.Ordinal));
+            if (hit.Bounds is not { } bounds)
+            {
+                Console.Error.WriteLine("--screenshot-state sign: placement reported no bounds; the geometry and chrome checks below were skipped.");
+                failed++;
+            }
+            else
+            {
+                Check($"it is 180pt wide (got {bounds.Width:F1})", Math.Abs(bounds.Width - expectedWidth) < 0.5);
+                Check($"its aspect ratio is preserved ({expectedHeight:F1}pt tall, got {bounds.Height:F1})",
+                      Math.Abs(bounds.Height - expectedHeight) < 0.5);
+                Check("it is centred on the click",
+                      Math.Abs(bounds.X + bounds.Width / 2 - at.X) < 1 && Math.Abs(bounds.Y + bounds.Height / 2 - at.Y) < 1);
+
+                Check("clicking the placed signature selects it", await view.ActivatePageForTest(0, bounds.Center));
+                Check("  offering move", view.SelectionIsMovableForTest);
+                Check("  and a resize handle", view.SelectionIsResizableForTest);
+
+                var movedTo = new PdfRect(bounds.X + 40, bounds.Y + 20, bounds.Width, bounds.Height);
+                var dragged = await view.DragSelectionForTest(movedTo);
+                await Task.Delay(300);
+                Check("dragging it lands",
+                      dragged && vm.HitTestPage(0, movedTo.Center).Kind == PageHitKind.StampAnnotation);
+
+                Check("undo removes it", vm.UndoCommand.CanExecute(null));
+                // Bounded — see the redact check's own remark on why while(CanExecute) alone is a hang risk.
+                for (var steps = 0; vm.UndoCommand.CanExecute(null) && steps < 10; steps++)
+                    await vm.UndoCommand.ExecuteAsync(null);
+                await Task.Delay(300);
+                Check("  the page has no stamp left where it was dropped",
+                      vm.HitTestPage(0, at).Kind != PageHitKind.StampAnnotation);
+            }
+        }
+        catch (Exception ex)
+        {
+            // Same reasoning as CheckReadingModeAsync's own try/catch: left to escape, this
+            // hangs the process with nothing said rather than failing the one check.
+            Console.Error.WriteLine($"FAIL: signature placement threw: {ex}");
+            failed++;
+        }
+        finally
+        {
+            vm.CancelSignaturePlacement();
+            // Bounded, and in a finally: an unbounded drain here could mask the real
+            // exception this block's own catch was reporting, turning a FAIL with a stack
+            // into a hang with nothing said.
+            for (var steps = 0; vm.UndoCommand.CanExecute(null) && steps < 10; steps++)
+                await vm.UndoCommand.ExecuteAsync(null);
+        }
+
+        Console.Error.WriteLine($"sign (placement): {passed} passed, {failed} failed ({passed + failed} checks)");
+        return failed == 0;
     }
 
     /// <summary>

@@ -2,6 +2,7 @@ using System.Runtime.InteropServices.WindowsRuntime;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Windows.ApplicationModel.DataTransfer;
@@ -538,22 +539,19 @@ public sealed partial class MainWindow : Window
     /// <summary>Opens the bundled THIRD-PARTY-NOTICES.txt in a scrollable in-app viewer.</summary>
     private async void OnThirdPartyNoticesClicked(object sender, RoutedEventArgs e)
     {
-        string text;
-        try
-        {
-            var path = Path.Combine(AppContext.BaseDirectory, "Assets", "THIRD-PARTY-NOTICES.txt");
-            text = await File.ReadAllTextAsync(path);
-        }
-        catch (Exception ex)
-        {
-            text = Strings.NoticesLoadFailed + "\n\n" + ex.Message;
-        }
+        var text = await LoadThirdPartyNoticesForTest();
 
         var viewer = new TextBox
         {
-            Text = text,
-            IsReadOnly = true,
+            // #590: AcceptsReturn has to be set before Text, not after — a plain single-line
+            // TextBox (AcceptsReturn's default) silently keeps only the first line of whatever
+            // multi-line string it is given, and object-initializer properties apply in the
+            // order written. With Text first, as this was, every notices dialog anyone ever
+            // opened showed the one "====...." banner line and nothing after it — the `about`
+            // self-test is the first thing that ever read the dialog's own Text back to notice.
             AcceptsReturn = true,
+            IsReadOnly = true,
+            Text = text,
             TextWrapping = TextWrapping.Wrap,
             FontFamily = new Microsoft.UI.Xaml.Media.FontFamily("Consolas"),
             FontSize = 12,
@@ -573,6 +571,37 @@ public sealed partial class MainWindow : Window
         };
         await dialog.ShowOneAtATimeAsync();
     }
+
+    /// <summary>The bundled notices text, or <see cref="Strings.NoticesLoadFailed"/> and why. Shared
+    /// by the real click handler and the `about` self-test (#590), which reads it without needing
+    /// the dialog up at all.</summary>
+    internal static async Task<string> LoadThirdPartyNoticesForTest()
+    {
+        try
+        {
+            var path = Path.Combine(AppContext.BaseDirectory, "Assets", "THIRD-PARTY-NOTICES.txt");
+            return await File.ReadAllTextAsync(path);
+        }
+        catch (Exception ex)
+        {
+            return Strings.NoticesLoadFailed + "\n\n" + ex.Message;
+        }
+    }
+
+    /// <summary>Opens the notices dialog exactly as the settings flyout's link click would,
+    /// for the `about` self-test (#590).</summary>
+    internal void OpenThirdPartyNoticesForTest() => OnThirdPartyNoticesClicked(this, new RoutedEventArgs());
+
+    /// <summary>Opens the settings flyout — About's version text and the notices link live in it —
+    /// the same route the toolbar's gear button takes (#590).</summary>
+    internal void OpenSettingsFlyoutForTest() => ShowFromToolbar(SettingsFlyout, null, FlyoutPlacementMode.BottomEdgeAlignedRight);
+
+    /// <summary>Closes the settings flyout, for the `about` self-test's own cleanup (#590).</summary>
+    internal void CloseSettingsFlyoutForTest() => SettingsFlyout.Hide();
+
+    /// <summary>The About section's version line, after <see cref="OnSettingsOpening"/> has set it —
+    /// for the `about` self-test (#590), the same shape #571 found missing on Linux.</summary>
+    internal string AboutVersionTextForTest => AboutVersion.Text;
 
     public void ApplyTheme()
     {
