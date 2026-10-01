@@ -17,7 +17,7 @@ Each cell says two things and both are checked against the code:
 | `GAP` | the feature is **missing** where it should exist — the #571 shape |
 | `+m` | a by-hand step in `TESTING.md` / `docs/RELEASING.md` covers it too |
 
-220 pairings: 119 UI, 69 eng, 13 —, 14 n/a, 5 GAP.
+220 pairings: 122 UI, 67 eng, 13 —, 14 n/a, 4 GAP.
 
 This map is about *what is covered*, not whether the covering tests pass — that is the
 other jobs' business — and it does not replace the by-hand pass in `docs/RELEASING.md`
@@ -28,13 +28,12 @@ other jobs' business — and it does not replace the by-hand pass in `docs/RELEA
 This is the part worth reading. A map that only restated what passes would not be
 worth checking in.
 
-### Missing feature — absent where it should exist (5)
+### Missing feature — absent where it should exist (4)
 
 Nothing is failing; nothing is looking. #571 (Linux had an About window with no route to it) and #3 (Android had no whiteout at all) were both this.
 
 | feature | platform | what is missing | issue |
 |---|---|---|---|
-| Whiteout (cover) (`whiteout`) | ios | no whiteout tool. The reason given in the engine source is that mobile's feature set excludes it — which stopped being true when Android got one on 2026-09-30. | — |
 | Print (`print`) | android | no PrintManager anywhere in android/app. Same shape as iOS. | — |
 | Print (`print`) | ios | no UIPrintInteractionController anywhere in ios/MegaPDF. AirPrint is what a phone user would reach for and there is no route to it. | — |
 | Shrink for email (`shrink`) | android | no shrink on Android either, for the same reason and with the same silence. | — |
@@ -60,7 +59,7 @@ The feature is reachable and no test in CI touches it.
 | Print (`print`) | macos | the self-test checks the command's enablement and nothing else; no print is ever performed in CI. | — |
 | Print (`print`) | windows | nothing automated touches printing on Windows: no self-test state, no core test of PdfPrinter, and tools/windows-qa's print flow is manual. | — |
 
-### Engine only — this platform's own path is untested (69)
+### Engine only — this platform's own path is untested (67)
 
 The shared core proves the operation. Nothing proves this platform reaches it correctly, which is where #401 and #412 lived.
 
@@ -77,7 +76,6 @@ The shared core proves the operation. Nothing proves this platform reaches it co
 | Light and dark app chrome (`theme`) | linux | as macOS. | — |
 | Light and dark app chrome (`theme`) | macos | --self-test never switches theme; the --theme flag exists for by-hand screenshot poses only. | — |
 | Light and dark app chrome (`theme`) | windows | token parity across platforms is asserted; no self-test state switches theme. The page-colour tint in `reading` is a different thing. | — |
-| Add text (`add-text`) | ios | geometry, style and round-trip at the engine; no UI test places a box. | — |
 | Edit the document's own text (`body-text-edit`) | android | engine only — iOS has a live UI test for the same feature (#113/#114) and Android does not. | — |
 | Edit the document's own text (`body-text-edit`) | windows | the engine side is the best-tested part of the app; no Windows self-test state retypes a line in the UI. | — |
 | Checkboxes, real and drawn (`checkboxes`) | ios | no mark-style setting on iOS and no UI test taps a box. | — |
@@ -165,9 +163,9 @@ The shared core proves the operation. Nothing proves this platform reaches it co
 | **Checkboxes, real and drawn** | eng+m | UI | UI | eng | UI |
 | **Make a signature (draw, type, photo) and the library** | eng+m | eng+m | eng+m | eng | eng |
 | **Place, move, resize and remove a signature** | eng+m | UI | UI | eng | eng |
-| **Add text** | UI+m | UI | UI | eng | UI |
+| **Add text** | UI+m | UI | UI | UI | UI |
 | **Edit the document's own text** | eng+m | UI | UI | UI | eng |
-| **Whiteout (cover)** | UI+m | UI | UI | GAP | UI |
+| **Whiteout (cover)** | UI+m | UI | UI | UI | UI |
 
 ### Redaction
 
@@ -356,7 +354,7 @@ import, which is where #99–#101 lived.
 - **Windows** — UI+m. coverage: UI/VM. reachable from `src/MegaPDF.App/MainWindow.xaml::AddTextButton`. tests: `.github/workflows/ci.yml::Run-Check "whiteout-text"`, `tests/MegaPDF.Core.Tests/WhiteoutAndTextBoxTests.cs::TextBox`, `tests/MegaPDF.Core.Tests/TextBoxSubstitutionTests.cs::Substitution`. by hand: `TESTING.md::**Add text**`. size chips, multi-line splitting and restyle-on-re-edit, since #3/#4.
 - **macOS** — UI. coverage: UI/VM. reachable from `src/MegaPDF.Avalonia/Views/MainWindow.MenuBar.cs::Strings.AddText`. tests: `tests/MegaPDF.Core.Tests/WhiteoutAndTextBoxTests.cs::TextBox`, `tests/MegaPDF.Core.Tests/TextBoxSubstitutionTests.cs::Substitution`, `tests/MegaPDF.Core.Tests/FontSubstitutionTests.cs::Font`. the self-test adds boxes, splits on Shift+Enter, restyles and undoes, through the view model.
 - **Linux** — UI. coverage: UI/VM. reachable from `src/MegaPDF.Avalonia/Views/MainWindow.MenuBar.cs::Strings.AddText`. tests: `tests/MegaPDF.Core.Tests/WhiteoutAndTextBoxTests.cs::TextBox`, `tests/MegaPDF.Core.Tests/TextBoxSubstitutionTests.cs::Substitution`, `tests/MegaPDF.Core.Tests/FontSubstitutionTests.cs::Font`. same as macOS.
-- **iOS/iPadOS** — eng. coverage: engine only. reachable from `ios/MegaPDF/ViewerView.swift::Label("Add text"`. tests: `ios/MegaPDFTests/AddTextTests.swift::class`. geometry, style and round-trip at the engine; no UI test places a box.
+- **iOS/iPadOS** — UI. coverage: UI/VM. reachable from `ios/MegaPDF/ViewerView.swift::Label("Add text"`. tests: `ios/MegaPDFTests/AddTextTests.swift::class`, `ios/MegaPDFTests/MultilineTextTests.swift::class`, `ios/MegaPDFUITests/MultilineTextUITests.swift::testTheFieldHandsBackANewlineForAReturnAndNotACarriageReturn`. geometry, style and round-trip at the engine; size chips since #43 and multi-line splitting since #4, with the UI test reading the code points the field actually hands back for a Return — the thing Windows and Android each got wrong by assuming it. No UI test places a box.
 - **Android** — UI. coverage: UI/VM. reachable from `android/app/src/main/java/com/megapdf/android/ViewerScreen.kt::R.string.add_text`. tests: `android/app/src/androidTest/java/com/megapdf/android/TextBoxMultilineTest.kt::class`, `android/engine/src/androidTest/java/com/megapdf/engine/TextBoxTest.kt::class`, `android/engine/src/test/java/com/megapdf/engine/PdfWriteTextOptionsTest.kt::class`.
 
 ### Edit the document's own text (`body-text-edit`)
@@ -371,15 +369,16 @@ import, which is where #99–#101 lived.
 
 The row that made the case for this map. Android had no whiteout tool at all until #3/#4
 landed on 2026-09-30, while the issue that produced them discussed improving its chrome on
-four platforms. iOS still has none, and the comment that explains why
-(ios/MegaPDF/Engine/PdfEngine+Redaction.swift: "iOS has no whiteout — mobile's feature set
-is fill, check, sign, find and add text") describes a mobile feature set that Android no
-longer has.
+four platforms — and iOS turned out to be in exactly the same position a day later, with
+the same comment explaining it away (ios/MegaPDF/Engine/PdfEngine+Redaction.swift: "iOS has
+no whiteout — mobile's feature set is fill, check, sign, find and add text"). Both now have
+one. The lesson the row exists for: when an issue says a feature needs improving on four
+platforms, check first that it exists on four platforms.
 
 - **Windows** — UI+m. coverage: UI/VM. reachable from `src/MegaPDF.App/MainWindow.xaml::WhiteoutButton`. tests: `.github/workflows/ci.yml::Run-Check "whiteout-text"`, `tests/MegaPDF.Core.Tests/WhiteoutAndTextBoxTests.cs::Whiteout`. by hand: `TESTING.md::**Whiteout**`.
 - **macOS** — UI. coverage: UI/VM. reachable from `src/MegaPDF.Avalonia/Views/MainWindow.MenuBar.cs::Strings.Cover`. tests: `tests/MegaPDF.Core.Tests/WhiteoutAndTextBoxTests.cs::Whiteout`. placed and round-tripped through the view model; the move/resize chrome the Windows state drives is not asserted here.
 - **Linux** — UI. coverage: UI/VM. reachable from `src/MegaPDF.Avalonia/Views/MainWindow.MenuBar.cs::Strings.Cover`. tests: `tests/MegaPDF.Core.Tests/WhiteoutAndTextBoxTests.cs::Whiteout`. same as macOS.
-- **iOS/iPadOS** — GAP. absent (gap). no whiteout tool. The reason given in the engine source is that mobile's feature set excludes it — which stopped being true when Android got one on 2026-09-30.
+- **iOS/iPadOS** — UI. coverage: UI/VM. reachable from `ios/MegaPDF/ViewerView.swift::viewerWhiteout`. tests: `ios/MegaPDFTests/WhiteoutTests.swift::class`. the whole lifecycle through the view model — arm, drag to place, tap to select, move, resize, remove, undo — plus the engine binding and both history operations (#3). The gesture itself is Redact's own drag, which no UI test drives on this platform either.
 - **Android** — UI. coverage: UI/VM. reachable from `android/app/src/main/java/com/megapdf/android/ViewerScreen.kt::R.string.whiteout`. tests: `android/app/src/androidTest/java/com/megapdf/android/WhiteoutLifecycleTest.kt::class`. arrived with its own instrumented test (#3/#4), which is why it is the strongest mobile cell here.
 
 ### Redact — mark text or an area, move, resize, remove, clear all (`redact-mark`)
