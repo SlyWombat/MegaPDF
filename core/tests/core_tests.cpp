@@ -3287,6 +3287,35 @@ void test_security(const std::string& fixtures) {
                   "owner-only.pdf: removing its security needs the owner password");
             check(megapdf_save_with_security(d, "x", "y", MEGAPDF_PERMIT_ALL, collect, &out) == MEGAPDF_ERR_RESTRICTED,
                   "owner-only.pdf: so does changing it");
+
+            // #558 (ADR-004 decision 11): the modify bit is advisory, so the person may choose
+            // to go on past it — and that choice reaches the advisory bits only. Setting or
+            // removing security is not advisory: without the owner password there is no
+            // credential to write a copy with, so those two stay refused.
+            check(megapdf_security_override(d, 1) == MEGAPDF_OK, "owner-only.pdf: the person chose to continue");
+            check(megapdf_save_without_security(d, collect, &out) == MEGAPDF_ERR_RESTRICTED,
+                  "owner-only.pdf: the override does not remove its security");
+            check(megapdf_save_with_security(d, "x", "y", MEGAPDF_PERMIT_ALL, collect, &out) == MEGAPDF_ERR_RESTRICTED,
+                  "owner-only.pdf: nor change it — that is not an advisory bit");
+            {
+                megapdf_security after{};
+                megapdf_security_info(d, &after);
+                check(after.permissions == s.permissions && after.full_access == 0,
+                      "owner-only.pdf: and the document still reports what its author asked");
+            }
+            {
+                Page p(d, 0);
+                const megapdf_rect area{100, 100, 200, 120};
+                int mark = 0;
+                check(megapdf_redaction_mark(p.page, &area, &mark) == MEGAPDF_OK, "owner-only.pdf: an area is marked");
+                megapdf_redaction_report* report = nullptr;
+                // Not MEGAPDF_OK: what is under test is the permission gate yielding, not what
+                // this particular area holds — a mark over blank space is still a redaction the
+                // engine is entitled to have its own opinion about.
+                check(megapdf_redact_apply(d, nullptr, &report) != MEGAPDF_ERR_RESTRICTED,
+                      "owner-only.pdf: redaction is no longer refused on permissions", megapdf_last_error_message());
+                megapdf_redaction_report_free(report);
+            }
             megapdf_close(d);
         }
         megapdf_document* owner = megapdf_open(bytes.data(), bytes.size(), "o-restricted");
@@ -8133,6 +8162,31 @@ void test_page_tools(const std::string& fixtures, const std::string& repo_fixtur
                       MEGAPDF_ERR_RESTRICTED,
                   "pages: importing from it is refused too", megapdf_last_error_message());
             check(megapdf_page_count(plain.doc) == 2, "pages: the refused import changed nothing");
+
+            // #558 (ADR-004 decision 11): the person was told what the author asked and chose
+            // to continue, so the same calls go through — without the owner password, and
+            // without anything about the document's own permissions changing.
+            check(megapdf_security_override(d, 1) == MEGAPDF_OK, "pages: the override is recorded");
+            check(megapdf_page_rotate(d, 0, 1) == MEGAPDF_OK, "pages: rotating goes ahead after the override",
+                  megapdf_last_error_message());
+            check(megapdf_pages_extract(d, nullptr, 0, utf8(dir / "overridden.pdf").c_str(), nullptr) == MEGAPDF_OK,
+                  "pages: so does extracting", megapdf_last_error_message());
+            check(fs::exists(dir / "overridden.pdf", ec), "pages: and the file is there");
+            megapdf_security sa{};
+            megapdf_security_info(d, &sa);
+            check(sa.permissions == s.permissions && sa.full_access == 0,
+                  "pages: the override does not touch what the document says its author asked");
+            // It is a statement about *this* document, not about a second file handed to it.
+            check(megapdf_pages_import(d, (security_fixtures + "/owner-only.pdf").c_str(), nullptr, nullptr, 0, 0, nullptr) ==
+                      MEGAPDF_ERR_RESTRICTED,
+                  "pages: the override does not reach an import source's own copy bit");
+            // And it is per open: another open of the same bytes starts where this one did.
+            megapdf_document* fresh = megapdf_open(bytes.data(), bytes.size(), nullptr);
+            check(fresh != nullptr && megapdf_page_rotate(fresh, 0, 1) == MEGAPDF_ERR_RESTRICTED,
+                  "pages: a second open of the same document is restricted again");
+            megapdf_close(fresh);
+            check(megapdf_security_override(d, 0) == MEGAPDF_OK && megapdf_page_rotate(d, 0, 1) == MEGAPDF_ERR_RESTRICTED,
+                  "pages: and the override can be put back");
             megapdf_close(d);
         }
         megapdf_document* owner = megapdf_open(bytes.data(), bytes.size(), "o-restricted");

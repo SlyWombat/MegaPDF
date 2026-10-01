@@ -876,7 +876,11 @@ fun ViewerScreen(
                                         stateDescription =
                                             if (redactMode) toolOn else toolOff
                                     },
-                                    enabled = capabilities.canEditContent && !toolsDisabled,
+                                    // #558: not gated on the document's permissions any more.
+                                    // A greyed-out row is the wall this replaced, and it cannot
+                                    // say what the author asked — the view model does, when the
+                                    // first mark is placed.
+                                    enabled = !toolsDisabled,
                                     onClick = { menuOpen = false; onToggleRedact() },
                                 )
                                 // Clearing is one action and one undo step (#329), and it only
@@ -884,7 +888,7 @@ fun ViewerScreen(
                                 if (hasMarks) {
                                     DropdownMenuItem(
                                         text = { Text(stringResource(R.string.redact_clear_marks)) },
-                                        enabled = capabilities.canEditContent && !toolsDisabled,
+                                        enabled = !toolsDisabled,
                                         onClick = { menuOpen = false; onClearRedactionMarks() },
                                     )
                                 }
@@ -906,7 +910,7 @@ fun ViewerScreen(
                                         stateDescription =
                                             if (whiteoutMode) toolOn else toolOff
                                     },
-                                    enabled = capabilities.canEditContent && !toolsDisabled,
+                                    enabled = !toolsDisabled,
                                     onClick = { menuOpen = false; onToggleWhiteout() },
                                 )
                                 HorizontalDivider()
@@ -943,18 +947,22 @@ fun ViewerScreen(
             // Not composed in reading mode — see the topBar note above.
             if (!readingMode) BottomAppBar(
                 actions = {
-                    // A restricted document disables what its owner did not allow (#131),
-                    // and a save or a slow change disables every editing tool (#145).
+                    // #131 disabled what a restricted document's owner did not allow. #558: it no
+                    // longer does — the tools stay reachable and the view model says what the
+                    // author asked, once, before the first change of each kind. A save or a slow
+                    // change still disables every editing tool (#145).
                     ToolbarAction(
                         icon = ToolbarIcons.Sign,
                         label = stringResource(R.string.sign),
-                        enabled = capabilities.canSign && !toolsDisabled,
+                        // #558: armable whatever the document's permissions say — arming is
+                        // not changing, and the view model asks before it changes anything.
+                        enabled = !toolsDisabled,
                         onClick = { signDialogOpen = true },
                     )
                     ToolbarAction(
                         icon = ToolbarIcons.AddText,
                         label = stringResource(R.string.add_text),
-                        enabled = capabilities.canAddText && !toolsDisabled,
+                        enabled = !toolsDisabled,
                         onClick = onStartTextPlacement,
                     )
                     // Redact is not here (#328). It moved into the ⋮ menu, where it says its
@@ -1386,9 +1394,11 @@ fun ViewerScreen(
                                 // Editing is off in reading mode (#507), so a mark is
                                 // something to look at there and not something to select:
                                 // no chrome, and no node for a TalkBack swipe to land on.
+                                // Selecting a mark is not changing it (#558), so the
+                                // document's permissions do not come into it; moving or
+                                // removing one asks, through the view model.
                                 selectable = !redactMode
                                     && !readingMode
-                                    && capabilities.canEditContent
                                     && !toolsDisabled,
                                 onSelect = { onSelectRedactionMark(index, it) },
                                 onRemove = { onRemoveRedactionMark(index, it) },

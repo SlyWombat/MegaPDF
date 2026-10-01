@@ -172,6 +172,28 @@ object TestPdfs {
         return out.toString().toByteArray(Charsets.ISO_8859_1)
     }
 
+    /**
+     * [source] again, encrypted with an owner password and no permissions at all (#558) — a
+     * document whose author asked that nothing be done to it.
+     *
+     * Written by the engine rather than checked in, for the reason the fixtures above are: the page
+     * tools need several pages of known sizes, which `tests/.../security/owner-only.pdf` (the one
+     * committed owner-restricted fixture, and the one the engine module's tests use) is not. There
+     * is no user password, so the viewer opens it like any other document and the permission bits
+     * are the only thing standing between the person and the work.
+     */
+    fun restricted(source: ByteArray, ownerPassword: String = "o-558"): ByteArray = runBlocking {
+        val engine = PdfEngine()
+        val doc = engine.open(source)
+        try {
+            val out = java.io.ByteArrayOutputStream()
+            doc.saveWithSecurity(out, userPassword = "", ownerPassword = ownerPassword, permissions = 0)
+            out.toByteArray()
+        } finally {
+            doc.close()
+        }
+    }
+
     /** Every page's width in points, read by an engine of the test's own. */
     fun pageWidths(file: File): List<Double> = runBlocking {
         val engine = PdfEngine()

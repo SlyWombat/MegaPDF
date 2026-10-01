@@ -1495,6 +1495,55 @@ tests = ["android/engine/src/androidTest/java/com/megapdf/engine/PdfEngineTest.k
 note = "no instrumented test opens the password sheet."
 
 [[feature]]
+id = "permission-override"
+title = "A withheld permission is said out loud, and the person may continue"
+area = "Saving and output"
+about = """
+Dave's decision on #558, 2026-09-30, recorded as ADR-004 decision 11: when a document's
+permissions forbid what someone is about to do, the app says its author asked that it not
+be done and offers to continue anyway. The bits are advisory — any tool with the owner
+password clears them, plenty of tools ignore them, and the person in front of the app may
+well be the author — so a refusal treats a request as a lock, which it is not.
+
+Four platforms, one shape; Android built it first and the comment on #558 is what the other
+three copy. The three outstanding cells below are *regressions of a kind this map exists to
+show*: each one has a working refusal, so no test fails — they are walls that pass."""
+[feature.windows]
+presence = "absent"
+coverage = "n/a"
+absence = "gap"
+issue = 558
+note = "still refuses. DocumentCapabilities.cs reads the bits and the toolbar greys out what the author withheld; megapdf_security_override() is in the core and unbound in CoreNative.cs."
+[feature.macos]
+presence = "absent"
+coverage = "n/a"
+absence = "gap"
+issue = 558
+note = "same as Windows — the shared MegaPDF.Core DocumentCapabilities both desktops consume is the half that has to change, so these two land together."
+[feature.linux]
+presence = "absent"
+coverage = "n/a"
+absence = "gap"
+issue = 558
+note = "same as macOS."
+[feature.ios]
+presence = "absent"
+coverage = "n/a"
+absence = "gap"
+issue = 558
+note = "iOS page tools landed in #570 consulting no permission bit at all, so this is the one platform where the question has to arrive with the detection rather than replace it."
+[feature.android]
+presence = "present"
+entry = "android/app/src/main/java/com/megapdf/android/MainActivity.kt::R.string.permission_ask_note"
+coverage = "ui"
+tests = [
+  "android/app/src/androidTest/java/com/megapdf/android/PermissionPromptTest.kt::class",
+  "android/app/src/test/java/com/megapdf/android/PermissionOverrideTest.kt::class",
+  "core/tests/core_tests.cpp::megapdf_security_override",
+]
+note = "the five Compose tests were pushed as their own commit and shown red on CI first. Continue is proved on the page's own reported size swapping after a quarter turn, which can only happen if the choice reached the C++ core — the core enforces the same bits underneath every platform, so an app-only Continue comes back MEGAPDF_ERR_RESTRICTED."
+
+[[feature]]
 id = "shrink"
 title = "Shrink for email"
 area = "Saving and output"
