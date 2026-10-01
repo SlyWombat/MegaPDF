@@ -59,6 +59,12 @@ object Brand {
     val RedactionMark = Color(0x3D16324F)
     val RedactionMarkOutline = Color(0xB216324F)
 
+    // A whiteout drag (#3): translucent white rather than the redaction tone — a whiteout
+    // covers, it does not remove, and the placement gesture should read that way. The
+    // outline is the accent hue, the same edge a selection's chrome already draws in.
+    val WhiteoutBand = Color(0x99FFFFFF)
+    val WhiteoutBandOutline = Blue
+
     val Danger = Color(0xFFC0362C)
 
     /** The wall the page sits on. Neutral shade, not a brand hue. */

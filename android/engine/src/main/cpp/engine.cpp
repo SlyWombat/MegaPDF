@@ -449,6 +449,48 @@ Java_com_megapdf_engine_PdfiumNative_nativeAddTextBox(JNIEnv* env, jobject, jlon
     return status == MEGAPDF_OK ? JNI_TRUE : JNI_FALSE;
 }
 
+// ---- Whiteouts (#3) ----------------------------------------------------------
+//
+// A whiteout is a white-filled path object marked MegaPDFWhiteout (contract 5, same as
+// added text): it covers what was already drawn rather than deleting it, so detaching one
+// (nativeDetachObject/nativeRestoreObject, already bound above for the body-text editor)
+// uncovers the content again. There is no native move; the app synthesizes one the same
+// way it already synthesizes moving a signature — detach the one that is there, add a
+// fresh one at the new bounds.
+
+// Appends a whiteout over crop-space (l, b, r, t); its object index, or -1 on failure.
+JNIEXPORT jint JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativeAddWhiteout(JNIEnv*, jobject, jlong handle,
+                                                       jdouble l, jdouble b, jdouble r, jdouble t) {
+    auto* p = reinterpret_cast<Page*>(handle);
+    const megapdf_rect bounds{l, b, r, t};
+    int index = -1;
+    return megapdf_add_whiteout(p->core, &bounds, &index) == MEGAPDF_OK
+               ? static_cast<jint>(index) : -1;
+}
+
+// [objectIndex, l, b, r, t] per whiteout on the page, in object order.
+JNIEXPORT jdoubleArray JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativeWhiteoutsPacked(JNIEnv* env, jobject, jlong handle) {
+    auto* p = reinterpret_cast<Page*>(handle);
+    std::vector<megapdf_object_rect> rects(megapdf_whiteouts(p->core, nullptr, 0));
+    if (!rects.empty()) megapdf_whiteouts(p->core, rects.data(), rects.size());
+    std::vector<double> packed;
+    packed.reserve(rects.size() * 5);
+    for (const auto& rect : rects) {
+        packed.push_back(static_cast<double>(rect.object_index));
+        packed.push_back(rect.bounds.left);
+        packed.push_back(rect.bounds.bottom);
+        packed.push_back(rect.bounds.right);
+        packed.push_back(rect.bounds.top);
+    }
+    jdoubleArray out = env->NewDoubleArray(static_cast<jsize>(packed.size()));
+    if (out && !packed.empty()) {
+        env->SetDoubleArrayRegion(out, 0, static_cast<jsize>(packed.size()), packed.data());
+    }
+    return out;
+}
+
 }  // extern "C"
 
 namespace {

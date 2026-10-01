@@ -63,11 +63,14 @@ data class DocumentCapabilities(
     /** Whether this open may apply [operation]. An edit this list does not know needs full access. */
     fun allows(operation: PdfEditOperation): Boolean = when (operation) {
         // Redaction removes the document's own content, so it needs the same permission the
-        // Redact command itself does (#329).
+        // Redact command itself does (#329). A whiteout covers rather than removes, but it is
+        // still the document's own page content rather than an annotation, so it needs the
+        // same permission as the rest of this group (#3).
         is BodyTextEditOperation, is BodyTextDeleteOperation,
         is RedactMarkOperation, is MoveRedactionMarkOperation, is ClearRedactionMarksOperation,
+        is WhiteoutAddOperation, is WhiteoutRemoveOperation, is MoveWhiteoutOperation,
         -> canEditContent
-        is TextBoxOperation, is EditTextBoxOperation, is MoveTextBoxOperation -> canAddText
+        is TextBoxOperation, is EditTextBoxOperation, is MoveTextBoxOperation, is AddTextBoxesOperation -> canAddText
         is StampOperation, is MoveStampOperation, is MarkOperation -> canSign
         is FieldToggleOperation -> canFillForms
         // The page tools (#174). Extract is not here: it changes nothing and is not an operation.
@@ -84,7 +87,7 @@ data class DocumentCapabilities(
      * page tools, not filling, and keep working exactly as they do today.
      */
     fun isFillingOperation(operation: PdfEditOperation): Boolean = when (operation) {
-        is TextBoxOperation, is EditTextBoxOperation, is MoveTextBoxOperation,
+        is TextBoxOperation, is EditTextBoxOperation, is MoveTextBoxOperation, is AddTextBoxesOperation,
         is StampOperation, is MoveStampOperation, is MarkOperation,
         is FieldToggleOperation,
         -> true

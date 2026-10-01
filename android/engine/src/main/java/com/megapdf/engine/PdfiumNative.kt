@@ -85,6 +85,14 @@ internal object PdfiumNative {
     external fun nativeMoveTextBox(handle: Long, id: String, x: Double, y: Double): Boolean
     external fun nativeRemoveTextBox(handle: Long, id: String): Boolean
 
+    // Whiteouts (#3, contract 5): a filled white path covering what was there — page
+    // content, not an annotation, and with no id of its own, so it is addressed by object
+    // index like a body-text run. There is no native move or remove: removing one is the
+    // generic nativeDetachObject/nativeRestoreObject pair above, and a move is a detach
+    // plus a fresh nativeAddWhiteout, the same way a signature's move already works.
+    external fun nativeAddWhiteout(handle: Long, left: Double, bottom: Double, right: Double, top: Double): Int
+    external fun nativeWhiteoutsPacked(handle: Long): DoubleArray
+
     // Text search (#26). Case-insensitive literal substring; packed
     // [rectCount, l, b, r, t...] per match, PDF points, bottom-left origin.
     external fun nativeSearchPagePacked(handle: Long, query: String): DoubleArray

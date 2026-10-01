@@ -42,10 +42,14 @@ class PageRewriteWarnings {
         /**
          * Whether [operation] regenerates its page's content without the text guard judging it.
          * Body-text edits and deletes are judged (and refused) on their own; signatures, check
-         * marks and form values are annotations and leave the content alone.
+         * marks and form values are annotations and leave the content alone. A whiteout is a
+         * page object exactly like a text box (#3), so it warns the same way.
          */
         fun regeneratesUnjudged(operation: PdfEditOperation): Boolean =
-            operation is TextBoxOperation || operation is EditTextBoxOperation || operation is MoveTextBoxOperation
+            operation is TextBoxOperation || operation is EditTextBoxOperation ||
+                operation is MoveTextBoxOperation || operation is AddTextBoxesOperation ||
+                operation is WhiteoutAddOperation || operation is WhiteoutRemoveOperation ||
+                operation is MoveWhiteoutOperation
     }
 }
 

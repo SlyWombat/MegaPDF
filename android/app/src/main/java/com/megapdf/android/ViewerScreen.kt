@@ -1,6 +1,7 @@
 package com.megapdf.android
 
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import android.graphics.Bitmap
 import androidx.compose.foundation.Image
@@ -226,6 +227,14 @@ fun ViewerScreen(
     onClearRedactionMarks: () -> Unit = {},
     onCommitRedactionMarkRect: (pageIndex: Int, markId: Int, rect: com.megapdf.engine.PdfRect) -> Unit =
         { _, _, _ -> },
+    // Whiteout (#3). Unlike a mark this is real page content the moment it lands, so it needs
+    // no overlay to draw it — only the chrome once it is selected, exactly like a signature.
+    whiteoutMode: Boolean = false,
+    onToggleWhiteout: () -> Unit = {},
+    onPlaceWhiteout: (pageIndex: Int, rect: com.megapdf.engine.PdfRect) -> Unit = { _, _ -> },
+    selectedWhiteout: SelectedWhiteout? = null,
+    onCommitWhiteoutRect: (com.megapdf.engine.PdfRect) -> Unit = {},
+    onRemoveWhiteout: () -> Unit = {},
     // Document security (#131).
     capabilities: DocumentCapabilities = DocumentCapabilities.FULL,
     /** #456/#457: this document is dynamic XFA — built for Adobe Reader, which MegaPDF can't
@@ -296,6 +305,8 @@ fun ViewerScreen(
     val zoomFloor = remember { mutableFloatStateOf(MIN_ZOOM) }
     // The rubber band a redaction drag is drawing; null the rest of the time (#173).
     var redactBand: RedactBand? by remember { mutableStateOf(null) }
+    // Same, for a whiteout drag (#3).
+    var whiteoutBand: WhiteoutBand? by remember { mutableStateOf(null) }
     val listState = rememberLazyListState()
     // Hoisted so search navigation can reach a hit that is off to the side when zoomed.
     val hScroll = rememberScrollState()
@@ -445,8 +456,19 @@ fun ViewerScreen(
                     OutlinedTextField(
                         value = typed,
                         onValueChange = { typed = it },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
+                        // A new note may run to several lines (#4): the phone's own Enter is
+                        // "start a new line" here, where a desktop reads that gesture as
+                        // Shift+Enter — there is no separate key to reserve for it on a soft
+                        // keyboard. Correcting an existing box stays single-line: growing one
+                        // box into several is a different shape of edit than restyling it in
+                        // place (same id, new text, new size), and out of scope for this pass.
+                        singleLine = editing,
+                        // Bounded rather than left to grow without limit: past a handful of
+                        // lines it scrolls within itself, so the size/font chips below stay
+                        // one swipe away in DialogBody's own scroll instead of being pushed
+                        // an arbitrary distance down by a long paste.
+                        modifier = Modifier.fillMaxWidth()
+                            .let { if (editing) it else it.heightIn(min = 56.dp, max = 160.dp) },
                     )
                     ChipRow(
                         label = stringResource(R.string.size),
@@ -856,6 +878,27 @@ fun ViewerScreen(
                                         onClick = { menuOpen = false; onClearRedactionMarks() },
                                     )
                                 }
+                                // Whiteout (#3): the same reasons as Redact just above — a plain
+                                // icon would mean nothing, so it says its own name, and the
+                                // armed state is said as well as shown. Unlike Redact it is not
+                                // destructive (it covers rather than removes), but it is the same
+                                // kind of tool — an area drag over the page — so it sits beside it.
+                                val whiteoutArmedIcon: (@Composable () -> Unit)? = if (whiteoutMode) {
+                                    { Icon(Icons.Filled.Check, contentDescription = null) }
+                                } else {
+                                    null
+                                }
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.whiteout)) },
+                                    leadingIcon = whiteoutArmedIcon,
+                                    modifier = Modifier.semantics {
+                                        selected = whiteoutMode
+                                        stateDescription =
+                                            if (whiteoutMode) toolOn else toolOff
+                                    },
+                                    enabled = capabilities.canEditContent && !toolsDisabled,
+                                    onClick = { menuOpen = false; onToggleWhiteout() },
+                                )
                                 HorizontalDivider()
                                 // Where Page colours and *Open documents in reading mode*
                                 // are set (#513) — app-level, so it is reachable from Home too.
@@ -1238,6 +1281,56 @@ fun ViewerScreen(
                                 },
                             )
                         }
+                        // While Whiteout is armed a drag covers an area instead of scrolling
+                        // (#3) — the same gesture Redact's drag is, but a plain rectangle: a
+                        // whiteout covers whatever is under it, drawn or not, so there is no
+                        // text to snap to.
+                        .pointerInput(index, whiteoutMode) {
+                            if (!whiteoutMode) return@pointerInput
+                            var origin = androidx.compose.ui.geometry.Offset.Zero
+                            var current = androidx.compose.ui.geometry.Offset.Zero
+                            detectDragGestures(
+                                onDragStart = { at ->
+                                    origin = at
+                                    current = at
+                                    whiteoutBand = WhiteoutBand(index, at, at)
+                                },
+                                onDrag = { change, delta ->
+                                    change.consume()
+                                    current += delta
+                                    whiteoutBand = WhiteoutBand(index, origin, current)
+                                },
+                                onDragCancel = { whiteoutBand = null },
+                                onDragEnd = {
+                                    whiteoutBand = null
+                                    var left = minOf(origin.x, current.x) / this.size.width
+                                    var right = maxOf(origin.x, current.x) / this.size.width
+                                    var top = minOf(origin.y, current.y) / this.size.height
+                                    var bottom = maxOf(origin.y, current.y) / this.size.height
+                                    if (right - left > MIN_MARK_EXTENT && bottom - top > MIN_MARK_EXTENT) {
+                                        if (bottom - top < MIN_MARK_THICKNESS) {
+                                            val middle = (top + bottom) / 2f
+                                            top = middle - MIN_MARK_THICKNESS / 2
+                                            bottom = middle + MIN_MARK_THICKNESS / 2
+                                        }
+                                        if (right - left < MIN_MARK_THICKNESS) {
+                                            val middle = (left + right) / 2f
+                                            left = middle - MIN_MARK_THICKNESS / 2
+                                            right = middle + MIN_MARK_THICKNESS / 2
+                                        }
+                                        onPlaceWhiteout(
+                                            index,
+                                            com.megapdf.engine.PdfRect(
+                                                left * size.widthPoints,
+                                                (1.0 - bottom) * size.heightPoints,
+                                                right * size.widthPoints,
+                                                (1.0 - top) * size.heightPoints,
+                                            ),
+                                        )
+                                    }
+                                },
+                            )
+                        }
                         // readingMode is a key, not just a capture: this block is built once
                         // per key set, and a plain capture would hold whatever the mode was
                         // when the page was first laid out.
@@ -1338,6 +1431,23 @@ fun ViewerScreen(
                                 onCommit = onCommitTextBoxRect,
                                 onRemove = onRemoveTextBox,
                                 onEdit = onEditTextBox,
+                                enabled = !editingBlocked,
+                            )
+                        }
+                        whiteoutBand?.let { band ->
+                            if (band.pageIndex == index) WhiteoutBandOverlay(band)
+                        }
+                        // The chrome for a selected whiteout (#3): the same box a selected
+                        // signature gets — drag to move, corner grip to resize, aspect
+                        // unlocked, since a whiteout is a rectangle by nature.
+                        if (selectedWhiteout != null && selectedWhiteout.pageIndex == index) {
+                            SelectionOverlay(
+                                key = selectedWhiteout,
+                                rect = selectedWhiteout.rect,
+                                pageSize = size,
+                                aspectLocked = false,
+                                onCommit = onCommitWhiteoutRect,
+                                onRemove = onRemoveWhiteout,
                                 enabled = !editingBlocked,
                             )
                         }
@@ -1753,6 +1863,39 @@ private fun RedactionBandOverlay(band: RedactBand) {
         drawRect(color = REDACTION_MARK, topLeft = topLeft, size = boxSize)
         drawRect(
             color = REDACTION_MARK_OUTLINE,
+            topLeft = topLeft,
+            size = boxSize,
+            style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2f),
+        )
+    }
+}
+
+/** The rubber band while a whiteout drag is in progress, in page-box pixels (#3). */
+data class WhiteoutBand(
+    val pageIndex: Int,
+    val origin: androidx.compose.ui.geometry.Offset,
+    val current: androidx.compose.ui.geometry.Offset,
+)
+
+/**
+ * The band a whiteout drag is drawing — translucent white rather than the redaction tone,
+ * so the gesture reads as "cover" and not "remove" (#3). Once dropped the whiteout itself
+ * is real page content and needs no overlay to draw it; this is only shown mid-drag.
+ */
+@Composable
+private fun WhiteoutBandOverlay(band: WhiteoutBand) {
+    androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
+        val topLeft = androidx.compose.ui.geometry.Offset(
+            minOf(band.origin.x, band.current.x),
+            minOf(band.origin.y, band.current.y),
+        )
+        val boxSize = androidx.compose.ui.geometry.Size(
+            kotlin.math.abs(band.current.x - band.origin.x),
+            kotlin.math.abs(band.current.y - band.origin.y),
+        )
+        drawRect(color = Brand.WhiteoutBand, topLeft = topLeft, size = boxSize)
+        drawRect(
+            color = Brand.WhiteoutBandOutline,
             topLeft = topLeft,
             size = boxSize,
             style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2f),

@@ -7,6 +7,9 @@ import com.megapdf.engine.RedactionMark
 import com.megapdf.engine.TextEditOutcome
 import com.megapdf.engine.TextLine
 
+/** Single line spacing at the face's own size (#4) — the same rule a wrapped paragraph reads at. */
+private const val TEXT_LINE_HEIGHT_FACTOR = 1.2
+
 // Undo/redo (#34) — the mobile port of the desktop `IEditOperation` + `UndoStack`
 // (SDD §4.2, command pattern), and the twin of iOS's EditHistory.swift. Two rules
 // make it safe on a document other edits are reshaping underneath it:
@@ -258,6 +261,87 @@ class MoveStampOperation(
     }
 }
 
+// ---- Whiteouts (#3) ---------------------------------------------------------
+//
+// A whiteout is page content, not an annotation, and carries no id of its own — it is
+// addressed by object index, which shifts every time it is placed or removed. Placing
+// always appends a fresh object (nothing worth restoring byte-identical about a brand new
+// one); removing keeps what it detached, so its own undo puts back the exact bytes rather
+// than a redrawn copy — the same asymmetry MoveWhiteoutOperation's two calls below have.
+
+/** Placing a whiteout (drag-to-cover, #3). Revert only ever detaches: nothing here is worth restoring byte-identical, since a redo places a fresh rectangle at the same bounds anyway. */
+class WhiteoutAddOperation(
+    override val pageIndex: Int,
+    private val rect: PdfRect,
+) : PdfEditOperation {
+    private var objectIndex: Int = -1
+
+    override val name: String get() = "whiteout"
+
+    /** Where it landed after the last apply — read this to keep it selected (#3). */
+    val currentObjectIndex: Int get() = objectIndex
+
+    override suspend fun apply(doc: EditTarget) = doc.onPage(pageIndex) { page ->
+        objectIndex = page.addWhiteout(rect)
+    }
+
+    override suspend fun revert(doc: EditTarget): Unit = doc.onPage(pageIndex) { page ->
+        page.detachObject(objectIndex)
+        Unit
+    }
+}
+
+/** Removing a selected whiteout (✕ on its chrome, #3). Undo restores the exact object detached. */
+class WhiteoutRemoveOperation(
+    override val pageIndex: Int,
+    private val objectIndex: Int,
+) : PdfEditOperation {
+    private var detached: DetachedObject? = null
+
+    override val name: String get() = "remove whiteout"
+
+    override suspend fun apply(doc: EditTarget) = doc.onPage(pageIndex) { page ->
+        detached = page.detachObject(objectIndex)
+    }
+
+    override suspend fun revert(doc: EditTarget) = doc.onPage(pageIndex) { page ->
+        page.restoreObject(checkNotNull(detached) { "nothing to undo" }, objectIndex)
+        detached = null
+    }
+}
+
+/**
+ * Moving or resizing a selected whiteout (drag or corner handle, #3).
+ *
+ * A whiteout has no native "move in place": it is a page object, not an annotation, and
+ * there is no primitive that repositions one without touching the object list. So a move is
+ * the same two primitives [WhiteoutAddOperation] and [WhiteoutRemoveOperation] already use —
+ * detach the rectangle that is there, append a fresh one at the new bounds — which is, byte
+ * for byte, the "remove it and redraw it by hand" this chrome replaces. The object index
+ * changes every time, which is why [currentObjectIndex] is read back after apply/revert
+ * rather than assumed.
+ */
+class MoveWhiteoutOperation(
+    override val pageIndex: Int,
+    objectIndex: Int,
+    private val from: PdfRect,
+    private val to: PdfRect,
+) : PdfEditOperation {
+    private var objectIndex: Int = objectIndex
+
+    override val name: String get() = "move whiteout"
+
+    val currentObjectIndex: Int get() = objectIndex
+
+    override suspend fun apply(doc: EditTarget) = move(doc, to)
+    override suspend fun revert(doc: EditTarget) = move(doc, from)
+
+    private suspend fun move(doc: EditTarget, rect: PdfRect) = doc.onPage(pageIndex) { page ->
+        page.detachObject(objectIndex)
+        objectIndex = page.addWhiteout(rect)
+    }
+}
+
 /**
  * Places a text box so its **bounds** lower-left lands on ([x], [y]).
  *
@@ -306,6 +390,40 @@ class TextBoxOperation(
         else doc.onPage(pageIndex) { it.addTextBox(text, fontSize, x, y, id, fontName) }
 
     private suspend fun remove(doc: EditTarget) = doc.onPage(pageIndex) { it.removeTextBox(id) }
+}
+
+/**
+ * Placing a multi-line note as one undo step (#4): the phone's Enter key is its "new line",
+ * where a desktop reads that as Shift+Enter. There is no multi-line text object in the
+ * format this app writes — a "line" of added text is already the whole of what
+ * [TextBoxOperation] places — so a note of several lines is that many boxes, one per [ids]
+ * (each already carrying its own place in [lines]), stacked top to bottom at the face's own
+ * line height from ([x], [y]). That is also what keeps every line individually editable
+ * afterwards (#4's acceptance test, in its own words): none of them ever stopped being an
+ * ordinary, separately-selectable text box. Undo takes the whole note at once, because
+ * placing all of them was the one gesture that made them.
+ */
+class AddTextBoxesOperation(
+    override val pageIndex: Int,
+    private val ids: List<String>,
+    private val lines: List<String>,
+    private val fontSize: Double,
+    private val x: Double,
+    private val y: Double,
+    private val fontName: String = DEFAULT_FONT,
+) : PdfEditOperation {
+
+    override val name: String get() = "text"
+
+    override suspend fun apply(doc: EditTarget) = doc.onPage(pageIndex) { page ->
+        lines.indices.forEach { i ->
+            page.addTextBox(lines[i], fontSize, x, y - i * fontSize * TEXT_LINE_HEIGHT_FACTOR, ids[i], fontName)
+        }
+    }
+
+    override suspend fun revert(doc: EditTarget) = doc.onPage(pageIndex) { page ->
+        ids.forEach { page.removeTextBox(it) }
+    }
 }
 
 // ---- Redaction marks (#329) -------------------------------------------------
