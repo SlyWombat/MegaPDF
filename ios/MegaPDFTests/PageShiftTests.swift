@@ -1,3 +1,4 @@
+import CoreGraphics
 import XCTest
 @testable import MegaPDF
 
@@ -198,6 +199,41 @@ final class PageShiftTests: XCTestCase {
         XCTAssertEqual(PageDrop.destination(dragging: 0, onto: 2, before: true), 1)
         // D dropped after B  ->  [A B D C], D at 2.
         XCTAssertEqual(PageDrop.destination(dragging: 3, onto: 1, before: false), 2)
+    }
+
+    /// Which half of a tile a drop landed on, against the width the tile actually came out — the
+    /// one quantity here that is measured rather than reasoned about. A hard-coded guess (the first
+    /// draft used 120) puts the midpoint in the wrong place on a grid whose columns are adaptive,
+    /// and then a drop near the middle of a tile goes the wrong way.
+    func testWhichHalfOfATileADropLandedOn() {
+        // A tile as the iPad's sidebar lays it out, and as the phone's sheet does.
+        for width in [118.0, 110.7, 96.0, 150.0] as [CGFloat] {
+            XCTAssertTrue(PageDrop.isBefore(dropX: 0, tileWidth: width), "the leading edge")
+            XCTAssertTrue(PageDrop.isBefore(dropX: width * 0.15, tileWidth: width))
+            XCTAssertFalse(PageDrop.isBefore(dropX: width * 0.85, tileWidth: width))
+            XCTAssertFalse(PageDrop.isBefore(dropX: width, tileWidth: width), "the trailing edge")
+            XCTAssertFalse(PageDrop.isBefore(dropX: width / 2, tileWidth: width),
+                           "the midpoint itself belongs to the trailing half, consistently")
+        }
+        // Asked before the first layout pass: a zero width must not make every drop land behind
+        // the tile, which is what dividing by it the other way round would do.
+        XCTAssertTrue(PageDrop.isBefore(dropX: 0, tileWidth: 0))
+    }
+
+    /// The two halves of the drag, composed: a point inside a tile, the tile's own width, and the
+    /// index `movePage` is then given. This is the whole of the drop that is *not* a platform
+    /// gesture, and it is checked here because the gesture itself cannot be synthesised (see
+    /// `PageDragUITests`).
+    func testAPointInsideATileBecomesTheIndexTheMoveIsGiven() {
+        let width: CGFloat = 118
+        // Dragging page 1 and letting go on the leading half of page 3 → page 1 stands second.
+        let leading = PageDrop.isBefore(dropX: 10, tileWidth: width)
+        XCTAssertEqual(PageDrop.destination(dragging: 0, onto: 2, before: leading), 1)
+        // …and on its trailing half → page 1 stands third.
+        let trailing = PageDrop.isBefore(dropX: 110, tileWidth: width)
+        XCTAssertEqual(PageDrop.destination(dragging: 0, onto: 2, before: trailing), 2)
+        // Dragging page 4 back onto the leading half of page 2 → page 4 stands second.
+        XCTAssertEqual(PageDrop.destination(dragging: 3, onto: 1, before: leading), 1)
     }
 
     func testADropThatAsksForNoChangeSaysSo() {

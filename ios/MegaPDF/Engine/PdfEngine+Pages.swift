@@ -31,10 +31,25 @@ enum PageToolRefusal: Equatable {
     /// The other file's own security does not allow copying out of it.
     case sourceRestricted
 
-    /// `MEGAPDF_ERR_FIELDS`: the pages carry form fields in a /Parent hierarchy this copy
-    /// cannot carry — about 0.8% of a real corpus. Deliberate, and whole: nothing was
-    /// changed, because the alternative is a document whose fields quietly lost their names
-    /// and values.
+    /// `MEGAPDF_ERR_FIELDS`: a page's form fields sit in a /Parent hierarchy whose top-level
+    /// name this document already uses, so the copy would have to rename a name that lives on
+    /// the parent rather than on the widget. Refused **whole**, because the alternative is a
+    /// document whose fields quietly lost their names and values.
+    ///
+    /// **Common, not exotic.** The corpus battery's ninth run (#567) measured it at **0.91% of
+    /// the private corpus and 15.4% of the public one** — the latter being government-forms
+    /// heavy, which is exactly the population that writes fields this way — plus **3.0%** of
+    /// the Canadian corpus from genuine collisions *between* two documents. Earlier runs
+    /// reported zero, and that zero turned out to be the absence of a probe rather than the
+    /// absence of the problem. So this reaches a person often enough that its sentence is a
+    /// feature of the app rather than a corner of it, and it is said in a titled alert rather
+    /// than a notice that clears itself.
+    ///
+    /// **Only an import can raise it.** An extract writes a brand-new file, and on this build's
+    /// PDFium (patch ≥ 33, which copies the /Parent chain) there is no name in a new file for a
+    /// hierarchy to collide with — so `megapdf_pages_extract` can no longer answer it at all.
+    /// The mapping below still covers extract, because the core documents the status for an
+    /// older PDFium and a status that cannot arrive costs nothing to name.
     case fieldHierarchy
 
     /// A PDF must keep at least one page, so the last one may not be deleted.

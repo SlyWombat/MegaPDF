@@ -66,6 +66,24 @@ enum PageDrop {
         if before { return from < over ? over - 1 : over }
         return from < over ? over : over + 1
     }
+
+    /// Whether a drop at `x` points **in front of** the tile it landed on.
+    ///
+    /// Its own function, and tested, because the width it divides is the one thing here that is
+    /// *measured* rather than reasoned about: the grid's columns are adaptive, so a hard-coded
+    /// guess puts the midpoint in the wrong place and a drop near the middle of a tile goes the
+    /// wrong way.
+    ///
+    /// A width of zero or less is **defined rather than divided**: it answers "before", which is
+    /// the half a drop on a tile's leading edge belongs to. The panel never hands one over — it
+    /// starts from a sensible default and only replaces it with a positive measurement — but a
+    /// total function is one fewer thing for the next caller to get right, and `0 < 0` silently
+    /// sending every drop behind its tile is exactly the kind of answer this file is trying not
+    /// to have.
+    static func isBefore(dropX x: CGFloat, tileWidth: CGFloat) -> Bool {
+        guard tileWidth > 0 else { return true }
+        return x < tileWidth / 2
+    }
 }
 
 /// The pages, and everything that can be done to them.
@@ -464,7 +482,7 @@ struct PagesPanel: View {
         guard let from = carried, from != index else { return false }
         // The tile is one grid cell wide; which half of it the finger let go over is what says
         // whether the page goes in front of this one or behind it.
-        let before = location.x < tileWidth / 2
+        let before = PageDrop.isBefore(dropX: location.x, tileWidth: tileWidth)
         let to = PageDrop.destination(dragging: from, onto: index, before: before)
         guard to != from else { return false }
         model.movePage(from: from, to: to)

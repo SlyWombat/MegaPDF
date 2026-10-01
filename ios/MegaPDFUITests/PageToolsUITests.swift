@@ -20,13 +20,13 @@ import XCTest
 ///   the field-hierarchy refusal is driven in `PageToolsTests`, which can build the two forms it
 ///   needs.
 ///
-/// **Where a gesture goes matters (#465, #531).** The drag that reorders a page is aimed at
-/// *coordinates inside two tiles*, not at the tiles as elements: `press(forDuration:thenDragTo:)`
-/// given an element drops on that element's centre, and the centre of a tile is exactly the
-/// midpoint that decides whether the page goes in front of it or behind it. A test that dropped on
-/// the boundary would be measuring its own aim, which is the same mistake #465 turned out to be.
-/// The tap tests are aimed at tiles, which are small and well inside the panel, and the one tap on
-/// the *page* goes to `viewerPinchProbe` for #531's reason.
+/// **Where a gesture goes matters (#465, #531).** The taps here are aimed at tiles, which are
+/// small and well inside the panel, and the one tap on the *page* goes to `viewerPinchProbe` for
+/// #531's reason. **Drag-to-reorder is not in this suite**: a long press on a tile opens its
+/// context menu, so a synthesised press-then-drag cannot express the one thing that tells the two
+/// apart on a real device, which is movement. It lives in `PageDragUITests`, which says why at
+/// length, and the reorder paths that *are* driven here are the ones a screen-reader user depends
+/// on anyway — the menu's Move Earlier / Move Later and Move to….
 final class PageToolsUITests: XCTestCase {
 
     private var app: XCUIApplication!
@@ -348,28 +348,6 @@ final class PageToolsUITests: XCTestCase {
                       dump("the sentence is not the rule"))
         alert.buttons["OK"].tap()
         XCTAssertTrue(probe().contains("count 1"), "and nothing was changed")
-    }
-
-    /// The drag, aimed the way a hand aims it: at a point inside the leading half of the tile the
-    /// page is meant to go in front of, not at that tile's centre, which is the midpoint between
-    /// "in front of" and "behind".
-    func testDraggingAPageOntoAnotherReordersIt() {
-        launch(with: fourPages)
-        openPages()
-
-        let source = tile(2)
-        let destination = tile(0)
-        XCTAssertTrue(source.waitForExistence(timeout: 10), dump("no tile 2"))
-        XCTAssertTrue(destination.exists, dump("no tile 0"))
-        source.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
-            .press(forDuration: 1.2,
-                   thenDragTo: destination.coordinate(withNormalizedOffset: CGVector(dx: 0.15, dy: 0.5)),
-                   withVelocity: .slow,
-                   thenHoldForDuration: 0.4)
-
-        waitFor("sizes 500x440,300x400,400x420,600x460")
-        undo()
-        waitFor("sizes 300x400,400x420,500x440,600x460")
     }
 
     /// The reorder every tile carries without a drag: unusable with a screen reader is exactly

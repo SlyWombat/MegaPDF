@@ -2035,6 +2035,12 @@ final class ViewerModel: ObservableObject {
     /// and values. The words are Android's, to the letter (#554), so the four platforms say the
     /// same thing about the same limit.
     ///
+    /// It is also **common**: the battery's ninth run (#567) measures it at 0.91% of the private
+    /// corpus and 15.4% of the public one. That is why it is raised as a titled alert rather than
+    /// a `showNotice` banner that takes itself away after four seconds — at that rate it is part
+    /// of how combining documents works, not a corner of it, and a person who has just imported
+    /// a form has to be able to read why nothing arrived.
+    ///
     /// The #118 **layout guard** has no sentence here, because it is not reachable: no page
     /// operation rewrites a page's content stream, so contract 10 lists no `MEGAPDF_ERR_LAYOUT`
     /// among its statuses. No dialog is invented for a state that cannot happen, and

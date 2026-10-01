@@ -619,7 +619,11 @@ note), so the journal entries the desktops record have no counterpart here.
 **The two refusals are surfaced, not hidden**, in the same words Android uses, so four platforms
 say one thing about one limit: `MEGAPDF_ERR_FIELDS` becomes a sentence naming the form on those
 pages and saying nothing was changed, and the last page becomes the rule it is — said when Delete
-is pressed, with *Save Pages As…* as the way round it. The #118 layout guard is not on this path
+is pressed, with *Save Pages As…* as the way round it. The first is raised as a **titled alert**
+rather than a self-clearing notice, because the battery's ninth run (#567) measures it at 0.91% of
+the private corpus and 15.4% of the public one: at that rate it is part of how combining documents
+works rather than a corner of it. Only an import can reach it — an extract writes a new file, and
+on PDFium ≥ 33 a new file has no name for a hierarchy to collide with. The #118 layout guard is not on this path
 at all and `PageToolRefusal` has no case for it; `PageToolsTests` drives that rather than claiming
 it, by showing the guard awake on a page it declines and then running every page operation over
 that same page.

@@ -263,8 +263,23 @@ Extra attention on an iPad, per #174:
 - [ ] the same sidebar in a Split View narrow enough to be compact width — it should become the
       sheet, and the strip's Pages button should go with the strip
 - [ ] a tile's long-press menu as a **popover**, and the same menu from a right-click
-- [ ] drag-to-reorder with a trackpad as well as with a finger
 - [ ] ⌥⌘2 on a hardware keyboard, and the ⌘-hold overlay listing *Pages*
+
+**Drag-to-reorder is a by-hand gate, on every layout** (`PageDragUITests` says why at length).
+A long press on a tile means two things and only movement tells them apart: hold still and the
+context menu opens, hold and move and the tile is picked up — as in Photos, Files and the Home
+screen. A synthesised `press(forDuration:thenDragTo:)` cannot express that difference, so the
+drag is proved here and not in CI. What CI does cover is every part of the drop that is not the
+gesture: the midpoint rule against the widths a tile really comes out at, the index `movePage` is
+given in all four directions, and the reorder end to end through the menu's own commands.
+
+- [ ] pick a tile up with a finger and drop it on the **leading** half of an earlier tile — it
+      lands in front of that page
+- [ ] the same drop on the **trailing** half — it lands behind that page
+- [ ] a drop that asks for no change (onto itself, or onto the neighbour it already follows)
+      leaves the order alone and puts nothing on the undo stack
+- [ ] hold a tile **without moving** — the context menu opens, and no page moves
+- [ ] the same drag with a trackpad on an iPad
 
 The older list:
 
