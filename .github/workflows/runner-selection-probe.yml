@@ -46,7 +46,7 @@ jobs:
       # proved separately by the array-in-runs-on job below.
       - name: 1. The real expression, as it stands right now
         env:
-          SELECTED: ${{ (vars.MAC_SELF_HOSTED == 'on' && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.repo.fork == false))) && '["self-hosted","macOS","ARM64","megapdf-ios"]' || '["macos-latest"]' }}
+          SELECTED: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.runner == 'self-hosted') && '["self-hosted","macOS","ARM64","megapdf-ios"]' || (github.event_name == 'workflow_dispatch' && github.event.inputs.runner == 'hosted') && '["macos-latest"]' || (vars.MAC_SELF_HOSTED == 'on' && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.repo.fork == false))) && '["self-hosted","macOS","ARM64","megapdf-ios"]' || '["macos-latest"]' }}
         run: echo "PROBE 1 real                 -> $SELECTED"
 
       # The fork branch of the same expression. The head-repository comparison is
@@ -89,6 +89,16 @@ jobs:
         env:
           SELECTED: ${{ ('on' == 'on' && ('pull_request' != 'pull_request' || (github.event.no_such_key.full_name == github.repository && github.event.no_such_key.fork == false))) && '["self-hosted","macOS","ARM64","megapdf-ios"]' || '["macos-latest"]' }}
         run: echo "PROBE 6 real guard, null head-> $SELECTED"
+
+      # The manual override is gated on event_name == 'workflow_dispatch'. This holds
+      # the override at 'self-hosted' and everything else as it really is: on a
+      # pull_request it must still print macos-latest, because the override term can
+      # never be true there. On a workflow_dispatch it may print the self-hosted set,
+      # which is the point of the override.
+      - name: 7. The override term, with the override held at self-hosted
+        env:
+          SELECTED: ${{ (github.event_name == 'workflow_dispatch' && 'self-hosted' == 'self-hosted') && '["self-hosted","macOS","ARM64","megapdf-ios"]' || (github.event_name == 'workflow_dispatch' && 'self-hosted' == 'hosted') && '["macos-latest"]' || (vars.MAC_SELF_HOSTED == 'on' && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.repo.fork == false))) && '["self-hosted","macOS","ARM64","megapdf-ios"]' || '["macos-latest"]' }}
+        run: echo "PROBE 7 override=self-hosted -> $SELECTED"
 
   # Proves the shape rather than the condition: a runs-on fed by
   # fromJSON() of a JSON array literal chosen by a ternary really does resolve to

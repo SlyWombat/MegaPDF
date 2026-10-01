@@ -8,6 +8,12 @@ on:
   # Development is Mac-less, so this is the only way to compile-check an iOS change
   # without opening a PR.
   workflow_dispatch:
+    inputs:
+      runner:
+        description: Which runner to use (auto = the usual rules)
+        type: choice
+        default: auto
+        options: [auto, self-hosted, hosted]
   push:
     branches: [main]
     paths: ['ios/**', 'core/**', 'libs/pdfium/**', 'tools/gen_test_fixtures.py', '.github/workflows/ios-ci.yml']
@@ -56,13 +62,23 @@ jobs:
     #   event_name != 'pull_request'      a push to main, or a workflow_dispatch: the
     #                                     code is already in the repository, so there is
     #                                     no untrusted author to guard against.
+    #   inputs.runner                     a manual override, and ONLY on
+    #                                     workflow_dispatch, which cannot be fired by
+    #                                     anyone without push access and is never a
+    #                                     fork. It is how the same commit was timed on
+    #                                     both runners for #614, and it is the thing to
+    #                                     reach for when one runner has to be used for a
+    #                                     single run without changing the variable for
+    #                                     everyone:
+    #                                       gh workflow run ios-ci.yml -f runner=hosted
+    #                                     `auto` means the rules above.
     #
     # Verified rather than assumed: .github/workflows/runner-selection-probe.yml
     # evaluated this expression and three held-constant variants on a hosted runner in
     # both event shapes. The one that matters is a pull_request whose head repository is
     # not this one with the switch forced on: it resolves to macos-latest. Recorded on
     # #614.
-    runs-on: ${{ fromJSON((vars.MAC_SELF_HOSTED == 'on' && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.repo.fork == false))) && '["self-hosted","macOS","ARM64","megapdf-ios"]' || '["macos-latest"]') }}
+    runs-on: ${{ fromJSON((github.event_name == 'workflow_dispatch' && github.event.inputs.runner == 'self-hosted') && '["self-hosted","macOS","ARM64","megapdf-ios"]' || (github.event_name == 'workflow_dispatch' && github.event.inputs.runner == 'hosted') && '["macos-latest"]' || (vars.MAC_SELF_HOSTED == 'on' && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.repo.fork == false))) && '["self-hosted","macOS","ARM64","megapdf-ios"]' || '["macos-latest"]') }}
     defaults:
       run:
         working-directory: ios
