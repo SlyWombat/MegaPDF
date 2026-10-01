@@ -487,9 +487,12 @@ NONLATIN_LICENCE = "CC-BY-SA-4.0"
 NONLATIN_ATTRIBUTION = (
     "Wikipedia contributors -- article text is CC BY-SA 4.0 "
     "(https://creativecommons.org/licenses/by-sa/4.0/), dual-licensed GFDL; each row's "
-    "own URL is the article's canonical attribution link (replace '/api/rest_v1/page/pdf/' "
-    "with '/wiki/' for the human-readable page). PDF rendering is the wiki's own REST "
-    "export, unmodified further here.")
+    "own URL (as fetch_nonlatin_wiki() builds it, before any #525 mirroring) is the "
+    "article's canonical attribution link (replace '/api/rest_v1/page/pdf/' with "
+    "'/wiki/' for the human-readable page). PDF rendering is the wiki's own REST "
+    "export, unmodified further here. Once a row is mirrored (#525, see "
+    "mirror-nonlatin-wiki.py), manifest.tsv's own url column points at the mirror "
+    "instead, and nonlatin-wiki-attribution.tsv carries this same link forward.")
 
 # See "Extending" below and NONLATIN_WIKI_TITLES's own comment for the pinned title list
 # (kept in a companion module to keep this file's line count sane).
@@ -1653,6 +1656,34 @@ def main():
                 f"Do not implement a fetcher for this key until that is resolved in writing.")
 
         if args.add_source == "nonlatin-wiki":
+            # #525: once a wiki-* row has been mirrored to MegaPDF's own storage, its `url`
+            # column is a release asset on this repository, not a *.wikipedia.org one -- see
+            # README.md, "Non-Latin scripts: hosted, not fetched live", and
+            # mirror-nonlatin-wiki.py. merge_and_report (below) matches purely by `url`, so a
+            # plain re-run here would never recognise those rows as "already have this one":
+            # fetch_nonlatin_wiki always builds a *.wikipedia.org url, which no longer equals
+            # any mirrored row's url, so every one of the 280 pinned titles would look brand
+            # new and get ADDED again -- doubling the category and putting a live, re-rendering
+            # Wikipedia url straight back into the manifest, which is the exact bug #525 fixed.
+            # Refuse outright rather than silently corrupting the selection; extending this
+            # source (new titles or languages) after mirroring is a deliberate, by-hand process
+            # now, documented in the README section named above, not a bare --add-source.
+            existing_wiki = [r for r in read_manifest(args.out) if r.get("source") in NONLATIN_SOURCE_KEYS] \
+                if os.path.exists(args.out) else []
+            mirrored = [r["path"] for r in existing_wiki if ".wikipedia.org" not in r.get("url", "")]
+            if mirrored:
+                sys.exit(
+                    f"--add-source nonlatin-wiki refuses: {len(mirrored)} of {len(existing_wiki)} "
+                    f"wiki-* row(s) in {args.out} are already mirrored to MegaPDF's own storage "
+                    f"(#525), not pointed at live *.wikipedia.org -- that is deliberate, because "
+                    f"Wikipedia's PDF export re-renders and its bytes drift, and these rows are "
+                    f"now pinned to a frozen copy instead. Re-running this generator would match "
+                    f"none of them (they no longer carry a *.wikipedia.org url) and would ADD a "
+                    f"second, live copy of the same articles rather than refresh them -- doubling "
+                    f"the category and reintroducing the unstable source this change removed. To "
+                    f"extend with new titles or languages, fetch and mirror them the same way (see "
+                    f"README.md, 'Non-Latin scripts: hosted, not fetched live', and "
+                    f"mirror-nonlatin-wiki.py) and merge the result by hand.")
             cache_dir = os.path.join(args.work, "nonlatin-wiki-fetch-cache")
             try:
                 rows, skipped = fetch_nonlatin_wiki(cache_dir)
