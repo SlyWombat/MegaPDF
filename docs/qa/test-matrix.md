@@ -17,7 +17,7 @@ Each cell says two things and both are checked against the code:
 | `GAP` | the feature is **missing** where it should exist — the #571 shape |
 | `+m` | a by-hand step in `TESTING.md` / `docs/RELEASING.md` covers it too |
 
-220 pairings: 119 UI, 69 eng, 13 —, 14 n/a, 5 GAP.
+225 pairings: 120 UI, 69 eng, 13 —, 14 n/a, 9 GAP.
 
 This map is about *what is covered*, not whether the covering tests pass — that is the
 other jobs' business — and it does not replace the by-hand pass in `docs/RELEASING.md`
@@ -28,13 +28,17 @@ other jobs' business — and it does not replace the by-hand pass in `docs/RELEA
 This is the part worth reading. A map that only restated what passes would not be
 worth checking in.
 
-### Missing feature — absent where it should exist (5)
+### Missing feature — absent where it should exist (9)
 
 Nothing is failing; nothing is looking. #571 (Linux had an About window with no route to it) and #3 (Android had no whiteout at all) were both this.
 
 | feature | platform | what is missing | issue |
 |---|---|---|---|
 | Whiteout (cover) (`whiteout`) | ios | no whiteout tool. The reason given in the engine source is that mobile's feature set excludes it — which stopped being true when Android got one on 2026-09-30. | — |
+| A withheld permission is said out loud, and the person may continue (`permission-override`) | ios | iOS page tools landed in #570 consulting no permission bit at all, so this is the one platform where the question has to arrive with the detection rather than replace it. | #558 |
+| A withheld permission is said out loud, and the person may continue (`permission-override`) | linux | same as macOS. | #558 |
+| A withheld permission is said out loud, and the person may continue (`permission-override`) | macos | same as Windows — the shared MegaPDF.Core DocumentCapabilities both desktops consume is the half that has to change, so these two land together. | #558 |
+| A withheld permission is said out loud, and the person may continue (`permission-override`) | windows | still refuses. DocumentCapabilities.cs reads the bits and the toolbar greys out what the author withheld; megapdf_security_override() is in the core and unbound in CoreNative.cs. | #558 |
 | Print (`print`) | android | no PrintManager anywhere in android/app. Same shape as iOS. | — |
 | Print (`print`) | ios | no UIPrintInteractionController anywhere in ios/MegaPDF. AirPrint is what a phone user would reach for and there is no route to it. | — |
 | Shrink for email (`shrink`) | android | no shrink on Android either, for the same reason and with the same silence. | — |
@@ -195,6 +199,7 @@ The shared core proves the operation. Nothing proves this platform reaches it co
 | **Export as Markdown** | eng+m | UI+m | UI+m | UI | UI |
 | **Share** | n/a | n/a | n/a | eng+m | UI+m |
 | **Password — set, change, remove, and opening a protected document** | eng | eng | eng | eng | eng |
+| **A withheld permission is said out loud, and the person may continue** | GAP | GAP | GAP | GAP | UI |
 | **Shrink for email** | UI+m | UI+m | UI+m | GAP | GAP |
 | **Print** | —+m | —+m | UI+m | GAP | GAP |
 | **Progress and Stop on long operations** | UI | UI | UI | eng | UI |
@@ -479,6 +484,24 @@ counters for two whole battery runs before #567's reporting fix.
 - **Linux** — eng. coverage: engine only. reachable from `src/MegaPDF.Avalonia/Views/MainWindow.MenuBar.cs::Strings.SecurityToolbar`. tests: `src/MegaPDF.Avalonia/Program.cs::CheckPasswordPromptAcrossTabSwitch`, `tests/MegaPDF.Core.Tests/PasswordTests.cs::Password`, `tests/MegaPDF.Core.Tests/SecurityTests.cs::Security`. same as macOS.
 - **iOS/iPadOS** — eng. coverage: engine only. reachable from `ios/MegaPDF/DocumentSecuritySheet.swift::DocumentSecuritySheet`. tests: `ios/MegaPDFTests/PdfEngineTests.swift::password`, `ios/MegaPDFUITests/FilesEndToEndUITests.swift::setPassword`. set-password and wrong-password-then-remove are real UI tests, and both are excluded from CI — the only platform with a UI test for this and it does not run.
 - **Android** — eng. coverage: engine only. reachable from `android/app/src/main/java/com/megapdf/android/SecurityDialogs.kt::R.string.security_password_title`. tests: `android/engine/src/androidTest/java/com/megapdf/engine/PdfEngineTest.kt::password`. no instrumented test opens the password sheet.
+
+### A withheld permission is said out loud, and the person may continue (`permission-override`)
+
+Dave's decision on #558, 2026-09-30, recorded as ADR-004 decision 11: when a document's
+permissions forbid what someone is about to do, the app says its author asked that it not
+be done and offers to continue anyway. The bits are advisory — any tool with the owner
+password clears them, plenty of tools ignore them, and the person in front of the app may
+well be the author — so a refusal treats a request as a lock, which it is not.
+
+Four platforms, one shape; Android built it first and the comment on #558 is what the other
+three copy. The three outstanding cells below are *regressions of a kind this map exists to
+show*: each one has a working refusal, so no test fails — they are walls that pass.
+
+- **Windows** — GAP. absent (gap). still refuses. DocumentCapabilities.cs reads the bits and the toolbar greys out what the author withheld; megapdf_security_override() is in the core and unbound in CoreNative.cs. #558.
+- **macOS** — GAP. absent (gap). same as Windows — the shared MegaPDF.Core DocumentCapabilities both desktops consume is the half that has to change, so these two land together. #558.
+- **Linux** — GAP. absent (gap). same as macOS. #558.
+- **iOS/iPadOS** — GAP. absent (gap). iOS page tools landed in #570 consulting no permission bit at all, so this is the one platform where the question has to arrive with the detection rather than replace it. #558.
+- **Android** — UI. coverage: UI/VM. reachable from `android/app/src/main/java/com/megapdf/android/MainActivity.kt::R.string.permission_ask_note`. tests: `android/app/src/androidTest/java/com/megapdf/android/PermissionPromptTest.kt::class`, `android/app/src/test/java/com/megapdf/android/PermissionOverrideTest.kt::class`, `core/tests/core_tests.cpp::megapdf_security_override`. the five Compose tests were pushed as their own commit and shown red on CI first. Continue is proved on the page's own reported size swapping after a quarter turn, which can only happen if the choice reached the C++ core — the core enforces the same bits underneath every platform, so an app-only Continue comes back MEGAPDF_ERR_RESTRICTED.
 
 ### Shrink for email (`shrink`)
 

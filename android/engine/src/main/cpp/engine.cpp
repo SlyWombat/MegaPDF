@@ -284,6 +284,14 @@ Java_com_megapdf_engine_PdfiumNative_nativeSecurityInfo(JNIEnv* env, jobject, jl
     return out;
 }
 
+// #558: the person was told what the document's author asked and chose to continue anyway.
+// For this open only, in memory; megapdf_security_info() above goes on reporting the
+// permissions the file carries, so the request is still there to be shown.
+JNIEXPORT void JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativeSecurityOverride(JNIEnv*, jobject, jlong handle, jboolean allow) {
+    megapdf_security_override(reinterpret_cast<Document*>(handle)->core, allow ? 1 : 0);
+}
+
 // Passwords arrive as NUL-terminated UTF-8 bytes rather than jstrings: JNI's "modified
 // UTF-8" writes characters outside the BMP differently from the UTF-8 a PDF's security
 // handler hashes. Returns the core's status; MEGAPDF_ERR_RESTRICTED without full access.

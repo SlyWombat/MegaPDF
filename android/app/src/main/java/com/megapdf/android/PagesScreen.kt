@@ -108,10 +108,6 @@ fun PagesScreen(
     pageSizes: List<PageSize>,
     thumbnails: Map<Int, Bitmap>,
     selection: Set<Int>,
-    /** The document's security allows pages to be rotated, deleted, moved, inserted, combined. */
-    canAssemble: Boolean,
-    /** …and allows a copy, which is what saving a selection as a new file is. */
-    canExtract: Boolean,
     canUndo: Boolean,
     canRedo: Boolean,
     busy: BusyState?,
@@ -135,7 +131,11 @@ fun PagesScreen(
     val pageCount = pageSizes.size
     var menuOpen by remember { mutableStateOf(false) }
     var moveToOpen by remember { mutableStateOf(false) }
-    val enabled = canAssemble && !toolsDisabled
+    // #558: the document's permissions no longer disable anything here. A greyed-out tool was
+    // the wall this replaced, and it cannot say what the author asked; the view model does, once
+    // per document, the first time one of these tools is used. What still disables them is a
+    // change or a save already going in (#145).
+    val enabled = !toolsDisabled
     // Everything selected cannot be deleted: a PDF must keep a page, and the engine refuses it
     // (MEGAPDF_ERR_ARGUMENT). Saying so by disabling the button is better than saying so in a
     // dialog after the tap — the refusal dialog is for what cannot be predicted from here.
@@ -235,7 +235,7 @@ fun PagesScreen(
                             )
                             DropdownMenuItem(
                                 text = { Text(stringResource(R.string.pages_save_selection)) },
-                                enabled = selection.isNotEmpty() && canExtract && !toolsDisabled,
+                                enabled = selection.isNotEmpty() && !toolsDisabled,
                                 onClick = { menuOpen = false; onSaveSelectionAs() },
                             )
                             HorizontalDivider()
