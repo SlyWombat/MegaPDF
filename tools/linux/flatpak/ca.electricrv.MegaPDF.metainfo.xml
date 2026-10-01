@@ -249,6 +249,14 @@
        tag build is where that is enforced (#254 A3) rather than left to whoever
        remembers. -->
   <releases>
+    <!-- 2.2.0's date is the day the entry was written; make-release-tarball.sh
+         refuses a top entry older than 30 days or in the future, so re-date it to the
+         tag day if the tag comes later. This entry is deliberately self-closing, like
+         1.7.0 and earlier below: docs/release-notes/2.2/linux.md has the "What's new"
+         copy and the two new <description> paragraphs ready to add, but both are
+         content for the Copy gate (§2.5), not the version-bump commit, and go in
+         together before the tag. -->
+    <release version="2.2.0" date="2026-10-01"/>
     <!-- 2.1.1's date is the day the entry was written (#395); make-release-tarball.sh
          refuses a top entry older than 30 days or in the future, so re-date it to the
          tag day if the tag comes later. -->
