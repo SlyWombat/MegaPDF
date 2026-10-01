@@ -802,6 +802,13 @@ final class ViewerModel: ObservableObject {
         await PdfEngine.shared.pageCheck(doc, pageIndex: page)
     }
 
+    /// How one page of a scan is searched (#145). A seam for the same reason `pageCheck` is
+    /// one: a real scan of any document small enough to live in a test bundle is over before
+    /// anything can watch it report or ask it to stop.
+    var searchPage: @MainActor (PdfDocument, Int, String) async -> [PdfSearchMatch] = { doc, page, term in
+        (try? await PdfEngine.shared.search(doc, pageIndex: page, term: term)) ?? []
+    }
+
     /// The page at the top of the view, which gets a background page check once it has settled there.
     private var currentPage: Int?
     private var pageShownTask: Task<Void, Never>?
@@ -814,6 +821,8 @@ final class ViewerModel: ObservableObject {
     private var exportEditCount: Int?
 
     private var searchToken: BusyToken?
+    /// The scan Stop would stop, if one is running (#145).
+    private var searchRun: StopRequest?
     /// What the find bar is looking for, so a page that arrives with an undo, an insert or an
     /// import can be searched for the same thing (#174, `applyPageShifts`). Nil when nothing is
     /// being searched for.
@@ -863,6 +872,24 @@ final class ViewerModel: ObservableObject {
         signatures = signatureStore.load()
         applyScreenshotModeIfNeeded()
         applyUITestDocumentIfNeeded()
+        applySlowSearchIfNeeded()
+    }
+
+    /// `-uiTestSlowSearch` makes each page of a scan take three seconds, so a UI test
+    /// can watch the strip report where it has got to and press Stop while it is still running
+    /// (#145).
+    ///
+    /// Every document small enough to ship in the app's bundle is scanned inside the strip's
+    /// own 0.5 s threshold, so without this there is nothing on screen to check — which is the
+    /// same reason `searchPage` is a seam at all. One flag, passed by one test; no ordinary
+    /// launch and no capture has it.
+    private func applySlowSearchIfNeeded() {
+        guard ProcessInfo.processInfo.arguments.contains("-uiTestSlowSearch") else { return }
+        let real = searchPage
+        searchPage = { doc, page, term in
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            return await real(doc, page, term)
+        }
     }
 
     /// Debug builds only: a UI test hands over a small PDF as base64 in the launch
@@ -2163,22 +2190,32 @@ final class ViewerModel: ObservableObject {
                 "This document doesn't allow its pages to be copied out. Its owner password would.")
             return
         }
-        guard let token = busy.begin(.saving, scope: .document, blocksFileCommands: true) else { return }
+        // Stop, no progress (#145). One engine call, so there is no count to show — but the
+        // core's own contract is that a raised flag stops the write and leaves **nothing** at
+        // the output path, so offering a way out of a long extract costs nothing and strands no
+        // half-written file. The same division the desktops made in #563.
+        let stop = CoreCancelFlag()
+        let request = StopRequest()
+        guard let token = busy.begin(.saving, scope: .document, blocksFileCommands: true,
+                                     onStop: { request.stopped = true; stop?.raise() })
+        else { return }
         Task { @MainActor in
             defer { busy.end(token) }
             discardPageExportFile()
             let name = Self.extractName(documentName: documentName, pages: targets, of: pageCount)
             do {
                 let staged = try Self.namedStagingURL(for: name)
-                try await PdfEngine.shared.extractPages(doc, pages: targets, to: staged)
+                try await PdfEngine.shared.extractPages(doc, pages: targets, to: staged, stop: stop)
                 guard document === doc else {
                     try? FileManager.default.removeItem(at: staged.deletingLastPathComponent())
                     return
                 }
                 pageExport = PageExport(url: staged, defaultName: name, pageCount: targets.count)
             } catch let error as PageToolError {
+                guard !request.stopped else { return }
                 showPageToolRefusal(error.refusal)
             } catch {
+                guard !request.stopped else { return }
                 statusMessage = String(localized: "Those pages couldn't be saved.")
             }
         }
@@ -2430,10 +2467,25 @@ final class ViewerModel: ObservableObject {
 
     // MARK: - search (#26)
 
+    /// One piece of stoppable work's answer to "did the person ask for this to end?" (#145).
+    ///
+    /// Its own object rather than a flag on the model, so a *stop* can be told apart from a
+    /// *supersede* — a newer search would reset a model flag underneath the older one — and so
+    /// an engine refusal can be told apart from a stop the person pressed. The task holds its
+    /// own request, and only the request it holds can be stopped.
+    private final class StopRequest {
+        var stopped = false
+    }
+
     /// As-you-type search: brief debounce, then a whole-document scan for
     /// case-insensitive literal matches, aggregated into the flat match list.
     /// An empty term just clears the results. `debounce` is only turned off by
     /// the `-screenshot search` seeding, which supplies the whole term at once.
+    ///
+    /// #145: a scan of a long document is the one piece of work on this platform with a real
+    /// denominator — pages — so the strip counts them and offers Stop. A **stopped** search
+    /// keeps the matches it already had; a **superseded** one (a newer term) still clears
+    /// them, because from then on the newer search owns the result.
     func search(term: String, debounce: Bool = true) {
         searchTask?.cancel()
         endSearchBusy()
@@ -2446,29 +2498,69 @@ final class ViewerModel: ObservableObject {
             return
         }
         isSearching = true
+        let run = StopRequest()
+        searchRun = run
+        let total = pageSizes.count
         searchTask = Task {
             if debounce {
                 try? await Task.sleep(nanoseconds: 250_000_000)
                 if Task.isCancelled { return }
             }
-            // "Searching…" in the strip, which doesn't block editing (#145).
-            let token = busy.begin(.searching, scope: .document, blocking: false)
+            // "Searching…" in the strip, which doesn't block editing (#145). The count's
+            // wording belongs to the app, not to `BusyState`: this one counts pages.
+            let token = busy.begin(
+                .searching, scope: .document, blocking: false,
+                progressFormat: { done, total in
+                    String(localized: "Page \(done) of \(total)")
+                },
+                onStop: { [weak self] in self?.stopSearch() })
             searchToken = token
             defer { if let token, searchToken == token { endSearchBusy() } }
             var matches: [SearchMatch] = []
-            for index in 0..<pageSizes.count {
-                if Task.isCancelled { return }
-                let hits = (try? await PdfEngine.shared.search(
-                    doc, pageIndex: index, term: term)) ?? []
+            for index in 0..<total {
+                if Task.isCancelled {
+                    // Stopped by the person: keep what the scan found before it was asked to
+                    // stop. Superseded by a newer term: leave the list cleared, because the
+                    // newer search has already claimed it.
+                    if run.stopped { stoppedSearch(matches) }
+                    return
+                }
+                // 1-based: the count is read by a person, and "Page 0 of 5" is not a thing
+                // anyone would say. It is the page being worked on, not the number finished.
+                if let token { busy.report(token, done: index + 1, total: total) }
+                let hits = await searchPage(doc, index, term)
                 matches.append(contentsOf: hits.map {
                     SearchMatch(pageIndex: index, rects: $0.rects)
                 })
             }
-            if Task.isCancelled { return }
-            searchMatches = matches
-            currentMatchIndex = matches.isEmpty ? nil : 0
-            isSearching = false
+            if Task.isCancelled {
+                if run.stopped { stoppedSearch(matches) }
+                return
+            }
+            if let token { busy.report(token, done: total, total: total) }
+            publishSearch(matches)
         }
+    }
+
+    /// Stops a running scan and keeps what it found. Reached from the strip's Stop; closing the
+    /// find bar is the other way out, and that one clears, because it is a dismissal.
+    func stopSearch() {
+        guard isSearching else { return }
+        searchRun?.stopped = true
+        searchTask?.cancel()
+    }
+
+    /// A scan the person stopped: it keeps what it found, and says so in the self-clearing
+    /// banner rather than an alert -- the result is on screen already, and nothing went wrong.
+    private func stoppedSearch(_ matches: [SearchMatch]) {
+        publishSearch(matches)
+        showNotice(String(localized: "Search stopped."))
+    }
+
+    private func publishSearch(_ matches: [SearchMatch]) {
+        searchMatches = matches
+        currentMatchIndex = matches.isEmpty ? nil : 0
+        isSearching = false
     }
 
     func nextMatch() {
@@ -2481,8 +2573,10 @@ final class ViewerModel: ObservableObject {
         currentMatchIndex = (current + searchMatches.count - 1) % searchMatches.count
     }
 
-    /// Search bar dismissed: drop highlights and any in-flight scan.
+    /// Search bar dismissed: drop highlights and any in-flight scan. A dismissal, unlike
+    /// Stop, is a statement that the result is not wanted, so it clears (#145).
     func clearSearch() {
+        searchRun = nil
         searchTask?.cancel()
         endSearchBusy()
         lastSearchTerm = nil

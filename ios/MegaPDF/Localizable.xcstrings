@@ -3460,6 +3460,23 @@
         }
       }
     },
+    "Search stopped." : {
+      "comment" : "Status line (#145): a scan the person stopped keeps the matches it had found. Same as the desktops' SearchCancelled",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recherche arrêtée."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recherche arrêtée."
+          }
+        }
+      }
+    },
     "Searching…" : {
       "localizations" : {
         "fr" : {
@@ -3750,6 +3767,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Merci tout spécial à Mega Woman."
+          }
+        }
+      }
+    },
+    "Stop" : {
+      "comment" : "Busy strip (#145): the button that stops the work the strip is reporting. Stop, not Cancel -- Cancel is the word that abandons a question, and this abandons work. Same word as the desktops' CancelThisWork",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Arrêter"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Arrêter"
+          }
+        }
+      }
+    },
+    "Stopping…" : {
+      "comment" : "Busy strip (#145): in the button's place once Stop has been pressed, because long work does not stop the instant it is asked to. Same as the desktops' BusyCancelling",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Arrêt…"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Arrêt…"
           }
         }
       }

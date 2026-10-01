@@ -266,8 +266,9 @@ extension PdfEngine {
     /// temporary name, reopened and its page count checked, and only then given the
     /// destination's name, so a crash or a full disk leaves either no file or a whole one.
     /// This document is unchanged and nothing is recorded: an extract is a copy, not an edit.
-    func extractPages(_ document: PdfDocument, pages: [Int]?, to url: URL) throws {
-        _ = try checked(extractPages(document, indices: pages, to: url), .extract)
+    func extractPages(_ document: PdfDocument, pages: [Int]?, to url: URL,
+                      stop: CoreCancelFlag? = nil) throws {
+        _ = try checked(extractPages(document, indices: pages, to: url, stop: stop), .extract)
     }
 
     /// Writes `indices` (nil/empty means every page) as a new PDF at `url`, exactly as
@@ -276,16 +277,21 @@ extension PdfEngine {
     /// carry across a page copy. Returns the raw core status code (MEGAPDF_OK and friends,
     /// imported as plain `Int`) rather than throwing, since that refusal is exactly what
     /// `PagesFieldHierarchyTests` needs to see (#469).
-    func extractPages(_ document: PdfDocument, indices: [Int]? = nil, to url: URL) -> Int {
+    /// `stop`, raised from any thread, ends the write with MEGAPDF_ERR_CANCELLED and leaves
+    /// nothing at `url` -- the core's own contract (#145). That is what lets the strip offer
+    /// Stop on an extract without a half-written file being the price of pressing it.
+    func extractPages(_ document: PdfDocument, indices: [Int]? = nil, to url: URL,
+                      stop: CoreCancelFlag? = nil) -> Int {
         guard !document.isDestroyed else { return Int(MEGAPDF_ERR_ARGUMENT) }
+        let cancel = stop?.handle
         return url.withUnsafeFileSystemRepresentation { path in
             guard let path else { return Int(MEGAPDF_ERR_ARGUMENT) }
             guard let indices, !indices.isEmpty else {
-                return Int(megapdf_pages_extract(document.core, nil, 0, path, nil))
+                return Int(megapdf_pages_extract(document.core, nil, 0, path, cancel))
             }
             let pages = indices.map { Int32($0) }
             return pages.withUnsafeBufferPointer {
-                Int(megapdf_pages_extract(document.core, $0.baseAddress, $0.count, path, nil))
+                Int(megapdf_pages_extract(document.core, $0.baseAddress, $0.count, path, cancel))
             }
         }
     }

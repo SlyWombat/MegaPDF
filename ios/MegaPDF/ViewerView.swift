@@ -978,7 +978,8 @@ struct ViewerView: View {
                     .transition(.opacity)
             }
             if let work = busy.strip {
-                BusyStrip(label: work.label.text)
+                BusyStrip(work: work, canStop: busy.canStop, isStopping: busy.isStopping,
+                          onStop: busy.requestStop)
                     .transition(.opacity)
             }
         }
@@ -1648,27 +1649,79 @@ struct DynamicXfaBanner: View {
     }
 }
 
-/// Document-level work in progress (#145): a label over an indeterminate bar, under the
-/// navigation bar. VoiceOver reads the label; the model announces it when the strip appears.
+/// Document-level work in progress (#145): a label over a bar, under the navigation bar —
+/// determinate with a count line when the work can say how far it has got, and with a Stop
+/// beside it when the work can be stopped. VoiceOver reads the label; the model announces it
+/// when the strip appears.
+///
+/// **The count is its own line, not part of the label.** The label is the strip's polite live
+/// region, and folding "Page 312 of 2,000" into it would have a screen reader announce it
+/// three hundred times over one search. The count sits inside the element that ignores its
+/// children, so it is drawn and not spoken; the label, which does not change, is what is
+/// spoken. (#563 made the same call on the desktops, for the same reason.)
+///
+/// **The button says Stop, not Cancel.** Cancel is the word that abandons a question; this
+/// abandons work. It goes insensitive the moment it is pressed, with "Stopping…" in its place,
+/// because work does not stop the instant it is asked to.
 struct BusyStrip: View {
-    let label: String
+    let work: BusyWork
+    /// Whether there is still running work behind the strip to stop. False while the strip
+    /// lives out its last 0.3 s, which is why it is asked of the state rather than of `work`.
+    let canStop: Bool
+    let isStopping: Bool
+    let onStop: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(label)
-                .font(.footnote)
-                .foregroundColor(.secondary)
-            ProgressView()
-                .progressViewStyle(.linear)
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(work.label.text)
+                    .font(.footnote)
+                    .foregroundColor(.secondary)
+                if let progress = work.progress {
+                    ProgressView(value: progress.fraction)
+                        .progressViewStyle(.linear)
+                } else {
+                    ProgressView()
+                        .progressViewStyle(.linear)
+                }
+                if let count = work.progressText {
+                    Text(count)
+                        .font(.caption.monospacedDigit())
+                        .foregroundColor(.secondary)
+                        .accessibilityIdentifier("busyCount")
+                }
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(work.label.text)
+            .accessibilityAddTraits(.updatesFrequently)
+            .accessibilityIdentifier("busyStrip")
+            if work.cancellable {
+                // Typed as keys, two literals rather than a ternary, so the catalog sees both.
+                Button(action: onStop) {
+                    // The 44-point target is around the LABEL, with a content shape to match,
+                    // not a `.frame` on the button: a frame outside it grows the layout and
+                    // leaves the hit area the size of the words. Measured on a simulator at
+                    // 15.7 points tall that way -- a third of what a finger needs, and
+                    // something only a running app would have said.
+                    Group {
+                        if isStopping {
+                            Text("Stopping…")
+                        } else {
+                            Text("Stop")
+                        }
+                    }
+                    .frame(minWidth: 44, minHeight: 44)
+                    .contentShape(Rectangle())
+                }
+                .font(.footnote.weight(.semibold))
+                .disabled(!canStop)
+                .accessibilityIdentifier("busyStop")
+            }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.bar)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(label)
-        .accessibilityAddTraits(.updatesFrequently)
-        .accessibilityIdentifier("busyStrip")
     }
 }
 

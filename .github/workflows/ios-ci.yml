@@ -78,6 +78,12 @@ jobs:
       # same tests take on the Mac mini (2.5 minutes); about 10 minutes on the
       # job in all.
       #
+      # #4's measurement (MultilineTextUITests) and #145's strip (ProgressStripUITests) are
+      # both in: the first reads what the text field hands back for a line break, which is the
+      # thing two other platforms got wrong by assuming it, and the second checks the strip's
+      # bindings and that the Stop is a finger-sized target -- both only answerable in a
+      # running app.
+      #
       # Kept out on purpose: DemoFlowUITests is the preview-video choreography
       # (timed for a recording, not a verdict); CaptureSimulatorSetupUITests
       # changes the simulator's Settings for the screenshot rig;
@@ -126,6 +132,8 @@ jobs:
             -only-testing:MegaPDFUITests/RecentsAccessibilityUITests/testEveryRecentRowAnnouncesWhereItsFileLives \
             -only-testing:MegaPDFUITests/ViewerBarContrastUITests \
             -only-testing:MegaPDFUITests/RedactionUITests/testSaveIsReachableWithAMarkAndAsksBeforeRemoving \
+            -only-testing:MegaPDFUITests/MultilineTextUITests \
+            -only-testing:MegaPDFUITests/ProgressStripUITests \
             CODE_SIGNING_ALLOWED=NO
 
       # The regular-width half of the zoom check (#465) and of reading mode (#506). No
