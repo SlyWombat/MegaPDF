@@ -327,15 +327,15 @@
     <!-- FR-REVIEW #513 — new with reading preferences, not yet read by the reviewer. -->
     <string name="fit_width">Ajuster à la largeur</string>
     <!-- FR-REVIEW #513 — new with reading preferences, not yet read by the reviewer. -->
-    <string name="fit_page">Ajuster à la page</string>
+    <string name="fit_page">Page entière</string>
     <!-- FR-REVIEW #513 — new with reading preferences, not yet read by the reviewer. -->
-    <string name="zoom_in">Agrandir</string>
+    <string name="zoom_in">Zoom avant</string>
     <!-- FR-REVIEW #513 — new with reading preferences, not yet read by the reviewer. -->
-    <string name="zoom_out">Réduire</string>
+    <string name="zoom_out">Zoom arrière</string>
 
-    <!-- Réglages (#513) -->
+    <!-- Paramètres (#513) -->
     <!-- FR-REVIEW #513 — new with reading preferences, not yet read by the reviewer. -->
-    <string name="settings">Réglages</string>
+    <string name="settings">Paramètres</string>
     <!-- FR-REVIEW #513 — new with reading preferences, not yet read by the reviewer. -->
     <string name="settings_reading">Lecture</string>
     <!-- FR-REVIEW #513 — new with reading preferences, not yet read by the reviewer. -->

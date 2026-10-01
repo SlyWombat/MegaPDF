@@ -52,7 +52,7 @@ Some documents arrive carrying a digital signature — the cryptographic kind, w
 
 ## Français (Canada) — `fr-CA`
 
-**Quoi de neuf** [4000] (2694)
+**Quoi de neuf** [4000] (2734)
 
 ```
 Mode lecture
@@ -65,24 +65,24 @@ Le panneau Vignettes (Présentation > Vignettes, ⌥⌘2) est maintenant un endr
 
 Le zoom, et un pincement qui fonctionne
 
-Le zoom garde maintenant le point que vous visez au lieu du coin de la page, qu'il vienne du menu, du clavier ou de Contrôle avec la molette. Et un pincement sur le pavé tactile zoome la page, ce qu'il ne faisait pas du tout ici avant.
+Le zoom garde maintenant le point que vous visez au lieu du coin de la page, qu'il vienne du menu, du clavier ou de Contrôle avec la molette. Et un pincement sur le pavé tactile zoome la page, ce qu'il ne faisait pas ici auparavant.
 
 Un correcteur qui se déplace, du texte sur une deuxième ligne
 
-Tracez du correcteur et il reste sélectionné : glissez-le pour le déplacer, prenez un coin pour le redimensionner, Supprimer pour l'enlever. Le texte ajouté tient sur plus d'une ligne — Retour commence la suivante, et la zone grandit pour contenir ce que vous tapez.
+Posez du correcteur et il reste sélectionné : glissez-le pour le déplacer, prenez un coin pour le redimensionner, Supprimer pour l'enlever. Le texte ajouté tient sur plus d'une ligne — Retour commence la suivante, et la zone grandit pour contenir ce que vous tapez.
 
 Les longues opérations disent ce qu'elles font
 
-Ouvrir un gros document, y chercher, l'enregistrer, en faire une copie réduite, en extraire des pages : chacune de ces opérations dit sur quoi elle travaille et où elle en est, au lieu d'avoir l'air figée. La recherche, la copie réduite et l'extraction de pages peuvent être arrêtées en cours de route, et un arrêt ne laisse aucun fichier à moitié écrit.
+Ouvrir un document volumineux, y chercher, l'enregistrer, en faire une copie réduite, en extraire des pages : chacune de ces opérations dit sur quoi elle travaille et où elle en est, au lieu d'avoir l'air figée. La recherche, la copie réduite et l'extraction de pages peuvent être arrêtées en cours de route, et un arrêt ne laisse aucun fichier à moitié écrit.
 
 Avant que la signature du document ne soit perdue
 
-Certains documents arrivent avec une signature numérique, celle du chiffrement, qui cesse d'être vérifiable dès que le fichier change. Enregistrer par-dessus un tel document le dit maintenant d'abord et propose Enregistrer une copie, pour que l'original signé reste intact. Il s'agit d'une signature déjà présente dans le document; la signature que vous dessinez, tapez ou photographiez pour la poser sur la page est une image de votre nom, et la poser n'a pas changé.
+Certains documents arrivent avec une signature numérique — la signature cryptographique, adossée à un certificat — qui cesse d'être vérifiable dès que le fichier change. Enregistrer par-dessus un tel document le dit maintenant d'abord et propose Enregistrer une copie, pour que l'original signé reste intact. Il s'agit d'une signature déjà présente dans le document; la signature que vous dessinez, tapez ou photographiez pour la poser sur la page est une image de votre nom, et rien n'a changé de ce côté.
 ```
 
 ## Français (France) — `fr`
 
-**Quoi de neuf** [4000] (2695)
+**Quoi de neuf** [4000] (2735)
 
 ```
 Mode lecture
@@ -95,19 +95,19 @@ Le panneau Vignettes (Présentation > Vignettes, ⌥⌘2) est maintenant un endr
 
 Le zoom, et un pincement qui fonctionne
 
-Le zoom garde maintenant le point que vous visez au lieu du coin de la page, qu'il vienne du menu, du clavier ou de Contrôle avec la molette. Et un pincement sur le pavé tactile zoome la page, ce qu'il ne faisait pas du tout ici avant.
+Le zoom garde maintenant le point que vous visez au lieu du coin de la page, qu'il vienne du menu, du clavier ou de Contrôle avec la molette. Et un pincement sur le pavé tactile zoome la page, ce qu'il ne faisait pas ici auparavant.
 
 Un correcteur qui se déplace, du texte sur une deuxième ligne
 
-Tracez du correcteur et il reste sélectionné : glissez-le pour le déplacer, prenez un coin pour le redimensionner, Supprimer pour l'enlever. Le texte ajouté tient sur plus d'une ligne — Retour commence la suivante, et la zone grandit pour contenir ce que vous tapez.
+Posez du correcteur et il reste sélectionné : glissez-le pour le déplacer, prenez un coin pour le redimensionner, Supprimer pour l'enlever. Le texte ajouté tient sur plus d'une ligne — Retour commence la suivante, et la zone grandit pour contenir ce que vous tapez.
 
 Les longues opérations disent ce qu'elles font
 
-Ouvrir un gros document, y chercher, l'enregistrer, en faire une copie réduite, en extraire des pages : chacune de ces opérations dit sur quoi elle travaille et où elle en est, au lieu d'avoir l'air figée. La recherche, la copie réduite et l'extraction de pages peuvent être arrêtées en cours de route, et un arrêt ne laisse aucun fichier à moitié écrit.
+Ouvrir un document volumineux, y chercher, l'enregistrer, en faire une copie réduite, en extraire des pages : chacune de ces opérations dit sur quoi elle travaille et où elle en est, au lieu d'avoir l'air figée. La recherche, la copie réduite et l'extraction de pages peuvent être arrêtées en cours de route, et un arrêt ne laisse aucun fichier à moitié écrit.
 
 Avant que la signature du document ne soit perdue
 
-Certains documents arrivent avec une signature numérique, celle du chiffrement, qui cesse d'être vérifiable dès que le fichier change. Enregistrer par-dessus un tel document le dit maintenant d'abord et propose Enregistrer une copie, pour que l'original signé reste intact. Il s'agit d'une signature déjà présente dans le document ; la signature que vous dessinez, tapez ou photographiez pour la poser sur la page est une image de votre nom, et la poser n'a pas changé.
+Certains documents arrivent avec une signature numérique — la signature cryptographique, adossée à un certificat — qui cesse d'être vérifiable dès que le fichier change. Enregistrer par-dessus un tel document le dit maintenant d'abord et propose Enregistrer une copie, pour que l'original signé reste intact. Il s'agit d'une signature déjà présente dans le document ; la signature que vous dessinez, tapez ou photographiez pour la poser sur la page est une image de votre nom, et rien n'a changé de ce côté.
 ```
 
 > Apple's French locale for France is `fr`, not `fr-FR`. The France block is
@@ -115,5 +115,8 @@ Certains documents arrivent avec une signature numérique, celle du chiffrement,
 >
 > The two senses of "signature" are handled as in
 > [`app-store.md`](app-store.md), and the note at the end of that file applies
-> here word for word — including the open question for a francophone about
-> whether `signature numérique` holds the distinction on its own.
+> here word for word, including the `celle du chiffrement` → `la signature
+> cryptographique, adossée à un certificat` fix (Fable's 2026-10-01 review,
+> W2). The question of whether `signature numérique` holds the distinction on
+> its own is no longer open: that review confirmed it does, in both OQLF and
+> Adobe's own French usage, so the term itself stays.

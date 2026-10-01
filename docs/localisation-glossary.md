@@ -4,6 +4,11 @@ The one vocabulary every platform's catalogue follows. Same English concept,
 same French word on Windows, macOS, Android and iOS. Add a row before you coin a
 new term; a term that exists here is not re-translated per platform.
 
+The exception is a platform's own idiom for its own system screen — Settings is
+the one case of this so far (Dave, 2026-10-01): it is *Paramètres* on Windows
+and Android, *Réglages* on iOS and macOS, each row below says so, and neither
+row is a conflict with the other.
+
 Conventions (OQLF, Canadian French):
 
 - Non-breaking space (U+00A0) before `:` only — none before `?`, `!` or `;`.
@@ -157,7 +162,8 @@ established French for the cryptographic sense.
 | {0}% | {0} % | #144, a zoom level; non-breaking space (U+00A0) before % |
 | File, Edit, View, Tools | Fichier, Édition, Présentation, Outils | #144, macOS menu bar: the names macOS itself uses in French |
 | Ctrl+Plus, Ctrl+Minus | Ctrl+Plus, Ctrl+Moins | #144, Windows zoom shortcuts in tooltips; Shift is *Maj* |
-| Settings | Paramètres | Windows |
+| Settings | Paramètres | Windows and Android — the word both platforms' own system settings use. **Not** Apple's word: iOS and macOS use *Réglages* instead (Dave, 2026-10-01, overriding a Fable review finding that read this row as binding on iOS too — same goal, each platform's own idiom, no Windows/Android pattern on an Apple screen) |
+| Settings (iOS/macOS) | Réglages | Apple's own word for its Settings screen, on the phone and on the Mac; see the exception noted on the row above. Previously mis-set to *Paramètres* on iOS, which is the error the exception records |
 | Options | Options | macOS |
 | Checkbox mark | Marque des cases à cocher | |
 | Cross | Croix | |
@@ -335,7 +341,7 @@ established French for the cryptographic sense.
 | Page %lld of %lld | Page %1$lld sur %2$lld | #506, what VoiceOver hears on the phones' reading bar, whose page number shows as digits with no room for words |
 | Page | Page | #506, the field in the phones' *Go to page* box. The same word in French |
 | Go | Aller | #506, the button that goes to the typed page number. Shorter than *Aller à la page*, which is the box's own title above it |
-| Settings… | Paramètres… | #512, the iOS ⋯ menu row that opens the settings sheet. *Settings* itself (Paramètres) is already Windows' word for the same screen |
+| Settings… | Réglages… | #512, the iOS ⋯ menu row that opens the settings sheet. *Settings* itself is *Réglages* on iOS — Apple's own idiom — not *Paramètres*, which is Windows and Android's word (see the Settings exception rows above); both were briefly swapped in the shipped strings (Fable review, 2026-10-01) |
 | Reading | Lecture | #512, the section of reading preferences in the iOS settings sheet. The noun on its own, not *Mode lecture*: the section holds page colours, which apply whether or not reading mode is on |
 | Hide the tools and read the page (Ctrl+H) | Masquer les outils et lire la page (Ctrl+H) | #504, the Windows-only tooltip on the Reading mode command. "The tools", not "the toolbar": on Windows the command also sits in the "…" overflow, where the row itself is not what goes |
 

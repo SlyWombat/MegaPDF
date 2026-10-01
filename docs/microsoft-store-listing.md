@@ -217,7 +217,7 @@ MegaPDF est un logiciel libre (Apache-2.0) : github.com/SlyWombat/MegaPDF
 **App features** — one line per box, 14 boxes
 ```
 Le mode lecture (Ctrl+H) masque les outils et laisse la page, avec les couleurs normales, sépia et nuit
-Pivoter, supprimer et réordonner les pages, insérer une page vierge, ajouter celles d'un autre PDF ou extraire une sélection — chaque geste est une annulation
+Faites pivoter, supprimez et réordonnez les pages, insérez une page vierge, ajoutez celles d'un autre PDF ou extrayez une sélection : une annulation par geste
 Modifiez le texte du document lui-même en cliquant et en tapant, comme dans un document Word
 Caviardez noms, adresses et images : retirés du fichier, pas seulement recouverts
 Ajoutez du texte sur une ligne vide, dans la taille et la police du formulaire
@@ -297,7 +297,7 @@ MegaPDF est un logiciel libre (Apache-2.0) : github.com/SlyWombat/MegaPDF
 **App features** — one line per box, 14 boxes
 ```
 Le mode lecture (Ctrl+H) masque les outils et laisse la page, avec les couleurs normales, sépia et nuit
-Pivoter, supprimer et réordonner les pages, insérer une page vierge, ajouter celles d'un autre PDF ou extraire une sélection — chaque geste est une annulation
+Faites pivoter, supprimez et réordonnez les pages, insérez une page vierge, ajoutez celles d'un autre PDF ou extrayez une sélection : une annulation par geste
 Modifiez le texte du document lui-même en cliquant et en tapant, comme dans un document Word
 Caviardez noms, adresses et images : retirés du fichier, pas seulement recouverts
 Ajoutez du texte sur une ligne vide, dans la taille et la police du formulaire

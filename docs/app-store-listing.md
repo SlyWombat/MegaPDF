@@ -156,7 +156,7 @@ Remplir, cocher, signer
 On vous a envoyé un PDF à signer? Ouvrez-le, cochez les cases, apposez votre signature, enregistrez. Fait en moins d'une minute, sans compte ni abonnement.
 ```
 
-**Description** [4000] (3943)
+**Description** [4000] (3952)
 ```
 Ouvrir. Corriger. Enregistrer. Terminé.
 
@@ -174,7 +174,7 @@ Mauvaise date? Nom mal orthographié? Touchez la ligne et retapez-la. MegaPDF ga
 Caviardez, et c'est parti pour de bon
 Marquez ce qui doit disparaître — un nom, une adresse, une image — et MegaPDF le retire du fichier au lieu de le recouvrir. Ce qui était dessous n'y est plus : aucune autre application ne peut le copier ni le retrouver par une recherche.
 
-Signez pour de vrai
+Signez comme sur papier
 Dessinez votre signature du doigt, ou photographiez celle sur papier : le fond blanc disparaît automatiquement. Vos signatures restent dans une bibliothèque privée sur votre appareil; déposez-en une sur un document, puis déplacez-la et redimensionnez-la jusqu'à ce qu'elle soit bien sur la ligne.
 
 Enregistrez sans crainte
@@ -187,7 +187,7 @@ Lisez le document, pas l'application
 Le mode lecture retire les barres d'outils de l'écran et laisse la page. Les couleurs de la page viennent avec : Sépia pour une longue lecture, Nuit pour une pièce sombre — et le mode nuit inverse aussi les images, à dessein. MegaPDF peut ouvrir chaque document ainsi.
 
 Mettez les pages en ordre
-Faites pivoter une page arrivée de travers, supprimez-en une, glissez les pages dans le bon ordre, insérez une page vierge, ajoutez les pages d'un autre PDF, ou extrayez quelques pages dans un fichier à part. Chaque geste est une seule étape, et une annulation le reprend.
+Faites pivoter une page arrivée de travers, supprimez-en une, glissez les pages dans le bon ordre, insérez une page vierge, ajoutez les pages d'un autre PDF, ou extrayez quelques pages dans un fichier à part. Chaque geste est une seule étape, et une seule annulation le défait.
 
 Confidentiel par conception
 MegaPDF ne demande aucune permission et n'établit aucune connexion réseau. Vos documents et votre signature ne quittent jamais votre appareil : il n'y a aucun serveur où ils pourraient aller. L'application est un logiciel libre; n'importe qui peut le vérifier.
@@ -203,11 +203,11 @@ MegaPDF est volontairement simple : il ne vous noie pas sous les barres d'outil
 pdf,signer,signature,remplir,formulaire,case,cocher,éditeur,recherche,document,annoter,lecture
 ```
 
-**What's new** [4000] (2210) — 2.2, from `docs/release-notes/2.2/app-store.md`
+**What's new** [4000] (2218) — 2.2, from `docs/release-notes/2.2/app-store.md`
 ```
 Mode lecture
 
-MegaPDF sait s'effacer. Le mode lecture retire les barres d'outils de l'écran et laisse la page. Une touche ramène une petite barre, et le numéro de page qu'elle porte ouvre une case pour aller n'importe où dans le document; une autre touche la fait repartir. Les couleurs de la page sont dans les Paramètres, sous Lecture : Normales, Sépia pour une longue lecture et Nuit pour une pièce sombre. Le mode nuit inverse la page, images comprises : c'est voulu, et le réglage le dit, parce qu'une photo lue la nuit est une photo en négatif. Si vous lisez un PDF plus souvent que vous ne le remplissez, Ouvrir les documents en mode lecture les ouvre tous ainsi.
+MegaPDF sait s'effacer. Le mode lecture retire les barres d'outils de l'écran et laisse la page. Une touche ramène une petite barre, et le numéro de page qu'elle porte ouvre un champ où taper la page voulue; une autre touche la fait repartir. Les couleurs de la page sont dans les Réglages, sous Lecture : Normales, Sépia pour une longue lecture et Nuit pour une pièce sombre. Le mode nuit inverse la page, images comprises : c'est voulu, et le réglage le dit, parce qu'une photo lue la nuit est une photo en négatif. Si vous lisez un PDF plus souvent que vous ne le remplissez, Ouvrir les documents en mode lecture les ouvre tous ainsi.
 
 Outils de page
 
@@ -215,7 +215,7 @@ Touchez Pages et les pages du document sont devant vous : une feuille sur l'iPh
 
 Une barre d'outils faite pour l'iPad
 
-Sur l'iPad, les outils de tous les jours occupent maintenant une rangée large qui leur appartient, sous la barre de navigation, chacun avec son titre à côté de son icône plutôt qu'une icône à deviner, et le sélecteur de chaque outil s'ouvre juste à côté de l'outil auquel il appartient. Les commandes au clavier y sont aussi.
+Sur l'iPad, les outils de tous les jours occupent maintenant une large rangée bien à eux, sous la barre de navigation, chacun avec son titre à côté de son icône plutôt qu'une icône à deviner, et le sélecteur de chaque outil s'ouvre juste à côté de l'outil auquel il appartient. Les raccourcis clavier y sont aussi.
 
 Le zoom là où vous regardez
 
@@ -223,7 +223,7 @@ Un pincement zoome maintenant sur le point entre vos doigts plutôt que sur le c
 
 Avant que la signature du document ne soit perdue
 
-Certains documents arrivent avec une signature numérique, celle du chiffrement, qui cesse d'être vérifiable dès que le fichier change. Enregistrer par-dessus un tel document le dit maintenant d'abord et propose d'enregistrer une copie, pour que l'original signé reste intact. Il s'agit d'une signature déjà présente dans le document; la signature que vous dessinez, tapez ou photographiez pour la poser sur la page est une image de votre nom, et la poser n'a pas changé.
+Certains documents arrivent avec une signature numérique — la signature cryptographique, adossée à un certificat — qui cesse d'être vérifiable dès que le fichier change. Enregistrer par-dessus un tel document le dit maintenant d'abord et propose d'enregistrer une copie, pour que l'original signé reste intact. Il s'agit d'une signature déjà présente dans le document; la signature que vous dessinez, tapez ou photographiez pour la poser sur la page est une image de votre nom, et rien n'a changé de ce côté.
 ```
 
 **Screenshot captions** (optional overlay text), iPhone 6.9" and iPad 13" in this order
@@ -255,7 +255,7 @@ Remplir, cocher, signer
 On vous a envoyé un PDF à signer ? Ouvrez-le, cochez les cases, apposez votre signature, enregistrez. Fait en moins d'une minute, sans compte ni abonnement.
 ```
 
-**Description** [4000] (3941)
+**Description** [4000] (3950)
 ```
 Ouvrir. Corriger. Enregistrer. Terminé.
 
@@ -273,7 +273,7 @@ Mauvaise date ? Nom mal orthographié ? Touchez la ligne et retapez-la. MegaPD
 Caviardez, et c'est parti pour de bon
 Marquez ce qui doit disparaître — un nom, une adresse, une image — et MegaPDF le retire du fichier au lieu de le recouvrir. Ce qui était dessous n'y est plus : aucune autre application ne peut le copier ni le retrouver par une recherche.
 
-Signez pour de vrai
+Signez comme sur papier
 Dessinez votre signature du doigt, ou photographiez celle sur papier : le fond blanc disparaît automatiquement. Vos signatures restent dans une bibliothèque privée sur votre appareil ; déposez-en une sur un document, puis déplacez-la et redimensionnez-la jusqu'à ce qu'elle soit bien sur la ligne.
 
 Enregistrez sans crainte
@@ -286,7 +286,7 @@ Lisez le document, pas l'application
 Le mode lecture retire les barres d'outils de l'écran et laisse la page. Les couleurs de la page viennent avec : Sépia pour une longue lecture, Nuit pour une pièce sombre — et le mode nuit inverse aussi les images, à dessein. MegaPDF peut ouvrir chaque document ainsi.
 
 Mettez les pages en ordre
-Faites pivoter une page arrivée de travers, supprimez-en une, glissez les pages dans le bon ordre, insérez une page vierge, ajoutez les pages d'un autre PDF, ou extrayez quelques pages dans un fichier à part. Chaque geste est une seule étape, et une annulation le reprend.
+Faites pivoter une page arrivée de travers, supprimez-en une, glissez les pages dans le bon ordre, insérez une page vierge, ajoutez les pages d'un autre PDF, ou extrayez quelques pages dans un fichier à part. Chaque geste est une seule étape, et une seule annulation le défait.
 
 Confidentiel par conception
 MegaPDF ne demande aucune permission et n'établit aucune connexion réseau. Vos documents et votre signature ne quittent jamais votre appareil : il n'y a aucun serveur où ils pourraient aller. L'application est un logiciel libre ; n'importe qui peut le vérifier.
@@ -302,11 +302,11 @@ MegaPDF est volontairement simple : il ne vous noie pas sous les barres d'outil
 pdf,signer,signature,remplir,formulaire,case,cocher,éditeur,recherche,document,annoter,lecture
 ```
 
-**What's new** [4000] (2212) — 2.2, from `docs/release-notes/2.2/app-store.md`
+**What's new** [4000] (2220) — 2.2, from `docs/release-notes/2.2/app-store.md`
 ```
 Mode lecture
 
-MegaPDF sait s'effacer. Le mode lecture retire les barres d'outils de l'écran et laisse la page. Une touche ramène une petite barre, et le numéro de page qu'elle porte ouvre une case pour aller n'importe où dans le document ; une autre touche la fait repartir. Les couleurs de la page sont dans les Paramètres, sous Lecture : Normales, Sépia pour une longue lecture et Nuit pour une pièce sombre. Le mode nuit inverse la page, images comprises : c'est voulu, et le réglage le dit, parce qu'une photo lue la nuit est une photo en négatif. Si vous lisez un PDF plus souvent que vous ne le remplissez, Ouvrir les documents en mode lecture les ouvre tous ainsi.
+MegaPDF sait s'effacer. Le mode lecture retire les barres d'outils de l'écran et laisse la page. Une touche ramène une petite barre, et le numéro de page qu'elle porte ouvre un champ où taper la page voulue ; une autre touche la fait repartir. Les couleurs de la page sont dans les Réglages, sous Lecture : Normales, Sépia pour une longue lecture et Nuit pour une pièce sombre. Le mode nuit inverse la page, images comprises : c'est voulu, et le réglage le dit, parce qu'une photo lue la nuit est une photo en négatif. Si vous lisez un PDF plus souvent que vous ne le remplissez, Ouvrir les documents en mode lecture les ouvre tous ainsi.
 
 Outils de page
 
@@ -314,7 +314,7 @@ Touchez Pages et les pages du document sont devant vous : une feuille sur l'iPh
 
 Une barre d'outils faite pour l'iPad
 
-Sur l'iPad, les outils de tous les jours occupent maintenant une rangée large qui leur appartient, sous la barre de navigation, chacun avec son titre à côté de son icône plutôt qu'une icône à deviner, et le sélecteur de chaque outil s'ouvre juste à côté de l'outil auquel il appartient. Les commandes au clavier y sont aussi.
+Sur l'iPad, les outils de tous les jours occupent maintenant une large rangée bien à eux, sous la barre de navigation, chacun avec son titre à côté de son icône plutôt qu'une icône à deviner, et le sélecteur de chaque outil s'ouvre juste à côté de l'outil auquel il appartient. Les raccourcis clavier y sont aussi.
 
 Le zoom là où vous regardez
 
@@ -322,7 +322,7 @@ Un pincement zoome maintenant sur le point entre vos doigts plutôt que sur le c
 
 Avant que la signature du document ne soit perdue
 
-Certains documents arrivent avec une signature numérique, celle du chiffrement, qui cesse d'être vérifiable dès que le fichier change. Enregistrer par-dessus un tel document le dit maintenant d'abord et propose d'enregistrer une copie, pour que l'original signé reste intact. Il s'agit d'une signature déjà présente dans le document ; la signature que vous dessinez, tapez ou photographiez pour la poser sur la page est une image de votre nom, et la poser n'a pas changé.
+Certains documents arrivent avec une signature numérique — la signature cryptographique, adossée à un certificat — qui cesse d'être vérifiable dès que le fichier change. Enregistrer par-dessus un tel document le dit maintenant d'abord et propose d'enregistrer une copie, pour que l'original signé reste intact. Il s'agit d'une signature déjà présente dans le document ; la signature que vous dessinez, tapez ou photographiez pour la poser sur la page est une image de votre nom, et rien n'a changé de ce côté.
 ```
 
 **Screenshot captions** (optional overlay text), iPhone 6.9" and iPad 13" in this order
@@ -397,7 +397,7 @@ MegaPDF is deliberately simple: it doesn't bury you in toolbars. It opens, it fi
 On vous a envoyé un PDF à signer? Ouvrez-le, cliquez sur les cases, apposez votre signature, enregistrez. Fait en moins d'une minute, sans compte ni abonnement.
 ```
 
-**Description** [4000] (3975)
+**Description** [4000] (3984)
 ```
 Ouvrir. Corriger. Enregistrer. Terminé.
 
@@ -415,7 +415,7 @@ Mauvaise date? Nom mal orthographié? Cliquez sur la ligne et retapez-la. MegaPD
 Caviardez, et c'est parti pour de bon
 Marquez ce qui doit disparaître — un nom, une adresse, une image — et MegaPDF le retire du fichier au lieu de le recouvrir. Ce qui était dessous n'y est plus : aucune autre application ne peut le copier ni le retrouver par une recherche. Masquer est là aussi, et précise qu'il ne fait que recouvrir.
 
-Signez pour de vrai
+Signez comme sur papier
 Dessinez votre signature au pavé tactile ou à la souris, tapez-la, ou photographiez celle sur papier : le fond blanc disparaît automatiquement. Vos signatures restent dans une bibliothèque privée sur votre Mac; déposez-en une sur un document, puis déplacez-la et redimensionnez-la jusqu'à ce qu'elle soit bien sur la ligne.
 
 Enregistrez sans crainte
@@ -428,7 +428,7 @@ Lisez le document, pas l'application
 Le mode lecture (Maj-Commande-R) retire la barre d'outils et le panneau latéral, et laisse la page; Échap ramène la fenêtre. Les couleurs de la page sont à côté, dans les Options : Sépia pour une longue lecture, Nuit pour une pièce sombre — et le mode nuit inverse aussi les images, à dessein.
 
 Mettez les pages en ordre
-Le panneau Vignettes est maintenant un endroit où travailler : faites pivoter une page arrivée de travers, supprimez-en une, glissez les pages dans le bon ordre, insérez une page vierge, insérez celles d'un autre PDF, ou extrayez une sélection. Chaque geste est une étape, et une annulation le reprend.
+Le panneau Vignettes est maintenant un endroit où travailler : faites pivoter une page arrivée de travers, supprimez-en une, glissez les pages dans le bon ordre, insérez une page vierge, insérez celles d'un autre PDF, ou extrayez une sélection. Chaque geste est une étape, et une seule annulation le défait.
 
 Confidentiel par conception
 MegaPDF n'établit aucune connexion réseau (son bac à sable ne le lui permet même pas) et n'ouvre que les fichiers que vous choisissez. Vos documents et votre signature ne quittent jamais votre Mac. L'application est un logiciel libre; n'importe qui peut le vérifier.
@@ -448,7 +448,7 @@ MegaPDF est volontairement simple : il ne vous noie pas sous les barres d'outil
 On vous a envoyé un PDF à signer ? Ouvrez-le, cliquez sur les cases, apposez votre signature, enregistrez. Fait en moins d'une minute, sans compte ni abonnement.
 ```
 
-**Description** [4000] (3981)
+**Description** [4000] (3990)
 ```
 Ouvrir. Corriger. Enregistrer. Terminé.
 
@@ -466,7 +466,7 @@ Mauvaise date ? Nom mal orthographié ? Cliquez sur la ligne et retapez-la. Me
 Caviardez, et c'est parti pour de bon
 Marquez ce qui doit disparaître — un nom, une adresse, une image — et MegaPDF le retire du fichier au lieu de le recouvrir. Ce qui était dessous n'y est plus : aucune autre application ne peut le copier ni le retrouver par une recherche. Masquer est là aussi, et précise qu'il ne fait que recouvrir.
 
-Signez pour de vrai
+Signez comme sur papier
 Dessinez votre signature au pavé tactile ou à la souris, tapez-la, ou photographiez celle sur papier : le fond blanc disparaît automatiquement. Vos signatures restent dans une bibliothèque privée sur votre Mac ; déposez-en une sur un document, puis déplacez-la et redimensionnez-la jusqu'à ce qu'elle soit bien sur la ligne.
 
 Enregistrez sans crainte
@@ -479,7 +479,7 @@ Lisez le document, pas l'application
 Le mode lecture (Maj-Commande-R) retire la barre d'outils et le panneau latéral, et laisse la page ; Échap ramène la fenêtre. Les couleurs de la page sont à côté, dans les Options : Sépia pour une longue lecture, Nuit pour une pièce sombre — et le mode nuit inverse aussi les images, à dessein.
 
 Mettez les pages en ordre
-Le panneau Vignettes est maintenant un endroit où travailler : faites pivoter une page arrivée de travers, supprimez-en une, glissez les pages dans le bon ordre, insérez une page vierge, insérez celles d'un autre PDF, ou extrayez une sélection. Chaque geste est une étape, et une annulation le reprend.
+Le panneau Vignettes est maintenant un endroit où travailler : faites pivoter une page arrivée de travers, supprimez-en une, glissez les pages dans le bon ordre, insérez une page vierge, insérez celles d'un autre PDF, ou extrayez une sélection. Chaque geste est une étape, et une seule annulation le défait.
 
 Confidentiel par conception
 MegaPDF n'établit aucune connexion réseau (son bac à sable ne le lui permet même pas) et n'ouvre que les fichiers que vous choisissez. Vos documents et votre signature ne quittent jamais votre Mac. L'application est un logiciel libre ; n'importe qui peut le vérifier.

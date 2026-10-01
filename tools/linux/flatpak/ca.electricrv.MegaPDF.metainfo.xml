@@ -157,8 +157,8 @@
       <image type="source" width="1280" height="800" xml:lang="fr-CA">https://electricrv.ca/megapdf/screenshots/linux/fr-CA/02-text.png</image>
       <image type="source" width="1280" height="800" xml:lang="fr">https://electricrv.ca/megapdf/screenshots/linux/fr-FR/02-text.png</image>
       <caption>Typing a name on the line: real, searchable text, not a sticker on the page</caption>
-      <caption xml:lang="fr-CA">Taper un nom sur la ligne : du vrai texte, consultable, et non une vignette posée sur la page</caption>
-      <caption xml:lang="fr">Taper un nom sur la ligne : du vrai texte, consultable, et non une vignette posée sur la page</caption>
+      <caption xml:lang="fr-CA">Taper un nom sur la ligne : du vrai texte, dans lequel on peut chercher, et non une vignette posée sur la page</caption>
+      <caption xml:lang="fr">Taper un nom sur la ligne : du vrai texte, dans lequel on peut chercher, et non une vignette posée sur la page</caption>
     </screenshot>
     <screenshot>
       <image type="source" width="1280" height="800">https://electricrv.ca/megapdf/screenshots/linux/en/03-sign.png</image>

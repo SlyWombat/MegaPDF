@@ -14,10 +14,11 @@ refuse. It is also the only channel where whiteout is *new* rather than improved
 — Android had no whiteout tool at all until #565 on 2026-10-01.
 
 **Where the French is cut.** The English spends 489 of 500 and the French 470.
-The French drops the English's *Added text takes more than one line* — the one
-item of the four paragraphs that is a refinement rather than a new thing — and
-shortens the page-tools list (`celles d'un autre PDF`, `Une annulation suffit`).
-Anything added to the French has to come out of it first.
+The French now carries the English's *Added text takes more than one line* (it
+was dropped from an earlier draft — Fable's 2026-10-01 review caught the
+omission) by also shortening the page-tools list (`celles d'un autre PDF`,
+`Une annulation suffit`) and the closing sentence (`reste inchangé` for `ne soit
+pas modifié`). Anything added to the French has to come out of it first.
 
 *The French below is new and has **not** been reviewed. 2.1.1's was reviewed on
 2026-09-26 (#343); every 2.2 string in the app still carries an `FR-REVIEW`
@@ -40,30 +41,30 @@ Where a document's author asked that it not be changed, MegaPDF says so and leav
 
 ## Français (Canada) — `fr-CA`
 
-**Notes de version** [500] (470)
+**Notes de version** [500] (497)
 
 ```
 Le mode lecture ne laisse que la page. Sépia pour lire longtemps, Nuit pour une pièce sombre — le mode nuit inverse aussi les images, et le dit.
 
 Pages : pivoter, supprimer, réordonner, insérer une page vierge, ajouter celles d'un autre PDF, extraire une sélection. Une annulation suffit.
 
-Le correcteur arrive : masquez une zone, puis déplacez-la et redimensionnez-la.
+Le correcteur arrive : masquez une zone, déplacez-la, redimensionnez-la. Le texte ajouté tient sur plus d'une ligne.
 
-Quand l'auteur a demandé qu'un document ne soit pas modifié, MegaPDF le dit et vous laisse choisir.
+Quand l'auteur a demandé qu'un document reste inchangé, MegaPDF le dit et laisse choisir.
 ```
 
 ## Français (France) — `fr-FR`
 
-**Notes de version** [500] (470)
+**Notes de version** [500] (497)
 
 ```
 Le mode lecture ne laisse que la page. Sépia pour lire longtemps, Nuit pour une pièce sombre — le mode nuit inverse aussi les images, et le dit.
 
 Pages : pivoter, supprimer, réordonner, insérer une page vierge, ajouter celles d'un autre PDF, extraire une sélection. Une annulation suffit.
 
-Le correcteur arrive : masquez une zone, puis déplacez-la et redimensionnez-la.
+Le correcteur arrive : masquez une zone, déplacez-la, redimensionnez-la. Le texte ajouté tient sur plus d'une ligne.
 
-Quand l'auteur a demandé qu'un document ne soit pas modifié, MegaPDF le dit et vous laisse choisir.
+Quand l'auteur a demandé qu'un document reste inchangé, MegaPDF le dit et laisse choisir.
 ```
 
 > The France block is derived from the Canadian one: none of this copy is one of
