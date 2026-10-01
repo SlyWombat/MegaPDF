@@ -1,0 +1,2229 @@
+# The #330 coverage map: every feature against every platform, checked against the tree.
+#
+# Read tools/qa/check-matrix.py's header first — it says why this is a feature × platform
+# map with proof per cell rather than the feature × action × state × platform grid #330
+# originally asked for, and what the validator enforces. docs/qa/test-matrix.md is
+# generated from this file and both are checked for drift on every push.
+#
+# Each cell says two separate things, because this week's three holes were failures of the
+# first kind and no amount of the second would have caught them:
+#
+#   presence  does the feature exist on this platform, and is there a route to it?
+#   coverage  does a test in CI exercise it, and at what level?
+#
+# `entry` is the route — a toolbar button, a menu row, a screen, an activation filter —
+# and the validator insists it resolves AND lives in that platform's menu/toolbar/screen
+# layer (meta.platform.<id>.entry_roots). Those lists deliberately exclude the destination
+# windows and dialogs themselves: #571 was an About window and a notices window that both
+# existed, under Views/, with nothing in any menu leading to them. Anchoring About on
+# AboutWindow.axaml would have "proved" presence while the feature was unreachable, so
+# AboutWindow.axaml is not an entry root and the anchor has to be the menu row.
+#
+# `coverage` is one of:
+#   ui      — a test that runs in CI drives this platform's own UI or view model
+#   engine  — only the shared core is tested; nothing proves this platform reaches it
+#   none    — present, reachable, nothing automated
+#   n/a     — the feature is not on this platform (see `absence`)
+# `engine` is a level of its own on purpose. "The core can redact" and "this app's Redact
+# button redacts" are different claims, and #401 (a Windows click did nothing) and #412
+# (the desktops opened to a dead toolbar) both lived in the gap between them.
+#
+# `tests` are `path::symbol` and both halves are resolved. In reverse, every test file in
+# the tree, every Avalonia `--self-test` Check* section and every Windows self-test state
+# CI runs must be cited by some cell or carry an `[[exempt]]` with a reason — that is what
+# keeps this file from going quietly stale as tests are added.
+#
+# Coverage here means "something looks at it", never "it works": the suites themselves say
+# that. And none of it replaces the by-hand pass in docs/RELEASING.md §2.3, which is still
+# the release gate and still where every 2.1.1 show-stopper was found.
+
+[meta]
+order = ["windows", "macos", "linux", "ios", "android"]
+
+[meta.platform.windows]
+title = "Windows"
+entry_roots = [
+  "src/MegaPDF.App/MainWindow.xaml",
+  "src/MegaPDF.App/MainWindow.xaml.cs",
+  "src/MegaPDF.App/MainWindow.Toolbar.cs",
+  "src/MegaPDF.App/MainWindow.Keyboard.cs",
+  "src/MegaPDF.App/MainWindow.Pages.cs",
+  "src/MegaPDF.App/MainWindow.ReadingMode.cs",
+  "src/MegaPDF.App/DocumentView.xaml",
+  "src/MegaPDF.App/DocumentView.xaml.cs",
+  "src/MegaPDF.App/DocumentView.Keyboard.cs",
+  "src/MegaPDF.App/DocumentView.Pages.cs",
+  "src/MegaPDF.App/DocumentView.ReadingMode.cs",
+  "src/MegaPDF.App/DocumentViewModel.cs",
+  "src/MegaPDF.App/DocumentViewModel.Pages.cs",
+  "src/MegaPDF.App/ShellViewModel.cs",
+  "src/MegaPDF.App/App.Activation.cs",
+  "src/MegaPDF.App/Package.appxmanifest",
+  "src/MegaPDF.App/JumpListRecents.cs",
+]
+
+[meta.platform.macos]
+title = "macOS"
+entry_roots = [
+  "src/MegaPDF.Avalonia/Views/MainWindow.axaml",
+  "src/MegaPDF.Avalonia/Views/MainWindow.axaml.cs",
+  "src/MegaPDF.Avalonia/Views/MainWindow.MenuBar.cs",
+  "src/MegaPDF.Avalonia/Views/MainWindow.Toolbar.cs",
+  "src/MegaPDF.Avalonia/Views/MainWindow.Keyboard.cs",
+  "src/MegaPDF.Avalonia/Views/MainWindow.FindBar.cs",
+  "src/MegaPDF.Avalonia/Views/MainWindow.Pages.cs",
+  "src/MegaPDF.Avalonia/Views/MainWindow.ReadingMode.cs",
+  "src/MegaPDF.Avalonia/Views/MainWindow.Selection.cs",
+  "src/MegaPDF.Avalonia/Views/MainWindow.Zoom.cs",
+  "src/MegaPDF.Avalonia/App.axaml.cs",
+  "src/MegaPDF.Avalonia/ViewModels/DocumentViewModel.cs",
+  "src/MegaPDF.Avalonia/ViewModels/ShellViewModel.cs",
+  "src/MegaPDF.Avalonia/Platform/SingleInstance.cs",
+  "src/MegaPDF.Avalonia/Platform/MacApplication.cs",
+  "src/MegaPDF.Avalonia/Platform/MacPrinter.cs",
+  "src/MegaPDF.Avalonia/Platform/MacLanguage.cs",
+  "src/MegaPDF.Avalonia/Platform/ScreenReader.cs",
+]
+
+[meta.platform.linux]
+title = "Linux"
+entry_roots = [
+  "src/MegaPDF.Avalonia/Views/MainWindow.axaml",
+  "src/MegaPDF.Avalonia/Views/MainWindow.axaml.cs",
+  "src/MegaPDF.Avalonia/Views/MainWindow.MenuBar.cs",
+  "src/MegaPDF.Avalonia/Views/MainWindow.Toolbar.cs",
+  "src/MegaPDF.Avalonia/Views/MainWindow.Keyboard.cs",
+  "src/MegaPDF.Avalonia/Views/MainWindow.FindBar.cs",
+  "src/MegaPDF.Avalonia/Views/MainWindow.Pages.cs",
+  "src/MegaPDF.Avalonia/Views/MainWindow.ReadingMode.cs",
+  "src/MegaPDF.Avalonia/Views/MainWindow.Selection.cs",
+  "src/MegaPDF.Avalonia/Views/MainWindow.Zoom.cs",
+  "src/MegaPDF.Avalonia/App.axaml.cs",
+  "src/MegaPDF.Avalonia/ViewModels/DocumentViewModel.cs",
+  "src/MegaPDF.Avalonia/ViewModels/ShellViewModel.cs",
+  "src/MegaPDF.Avalonia/Platform/SingleInstance.cs",
+  "src/MegaPDF.Avalonia/Platform/LinuxPrinter.cs",
+  "src/MegaPDF.Avalonia/Platform/PortalPrinter.cs",
+  "src/MegaPDF.Avalonia/Platform/LinuxLanguage.cs",
+  "src/MegaPDF.Avalonia/Platform/ScreenReader.cs",
+  "tools/linux/megapdf.desktop",
+]
+
+[meta.platform.ios]
+title = "iOS/iPadOS"
+entry_roots = [
+  "ios/MegaPDF/ContentView.swift",
+  "ios/MegaPDF/HomeView.swift",
+  "ios/MegaPDF/ViewerView.swift",
+  "ios/MegaPDF/ViewerModel.swift",
+  "ios/MegaPDF/ReadingBar.swift",
+  "ios/MegaPDF/SettingsView.swift",
+  "ios/MegaPDF/KeyboardCommands.swift",
+  "ios/MegaPDF/MegaPDFApp.swift",
+  "ios/MegaPDF/SignatureViews.swift",
+  "ios/MegaPDF/BodyTextSheet.swift",
+  "ios/MegaPDF/DocumentSecuritySheet.swift",
+  "ios/MegaPDF/PagesView.swift",
+  "ios/project.yml",
+]
+
+[meta.platform.android]
+title = "Android"
+entry_roots = [
+  "android/app/src/main/java/com/megapdf/android/MainActivity.kt",
+  "android/app/src/main/java/com/megapdf/android/HomeScreen.kt",
+  "android/app/src/main/java/com/megapdf/android/ViewerScreen.kt",
+  "android/app/src/main/java/com/megapdf/android/ViewerViewModel.kt",
+  "android/app/src/main/java/com/megapdf/android/PagesScreen.kt",
+  "android/app/src/main/java/com/megapdf/android/SettingsScreen.kt",
+  "android/app/src/main/java/com/megapdf/android/SignaturesSheet.kt",
+  "android/app/src/main/java/com/megapdf/android/SecurityDialogs.kt",
+  "android/app/src/main/java/com/megapdf/android/ReadingMode.kt",
+  "android/app/src/main/AndroidManifest.xml",
+  "android/app/src/main/res/values/strings.xml",
+  "android/app/src/main/java/com/megapdf/android/ui/Brand.kt",
+]
+
+
+# =============================================================================
+# Opening a document
+# =============================================================================
+
+[[feature]]
+id = "open-picker"
+title = "Open from the file picker"
+area = "Opening a document"
+about = """
+The platform's own picker. No automated test on any platform drives it: every suite hands
+the path or the stream in directly, which is the right call (it is the OS's dialog, not
+ours) but does mean the first step of every session is only ever checked by hand."""
+[feature.windows]
+presence = "present"
+entry = "src/MegaPDF.App/MainWindow.xaml::OpenButton"
+coverage = "engine"
+tests = ["tests/MegaPDF.Core.Tests/PdfiumEngineTests.cs::Open"]
+manual = "TESTING.md::Open any PDF (Open button"
+note = "the picker itself is never driven; the engine's open is."
+[feature.macos]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/Views/MainWindow.MenuBar.cs::Command(\"OpenButton\""
+coverage = "engine"
+tests = ["tests/MegaPDF.Core.Tests/PdfiumEngineTests.cs::Open"]
+manual = "docs/RELEASING.md::open two documents (tabs, one window)"
+note = "the picker itself is never driven; the engine's open is."
+[feature.linux]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/Views/MainWindow.MenuBar.cs::Command(\"OpenButton\""
+coverage = "engine"
+tests = ["tests/MegaPDF.Core.Tests/PdfiumEngineTests.cs::Open"]
+manual = "docs/RELEASING.md::open two documents (tabs, one window)"
+note = "the portal picker is screenshotted by hand (docs/qa/linux-portal-file-dialog.png), never driven."
+[feature.ios]
+presence = "present"
+entry = "ios/MegaPDF/HomeView.swift::Button(\"Open PDF\")"
+coverage = "ui"
+tests = ["ios/MegaPDFUITests/FilesEndToEndUITests.swift::test1"]
+manual = "docs/RELEASING.md::Files → share sheet → MegaPDF"
+note = "FilesEndToEndUITests drives the real Files picker but is excluded from CI (needs a 1 GB fixture); tools/ios-files-e2e.sh runs it by hand."
+[feature.android]
+presence = "present"
+entry = "android/app/src/main/java/com/megapdf/android/HomeScreen.kt::R.string.open_pdf"
+coverage = "engine"
+tests = ["android/engine/src/androidTest/java/com/megapdf/engine/PdfEngineTest.kt::open"]
+manual = "docs/RELEASING.md::Files → Open with"
+note = "no instrumented test taps Open PDF; ACTION_OPEN_DOCUMENT is only driven for importing pages."
+
+[[feature]]
+id = "open-recents"
+title = "Recents list"
+area = "Opening a document"
+[feature.windows]
+presence = "present"
+entry = "src/MegaPDF.App/MainWindow.xaml::RecentHeading"
+coverage = "engine"
+tests = [
+  "tests/MegaPDF.Core.Tests/RecentFilesTests.cs::RecentFiles",
+  "tests/MegaPDF.Core.Tests/RecentLocationTests.cs::RecentLocation",
+]
+note = "the list's storage and display names are tested; no Windows self-test state opens from Recents or exercises the jump list."
+[feature.macos]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/Views/MainWindow.axaml::RecentList"
+coverage = "ui"
+tests = ["src/MegaPDF.Avalonia/Program.cs::CheckSingleInstanceRouting"]
+note = "the self-test checks the recents rows the shell builds, including the no-paths-shown rule and the screen-reader name."
+[feature.linux]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/Views/MainWindow.axaml::RecentList"
+coverage = "ui"
+tests = ["src/MegaPDF.Avalonia/Program.cs::CheckSingleInstanceRouting"]
+note = "same as macOS; the Show-in-file-manager row itself is never invoked."
+[feature.ios]
+presence = "present"
+entry = "ios/MegaPDF/HomeView.swift::Remove from Recents"
+coverage = "ui"
+tests = [
+  "ios/MegaPDFUITests/RecentsAccessibilityUITests.swift::testEveryRecentRowAnnouncesWhereItsFileLives",
+  "ios/MegaPDFTests/RecentsStoreTests.swift::Recents",
+  "ios/MegaPDFTests/RecentLocationTests.swift::Location",
+]
+note = "the Remove-from-Recents case in the same file is excluded from CI as flaky."
+[feature.android]
+presence = "present"
+entry = "android/app/src/main/java/com/megapdf/android/HomeScreen.kt::R.string.recent"
+coverage = "engine"
+tests = [
+  "android/app/src/test/java/com/megapdf/android/RecentFilesStoreTest.kt::class",
+  "android/app/src/test/java/com/megapdf/android/RecentLocationTest.kt::class",
+  "android/app/src/test/java/com/megapdf/android/UriGrantsTest.kt::class",
+]
+note = "store and grant logic only — no Compose test taps a recent row, which is the path the 2.0.1 save-after-reboot bug came in by."
+
+[[feature]]
+id = "open-external"
+title = "Open from outside the app (Explorer/Finder/Files/share, drag and drop)"
+area = "Opening a document"
+about = """
+A file arriving from somewhere else: a double-click in the file manager, an Open with, a
+share sheet, a drop on the window. #412 and #401 were both in this neighbourhood, and on
+the desktops it also means landing in the window that is already running."""
+[feature.windows]
+presence = "present"
+entry = "src/MegaPDF.App/App.Activation.cs::OnActivatedFromAnotherInstance"
+coverage = "engine"
+tests = ["tests/MegaPDF.Core.Tests/LaunchedDocumentTests.cs::Launched"]
+manual = "TESTING.md::File Explorer while MegaPDF is running lands in the window you already have"
+note = "only the don't-reopen-what-is-already-open rule is tested; the redirect race has a by-hand script (tools/windows-qa/redirect-toolbar-check.ps1, #427) that CI does not run."
+[feature.macos]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/Platform/SingleInstance.cs::Listen"
+coverage = "ui"
+tests = [
+  "src/MegaPDF.Avalonia/Program.cs::CheckLaunchWithArguments",
+  "src/MegaPDF.Avalonia/Program.cs::CheckSingleInstanceRouting",
+  "src/MegaPDF.Avalonia/Program.cs::CheckDuplicateHandover",
+]
+note = "handover and routing are covered; a real drop on the window is not — MainWindow.axaml.cs's DragDrop handlers are never raised by any test."
+[feature.linux]
+presence = "present"
+entry = "tools/linux/megapdf.desktop::MimeType=application/pdf"
+coverage = "ui"
+tests = [
+  "src/MegaPDF.Avalonia/Program.cs::CheckLaunchWithArguments",
+  "src/MegaPDF.Avalonia/Program.cs::CheckSingleInstanceRouting",
+  "src/MegaPDF.Avalonia/Program.cs::CheckDuplicateHandover",
+]
+note = "the desktop entry's validity is a CI step of its own; the drop handlers are untested as on macOS."
+[feature.ios]
+presence = "present"
+entry = "ios/project.yml::LSSupportsOpeningDocumentsInPlace"
+coverage = "engine"
+tests = ["ios/MegaPDFTests/ShareAndExternalOpenTests.swift::ExternalOpen"]
+manual = "docs/RELEASING.md::Files → share sheet → MegaPDF"
+note = "the unit test mocks the hand-off; OpenWithVerificationUITests drives the real thing and is excluded from CI (MegaPDF is not listed in the share sheet on the Mac mini runner)."
+[feature.android]
+presence = "present"
+entry = "android/app/src/main/AndroidManifest.xml::android.intent.action.VIEW"
+coverage = "ui"
+tests = [
+  "android/app/src/androidTest/java/com/megapdf/android/OpenWithTest.kt::class",
+  "android/app/src/test/java/com/megapdf/android/ViewIntentTest.kt::class",
+]
+note = "the strongest coverage of this on any platform: cold start and onNewIntent, file:// and content://, with the unsaved-changes prompt."
+
+[[feature]]
+id = "tabs"
+title = "Several documents in one window (tabs)"
+area = "Opening a document"
+[feature.windows]
+presence = "present"
+entry = "src/MegaPDF.App/MainWindow.xaml::DocumentsTabView"
+coverage = "ui"
+tests = [
+  ".github/workflows/ci.yml::Run-Check \"close-tabs\"",
+  ".github/workflows/ci.yml::Run-Check \"reading\"",
+]
+manual = "TESTING.md::**Tabs**"
+note = "close-tabs asserts the documents are really disposed; reading opens a second tab. Per-tab undo/find/zoom isolation is checked by hand only."
+[feature.macos]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/Views/MainWindow.axaml::TabStrip"
+coverage = "ui"
+tests = [
+  "src/MegaPDF.Avalonia/Program.cs::CheckTabs",
+  "src/MegaPDF.Avalonia/Program.cs::CheckEmptyWindow",
+  "src/MegaPDF.Avalonia/Program.cs::CheckMultiFileOpen",
+  "src/MegaPDF.Avalonia/Program.cs::CheckTabTransitionSafety",
+  "src/MegaPDF.Avalonia/Program.cs::CheckWindowTitle",
+  "src/MegaPDF.Avalonia/Program.cs::CheckCloseDuringRender",
+]
+manual = "TESTING.md::**Tabs**"
+note = "the deepest tab coverage anywhere: mid-gesture switches, scroll and selection survival, close during render, the window with no tab."
+[feature.linux]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/Views/MainWindow.axaml::TabStrip"
+coverage = "ui"
+tests = [
+  "src/MegaPDF.Avalonia/Program.cs::CheckTabs",
+  "src/MegaPDF.Avalonia/Program.cs::CheckEmptyWindow",
+  "src/MegaPDF.Avalonia/Program.cs::CheckMultiFileOpen",
+  "src/MegaPDF.Avalonia/Program.cs::CheckTabTransitionSafety",
+  "src/MegaPDF.Avalonia/Program.cs::CheckWindowTitle",
+  "src/MegaPDF.Avalonia/Program.cs::CheckCloseDuringRender",
+]
+manual = "TESTING.md::**Tabs**"
+note = "same harness as macOS."
+[feature.ios]
+presence = "absent"
+coverage = "n/a"
+absence = "deliberate"
+note = "one document at a time; the phones open into the viewer, and iPadOS multitasking is the platform's own answer."
+[feature.android]
+presence = "absent"
+coverage = "n/a"
+absence = "deliberate"
+note = "one document at a time, as on iOS."
+
+
+# =============================================================================
+# Viewing
+# =============================================================================
+
+[[feature]]
+id = "render-scroll"
+title = "Render and scroll"
+area = "Viewing"
+[feature.windows]
+presence = "present"
+entry = "src/MegaPDF.App/DocumentView.xaml::PagesScroll"
+coverage = "engine"
+tests = [
+  "tests/MegaPDF.Core.Tests/PdfiumEngineTests.cs::Render",
+  "tests/MegaPDF.Core.Tests/RenderLimitsTests.cs::RenderLimits",
+  "tests/MegaPDF.Core.Tests/CorpusTests.cs::Corpus",
+  "tests/MegaPDF.Core.Tests/UserUnitTests.cs::UserUnit",
+  "tests/MegaPDF.Core.Tests/SearchCropBoxTests.cs::CropBox",
+]
+note = "every self-test state renders a document to get started, so a dead viewer would fail them; nothing asserts scroll position or lazy page arrival."
+[feature.macos]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/Views/MainWindow.axaml::PageScroll"
+coverage = "ui"
+tests = [
+  "src/MegaPDF.Avalonia/Program.cs::CheckMinimumWindow",
+  "tests/MegaPDF.Core.Tests/RenderLimitsTests.cs::RenderLimits",
+  "tests/MegaPDF.Core.Tests/CorpusTests.cs::Corpus",
+]
+note = "layout is asserted in a real window at the declared minimum size (#237); scroll itself only through the tab-transition checks."
+[feature.linux]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/Views/MainWindow.axaml::PageScroll"
+coverage = "ui"
+tests = [
+  "src/MegaPDF.Avalonia/Program.cs::CheckMinimumWindow",
+  "tests/MegaPDF.Core.Tests/RenderLimitsTests.cs::RenderLimits",
+  "tests/MegaPDF.Core.Tests/CorpusTests.cs::Corpus",
+]
+note = "plus the CI steps that start the real UI under Xvfb and at a 150% display scale, which are not part of --self-test."
+[feature.ios]
+presence = "present"
+entry = "ios/MegaPDF/ViewerView.swift::ScrollView"
+coverage = "engine"
+tests = [
+  "ios/MegaPDFTests/PdfEngineTests.swift::testRenderProducesInk",
+  "ios/MegaPDFTests/CropBoxTests.swift::CropBox",
+  "ios/MegaPDFTests/UserUnitTests.swift::UserUnit",
+]
+note = "the UI tests render incidentally; no test asserts what scrolling does."
+[feature.android]
+presence = "present"
+entry = "android/app/src/main/java/com/megapdf/android/ViewerScreen.kt::R.string.page_n"
+coverage = "engine"
+tests = [
+  "android/engine/src/androidTest/java/com/megapdf/engine/PdfEngineTest.kt::render",
+  "android/engine/src/androidTest/java/com/megapdf/engine/UserUnitTest.kt::class",
+  "android/app/src/test/java/com/megapdf/android/RenderWindowTest.kt::class",
+]
+note = "the render window's page-keeping arithmetic is unit-tested; no instrumented test scrolls."
+
+[[feature]]
+id = "zoom"
+title = "Zoom (buttons, keyboard, wheel, pinch) and fit"
+area = "Viewing"
+[feature.windows]
+presence = "present"
+entry = "src/MegaPDF.App/MainWindow.xaml::ZoomInButton"
+coverage = "ui"
+tests = [".github/workflows/ci.yml::Run-Check \"zoom-anchor\""]
+note = "keyboard zoom, the 300% clamp and Ctrl+wheel all assert the anchor point has not moved (#528)."
+[feature.macos]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/Views/MainWindow.Zoom.cs::ZoomIn"
+coverage = "ui"
+tests = ["src/MegaPDF.Avalonia/Program.cs::CheckZoomAnchor"]
+note = "real wheel and pinch events injected into a headless window."
+[feature.linux]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/Views/MainWindow.Zoom.cs::ZoomIn"
+coverage = "ui"
+tests = ["src/MegaPDF.Avalonia/Program.cs::CheckZoomAnchor"]
+note = "same harness as macOS."
+[feature.ios]
+presence = "present"
+entry = "ios/MegaPDF/ViewerView.swift::PinchZoom"
+coverage = "ui"
+tests = [
+  "ios/MegaPDFUITests/ViewerZoomUITests.swift::class",
+  "ios/MegaPDFTests/ZoomAnchorTests.swift::class",
+]
+note = "the one feature CI exercises on both an iPhone and an iPad destination."
+[feature.android]
+presence = "present"
+entry = "android/app/src/main/java/com/megapdf/android/ViewerScreen.kt::pointerInput(Unit)"
+coverage = "ui"
+tests = [
+  "android/app/src/androidTest/java/com/megapdf/android/PinchZoomTest.kt::class",
+  "android/app/src/androidTest/java/com/megapdf/android/PinchAnchorTest.kt::class",
+  "android/app/src/test/java/com/megapdf/android/PinchAnchorMathTest.kt::class",
+]
+note = "pinch centroid and double-tap-to-fit on a device."
+
+[[feature]]
+id = "search"
+title = "Find in document"
+area = "Viewing"
+[feature.windows]
+presence = "present"
+entry = "src/MegaPDF.App/MainWindow.xaml::FindButton"
+coverage = "engine"
+tests = [
+  "tests/MegaPDF.Core.Tests/SearchParityTests.cs::Search",
+  "tests/MegaPDF.Core.Tests/SearchCropBoxTests.cs::CropBox",
+  "tests/MegaPDF.Core.Tests/MatchScrollTests.cs::MatchScroll",
+  ".github/workflows/ci.yml::Run-Check \"progress\"",
+]
+manual = "TESTING.md::**Find**"
+note = "the progress state stops a long search; the find bar's own counter, wrap and Esc are by hand only. The `find` and `find-zoomed` harness states exist but CI does not run them."
+[feature.macos]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/Views/MainWindow.FindBar.cs::WireFindBar"
+coverage = "ui"
+tests = [
+  "src/MegaPDF.Avalonia/Program.cs::CheckMinimumWindow",
+  "src/MegaPDF.Avalonia/Program.cs::CheckProgressAndCancel",
+  "tests/MegaPDF.Core.Tests/SearchParityTests.cs::Search",
+]
+manual = "TESTING.md::**Find**"
+note = "case-insensitivity, no-match and wrap are driven through the view model; the bar's layout and button names in three languages by CheckMinimumWindow."
+[feature.linux]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/Views/MainWindow.FindBar.cs::WireFindBar"
+coverage = "ui"
+tests = [
+  "src/MegaPDF.Avalonia/Program.cs::CheckMinimumWindow",
+  "src/MegaPDF.Avalonia/Program.cs::CheckProgressAndCancel",
+  "tests/MegaPDF.Core.Tests/SearchParityTests.cs::Search",
+]
+manual = "TESTING.md::**Find**"
+note = "same harness as macOS."
+[feature.ios]
+presence = "present"
+entry = "ios/MegaPDF/ViewerView.swift::Find in document"
+coverage = "engine"
+tests = ["ios/MegaPDFTests/SearchTests.swift::class"]
+note = "engine parity against the shared fixtures; no UI test opens the find bar."
+[feature.android]
+presence = "present"
+entry = "android/app/src/main/java/com/megapdf/android/ViewerScreen.kt::R.string.close_search"
+coverage = "engine"
+tests = ["android/engine/src/androidTest/java/com/megapdf/engine/TextSearchTest.kt::class"]
+note = "engine parity only; no Compose test types in the search field. #98's canary lives in the engine suite, not the UI."
+
+[[feature]]
+id = "reading-mode"
+title = "Reading mode"
+area = "Viewing"
+[feature.windows]
+presence = "present"
+entry = "src/MegaPDF.App/MainWindow.xaml::ReadingModeButton"
+coverage = "ui"
+tests = [
+  ".github/workflows/ci.yml::Run-Check \"reading\"",
+  "tests/MegaPDF.Core.Tests/ReadingModeTests.cs::ReadingMode",
+]
+note = "the richest single state in the Windows harness: accelerators, the Escape ladder, tab order, the floating bar's screen-reader rule, and entering on a new tab."
+[feature.macos]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/Views/MainWindow.ReadingMode.cs::EnterReadingMode"
+coverage = "ui"
+tests = [
+  "src/MegaPDF.Avalonia/Program.cs::CheckReadingMode",
+  "tests/MegaPDF.Core.Tests/ReadingModeTests.cs::ReadingMode",
+]
+[feature.linux]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/Views/MainWindow.ReadingMode.cs::EnterReadingMode"
+coverage = "ui"
+tests = [
+  "src/MegaPDF.Avalonia/Program.cs::CheckReadingMode",
+  "tests/MegaPDF.Core.Tests/ReadingModeTests.cs::ReadingMode",
+]
+[feature.ios]
+presence = "present"
+entry = "ios/MegaPDF/ReadingBar.swift::ReadingBar"
+coverage = "ui"
+tests = [
+  "ios/MegaPDFUITests/ReadingModeUITests.swift::class",
+  "ios/MegaPDFTests/ReadingModeTests.swift::class",
+]
+note = "run on both the iPhone and the iPad destination, including the iPad tool-strip entry point."
+[feature.android]
+presence = "present"
+entry = "android/app/src/main/java/com/megapdf/android/ViewerScreen.kt::R.string.reading_mode"
+coverage = "ui"
+tests = [
+  "android/app/src/androidTest/java/com/megapdf/android/ReadingModeTest.kt::class",
+  "android/app/src/test/java/com/megapdf/android/ReadingModeMathTest.kt::class",
+]
+
+[[feature]]
+id = "page-colours"
+title = "Page colours (normal / sepia / night)"
+area = "Viewing"
+[feature.windows]
+presence = "present"
+entry = "src/MegaPDF.App/MainWindow.xaml::PageColoursChoice"
+coverage = "ui"
+tests = [".github/workflows/ci.yml::Run-Check \"reading\""]
+note = "asserts the tint really reaches the pixels, persists, and does not force an eager render."
+[feature.macos]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/Views/MainWindow.ReadingMode.cs::PageTint.Sepia"
+coverage = "ui"
+tests = ["src/MegaPDF.Avalonia/Program.cs::CheckReadingMode"]
+[feature.linux]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/Views/MainWindow.ReadingMode.cs::PageTint.Sepia"
+coverage = "ui"
+tests = ["src/MegaPDF.Avalonia/Program.cs::CheckReadingMode"]
+[feature.ios]
+presence = "present"
+entry = "ios/MegaPDF/SettingsView.swift::pageTint"
+coverage = "engine"
+tests = ["ios/MegaPDFTests/ReadingModeTests.swift::tint"]
+note = "the stored setting and its descriptions are tested; ReadingModeUITests checks the tint descriptions but not the rendered pixels."
+[feature.android]
+presence = "present"
+entry = "android/app/src/main/java/com/megapdf/android/SettingsScreen.kt::R.string.page_colours"
+coverage = "ui"
+tests = [
+  "android/app/src/androidTest/java/com/megapdf/android/ReadingModeTest.kt::night",
+  "android/engine/src/test/java/com/megapdf/engine/PageTintTest.kt::class",
+]
+note = "the instrumented test checks night-tinted pixels."
+
+[[feature]]
+id = "pages-pane"
+title = "Page thumbnails pane"
+area = "Viewing"
+[feature.windows]
+presence = "present"
+entry = "src/MegaPDF.App/MainWindow.xaml::PagesPaneButton"
+coverage = "ui"
+tests = [".github/workflows/ci.yml::Run-Check \"pages\""]
+[feature.macos]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/Views/MainWindow.MenuBar.cs::Strings.PageThumbnailsMenuItem"
+coverage = "ui"
+tests = ["src/MegaPDF.Avalonia/Program.cs::CheckPageTools"]
+[feature.linux]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/Views/MainWindow.MenuBar.cs::Strings.PageThumbnailsMenuItem"
+coverage = "ui"
+tests = ["src/MegaPDF.Avalonia/Program.cs::CheckPageTools"]
+[feature.ios]
+presence = "present"
+entry = "ios/MegaPDF/ViewerView.swift::PagesPanel(model: model,"
+coverage = "ui"
+tests = ["ios/MegaPDFUITests/PageToolsUITests.swift::testThePhonesGridIsASheetThatLeavesThePageOnScreen"]
+note = "arrived with #570 — a sheet on a compact width and a sidebar on a regular one, both asserted in CI on their own destinations."
+[feature.android]
+presence = "present"
+entry = "android/app/src/main/java/com/megapdf/android/ViewerScreen.kt::R.string.pages"
+coverage = "ui"
+tests = ["android/app/src/androidTest/java/com/megapdf/android/PageToolsTest.kt::class"]
+
+
+# =============================================================================
+# Filling in and marking up
+# =============================================================================
+
+[[feature]]
+id = "form-fields"
+title = "Form text fields"
+area = "Filling in and marking up"
+[feature.windows]
+presence = "present"
+entry = "src/MegaPDF.App/DocumentView.xaml.cs::OnPageTapped"
+coverage = "engine"
+tests = ["tests/MegaPDF.Core.Tests/AcroFormTests.cs::Field"]
+manual = "TESTING.md::**Form fields**"
+note = "no Windows self-test state fills a field; `click` exists in the harness for exactly this and CI does not run it."
+[feature.macos]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/ViewModels/DocumentViewModel.cs::HandlePageClick"
+coverage = "ui"
+tests = ["tests/MegaPDF.Core.Tests/AcroFormTests.cs::Field"]
+note = "the self-test's fill-check-sign block drives the view model's hit test and round-trips the value through PDFium."
+[feature.linux]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/ViewModels/DocumentViewModel.cs::HandlePageClick"
+coverage = "ui"
+tests = ["tests/MegaPDF.Core.Tests/AcroFormTests.cs::Field"]
+note = "same as macOS."
+[feature.ios]
+presence = "present"
+entry = "ios/MegaPDF/ViewerModel.swift::formFields"
+coverage = "engine"
+tests = [
+  "ios/MegaPDFTests/CheckboxTests.swift::class",
+  "ios/MegaPDFTests/DocumentCapabilitiesTests.swift::class",
+]
+note = "the engine and the gating are tested; DemoFlowUITests fills a field live but is excluded from CI as a video script."
+[feature.android]
+presence = "present"
+entry = "android/app/src/main/java/com/megapdf/android/ViewerScreen.kt::R.string.edit_text"
+coverage = "ui"
+tests = [
+  "android/app/src/androidTest/java/com/megapdf/android/EditingTest.kt::class",
+  "android/app/src/test/java/com/megapdf/android/DocumentCapabilitiesTest.kt::class",
+]
+
+[[feature]]
+id = "checkboxes"
+title = "Checkboxes, real and drawn"
+area = "Filling in and marking up"
+[feature.windows]
+presence = "present"
+entry = "src/MegaPDF.App/MainWindow.xaml::MarkStyleChoice"
+coverage = "engine"
+tests = [
+  "tests/MegaPDF.Core.Tests/DrawnCheckboxTests.cs::Drawn",
+  "tests/MegaPDF.Core.Tests/SettingsAndMarkStyleTests.cs::MarkStyle",
+]
+manual = "TESTING.md::**Checkboxes**"
+note = "detection and the mark style are tested; no Windows self-test state clicks a box. The `click` state exists for this and CI does not run it."
+[feature.macos]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/ViewModels/DocumentViewModel.cs::CheckboxToggleOperation"
+coverage = "ui"
+tests = [
+  "tests/MegaPDF.Core.Tests/DrawnCheckboxTests.cs::Drawn",
+  "tests/MegaPDF.Core.Tests/SettingsAndMarkStyleTests.cs::MarkStyle",
+]
+note = "the self-test ticks both a real AcroForm box and a drawn square through the view model."
+[feature.linux]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/ViewModels/DocumentViewModel.cs::CheckboxToggleOperation"
+coverage = "ui"
+tests = [
+  "tests/MegaPDF.Core.Tests/DrawnCheckboxTests.cs::Drawn",
+  "tests/MegaPDF.Core.Tests/SettingsAndMarkStyleTests.cs::MarkStyle",
+]
+note = "same as macOS."
+[feature.ios]
+presence = "present"
+entry = "ios/MegaPDF/ViewerModel.swift::detectCheckboxSquares"
+coverage = "engine"
+tests = ["ios/MegaPDFTests/CheckboxTests.swift::class"]
+note = "no mark-style setting on iOS and no UI test taps a box."
+[feature.android]
+presence = "present"
+entry = "android/app/src/main/java/com/megapdf/android/SettingsScreen.kt::R.string.settings"
+coverage = "ui"
+tests = [
+  "android/app/src/androidTest/java/com/megapdf/android/EditingTest.kt::class",
+  "android/engine/src/androidTest/java/com/megapdf/engine/CheckboxTest.kt::class",
+]
+
+[[feature]]
+id = "signature-capture"
+title = "Make a signature (draw, type, photo) and the library"
+area = "Filling in and marking up"
+about = """
+The weakest row on the board. Every platform tests the image cleanup and the library's
+storage; not one test on any platform drives the draw pad, the type field or the photo
+import, which is where #99–#101 lived."""
+[feature.windows]
+presence = "present"
+entry = "src/MegaPDF.App/MainWindow.xaml::SignaturesToolbarButton"
+coverage = "engine"
+tests = [
+  "tests/MegaPDF.Core.Tests/SignatureCleanupTests.cs::Cleanup",
+  "tests/MegaPDF.Core.Tests/SignatureLibraryTests.cs::Library",
+]
+manual = "TESTING.md::**Signatures**"
+note = "the `sign` and `sign-missing` harness states exist and CI runs neither; nothing drives the pad, the typed field or a photo import."
+[feature.macos]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/Views/MainWindow.Toolbar.cs::SignButton"
+coverage = "engine"
+tests = [
+  "tests/MegaPDF.Core.Tests/SignatureCleanupTests.cs::Cleanup",
+  "tests/MegaPDF.Core.Tests/SignatureLibraryTests.cs::Library",
+]
+manual = "TESTING.md::**Signatures**"
+note = "the self-test deliberately synthesises raw pixels rather than decoding a PNG, so the real image path is never run."
+[feature.linux]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/Views/MainWindow.Toolbar.cs::SignButton"
+coverage = "engine"
+tests = [
+  "tests/MegaPDF.Core.Tests/SignatureCleanupTests.cs::Cleanup",
+  "tests/MegaPDF.Core.Tests/SignatureLibraryTests.cs::Library",
+]
+manual = "TESTING.md::**Signatures**"
+note = "same as macOS."
+[feature.ios]
+presence = "present"
+entry = "ios/MegaPDF/SignatureViews.swift::DrawSignatureView"
+coverage = "engine"
+tests = [
+  "ios/MegaPDFTests/SignatureTests.swift::Processor",
+  "ios/MegaPDFTests/SignatureStoreTests.swift::class",
+]
+note = "cleanup and store only; the capture sheets are driven by DemoFlowUITests, which is excluded from CI."
+[feature.android]
+presence = "present"
+entry = "android/app/src/main/java/com/megapdf/android/SignaturesSheet.kt::R.string.signatures"
+coverage = "engine"
+tests = [
+  "android/app/src/test/java/com/megapdf/android/SignatureImageProcessorTest.kt::class",
+  "android/app/src/test/java/com/megapdf/android/SignatureLibraryStoreTest.kt::class",
+]
+note = "no instrumented test opens the signatures sheet at all."
+
+[[feature]]
+id = "signature-place"
+title = "Place, move, resize and remove a signature"
+area = "Filling in and marking up"
+[feature.windows]
+presence = "present"
+entry = "src/MegaPDF.App/MainWindow.xaml::SignaturesFlyout"
+coverage = "engine"
+tests = [
+  "tests/MegaPDF.Core.Tests/SignatureStampTests.cs::Stamp",
+  "tests/MegaPDF.Core.Tests/HitTargetGeometryTests.cs::HitTarget",
+]
+manual = "TESTING.md::**Signatures**"
+note = "no Windows self-test state places a signature, although `whiteout-text` drives the same move/resize chrome for whiteouts."
+[feature.macos]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/ViewModels/DocumentViewModel.cs::PlaceSignature"
+coverage = "ui"
+tests = [
+  "tests/MegaPDF.Core.Tests/SignatureStampTests.cs::Stamp",
+  "tests/MegaPDF.Core.Tests/HitTargetGeometryTests.cs::HitTarget",
+]
+note = "the self-test places one and asserts its width, aspect and centring, and undoes it."
+[feature.linux]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/ViewModels/DocumentViewModel.cs::PlaceSignature"
+coverage = "ui"
+tests = [
+  "tests/MegaPDF.Core.Tests/SignatureStampTests.cs::Stamp",
+  "tests/MegaPDF.Core.Tests/HitTargetGeometryTests.cs::HitTarget",
+]
+note = "same as macOS."
+[feature.ios]
+presence = "present"
+entry = "ios/MegaPDF/ViewerView.swift::Label(\"Sign\""
+coverage = "engine"
+tests = ["ios/MegaPDFTests/SignatureTests.swift::stamp"]
+note = "engine placement only."
+[feature.android]
+presence = "present"
+entry = "android/app/src/main/java/com/megapdf/android/ViewerScreen.kt::R.string.sign"
+coverage = "engine"
+tests = [
+  "android/engine/src/androidTest/java/com/megapdf/engine/SignatureStampTest.kt::class",
+  "android/app/src/test/java/com/megapdf/android/HitTargetGeometryTest.kt::class",
+]
+note = "the stamp round-trips on a device; no Compose test places one through the UI."
+
+[[feature]]
+id = "add-text"
+title = "Add text"
+area = "Filling in and marking up"
+[feature.windows]
+presence = "present"
+entry = "src/MegaPDF.App/MainWindow.xaml::AddTextButton"
+coverage = "ui"
+tests = [
+  ".github/workflows/ci.yml::Run-Check \"whiteout-text\"",
+  "tests/MegaPDF.Core.Tests/WhiteoutAndTextBoxTests.cs::TextBox",
+  "tests/MegaPDF.Core.Tests/TextBoxSubstitutionTests.cs::Substitution",
+]
+manual = "TESTING.md::**Add text**"
+note = "size chips, multi-line splitting and restyle-on-re-edit, since #3/#4."
+[feature.macos]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/Views/MainWindow.MenuBar.cs::Strings.AddText"
+coverage = "ui"
+tests = [
+  "tests/MegaPDF.Core.Tests/WhiteoutAndTextBoxTests.cs::TextBox",
+  "tests/MegaPDF.Core.Tests/TextBoxSubstitutionTests.cs::Substitution",
+  "tests/MegaPDF.Core.Tests/FontSubstitutionTests.cs::Font",
+]
+note = "the self-test adds boxes, splits on Shift+Enter, restyles and undoes, through the view model."
+[feature.linux]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/Views/MainWindow.MenuBar.cs::Strings.AddText"
+coverage = "ui"
+tests = [
+  "tests/MegaPDF.Core.Tests/WhiteoutAndTextBoxTests.cs::TextBox",
+  "tests/MegaPDF.Core.Tests/TextBoxSubstitutionTests.cs::Substitution",
+  "tests/MegaPDF.Core.Tests/FontSubstitutionTests.cs::Font",
+]
+note = "same as macOS."
+[feature.ios]
+presence = "present"
+entry = "ios/MegaPDF/ViewerView.swift::Label(\"Add text\""
+coverage = "engine"
+tests = ["ios/MegaPDFTests/AddTextTests.swift::class"]
+note = "geometry, style and round-trip at the engine; no UI test places a box."
+[feature.android]
+presence = "present"
+entry = "android/app/src/main/java/com/megapdf/android/ViewerScreen.kt::R.string.add_text"
+coverage = "ui"
+tests = [
+  "android/app/src/androidTest/java/com/megapdf/android/TextBoxMultilineTest.kt::class",
+  "android/engine/src/androidTest/java/com/megapdf/engine/TextBoxTest.kt::class",
+  "android/engine/src/test/java/com/megapdf/engine/PdfWriteTextOptionsTest.kt::class",
+]
+
+[[feature]]
+id = "body-text-edit"
+title = "Edit the document's own text"
+area = "Filling in and marking up"
+[feature.windows]
+presence = "present"
+entry = "src/MegaPDF.App/MainWindow.xaml::FontPicker"
+coverage = "engine"
+tests = [
+  "tests/MegaPDF.Core.Tests/TextEditSpikeTests.cs::TextEdit",
+  "tests/MegaPDF.Core.Tests/LineEditingTests.cs::Line",
+  "tests/MegaPDF.Core.Tests/TextDeleteTests.cs::Delete",
+  "tests/MegaPDF.Core.Tests/SubstitutedEditUndoTests.cs::Undo",
+  "tests/MegaPDF.Core.Tests/LayoutGuardTests.cs::Guard",
+]
+manual = "TESTING.md::**Text**"
+note = "the engine side is the best-tested part of the app; no Windows self-test state retypes a line in the UI."
+[feature.macos]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/ViewModels/DocumentViewModel.cs::EditLine"
+coverage = "ui"
+tests = [
+  "tests/MegaPDF.Core.Tests/TextEditSpikeTests.cs::TextEdit",
+  "tests/MegaPDF.Core.Tests/LineEditingTests.cs::Line",
+  "tests/MegaPDF.Core.Tests/TextDeleteTests.cs::Delete",
+  "tests/MegaPDF.Core.Tests/SubstitutedEditUndoTests.cs::Undo",
+  "tests/MegaPDF.Core.Tests/LayoutGuardTests.cs::Guard",
+]
+note = "the self-test retypes a line through the view model and reopens the file."
+[feature.linux]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/ViewModels/DocumentViewModel.cs::EditLine"
+coverage = "ui"
+tests = [
+  "tests/MegaPDF.Core.Tests/TextEditSpikeTests.cs::TextEdit",
+  "tests/MegaPDF.Core.Tests/LineEditingTests.cs::Line",
+  "tests/MegaPDF.Core.Tests/TextDeleteTests.cs::Delete",
+  "tests/MegaPDF.Core.Tests/SubstitutedEditUndoTests.cs::Undo",
+  "tests/MegaPDF.Core.Tests/LayoutGuardTests.cs::Guard",
+]
+note = "same as macOS."
+[feature.ios]
+presence = "present"
+entry = "ios/MegaPDF/BodyTextSheet.swift::BodyTextSheet"
+coverage = "ui"
+tests = [
+  "ios/MegaPDFUITests/BodyTextEditUITests.swift::class",
+  "ios/MegaPDFTests/BodyTextTests.swift::class",
+]
+note = "the only live UI test of this on any platform, and it runs in CI."
+[feature.android]
+presence = "present"
+entry = "android/app/src/main/java/com/megapdf/android/ViewerScreen.kt::R.string.edit_text_hint"
+coverage = "engine"
+tests = ["android/engine/src/androidTest/java/com/megapdf/engine/BodyTextTest.kt::class"]
+note = "engine only — iOS has a live UI test for the same feature (#113/#114) and Android does not."
+
+[[feature]]
+id = "whiteout"
+title = "Whiteout (cover)"
+area = "Filling in and marking up"
+about = """
+The row that made the case for this map. Android had no whiteout tool at all until #3/#4
+landed on 2026-09-30, while the issue that produced them discussed improving its chrome on
+four platforms. iOS still has none, and the comment that explains why
+(ios/MegaPDF/Engine/PdfEngine+Redaction.swift: \"iOS has no whiteout — mobile's feature set
+is fill, check, sign, find and add text\") describes a mobile feature set that Android no
+longer has."""
+[feature.windows]
+presence = "present"
+entry = "src/MegaPDF.App/MainWindow.xaml::WhiteoutButton"
+coverage = "ui"
+tests = [
+  ".github/workflows/ci.yml::Run-Check \"whiteout-text\"",
+  "tests/MegaPDF.Core.Tests/WhiteoutAndTextBoxTests.cs::Whiteout",
+]
+manual = "TESTING.md::**Whiteout**"
+[feature.macos]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/Views/MainWindow.MenuBar.cs::Strings.Cover"
+coverage = "ui"
+tests = ["tests/MegaPDF.Core.Tests/WhiteoutAndTextBoxTests.cs::Whiteout"]
+note = "placed and round-tripped through the view model; the move/resize chrome the Windows state drives is not asserted here."
+[feature.linux]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/Views/MainWindow.MenuBar.cs::Strings.Cover"
+coverage = "ui"
+tests = ["tests/MegaPDF.Core.Tests/WhiteoutAndTextBoxTests.cs::Whiteout"]
+note = "same as macOS."
+[feature.ios]
+presence = "absent"
+coverage = "n/a"
+absence = "gap"
+note = "no whiteout tool. The reason given in the engine source is that mobile's feature set excludes it — which stopped being true when Android got one on 2026-09-30."
+[feature.android]
+presence = "present"
+entry = "android/app/src/main/java/com/megapdf/android/ViewerScreen.kt::R.string.whiteout"
+coverage = "ui"
+tests = ["android/app/src/androidTest/java/com/megapdf/android/WhiteoutLifecycleTest.kt::class"]
+note = "arrived with its own instrumented test (#3/#4), which is why it is the strongest mobile cell here."
+
+
+# =============================================================================
+# Redaction
+# =============================================================================
+
+[[feature]]
+id = "redact-mark"
+title = "Redact — mark text or an area, move, resize, remove, clear all"
+area = "Redaction"
+[feature.windows]
+presence = "present"
+entry = "src/MegaPDF.App/MainWindow.xaml::RedactButton"
+coverage = "engine"
+tests = ["tests/MegaPDF.Core.Tests/RedactionMarkTests.cs::Mark"]
+manual = "TESTING.md::**Redact**"
+note = "#329 was exactly this on Windows (mark then Undo, mark then reopen) and no Windows self-test state marks anything; the engine-level mark lifecycle is the only automated cover."
+issue = 329
+[feature.macos]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/Views/MainWindow.MenuBar.cs::Strings.ToolbarRedact"
+coverage = "ui"
+tests = ["tests/MegaPDF.Core.Tests/RedactionMarkTests.cs::Mark"]
+manual = "TESTING.md::**Redact**"
+note = "the self-test drags a mark, moves, resizes, removes, clears all and undoes each, and checks marking leaves the document clean (#329)."
+[feature.linux]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/Views/MainWindow.MenuBar.cs::Strings.ToolbarRedact"
+coverage = "ui"
+tests = ["tests/MegaPDF.Core.Tests/RedactionMarkTests.cs::Mark"]
+manual = "TESTING.md::**Redact**"
+note = "same as macOS."
+[feature.ios]
+presence = "present"
+entry = "ios/MegaPDF/ViewerView.swift::viewerRedact"
+coverage = "engine"
+tests = ["ios/MegaPDFTests/RedactionTests.swift::class"]
+note = "the unit suite is thorough (mark, area with no text, move, remove, undo, redo); the UI test that checks the Redact row is armed is excluded from CI because the row is missing on the simulator (#405)."
+issue = 405
+[feature.android]
+presence = "present"
+entry = "android/app/src/main/java/com/megapdf/android/ViewerScreen.kt::R.string.redact"
+coverage = "ui"
+tests = [
+  "android/app/src/androidTest/java/com/megapdf/android/RedactionMarkLifecycleTest.kt::class",
+  "android/app/src/test/java/com/megapdf/android/RedactionMarkHistoryTest.kt::class",
+]
+
+[[feature]]
+id = "redact-apply"
+title = "Redact — apply on save, and prove the words are gone"
+area = "Redaction"
+about = """
+The promise the feature exists to keep. It is proved by hunting for what was removed
+(tools/leakcheck), not by asking the engine — but only in the native and mobile suites.
+The .NET side has no test that calls ApplyRedactions at all."""
+[feature.windows]
+presence = "present"
+entry = "src/MegaPDF.App/DocumentViewModel.cs::ApplyRedactions"
+coverage = "engine"
+tests = [
+  "core/tests/core_tests.cpp::test_redaction_fixtures",
+  "tests/MegaPDF.Core.Tests/RedactionApplyTests.cs::Apply_RemovesTheMarkedWord_FromTheExtractedTextAndFromTheBytes",
+]
+manual = "TESTING.md::Open the saved copy **in Edge or Acrobat**"
+note = "RedactionApplyTests arrived with this map, because the cell was empty: the .NET apply path the Windows app takes had no test at all. It hunts for the word in the saved bytes the way tools/leakcheck does rather than asking the engine. No Windows self-test state marks and saves, so the UI above it is still uncovered."
+[feature.macos]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/ViewModels/DocumentViewModel.cs::ApplyRedactions"
+coverage = "ui"
+tests = ["core/tests/core_tests.cpp::test_redaction_fixtures"]
+manual = "TESTING.md::Open the saved copy **in Edge or Acrobat**"
+note = "the self-test applies and then checks the bytes of the saved file no longer contain the words — the one place the app's own apply path is exercised in ci.yml."
+[feature.linux]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/ViewModels/DocumentViewModel.cs::ApplyRedactions"
+coverage = "ui"
+tests = ["core/tests/core_tests.cpp::test_redaction_fixtures"]
+manual = "TESTING.md::Open the saved copy **in Edge or Acrobat**"
+note = "same as macOS."
+[feature.ios]
+presence = "present"
+entry = "ios/MegaPDF/ViewerView.swift::Overwrite the original"
+coverage = "ui"
+tests = [
+  "ios/MegaPDFTests/RedactionTests.swift::apply",
+  "ios/MegaPDFUITests/RedactionUITests.swift::testSaveIsReachableWithAMarkAndAsksBeforeRemoving",
+]
+[feature.android]
+presence = "present"
+entry = "android/app/src/main/java/com/megapdf/android/ViewerScreen.kt::R.string.redact_overwrite"
+coverage = "engine"
+tests = ["android/engine/src/androidTest/java/com/megapdf/engine/RedactionTest.kt::apply"]
+note = "the engine's apply is proved on a device, including image pixels; no Compose test taps through to the save-a-copy-or-overwrite question."
+
+[[feature]]
+id = "redact-refusal"
+title = "Redact — the refusal path (\"nothing was removed\")"
+area = "Redaction"
+about = """
+The deliberate refusal: if some of what was marked cannot be taken apart safely, nothing
+is removed and the reason is shown. Worth a row of its own because a refusal path that no
+test reaches reads as a clean zero — which is what happened to the page-tools refusal
+counters for two whole battery runs before #567's reporting fix."""
+[feature.windows]
+presence = "present"
+entry = "src/MegaPDF.App/DocumentViewModel.cs::RefusalReason"
+coverage = "engine"
+tests = [
+  "core/tests/core_tests.cpp::refus",
+  "tests/MegaPDF.Core.Tests/RedactionApplyTests.cs::Apply_WithAMarkOverEmptySpace_RemovesNothing_AndLeavesTheTextAlone",
+]
+note = "no .NET test produces a real refusal — the native suite and tools/stress/redaction-battery.sh are the only places one is seen. What this map's own test does cover is the quieter half: a mark over empty space must report zero removed and leave what is beside it alone, so a zero cannot mean nothing looked (the #567 shape)."
+[feature.macos]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/ViewModels/DocumentViewModel.cs::RefusalReason"
+coverage = "engine"
+tests = ["core/tests/core_tests.cpp::refus"]
+note = "the self-test applies successfully; it never makes the engine refuse, so the message the user would read is unchecked in ci.yml."
+[feature.linux]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/ViewModels/DocumentViewModel.cs::RefusalReason"
+coverage = "engine"
+tests = ["core/tests/core_tests.cpp::refus"]
+note = "same as macOS."
+[feature.ios]
+presence = "present"
+entry = "ios/MegaPDF/ViewerView.swift::redactionRefusal"
+coverage = "engine"
+tests = ["ios/MegaPDFTests/RedactionTests.swift::refus"]
+note = "the refusal leaves the document unchanged; the banner itself is not driven."
+[feature.android]
+presence = "present"
+entry = "android/app/src/main/java/com/megapdf/android/ViewerViewModel.kt::refusal"
+coverage = "engine"
+tests = ["android/engine/src/androidTest/java/com/megapdf/engine/RedactionTest.kt::refus"]
+note = "the engine refuses and leaves the file alone; no Compose test reads the refusal message back."
+
+
+# =============================================================================
+# Page tools (#174)
+# =============================================================================
+
+[[feature]]
+id = "page-rotate-delete"
+title = "Rotate and delete pages"
+area = "Page tools"
+[feature.windows]
+presence = "present"
+entry = "src/MegaPDF.App/MainWindow.xaml::RotateLeftItem"
+coverage = "ui"
+tests = [
+  ".github/workflows/ci.yml::Run-Check \"pages\"",
+  "tests/MegaPDF.Core.Tests/PageToolsTests.cs::Rotate",
+]
+note = "107 checks over eleven documents, including the renumbering core contract 10 owes and the journal replay."
+[feature.macos]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/Views/MainWindow.MenuBar.cs::Strings.RotatePageLeft"
+coverage = "ui"
+tests = [
+  "src/MegaPDF.Avalonia/Program.cs::CheckPageTools",
+  "tests/MegaPDF.Core.Tests/PageToolsTests.cs::Rotate",
+]
+[feature.linux]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/Views/MainWindow.MenuBar.cs::Strings.RotatePageLeft"
+coverage = "ui"
+tests = [
+  "src/MegaPDF.Avalonia/Program.cs::CheckPageTools",
+  "tests/MegaPDF.Core.Tests/PageToolsTests.cs::Rotate",
+]
+[feature.ios]
+presence = "present"
+entry = "ios/MegaPDF/PagesView.swift::Rotate Left"
+coverage = "ui"
+tests = [
+  "ios/MegaPDFUITests/PageToolsUITests.swift::testRotatingASelectionIsOneChangeAndOneUndo",
+  "ios/MegaPDFTests/PageToolsTests.swift::testDeletingPagesTakesExactlyThoseAndUndoPutsThePagesThemselvesBack",
+  "ios/MegaPDFTests/PageToolsModelTests.swift::testTheSizesFollowARotationAndItsPictureIsRedrawn",
+  "ios/MegaPDFTests/PageCheckTests.swift::class",
+]
+[feature.android]
+presence = "present"
+entry = "android/app/src/main/java/com/megapdf/android/PagesScreen.kt::R.string.rotate_left"
+coverage = "ui"
+tests = [
+  "android/app/src/androidTest/java/com/megapdf/android/PageToolsTest.kt::rotat",
+  "android/engine/src/androidTest/java/com/megapdf/engine/PageToolsEngineTest.kt::class",
+  "android/app/src/test/java/com/megapdf/android/PageHistoryTest.kt::class",
+]
+
+[[feature]]
+id = "page-reorder-insert"
+title = "Reorder pages, insert a blank page, insert pages from a file"
+area = "Page tools"
+[feature.windows]
+presence = "present"
+entry = "src/MegaPDF.App/MainWindow.xaml::InsertPagesFromFileItem"
+coverage = "ui"
+tests = [
+  ".github/workflows/ci.yml::Run-Check \"pages\"",
+  "tests/MegaPDF.Core.Tests/PageToolsTests.cs::Insert",
+]
+note = "combine is checked including the field-name clash refusal."
+[feature.macos]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/Views/MainWindow.MenuBar.cs::Strings.InsertPagesFromFileItem"
+coverage = "ui"
+tests = [
+  "src/MegaPDF.Avalonia/Program.cs::CheckPageTools",
+  "tests/MegaPDF.Core.Tests/PageToolsTests.cs::Insert",
+]
+[feature.linux]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/Views/MainWindow.MenuBar.cs::Strings.InsertPagesFromFileItem"
+coverage = "ui"
+tests = [
+  "src/MegaPDF.Avalonia/Program.cs::CheckPageTools",
+  "tests/MegaPDF.Core.Tests/PageToolsTests.cs::Insert",
+]
+[feature.ios]
+presence = "present"
+entry = "ios/MegaPDF/PagesView.swift::Insert Pages from File…"
+coverage = "ui"
+tests = [
+  "ios/MegaPDFTests/PageToolsTests.swift::testImportingPagesInsertsThemAndUndoTakesExactlyThoseOff",
+  "ios/MegaPDFTests/PageShiftTests.swift::testInsertedPagesMoveEverythingFromThereUp",
+  "ios/MegaPDFTests/PageToolsModelTests.swift::testABlankPageTakesTheSizeOfThePageInFrontOfIt",
+]
+note = "reorder by dragging is a by-hand gate on this platform: PageDragUITests exists and CI does not run it."
+[feature.android]
+presence = "present"
+entry = "android/app/src/main/java/com/megapdf/android/PagesScreen.kt::R.string.pages_add_from_file"
+coverage = "ui"
+tests = [
+  "android/app/src/androidTest/java/com/megapdf/android/PageToolsTest.kt::insert",
+  "android/app/src/test/java/com/megapdf/android/PageShiftTest.kt::class",
+  "android/app/src/test/java/com/megapdf/android/PageRewriteWarningsTest.kt::class",
+  "android/app/src/test/java/com/megapdf/android/PageCheckGateTest.kt::class",
+]
+
+[[feature]]
+id = "page-extract"
+title = "Extract pages to a new file"
+area = "Page tools"
+[feature.windows]
+presence = "present"
+entry = "src/MegaPDF.App/MainWindow.xaml::ExtractPagesItem"
+coverage = "ui"
+tests = [
+  ".github/workflows/ci.yml::Run-Check \"pages\"",
+  ".github/workflows/ci.yml::Run-Check \"progress\"",
+  "tests/MegaPDF.Core.Tests/PageToolsTests.cs::Extract",
+]
+note = "extract is also where the progress state proves Stop leaves no partial file."
+[feature.macos]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/Views/MainWindow.MenuBar.cs::Strings.ExtractPagesItem"
+coverage = "ui"
+tests = [
+  "src/MegaPDF.Avalonia/Program.cs::CheckPageTools",
+  "src/MegaPDF.Avalonia/Program.cs::CheckProgressAndCancel",
+  "tests/MegaPDF.Core.Tests/PageToolsTests.cs::Extract",
+]
+[feature.linux]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/Views/MainWindow.MenuBar.cs::Strings.ExtractPagesItem"
+coverage = "ui"
+tests = [
+  "src/MegaPDF.Avalonia/Program.cs::CheckPageTools",
+  "src/MegaPDF.Avalonia/Program.cs::CheckProgressAndCancel",
+  "tests/MegaPDF.Core.Tests/PageToolsTests.cs::Extract",
+]
+[feature.ios]
+presence = "present"
+entry = "ios/MegaPDF/PagesView.swift::Save Pages As…"
+coverage = "ui"
+tests = [
+  "ios/MegaPDFTests/PageToolsTests.swift::testExtractingPagesWritesThemInOrderAndLeavesTheDocumentAlone",
+  "ios/MegaPDFTests/PagesFieldHierarchyTests.swift::class",
+]
+note = "the extract name and every refusal sentence are asserted too; the picker the file goes through is not."
+[feature.android]
+presence = "present"
+entry = "android/app/src/main/java/com/megapdf/android/PagesScreen.kt::R.string.pages_save_selection"
+coverage = "ui"
+tests = ["android/app/src/androidTest/java/com/megapdf/android/PageToolsTest.kt::save"]
+
+
+# =============================================================================
+# Saving and output
+# =============================================================================
+
+[[feature]]
+id = "save-in-place"
+title = "Save (overwrite in place)"
+area = "Saving and output"
+[feature.windows]
+presence = "present"
+entry = "src/MegaPDF.App/MainWindow.xaml::SaveButton"
+coverage = "engine"
+tests = [
+  "tests/MegaPDF.Core.Tests/VerifiedSaveTests.cs::Save",
+  "tests/MegaPDF.Core.Tests/AtomicFileWriterTests.cs::Atomic",
+  "tests/MegaPDF.Core.Tests/StagedStreamWriterTests.cs::Staged",
+  "tests/MegaPDF.Core.Tests/FlattenTests.cs::Flatten",
+]
+manual = "TESTING.md::**Saving**"
+note = "the save machinery is thoroughly tested; no Windows self-test state presses Save, and a read-only or provider-backed location is never used."
+[feature.macos]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/Views/MainWindow.MenuBar.cs::Strings.Save"
+coverage = "ui"
+tests = [
+  "tests/MegaPDF.Core.Tests/VerifiedSaveTests.cs::Save",
+  "tests/MegaPDF.Core.Tests/AtomicFileWriterTests.cs::Atomic",
+  "tests/MegaPDF.Core.Tests/StagedStreamWriterTests.cs::Staged",
+  "tests/MegaPDF.Core.Tests/FlattenTests.cs::Flatten",
+]
+manual = "TESTING.md::**Saving**"
+note = "the self-test saves by stream and by path and checks busy-state locking during the save."
+[feature.linux]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/Views/MainWindow.MenuBar.cs::Strings.Save"
+coverage = "ui"
+tests = [
+  "tests/MegaPDF.Core.Tests/VerifiedSaveTests.cs::Save",
+  "tests/MegaPDF.Core.Tests/AtomicFileWriterTests.cs::Atomic",
+  "tests/MegaPDF.Core.Tests/StagedStreamWriterTests.cs::Staged",
+  "tests/MegaPDF.Core.Tests/FlattenTests.cs::Flatten",
+]
+manual = "TESTING.md::**Saving**"
+note = "also the only platform where CI checks saves are not staged on a RAM-backed filesystem and that an in-place save works where a hidden temp file is not allowed (snap, #158)."
+[feature.ios]
+presence = "present"
+entry = "ios/MegaPDF/ViewerView.swift::saveTapped"
+coverage = "engine"
+tests = [
+  "ios/MegaPDFTests/PdfEngineTests.swift::save",
+  "ios/MegaPDFTests/PageCheckTests.swift::class",
+]
+note = "FilesEndToEndUITests saves through the real picker and is excluded from CI."
+[feature.android]
+presence = "present"
+entry = "android/app/src/main/java/com/megapdf/android/ViewerScreen.kt::R.string.save"
+coverage = "ui"
+tests = [
+  "android/app/src/androidTest/java/com/megapdf/android/FileCommandsTest.kt::class",
+  "android/app/src/test/java/com/megapdf/android/DirtyTrackerTest.kt::class",
+  "android/engine/src/androidTest/java/com/megapdf/engine/PdfEngineTest.kt::save",
+]
+note = "the 2.0.1 bug was open-from-Recents-after-a-reboot then Save; the reboot half is still untested anywhere."
+
+[[feature]]
+id = "save-a-copy"
+title = "Save a copy / Save As"
+area = "Saving and output"
+[feature.windows]
+presence = "present"
+entry = "src/MegaPDF.App/MainWindow.xaml::SaveAsButton"
+coverage = "engine"
+tests = ["tests/MegaPDF.Core.Tests/VerifiedSaveTests.cs::Copy"]
+manual = "TESTING.md::**Saving**"
+note = "no self-test state drives Save As; the picker is the OS's."
+[feature.macos]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/Views/MainWindow.MenuBar.cs::Strings.SaveAs"
+coverage = "ui"
+tests = ["tests/MegaPDF.Core.Tests/VerifiedSaveTests.cs::Copy"]
+manual = "TESTING.md::**Saving**"
+note = "the self-test checks Save As adopts the copy as the open document (#68)."
+[feature.linux]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/Views/MainWindow.MenuBar.cs::Strings.SaveAs"
+coverage = "ui"
+tests = ["tests/MegaPDF.Core.Tests/VerifiedSaveTests.cs::Copy"]
+manual = "TESTING.md::**Saving**"
+note = "same as macOS."
+[feature.ios]
+presence = "present"
+entry = "ios/MegaPDF/ViewerView.swift::Save a copy"
+coverage = "engine"
+tests = ["ios/MegaPDFTests/SignatureDetectionTests.swift::copy"]
+note = "the live cases are in FilesEndToEndUITests, excluded from CI."
+[feature.android]
+presence = "present"
+entry = "android/app/src/main/java/com/megapdf/android/ViewerScreen.kt::R.string.save_a_copy"
+coverage = "ui"
+tests = ["android/app/src/androidTest/java/com/megapdf/android/FileCommandsTest.kt::copy"]
+
+[[feature]]
+id = "export-markdown"
+title = "Export as Markdown"
+area = "Saving and output"
+[feature.windows]
+presence = "present"
+entry = "src/MegaPDF.App/DocumentViewModel.cs::Strings.MarkdownDocumentFilter"
+coverage = "engine"
+tests = [
+  "tests/MegaPDF.Core.Tests/DocumentTextExportTests.cs::Markdown",
+  "tests/MegaPDF.Core.Tests/SaveAsExportTests.cs::Export",
+]
+manual = "TESTING.md::**Save As → Markdown**"
+note = "the goldens and the extension-to-kind rule are tested; nothing checks the PDF is left untouched except by hand (#386)."
+[feature.macos]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/ViewModels/DocumentViewModel.cs::ExportMarkdownAsync"
+coverage = "ui"
+tests = [
+  "tests/MegaPDF.Core.Tests/DocumentTextExportTests.cs::Markdown",
+  "tests/MegaPDF.Core.Tests/SaveAsExportTests.cs::Export",
+]
+manual = "TESTING.md::**Save As → Markdown**"
+note = "the self-test exports and checks the dot and the busy wording (#386)."
+[feature.linux]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/ViewModels/DocumentViewModel.cs::ExportMarkdownAsync"
+coverage = "ui"
+tests = [
+  "tests/MegaPDF.Core.Tests/DocumentTextExportTests.cs::Markdown",
+  "tests/MegaPDF.Core.Tests/SaveAsExportTests.cs::Export",
+]
+manual = "TESTING.md::**Save As → Markdown**"
+note = "same as macOS."
+[feature.ios]
+presence = "present"
+entry = "ios/MegaPDF/ViewerView.swift::Export as Markdown"
+coverage = "ui"
+tests = [
+  "ios/MegaPDFUITests/MarkdownExportUITests.swift::class",
+  "ios/MegaPDFTests/StructureExportTests.swift::class",
+]
+[feature.android]
+presence = "present"
+entry = "android/app/src/main/java/com/megapdf/android/ViewerScreen.kt::R.string.export_markdown"
+coverage = "ui"
+tests = [
+  "android/app/src/androidTest/java/com/megapdf/android/FileCommandsTest.kt::markdown",
+  "android/app/src/test/java/com/megapdf/android/MarkdownExportNameTest.kt::class",
+  "android/engine/src/androidTest/java/com/megapdf/engine/WriteTextGoldenTest.kt::class",
+]
+note = "#409 (the picker could not write Markdown) was found by hand after CI was green."
+
+[[feature]]
+id = "share"
+title = "Share"
+area = "Saving and output"
+[feature.windows]
+presence = "absent"
+coverage = "n/a"
+absence = "deliberate"
+note = "the desktops offer Save As and the file manager instead; there is no Share on the Windows toolbar."
+[feature.macos]
+presence = "absent"
+coverage = "n/a"
+absence = "deliberate"
+note = "as Windows."
+[feature.linux]
+presence = "absent"
+coverage = "n/a"
+absence = "deliberate"
+note = "as Windows."
+[feature.ios]
+presence = "present"
+entry = "ios/MegaPDF/ViewerView.swift::Share without saving"
+coverage = "engine"
+tests = ["ios/MegaPDFTests/ShareAndExternalOpenTests.swift::share"]
+manual = "docs/RELEASING.md::**Share** on the"
+note = "ShareVerificationUITests drives the real sheet and is excluded from CI for Files-app flakiness."
+[feature.android]
+presence = "present"
+entry = "android/app/src/main/java/com/megapdf/android/ViewerScreen.kt::R.string.share"
+coverage = "ui"
+tests = [
+  "android/app/src/androidTest/java/com/megapdf/android/FileCommandsTest.kt::share",
+  "android/app/src/test/java/com/megapdf/android/ShareFileTest.kt::class",
+]
+manual = "docs/RELEASING.md::**Share** on the"
+
+[[feature]]
+id = "password"
+title = "Password — set, change, remove, and opening a protected document"
+area = "Saving and output"
+[feature.windows]
+presence = "present"
+entry = "src/MegaPDF.App/MainWindow.xaml::SecurityButton"
+coverage = "engine"
+tests = [
+  "tests/MegaPDF.Core.Tests/PasswordTests.cs::Password",
+  "tests/MegaPDF.Core.Tests/SecurityTests.cs::Security",
+]
+note = "no Windows self-test state opens the security dialog; every platform's UI path to this is untested except iOS's, and iOS's is excluded from CI."
+[feature.macos]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/Views/MainWindow.MenuBar.cs::Strings.SecurityToolbar"
+coverage = "engine"
+tests = [
+  "src/MegaPDF.Avalonia/Program.cs::CheckPasswordPromptAcrossTabSwitch",
+  "tests/MegaPDF.Core.Tests/PasswordTests.cs::Password",
+  "tests/MegaPDF.Core.Tests/SecurityTests.cs::Security",
+]
+note = "the self-test checks a password prompt survives a tab switch but never sets, changes or removes a password through the UI."
+[feature.linux]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/Views/MainWindow.MenuBar.cs::Strings.SecurityToolbar"
+coverage = "engine"
+tests = [
+  "src/MegaPDF.Avalonia/Program.cs::CheckPasswordPromptAcrossTabSwitch",
+  "tests/MegaPDF.Core.Tests/PasswordTests.cs::Password",
+  "tests/MegaPDF.Core.Tests/SecurityTests.cs::Security",
+]
+note = "same as macOS."
+[feature.ios]
+presence = "present"
+entry = "ios/MegaPDF/DocumentSecuritySheet.swift::DocumentSecuritySheet"
+coverage = "engine"
+tests = [
+  "ios/MegaPDFTests/PdfEngineTests.swift::password",
+  "ios/MegaPDFUITests/FilesEndToEndUITests.swift::setPassword",
+]
+note = "set-password and wrong-password-then-remove are real UI tests, and both are excluded from CI — the only platform with a UI test for this and it does not run."
+[feature.android]
+presence = "present"
+entry = "android/app/src/main/java/com/megapdf/android/SecurityDialogs.kt::R.string.security_password_title"
+coverage = "engine"
+tests = ["android/engine/src/androidTest/java/com/megapdf/engine/PdfEngineTest.kt::password"]
+note = "no instrumented test opens the password sheet."
+
+[[feature]]
+id = "shrink"
+title = "Shrink for email"
+area = "Saving and output"
+[feature.windows]
+presence = "present"
+entry = "src/MegaPDF.App/MainWindow.xaml::ShrinkButton"
+coverage = "ui"
+tests = [
+  ".github/workflows/ci.yml::Run-Check \"progress\"",
+  "tests/MegaPDF.Core.Tests/ImageShrinkerTests.cs::Shrink",
+  "tests/MegaPDF.Core.Tests/ImageCompressionTests.cs::Compress",
+]
+manual = "TESTING.md::**Shrink for email**"
+note = "progress and a deterministic in-loop Stop, with no partial file left behind."
+[feature.macos]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/Views/MainWindow.Toolbar.cs::CommandEntry(Strings.Shrink"
+coverage = "ui"
+tests = [
+  "src/MegaPDF.Avalonia/Program.cs::CheckProgressAndCancel",
+  "tests/MegaPDF.Core.Tests/ImageShrinkerTests.cs::Shrink",
+  "tests/MegaPDF.Core.Tests/ImageCompressionTests.cs::Compress",
+]
+manual = "TESTING.md::**Shrink for email**"
+note = "stoppability and the rule that the open document is never what shrink was working on."
+[feature.linux]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/Views/MainWindow.Toolbar.cs::CommandEntry(Strings.Shrink"
+coverage = "ui"
+tests = [
+  "src/MegaPDF.Avalonia/Program.cs::CheckProgressAndCancel",
+  "tests/MegaPDF.Core.Tests/ImageShrinkerTests.cs::Shrink",
+  "tests/MegaPDF.Core.Tests/ImageCompressionTests.cs::Compress",
+]
+manual = "TESTING.md::**Shrink for email**"
+note = "same as macOS."
+[feature.ios]
+presence = "absent"
+coverage = "n/a"
+absence = "gap"
+note = "no shrink on iOS. Nothing in the source says it was decided against, and a phone mailing a scan is the case it exists for."
+[feature.android]
+presence = "absent"
+coverage = "n/a"
+absence = "gap"
+note = "no shrink on Android either, for the same reason and with the same silence."
+
+[[feature]]
+id = "print"
+title = "Print"
+area = "Saving and output"
+[feature.windows]
+presence = "present"
+entry = "src/MegaPDF.App/MainWindow.xaml::PrintButton"
+coverage = "none"
+manual = "TESTING.md::**Print**"
+note = "nothing automated touches printing on Windows: no self-test state, no core test of PdfPrinter, and tools/windows-qa's print flow is manual."
+[feature.macos]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/Views/MainWindow.Toolbar.cs::CommandEntry(Strings.Print"
+coverage = "none"
+manual = "TESTING.md::**Print**"
+note = "the self-test checks the command's enablement and nothing else; no print is ever performed in CI."
+[feature.linux]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/Platform/LinuxPrinter.cs::Print"
+coverage = "ui"
+tests = [".github/workflows/ci.yml::The CUPS printing route is sound"]
+note = "the best-covered print of the five: a CI step runs --print-check against CUPS, and check-flatpak.sh probes the portal path. The actual dialog is still by hand."
+manual = "TESTING.md::**Print**"
+[feature.ios]
+presence = "absent"
+coverage = "n/a"
+absence = "gap"
+note = "no UIPrintInteractionController anywhere in ios/MegaPDF. AirPrint is what a phone user would reach for and there is no route to it."
+[feature.android]
+presence = "absent"
+coverage = "n/a"
+absence = "gap"
+note = "no PrintManager anywhere in android/app. Same shape as iOS."
+
+[[feature]]
+id = "progress-cancel"
+title = "Progress and Stop on long operations"
+area = "Saving and output"
+[feature.windows]
+presence = "present"
+entry = "src/MegaPDF.App/MainWindow.xaml::BusyCancelButton"
+coverage = "ui"
+tests = [
+  ".github/workflows/ci.yml::Run-Check \"progress\"",
+  "tests/MegaPDF.Core.Tests/BusyStateTests.cs::Busy",
+]
+[feature.macos]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/Views/MainWindow.axaml::BusyStrip"
+coverage = "ui"
+tests = [
+  "src/MegaPDF.Avalonia/Program.cs::CheckProgressAndCancel",
+  "src/MegaPDF.Avalonia/Program.cs::CheckBusyStripControls",
+  "tests/MegaPDF.Core.Tests/BusyStateTests.cs::Busy",
+]
+[feature.linux]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/Views/MainWindow.axaml::BusyStrip"
+coverage = "ui"
+tests = [
+  "src/MegaPDF.Avalonia/Program.cs::CheckProgressAndCancel",
+  "src/MegaPDF.Avalonia/Program.cs::CheckBusyStripControls",
+  "tests/MegaPDF.Core.Tests/BusyStateTests.cs::Busy",
+]
+[feature.ios]
+presence = "present"
+entry = "ios/MegaPDF/ViewerView.swift::busy"
+coverage = "engine"
+tests = [
+  "ios/MegaPDFTests/BusyStateTests.swift::class",
+  "ios/MegaPDFTests/NoticeLifetimeTests.swift::class",
+]
+note = "the timing state machine only; no UI test sees a busy strip or presses Stop."
+[feature.android]
+presence = "present"
+entry = "android/app/src/main/java/com/megapdf/android/ViewerScreen.kt::BusyLabel"
+coverage = "engine"
+tests = ["android/app/src/test/java/com/megapdf/android/BusyStateTest.kt::class"]
+note = "as iOS."
+
+
+# =============================================================================
+# Lifecycle and state
+# =============================================================================
+
+[[feature]]
+id = "undo-redo"
+title = "Undo and redo"
+area = "Lifecycle and state"
+about = """
+#330's own first example: mark for redaction then Undo. Undo is tested per operation on
+every platform and the chains are deep, so this row is better than most — the thin part is
+that undo past the start and redo after a new edit are only checked in the shared stack."""
+[feature.windows]
+presence = "present"
+entry = "src/MegaPDF.App/MainWindow.xaml::UndoButton"
+coverage = "ui"
+tests = [
+  "tests/MegaPDF.Core.Tests/UndoStackTests.cs::Undo",
+  ".github/workflows/ci.yml::Run-Check \"whiteout-text\"",
+]
+[feature.macos]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/Views/MainWindow.MenuBar.cs::Strings.Undo"
+coverage = "ui"
+tests = [
+  "tests/MegaPDF.Core.Tests/UndoStackTests.cs::Undo",
+  "src/MegaPDF.Avalonia/Program.cs::CheckPageTools",
+]
+[feature.linux]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/Views/MainWindow.MenuBar.cs::Strings.Undo"
+coverage = "ui"
+tests = [
+  "tests/MegaPDF.Core.Tests/UndoStackTests.cs::Undo",
+  "src/MegaPDF.Avalonia/Program.cs::CheckPageTools",
+]
+[feature.ios]
+presence = "present"
+entry = "ios/MegaPDF/ViewerView.swift::Label(\"Undo\""
+coverage = "engine"
+tests = ["ios/MegaPDFTests/UndoTests.swift::class"]
+note = "cross-feature undo is unit-tested; no UI test presses the Undo button."
+[feature.android]
+presence = "present"
+entry = "android/app/src/main/java/com/megapdf/android/PagesScreen.kt::R.string.undo"
+coverage = "ui"
+tests = [
+  "android/app/src/androidTest/java/com/megapdf/android/PageToolsTest.kt::undo",
+  "android/app/src/test/java/com/megapdf/android/PageHistoryTest.kt::undo",
+]
+
+[[feature]]
+id = "unsaved-prompt"
+title = "Closing with unsaved changes"
+area = "Lifecycle and state"
+[feature.windows]
+presence = "present"
+entry = "src/MegaPDF.App/MainWindow.xaml.cs::ConfirmSaveChangesAsync"
+coverage = "none"
+manual = "TESTING.md::unsaved changes in two tabs"
+note = "no self-test state closes a dirty document; the per-tab Cancel case TESTING.md describes is by hand only."
+[feature.macos]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/Views/MainWindow.axaml.cs::ConfirmClose"
+coverage = "ui"
+tests = ["src/MegaPDF.Avalonia/Program.cs::CheckMultiWindowQuitConfirmation"]
+manual = "TESTING.md::unsaved changes in two tabs"
+[feature.linux]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/Views/MainWindow.axaml.cs::ConfirmClose"
+coverage = "ui"
+tests = [
+  "src/MegaPDF.Avalonia/Program.cs::CheckMultiWindowQuitConfirmation",
+  "src/MegaPDF.Avalonia/Program.cs::CheckLinuxCloseAndQuit",
+]
+manual = "TESTING.md::unsaved changes in two tabs"
+note = "Linux has a check of its own for close-versus-quit."
+[feature.ios]
+presence = "present"
+entry = "ios/MegaPDF/ViewerView.swift::Discard"
+coverage = "engine"
+tests = ["ios/MegaPDFTests/ShareAndExternalOpenTests.swift::unsaved"]
+note = "the share-with-unsaved-changes branch is tested; closing dirty is not driven in the UI."
+[feature.android]
+presence = "present"
+entry = "android/app/src/main/java/com/megapdf/android/ViewerScreen.kt::R.string.unsaved_changes"
+coverage = "ui"
+tests = [
+  "android/app/src/androidTest/java/com/megapdf/android/OpenWithTest.kt::unsaved",
+  "android/app/src/test/java/com/megapdf/android/DirtyTrackerTest.kt::dirty",
+]
+
+[[feature]]
+id = "crash-recovery"
+title = "Recovery after a crash"
+area = "Lifecycle and state"
+[feature.windows]
+presence = "present"
+entry = "src/MegaPDF.App/MainWindow.xaml.cs::Strings.RestoreTitle"
+coverage = "engine"
+tests = [
+  "tests/MegaPDF.Core.Tests/RecoveryJournalTests.cs::Journal",
+  "tests/MegaPDF.Core.Tests/HiddenCopyTests.cs::HiddenCopy",
+  "tests/MegaPDF.Core.Tests/LaunchedDocumentTests.cs::Launched",
+]
+manual = "TESTING.md::**Sturdiness**"
+note = "the journal and its replay are well covered; the restore dialog is never shown in CI, and the three-tabs-restored case TESTING.md describes is by hand only."
+[feature.macos]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/Views/MainWindow.axaml.cs::AskAboutRecoveryAsync"
+coverage = "ui"
+tests = [
+  "src/MegaPDF.Avalonia/Program.cs::CheckLaunchAfterCrash",
+  "tests/MegaPDF.Core.Tests/RecoveryJournalTests.cs::Journal",
+  "tests/MegaPDF.Core.Tests/HiddenCopyTests.cs::HiddenCopy",
+]
+manual = "TESTING.md::**Sturdiness**"
+[feature.linux]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/Views/MainWindow.axaml.cs::AskAboutRecoveryAsync"
+coverage = "ui"
+tests = [
+  "src/MegaPDF.Avalonia/Program.cs::CheckLaunchAfterCrash",
+  "tests/MegaPDF.Core.Tests/RecoveryJournalTests.cs::Journal",
+  "tests/MegaPDF.Core.Tests/HiddenCopyTests.cs::HiddenCopy",
+]
+manual = "TESTING.md::**Sturdiness**"
+[feature.ios]
+presence = "absent"
+coverage = "n/a"
+absence = "deliberate"
+note = "iOS apps are suspended rather than killed mid-edit, and the platform's own state restoration covers the case; no recovery journal on this platform."
+[feature.android]
+presence = "absent"
+coverage = "n/a"
+absence = "deliberate"
+note = "as iOS: no recovery journal. Process death is the Android shape of this and it has its own row."
+
+[[feature]]
+id = "process-death"
+title = "Background, foreground and process death"
+area = "Lifecycle and state"
+[feature.windows]
+presence = "absent"
+coverage = "n/a"
+absence = "deliberate"
+note = "a desktop app is not suspended by the system; crash-recovery is the desktop shape of this."
+[feature.macos]
+presence = "absent"
+coverage = "n/a"
+absence = "deliberate"
+note = "as Windows."
+[feature.linux]
+presence = "absent"
+coverage = "n/a"
+absence = "deliberate"
+note = "as Windows."
+[feature.ios]
+presence = "present"
+entry = "ios/MegaPDF/MegaPDFApp.swift::WindowGroup"
+coverage = "none"
+note = "a blind spot. No test backgrounds the app, and nothing checks what survives being killed while a document is open with edits."
+[feature.android]
+presence = "present"
+entry = "android/app/src/main/java/com/megapdf/android/MainActivity.kt::onNewIntent"
+coverage = "none"
+note = "a blind spot, and the one the 2.0.1 save-after-reboot bug came through: the persisted URI grant outlives the process and nothing tests that it does. UiAutomator can drive process death on the emulator CI already runs."
+
+[[feature]]
+id = "device-rotation"
+title = "Device rotation"
+area = "Lifecycle and state"
+[feature.windows]
+presence = "absent"
+coverage = "n/a"
+absence = "deliberate"
+note = "window resize is the desktop equivalent, and CheckMinimumWindow covers the smallest case."
+[feature.macos]
+presence = "absent"
+coverage = "n/a"
+absence = "deliberate"
+note = "as Windows."
+[feature.linux]
+presence = "absent"
+coverage = "n/a"
+absence = "deliberate"
+note = "as Windows."
+[feature.ios]
+presence = "present"
+entry = "ios/project.yml::UISupportedInterfaceOrientations"
+coverage = "none"
+note = "a blind spot. The app declares every orientation and no test rotates anything, on the iPhone or the iPad destination."
+[feature.android]
+presence = "present"
+entry = "android/app/src/main/AndroidManifest.xml::android:name=\".MainActivity\""
+coverage = "none"
+note = "a blind spot, and rotation on Android destroys and recreates the activity, which is where unsaved edits and an armed tool would go missing."
+
+[[feature]]
+id = "large-files"
+title = "Very large documents (1, 2.5 and 4.5 GB)"
+area = "Lifecycle and state"
+about = """
+Tested at two tiers because the defects only show at sizes no repository can hold. The
+small tier runs on every push; the large one runs where the fixtures exist, which is never
+in CI and by design (#147, #148, #267, #270)."""
+[feature.windows]
+presence = "present"
+entry = "src/MegaPDF.App/DocumentViewModel.cs::OpenDocumentAsync"
+coverage = "engine"
+tests = ["core/tests/core_tests.cpp::test_xref_entries_are_findable"]
+manual = "docs/RELEASING.md::2.3 Real-machine verification"
+note = "the cross-reference checks run on every push on the ordinary fixtures; the 2.5 and 4.5 GB cases skip themselves unless MEGAPDF_LARGE_FIXTURES is set, so CI never runs them. tools/windows-qa has the by-hand large-file pass."
+[feature.macos]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/ViewModels/DocumentViewModel.cs::OpenAsync"
+coverage = "engine"
+tests = ["core/tests/core_tests.cpp::test_xref_entries_are_findable"]
+note = "as Windows; no large fixture in CI."
+[feature.linux]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/ViewModels/DocumentViewModel.cs::OpenAsync"
+coverage = "engine"
+tests = ["core/tests/core_tests.cpp::test_xref_entries_are_findable"]
+note = "as Windows; the corpus batteries on k3 are where real large documents are seen."
+[feature.ios]
+presence = "present"
+entry = "ios/MegaPDF/ViewerModel.swift::open"
+coverage = "engine"
+tests = ["ios/MegaPDFUITests/FilesEndToEndUITests.swift::1 GB"]
+note = "a real 1 GB open, search and save-a-copy with timings — and excluded from CI because the fixture is 1 GB. tools/ios-files-e2e.sh is how it runs."
+[feature.android]
+presence = "present"
+entry = "android/app/src/main/java/com/megapdf/android/ViewerViewModel.kt::open"
+coverage = "none"
+note = "a blind spot: no large-file test of any size on Android, in CI or by hand."
+
+
+# =============================================================================
+# Cross-cutting
+# =============================================================================
+
+[[feature]]
+id = "localisation"
+title = "English, fr-CA and fr-FR"
+area = "Cross-cutting"
+[feature.windows]
+presence = "present"
+entry = "src/MegaPDF.App/MainWindow.xaml::LanguageChoice"
+coverage = "engine"
+tests = ["tests/MegaPDF.Core.Tests/StringCatalogueTests.cs::Catalogue"]
+manual = "docs/RELEASING.md::switch to **fr-CA** and read the chrome"
+note = "catalogue completeness for all four platforms is asserted; no Windows run happens in French, and the French-width pass in tools/windows-qa is manual."
+[feature.macos]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/Platform/MacLanguage.cs::PreferredLanguages"
+coverage = "ui"
+tests = [
+  "tests/MegaPDF.Core.Tests/StringCatalogueTests.cs::Catalogue",
+  "src/MegaPDF.Avalonia/Program.cs::CheckMinimumWindow",
+]
+note = "CheckMinimumWindow lays the find bar and the empty state out in en, fr-CA and fr-FR at the declared minimum (#237) — the rest of --self-test is pinned to en-US on purpose so its PASS lines read the same."
+[feature.linux]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/Platform/LinuxLanguage.cs::LANGUAGE"
+coverage = "ui"
+tests = [
+  "tests/MegaPDF.Core.Tests/StringCatalogueTests.cs::Catalogue",
+  "src/MegaPDF.Avalonia/Program.cs::CheckMinimumWindow",
+  ".github/workflows/ci.yml::The app runs in French",
+]
+note = "the only platform where CI starts the real UI in French and reads the POSIX locale environment back."
+[feature.ios]
+presence = "present"
+entry = "ios/MegaPDF/SettingsView.swift::settingsPageColours"
+coverage = "ui"
+tests = [".github/workflows/ios-ci.yml::-testLanguage fr"]
+note = "the whole unit suite is re-run in fr-CA, which proves the catalogue compiles and the app launches — no test asserts any French string."
+[feature.android]
+presence = "present"
+entry = "android/app/src/main/res/values/strings.xml::app_name"
+coverage = "engine"
+tests = ["tests/MegaPDF.Core.Tests/StringCatalogueTests.cs::Catalogue"]
+note = "nothing on Android runs in French at all — no locale-qualified instrumented run, unlike iOS. The catalogue is checked from the .NET side."
+
+[[feature]]
+id = "theme"
+title = "Light and dark app chrome"
+area = "Cross-cutting"
+[feature.windows]
+presence = "present"
+entry = "src/MegaPDF.App/MainWindow.xaml::ThemeChoice"
+coverage = "engine"
+tests = ["tests/MegaPDF.Core.Tests/DesignTokenParityTests.cs::Token"]
+note = "token parity across platforms is asserted; no self-test state switches theme. The page-colour tint in `reading` is a different thing."
+[feature.macos]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/App.axaml.cs::RequestedThemeVariant"
+coverage = "engine"
+tests = ["tests/MegaPDF.Core.Tests/DesignTokenParityTests.cs::Token"]
+note = "--self-test never switches theme; the --theme flag exists for by-hand screenshot poses only."
+[feature.linux]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/App.axaml.cs::RequestedThemeVariant"
+coverage = "engine"
+tests = ["tests/MegaPDF.Core.Tests/DesignTokenParityTests.cs::Token"]
+note = "as macOS."
+[feature.ios]
+presence = "present"
+entry = "ios/MegaPDF/ViewerView.swift::colorScheme"
+coverage = "ui"
+tests = ["ios/MegaPDFUITests/ViewerBarContrastUITests.swift::class"]
+note = "the one real check of chrome legibility on a dark bar on any platform; it is not a system-wide dark-mode pass."
+[feature.android]
+presence = "present"
+entry = "android/app/src/main/java/com/megapdf/android/ui/Brand.kt::darkColorScheme"
+coverage = "engine"
+tests = ["tests/MegaPDF.Core.Tests/DesignTokenParityTests.cs::Token"]
+note = "no instrumented test runs in dark mode."
+
+[[feature]]
+id = "screen-reader"
+title = "Screen-reader names and announcements"
+area = "Cross-cutting"
+about = """
+Every platform asserts the names a screen reader would read; no platform drives a real
+screen reader in CI, and none can. NVDA, VoiceOver, TalkBack and Orca are by-hand passes."""
+[feature.windows]
+presence = "present"
+entry = "src/MegaPDF.App/DocumentView.Keyboard.cs::Announce"
+coverage = "ui"
+tests = [
+  ".github/workflows/ci.yml::Run-Check \"reading\"",
+  "tests/MegaPDF.Core.Tests/PageReadingOrderTests.cs::ReadingOrder",
+]
+note = "the reading state forces the screen-reader flag on and checks the floating bar stays put; the NVDA pass in tools/windows-qa is manual."
+[feature.macos]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/Platform/ScreenReader.cs::IsRunning"
+coverage = "ui"
+tests = [
+  "src/MegaPDF.Avalonia/Program.cs::CheckToolbarMenus",
+  "tests/MegaPDF.Core.Tests/PageReadingOrderTests.cs::ReadingOrder",
+]
+note = "automation peers, names and children for the toolbar pickers, the find bar and the recents rows (#144)."
+[feature.linux]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/Platform/ScreenReader.cs::IsRunning"
+coverage = "ui"
+tests = [
+  "src/MegaPDF.Avalonia/Program.cs::CheckToolbarMenus",
+  "tests/MegaPDF.Core.Tests/PageReadingOrderTests.cs::ReadingOrder",
+]
+note = "as macOS; Orca itself is by hand."
+[feature.ios]
+presence = "present"
+entry = "ios/MegaPDF/ViewerView.swift::accessibilityLabel"
+coverage = "ui"
+tests = ["ios/MegaPDFUITests/RecentsAccessibilityUITests.swift::testEveryRecentRowAnnouncesWhereItsFileLives"]
+note = "a real row announcement is asserted; the VoiceOver-running case is a mocked flag, not VoiceOver."
+[feature.android]
+presence = "present"
+entry = "android/app/src/main/java/com/megapdf/android/ViewerScreen.kt::contentDescription"
+coverage = "engine"
+tests = [
+  "android/app/src/test/java/com/megapdf/android/ReadingModeMathTest.kt::class",
+  "android/app/src/test/java/com/megapdf/android/NoticeParagraphsTest.kt::class",
+]
+note = "touch-exploration arithmetic and notice formatting; no instrumented test reads a content description back, and TalkBack is by hand."
+
+[[feature]]
+id = "keyboard-only"
+title = "Keyboard-only operation"
+area = "Cross-cutting"
+[feature.windows]
+presence = "present"
+entry = "src/MegaPDF.App/MainWindow.Keyboard.cs::InitializeWindowKeyboard"
+coverage = "ui"
+tests = [
+  ".github/workflows/ci.yml::Run-Check \"reading\"",
+  ".github/workflows/ci.yml::Run-Check \"pages\"",
+]
+note = "accelerators, the Escape ladder and tab order in reading mode and the pages pane. #2's Tab traversal fix was verified by hand with Narrator, not here."
+[feature.macos]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/Views/MainWindow.Keyboard.cs::HandlePageKey"
+coverage = "ui"
+tests = [
+  "src/MegaPDF.Avalonia/Program.cs::CheckToolbarMenus",
+  "src/MegaPDF.Avalonia/Program.cs::CheckReadingMode",
+]
+note = "real key presses injected into a headless window, including arming Redact from the keyboard."
+[feature.linux]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/Views/MainWindow.Keyboard.cs::HandlePageKey"
+coverage = "ui"
+tests = [
+  "src/MegaPDF.Avalonia/Program.cs::CheckToolbarMenus",
+  "src/MegaPDF.Avalonia/Program.cs::CheckReadingMode",
+]
+note = "as macOS."
+[feature.ios]
+presence = "present"
+entry = "ios/MegaPDF/KeyboardCommands.swift::keyboardShortcut"
+coverage = "none"
+note = "iPad keyboard commands are declared and no test presses one, on either destination."
+[feature.android]
+presence = "absent"
+coverage = "n/a"
+absence = "deliberate"
+note = "no hardware-keyboard commands are declared; touch and TalkBack are the input story here."
+
+[[feature]]
+id = "about-notices"
+title = "About, the version, and the third-party notices"
+area = "Cross-cutting"
+about = """
+#571: Linux had both windows and no route to either. They had been there for releases. The
+fix added the route and a self-test check for it, which is why Linux now has the strongest
+cell in this row — and why `entry` for this feature has to be a menu row, never the window."""
+[feature.windows]
+presence = "present"
+entry = "src/MegaPDF.App/MainWindow.xaml::NoticesLink"
+coverage = "none"
+manual = "TESTING.md::**About**"
+note = "the settings flyout's About section and the notices dialog are not driven by any self-test state. The notices text itself is checked for drift by the `notices` job."
+[feature.macos]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/App.axaml.cs::NativeMenuItem(Strings.AboutMegaPDF)"
+coverage = "ui"
+tests = ["src/MegaPDF.Avalonia/Program.cs::CheckAboutWindow"]
+note = "the application menu is raised, About is clicked and the notices are read from what the bundle actually carries."
+[feature.linux]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/Views/MainWindow.Toolbar.cs::CommandEntry(Strings.AboutMegaPDF"
+coverage = "ui"
+tests = [
+  "src/MegaPDF.Avalonia/Program.cs::CheckAboutWindow",
+  "src/MegaPDF.Avalonia/Program.cs::CheckLinuxAboutRoute",
+]
+note = "CheckLinuxAboutRoute asserts More carries About and clicking it opens the window — the check that #571's absence would have failed."
+issue = 571
+[feature.ios]
+presence = "present"
+entry = "ios/MegaPDF/ViewerView.swift::About MegaPDF"
+coverage = "none"
+manual = "docs/RELEASING.md::**About** says the version"
+note = "no test opens About or the notices on iOS."
+[feature.android]
+presence = "present"
+entry = "android/app/src/main/java/com/megapdf/android/ViewerScreen.kt::R.string.about_megapdf"
+coverage = "engine"
+tests = ["android/app/src/test/java/com/megapdf/android/NoticeParagraphsTest.kt::class"]
+note = "the notices' paragraph formatting is unit-tested; no instrumented test opens the dialog."
+
+[[feature]]
+id = "special-documents"
+title = "Protected, restricted, XFA and damaged documents"
+area = "Cross-cutting"
+about = """
+The documents that are not a happy path: permission bits that must disable tools, dynamic
+XFA that must explain itself rather than pretend, signed documents, and files that are
+simply broken. The corpus batteries are where these are met at scale (TESTING.md)."""
+[feature.windows]
+presence = "present"
+entry = "src/MegaPDF.App/DocumentViewModel.cs::DocumentCapabilities"
+coverage = "engine"
+tests = [
+  "tests/MegaPDF.Core.Tests/DocumentCapabilitiesTests.cs::Capabilities",
+  "tests/MegaPDF.Core.Tests/DynamicXfaTests.cs::Xfa",
+  "tests/MegaPDF.Core.Tests/SignatureDetectionTests.cs::Detect",
+  "tests/MegaPDF.Core.Tests/CorpusTests.cs::corpus",
+]
+note = "the gating rules are tested; no self-test state opens a restricted or XFA document in the UI."
+[feature.macos]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/ViewModels/DocumentViewModel.cs::DocumentCapabilities"
+coverage = "ui"
+tests = [
+  "tests/MegaPDF.Core.Tests/DocumentCapabilitiesTests.cs::Capabilities",
+  "tests/MegaPDF.Core.Tests/DynamicXfaTests.cs::Xfa",
+  "tests/MegaPDF.Core.Tests/SignatureDetectionTests.cs::Detect",
+]
+note = "the self-test opens a dynamic-XFA document and a signed one and checks what the window offers (#457, #481)."
+[feature.linux]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/ViewModels/DocumentViewModel.cs::DocumentCapabilities"
+coverage = "ui"
+tests = [
+  "tests/MegaPDF.Core.Tests/DocumentCapabilitiesTests.cs::Capabilities",
+  "tests/MegaPDF.Core.Tests/DynamicXfaTests.cs::Xfa",
+  "tests/MegaPDF.Core.Tests/SignatureDetectionTests.cs::Detect",
+]
+note = "as macOS."
+[feature.ios]
+presence = "present"
+entry = "ios/MegaPDF/ViewerModel.swift::capabilities"
+coverage = "ui"
+tests = [
+  "ios/MegaPDFTests/DynamicXfaTests.swift::class",
+  "ios/MegaPDFTests/DocumentCapabilitiesTests.swift::class",
+  "ios/MegaPDFTests/SignatureDetectionTests.swift::class",
+  "ios/MegaPDFTests/PagesFieldHierarchyTests.swift::class",
+]
+note = "PdfEngineTests also feeds the engine invalid bytes."
+[feature.android]
+presence = "present"
+entry = "android/app/src/main/java/com/megapdf/android/ViewerScreen.kt::R.string.signed_overwrite_title"
+coverage = "ui"
+tests = [
+  "android/app/src/androidTest/java/com/megapdf/android/DynamicXfaTest.kt::class",
+  "android/app/src/androidTest/java/com/megapdf/android/SignatureOverwriteTest.kt::class",
+  "android/engine/src/androidTest/java/com/megapdf/engine/DocumentFlagsTest.kt::class",
+]
+note = "the signed-document overwrite question has an instrumented test here and nowhere else."
+
+[[feature]]
+id = "packaged-install"
+title = "The build a user installs (MSIX, App Store sandbox, .deb, Snap, Flatpak, tarball)"
+area = "Cross-cutting"
+about = """
+#330 asked for the install matrix explicitly, and it is the dimension CI covers best on
+Linux and least everywhere else: the Linux jobs install the real package in clean
+containers and run the app out of it, while Windows, macOS, iOS and Android are all tested
+as dev builds in CI and as real installs only by hand (docs/RELEASING.md §2.3)."""
+[feature.windows]
+presence = "present"
+entry = "src/MegaPDF.App/Package.appxmanifest::Identity"
+coverage = "engine"
+tests = [".github/workflows/ci.yml::Store packages, both architectures, and what is in them"]
+manual = "docs/RELEASING.md::Add-AppxPackage"
+note = "the MSIX's identity, architecture and resource map are checked; nothing runs the installed MSIX in CI, which is where #401 was."
+[feature.macos]
+presence = "present"
+entry = "src/MegaPDF.Avalonia/Platform/MacApplication.cs::NSApplication"
+coverage = "engine"
+tests = [".github/workflows/macos-appstore.yml::--self-test"]
+manual = "docs/RELEASING.md::tools/build-macos-app.sh"
+note = "the App Store build runs --self-test out of the bundle; the sandboxed, signed, installed app is only ever run by hand on the Mac mini."
+[feature.linux]
+presence = "present"
+entry = "tools/linux/megapdf.desktop::Exec=megapdf %F"
+coverage = "ui"
+tests = [
+  "tests/MegaPDF.Core.Tests/LinuxInstallTests.cs::Install",
+  "tests/MegaPDF.Core.Tests/UserDataPathsTests.cs::Paths",
+  ".github/workflows/ci.yml::Install the .deb and run the app out of it",
+]
+manual = "docs/RELEASING.md::tools/linux/check-apt-repo.sh"
+note = "the strongest install coverage anywhere: .deb and Flatpak installed and run in CI, lintian and the Flathub linter, the tarball's install.sh as non-root, and --self-test inside both sandboxes. The APT matrix across five distributions is by hand."
+[feature.ios]
+presence = "present"
+entry = "ios/project.yml::PRODUCT_BUNDLE_IDENTIFIER"
+coverage = "none"
+manual = "docs/RELEASING.md::xcodebuild test` then a simulator run"
+note = "CI builds and tests on the simulator only; nothing checks the shipped archive beyond the release workflow's own packaging."
+[feature.android]
+presence = "present"
+entry = "android/app/src/main/AndroidManifest.xml::android:name"
+coverage = "none"
+manual = "docs/RELEASING.md::aapt dump badging"
+note = "CI assembles a debug APK and tests it; the release AAB is only verified by hand."
+
+
+# =============================================================================
+# Test artefacts deliberately not on the map.
+# =============================================================================
+
+[[exempt]]
+ref = "android/app/src/androidTest/java/com/megapdf/android/TestPdfs.kt"
+why = "fixture builder for the instrumented suite, not a test"
+
+[[exempt]]
+ref = "android/app/src/androidTest/java/com/megapdf/android/ViewerHarness.kt"
+why = "Compose harness for the instrumented suite, not a test"
+
+[[exempt]]
+ref = "android/app/src/test/java/com/megapdf/android/ScaffoldTest.kt"
+why = "toolchain smoke test — proves Gradle and JUnit are wired, covers no feature"
+
+[[exempt]]
+ref = "android/engine/src/test/java/com/megapdf/engine/EngineScaffoldTest.kt"
+why = "toolchain smoke test, as ScaffoldTest"
+
+[[exempt]]
+ref = "ios/MegaPDFUITests/CaptureSimulatorSetupUITests.swift"
+why = "screenshot rig — mutates simulator Settings for store captures; excluded from the CI test lanes"
+
+[[exempt]]
+ref = "ios/MegaPDFUITests/DemoFlowUITests.swift"
+why = "preview-video choreography and the App Review walkthrough; it performs a flow but asserts no verdict, and CI excludes it"
+
+[[exempt]]
+ref = "ios/MegaPDFUITests/OpenWithVerificationUITests.swift"
+why = "excluded from CI (MegaPDF is not offered in the share sheet on the Mac mini runner), so no cell may count it as coverage — see open-external/ios"
+
+[[exempt]]
+ref = "ios/MegaPDFUITests/ShareVerificationUITests.swift"
+why = "excluded from CI for Files-app flakiness on the runner, as OpenWithVerificationUITests — see share/ios"
+
+[[exempt]]
+ref = ".github/workflows/ci.yml::Run-Check \"more\""
+why = "the toolbar overflow state asserts nothing: it opens the flyout, returns true, and the flyout's own popup is not even in the captured PNG (#144). It proves the app does not crash opening More, which is not coverage of a feature"
+
+[[exempt]]
+ref = "ios/MegaPDFUITests/PageDragUITests.swift"
+why = "dragging a page tile onto another is a by-hand gate (#570): the drag is unreliable to synthesise on the simulator, so CI does not run this and no cell may count it"

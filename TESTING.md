@@ -185,6 +185,15 @@ the commands are in [`docs/RELEASING.md`](docs/RELEASING.md).
 
 ## Automated coverage (for contributors, not testers)
 
+**What is covered, and what is not: `docs/qa/test-matrix.md`.** Every feature against every
+platform, with each pairing saying whether a test in CI drives that platform's own path, only
+the shared engine is tested, nothing is, or the feature is not there — and the gap list first,
+because that is the part worth reading. It is generated from `tests/matrix/coverage.toml`, and
+the `qa-matrix` workflow resolves every claim in it against the tree on every push: a named
+entry point or test that stops existing fails CI rather than quietly going stale here. It
+answers "is anything looking at this?", never "does this work", and it does not stand in for
+the by-hand pass in `docs/RELEASING.md` §2.3 (#330).
+
 Search is covered by engine-level tests on all three platforms, so a parity break shows
 up in CI rather than in your hands: `tests/MegaPDF.Core.Tests/PdfiumEngineTests.cs`
 (five tests — case-insensitive matching with a plausible rect, every occurrence in
