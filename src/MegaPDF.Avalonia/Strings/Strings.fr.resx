@@ -784,7 +784,7 @@
     <value>Supprimer aussi la signature, qui ne sera plus valide</value>
   </data>
   <data name="SignedSaveRemoveOffer" xml:space="preserve">
-    <value>Si elle reste, elle suit le fichier enregistré et continue d'affirmer qu'elle décrit un fichier qu'elle ne décrit plus&#160;: MegaPDF et les autres lecteurs présenteront donc ce fichier comme signé. Le document que vous avez ouvert n'est modifié dans aucun cas — ce choix ne touche que le fichier enregistré. Et une signature numérique indique qu'un fichier n'a pas changé depuis sa signature&#160;: elle n'a jamais empêché qui que ce soit d'ouvrir ce document, alors un fichier enregistré sans elle est lisible par exactement les mêmes personnes.</value>
+    <value>Si elle reste, elle suit le fichier enregistré et continue d'affirmer qu'elle décrit un fichier qu'elle ne décrit plus&#160;: MegaPDF et les autres lecteurs présenteront donc ce fichier comme signé. Le document que vous avez ouvert n'est modifié en aucun cas — ce choix ne touche que le fichier enregistré. Et une signature numérique indique qu'un fichier n'a pas changé depuis sa signature&#160;: elle n'a jamais empêché qui que ce soit d'ouvrir ce document, alors un fichier enregistré sans elle est lisible par exactement les mêmes personnes.</value>
   </data>
   <data name="SaveACopyButton" xml:space="preserve">
     <value>Enregistrer une copie</value>
