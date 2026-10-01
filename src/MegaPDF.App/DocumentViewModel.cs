@@ -1582,12 +1582,12 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
     /// </summary>
     public async Task<bool> RemoveRedactionMarkAsync(int pageIndex, int markId, PdfRect bounds) =>
         _document is { } document && await DoMarkEditAsync(document,
-            () => new RemoveRedactionMarkOperation(document, pageIndex, markId, bounds));
+            () => new RemoveRedactionMarkOperation(document, pageIndex, markId, bounds), appliedByMake: false);
 
     /// <summary>Moves or resizes a mark, as one undo step like every other edit.</summary>
     public async Task<bool> MoveRedactionMarkAsync(int pageIndex, int markId, PdfRect from, PdfRect to) =>
         _document is { } document && await DoMarkEditAsync(document,
-            () => new MoveRedactionMarkOperation(document, pageIndex, markId, from, to));
+            () => new MoveRedactionMarkOperation(document, pageIndex, markId, from, to), appliedByMake: false);
 
     /// <summary>
     /// Drops every mark on the document as one step (#329), the ⋮ item's action. Undo puts
@@ -1597,7 +1597,7 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
         _document is { } document && await DoMarkEditAsync(document,
             // Captured before the clear: only the core knows the rectangles, and a clear
             // that could not be undone would be the bug this exists to fix.
-            () => ClearRedactionMarksOperation.Capture(document, pageIndex));
+            () => ClearRedactionMarksOperation.Capture(document, pageIndex), appliedByMake: false);
 
     /// <summary>
     /// Sizes offered for added text (#43). A short list, not a free-entry number box:
@@ -1974,10 +1974,13 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
     /// An edit that does not change the file (#329): a redaction mark placed, moved, removed
     /// or cleared. Everything else goes through <see cref="DoEditAsync"/>.
     ///
-    /// The mark is made **inside here** rather than by the caller, because the engine call
-    /// that answers "did this drag cover text?" makes the marks as it answers — so the work
-    /// is done by the time the operation exists, and the operation is recorded as already
-    /// applied rather than applied on top of itself.
+    /// For a new mark (<see cref="MarkForRedactionOperation.Place"/>) only, the mark is made
+    /// **inside <paramref name="make"/>** rather than by this method, because the engine call
+    /// that answers "did this drag cover text?" makes the marks as it answers — so the work is
+    /// done by the time that operation exists, and <paramref name="appliedByMake"/> says so
+    /// rather than this method applying it on top of itself. Move, Remove and Clear are the
+    /// opposite: seeing <paramref name="appliedByMake"/>'s own remark below matters here,
+    /// because assuming every operation arrives pre-applied is exactly the bug it describes.
     ///
     /// What a mark deliberately does not do: raise the unsaved flag, write a recovery entry,
     /// or spend a re-render. A mark lives in the core and is never written to the file
@@ -2000,7 +2003,7 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
     /// call <c>Revert()</c>/<c>Apply()</c> directly — which is why this was invisible to
     /// anything that only pressed Ctrl+Z afterwards.
     /// </summary>
-    private async Task<bool> DoMarkEditAsync(IPdfDocument document, Func<IPageEditOperation?> make, bool appliedByMake = false)
+    private async Task<bool> DoMarkEditAsync(IPdfDocument document, Func<IPageEditOperation?> make, bool appliedByMake)
     {
         if (!Capabilities.CanEditContent)
         {
@@ -2015,13 +2018,19 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
         {
             try
             {
-                op = await Task.Run(() =>
-                {
-                    var built = make();
-                    if (built is not null && !appliedByMake)
-                        built.Apply();
-                    return built;
-                });
+                op = await Task.Run(make);
+                // The liveness check has to land here, before Apply() ever touches the page —
+                // not after, the way it used to sit right below this block. Another document
+                // can replace _document during the Task.Run hop above (a reopen after a save,
+                // a crash-recovery restore); applying a Move/Remove/Clear to a page that is no
+                // longer this call's own document would mutate it anyway, then this method
+                // would discard the result without recording it — a change with no undo entry
+                // and no overlay refresh, rather than the inert no-op a discarded op used to be
+                // for every kind except Place (whose factory always mutates regardless).
+                if (op is null || !ReferenceEquals(document, _document))
+                    return false;
+                if (!appliedByMake)
+                    await Task.Run(op.Apply);
             }
             catch (Exception ex)
             {
@@ -2029,8 +2038,6 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
                 return false;
             }
         }
-        if (op is null || !ReferenceEquals(document, _document))
-            return false;
 
         _undoStack.Record(op);
         UndoCommand.NotifyCanExecuteChanged();
@@ -2934,9 +2941,11 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
     /// to invoke an ad hoc <c>ContentDialog</c>'s Primary button short of UI Automation on a
     /// live desktop session, which a CI runner does not reliably have (#462) — the same honest
     /// limit <see cref="DocumentView.DragSelectionForTest"/> already documents for a gesture
-    /// this process cannot synthesize either. The dialog itself, and the validation its real
-    /// Primary click runs, are exercised separately by opening it and reading
-    /// <see cref="MegaPDF.App.DialogGate.Current"/>.
+    /// this process cannot synthesize either. The dialog itself is exercised separately by
+    /// opening it and reading <see cref="MegaPDF.App.DialogGate.Current"/> — its title and its
+    /// two real password fields, not the Primary click or the empty/mismatch validation that
+    /// click runs (<c>ShowNewPasswordDialogAsync</c>'s own handler), which this bypasses
+    /// rather than proves. That validation is still nobody's test, on any platform.
     /// </summary>
     internal Task SetPasswordForTestAsync(string password) => ApplySecurityAsync(password, Strings.PasswordSetNotice);
 

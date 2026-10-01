@@ -2668,7 +2668,11 @@ internal static class Screenshot
         Check("undoing the clear puts both marks back, in one step", tab.RedactionMarksOn(0).Count == 2);
 
         // Clean up: undo everything this check did, so the fixture is left as it opened.
-        while (tab.UndoCommand.CanExecute(null))
+        // Bounded (the page-tools check's own "five page operations" cleanup sets the
+        // precedent): a Revert() that throws leaves CanExecute true forever — UndoStack.Undo
+        // re-pushes the failed op rather than drop it — and an unbounded drain here would
+        // hang the state rather than report the real failure.
+        for (var steps = 0; tab.UndoCommand.CanExecute(null) && steps < 10; steps++)
             await tab.UndoCommand.ExecuteAsync(null);
         await Task.Delay(300);
         Check("fully undone, no marks remain", tab.RedactionMarksOn(0).Count == 0);
@@ -2767,7 +2771,8 @@ internal static class Screenshot
 
         // Clean up in memory, though the file on disk already carries the note and this
         // check does not undo it there — the scratch copy is deleted with the directory.
-        while (tab.UndoCommand.CanExecute(null))
+        // Bounded, not while(CanExecute) — see the redact check's own remark on why.
+        for (var steps = 0; tab.UndoCommand.CanExecute(null) && steps < 10; steps++)
             await tab.UndoCommand.ExecuteAsync(null);
     }
 
@@ -2845,21 +2850,34 @@ internal static class Screenshot
               tab.SecurityCommand.CanExecute(null));
 
         // --- The dialog itself: raised, real, and cancellable -------------------------
+        //
+        // DialogGate.Current is one static slot, not a stack: if anything else already had
+        // the gate (a leftover dialog from an earlier step in this same process), Current
+        // would be THAT dialog while this one waits its turn behind it, and this check would
+        // read, title-match and Hide() the wrong one — then wait forever below on a Set
+        // Password dialog nobody closes. Pumped rather than slept, and matched by title
+        // rather than trusted on sight, so a mismatch is a clear FAIL instead of a hang.
         var showing = tab.SecurityCommand.ExecuteAsync(null);
-        await Task.Delay(600);
+        await PumpUntilAsync(() => DialogGate.Current is not null, TimeSpan.FromSeconds(5));
         Check("the toolbar is disabled while the password dialog shows", !window.IsToolbarEnabled);
-        if (DialogGate.Current is { } dialog)
+        if (DialogGate.Current is { } dialog && Equals(dialog.Title, Strings.SetPasswordTitle))
         {
-            Check("it is the Set Password dialog", Equals(dialog.Title, Strings.SetPasswordTitle));
+            Check("it is the Set Password dialog", true);
             var fields = (dialog.Content as Panel)?.Children.OfType<PasswordBox>().ToList() ?? [];
             Check("it shows the two real password fields (new, confirm)", fields.Count == 2);
             dialog.Hide(); // cancel — WinUI gives this process no way to press Primary itself
         }
         else
         {
-            Check("a dialog is actually open", false);
+            var found = DialogGate.Current is { } other ? $"found \"{other.Title}\" instead" : "nothing is open";
+            Check($"the Set Password dialog is actually the one open ({found})", false);
         }
-        await showing;
+        // Bounded: if the dialog found above was not really the one SecurityCommand raised
+        // (the mismatch branch just above), nothing ever closes it and an unconditional await
+        // here would hang until the state's own CI timeout kills it with no PASS/FAIL to show
+        // for the wait.
+        if (await Task.WhenAny(showing, Task.Delay(TimeSpan.FromSeconds(5))) != showing)
+            Check("the password command returned once the dialog closed (it did not, within 5s)", false);
         await Task.Delay(300);
         Check("cancelling leaves the document unencrypted", !tab.HasUnsavedChanges);
         Check("  and the toolbar re-enabled", window.IsToolbarEnabled);
@@ -2912,7 +2930,7 @@ internal static class Screenshot
         {
             var expectedVersion = typeof(MainWindow).Assembly.GetName().Version?.ToString(3) ?? "dev";
             window.OpenSettingsFlyoutForTest();
-            await Task.Delay(600);
+            await PumpUntilAsync(() => window.AboutVersionTextForTest.Length > 0, TimeSpan.FromSeconds(5));
             Check($"About shows the real assembly version (\"{window.AboutVersionTextForTest}\", expected \"{expectedVersion}\")",
                   window.AboutVersionTextForTest == Strings.AboutVersion(expectedVersion));
 
@@ -2920,17 +2938,21 @@ internal static class Screenshot
             Check("the bundled notices file loads", notices.Length > 0 && !notices.StartsWith(Strings.NoticesLoadFailed, StringComparison.Ordinal));
             Check("  and actually lists a third-party component (PDFium)", notices.Contains("PDFium", StringComparison.Ordinal));
 
+            // DialogGate.Current is one slot, not a stack (see the `security` check's own
+            // remark) — matched by title, not trusted on sight, so a leftover dialog from
+            // anywhere else in this run cannot be misreported as the notices dialog.
             window.OpenThirdPartyNoticesForTest();
-            await Task.Delay(700);
-            if (DialogGate.Current is { } dialog)
+            await PumpUntilAsync(() => DialogGate.Current is not null, TimeSpan.FromSeconds(5));
+            if (DialogGate.Current is { } dialog && Equals(dialog.Title, Strings.NoticesTitle))
             {
-                Check("the notices dialog is the real one", Equals(dialog.Title, Strings.NoticesTitle));
+                Check("the notices dialog is the real one", true);
                 Check("  showing the same text", dialog.Content is TextBox tb && tb.Text.Contains("PDFium", StringComparison.Ordinal));
                 dialog.Hide();
             }
             else
             {
-                Check("the notices dialog actually opened", false);
+                var found = DialogGate.Current is { } other ? $"found \"{other.Title}\" instead" : "nothing is open";
+                Check($"the notices dialog actually opened ({found})", false);
             }
             await Task.Delay(300);
         }
@@ -3074,7 +3096,8 @@ internal static class Screenshot
                       dragged && vm.HitTestPage(0, movedTo.Center).Kind == PageHitKind.StampAnnotation);
 
                 Check("undo removes it", vm.UndoCommand.CanExecute(null));
-                while (vm.UndoCommand.CanExecute(null))
+                // Bounded — see the redact check's own remark on why while(CanExecute) alone is a hang risk.
+                for (var steps = 0; vm.UndoCommand.CanExecute(null) && steps < 10; steps++)
                     await vm.UndoCommand.ExecuteAsync(null);
                 await Task.Delay(300);
                 Check("  the page has no stamp left where it was dropped",
@@ -3091,7 +3114,10 @@ internal static class Screenshot
         finally
         {
             vm.CancelSignaturePlacement();
-            while (vm.UndoCommand.CanExecute(null))
+            // Bounded, and in a finally: an unbounded drain here could mask the real
+            // exception this block's own catch was reporting, turning a FAIL with a stack
+            // into a hang with nothing said.
+            for (var steps = 0; vm.UndoCommand.CanExecute(null) && steps < 10; steps++)
                 await vm.UndoCommand.ExecuteAsync(null);
         }
 
