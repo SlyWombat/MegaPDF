@@ -389,6 +389,7 @@ fun MegaPdfApp(viewModel: ViewerViewModel = viewModel(), screenshotState: String
                 readingMode = viewModel.readingMode,
                 onEnterReadingMode = viewModel::enterReadingMode,
                 onExitReadingMode = viewModel::exitReadingMode,
+                pinReadingBar = viewModel.screenshotPinsReadingBar,
                 pageTint = viewModel.pageTint,
                 onOpenSettings = { settingsOpen = true },
                 // Page tools (#174).

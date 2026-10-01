@@ -1,8 +1,9 @@
 name: Android Screenshots
 
 # Manual: captures Play Store phone screenshots from an emulator using the
-# app's `--es screenshot <state>` launch extra
-# (home / viewer / search / sign / draw / text / text-edit / redact), once per
+# app's `--es screenshot <state>` launch extra — the eight listing slots #613
+# settled on 2026-10-01, in listing order
+# (reading / text-edit / sign / pages / text / search / redact / home), once per
 # listing language (#91): en, fr-CA and fr-FR each get their own artifact.
 # Download the artifact; tools/play_submit.py-style API upload puts them on
 # the listing.

@@ -344,5 +344,89 @@ class MacReadingPose(unittest.TestCase):
             ["reading", "text", "sign", "pages", "search", "redact", "home"])
 
 
+@unittest.skipUnless(shutil.which("convert"), "ImageMagick is not installed")
+class PlayReadingPose(unittest.TestCase):
+    """#613: reading mode is a Play listing slot now, and on Android the mode
+    puts the system bars into immersive mode — so the one pose in the set has
+    no status bar at all. `chrome_consistent` compares each shot's status band
+    with the rest of its own language set, which made the absence read as "a
+    badge, a notification, or the wrong demo-mode state".
+
+    The profile names the pose and the check is turned around for it: it is the
+    posed bar *appearing* in this pose that is the defect, because it means
+    immersive mode did not engage and the lead image carries the emulator's own
+    status bar."""
+
+    SIZE = "1080x2400"
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+
+    def _set(self, name: str, reading_has_bar: bool) -> str:
+        """One language set: three ordinary poses with the posed status bar on
+        them, and the reading pose with or without it."""
+        folder = os.path.join(self.tmp.name, name, "en")
+        os.makedirs(folder)
+        # The posed bar, as SystemUI demo mode draws it: a clock on the left and
+        # a battery on the right, inside the top 3.2 % (76 px of 2400). Thin on
+        # purpose — `im.ink_mask` calls any tone holding 2 % of a crop a flat,
+        # so a bar painted as solid blocks would be read as background and
+        # measure as no ink at all.
+        bar = ["-fill", "black",
+               "-draw", "rectangle 40,30 150,36",
+               "-draw", "rectangle 980,30 1040,36"]
+        for pose in ("sign", "text", "search"):
+            subprocess.run(["convert", "-size", self.SIZE, "xc:white", *bar,
+                            "-fill", "#333333",
+                            "-draw", "rectangle 60,400 1020,430",
+                            os.path.join(folder, f"android-{pose}.png")],
+                           check=True, capture_output=True)
+        reading = ["convert", "-size", self.SIZE, "xc:white"]
+        if reading_has_bar:
+            reading += bar
+        # The page, and the floating bar near the foot of the screen.
+        reading += ["-fill", "#333333", "-draw", "rectangle 60,500 1020,530",
+                    "-draw", "rectangle 240,2180 840,2260",
+                    os.path.join(folder, "android-reading.png")]
+        subprocess.run(reading, check=True, capture_output=True)
+        return folder
+
+    def _chrome(self, folder: str):
+        with tempfile.TemporaryDirectory() as out:
+            result = gate.run(folder, "play", out, thumb_width=32)
+        image = next(i for i in result["images"]
+                     if os.path.basename(i["path"]) == "android-reading.png")
+        return next(f for f in image["findings"] if f["check"] == "chrome")
+
+    def test_no_status_bar_is_what_this_pose_is(self):
+        finding = self._chrome(self._set("good", reading_has_bar=False))
+        self.assertEqual(finding["status"], "pass", finding["note"])
+        self.assertIn("no status bar", finding["note"])
+
+    def test_a_status_bar_left_on_is_flagged(self):
+        """Immersive mode not engaging is the failure this has to catch: the
+        same slot with the emulator's bar across the top of it."""
+        finding = self._chrome(self._set("bad", reading_has_bar=True))
+        self.assertEqual(finding["status"], "flag", finding["note"])
+        self.assertIn("immersive mode did not engage", finding["note"])
+
+    def test_the_pose_name_is_the_one_the_rig_writes(self):
+        """android/scripts/capture-screenshots.sh writes android-reading.png,
+        and the profile's rule is keyed on the parsed pose, not the file name."""
+        parsed = stores.STORES["play"]["parse"]("android-reading.png")
+        self.assertIsNotNone(parsed)
+        self.assertEqual(parsed[1], "reading")
+        self.assertIn("reading", stores.STORES["play"]["barless_poses"])
+
+    def test_the_listing_order_is_the_order_the_rig_shoots(self):
+        """The eight slots #613 settled, in order, ahead of the two poses that
+        are no longer listing slots but are still in the QA matrix."""
+        self.assertEqual(
+            stores.STORES["play"]["order"][:8],
+            ["reading", "text-edit", "sign", "pages", "text", "search",
+             "redact", "home"])
+
+
 if __name__ == "__main__":
     unittest.main()

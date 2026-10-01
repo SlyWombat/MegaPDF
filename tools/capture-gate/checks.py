@@ -676,9 +676,41 @@ def chrome_consistent(group: list, profile, live_clock: bool = False) -> list[tu
     if len(group) < 3:
         return out
     if (profile.get("status_band") or {}).get("height_frac"):
+        # A pose that hides the system bars on purpose — reading mode (#507),
+        # which goes immersive, so the band this check measures is page and
+        # gutter rather than a clock. Comparing it with its siblings measures
+        # the absence and reports it as a notification (#613).
+        #
+        # Taken out of the buckets and given the opposite check instead: the
+        # posed bar *appearing* here is the defect, because it means immersive
+        # mode did not engage and the listing's lead image is carrying the
+        # emulator's own status bar. Measured against the set's own bar rather
+        # than against a stored one, so a re-shoot needs nothing updated here.
+        barless = profile.get("barless_poses", ())
+        posed = [s for s in group if s.status_ink and s.pose not in barless]
+        if barless and len(posed) >= 3:
+            scores = {id(s): sum(im.mask_difference(s.status_ink, o.status_ink)
+                                 for o in posed if o is not s) for s in posed}
+            bar = min(posed, key=lambda s: scores[id(s)]).status_ink
+            total = max(sum(bar), 1)
+            for shot in group:
+                if shot.pose not in barless or not shot.status_ink:
+                    continue
+                shared = 1 - im.mask_difference(shot.status_ink, bar) / total
+                if shared > 0.5:
+                    out.append((shot, _flag(
+                        "chrome", f"{100 * shared:.0f} % of the posed status "
+                                  f"bar's ink is in the top of this image, and "
+                                  f"this pose hides the system bars — immersive "
+                                  f"mode did not engage")))
+                else:
+                    out.append((shot, _ok(
+                        "chrome", f"no status bar in the top of the frame, "
+                                  f"which is what this pose is ({100 * shared:.0f} "
+                                  f"% of the set's bar is present)")))
         buckets = collections.defaultdict(list)
         for shot in group:
-            if shot.status_ink:
+            if shot.status_ink and shot.pose not in barless:
                 buckets[shot.status_bg].append(shot)
         for bucket in buckets.values():
             if len(bucket) < 3:
