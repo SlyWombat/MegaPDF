@@ -859,6 +859,17 @@ struct ViewerView: View {
                         .disabled(!model.canRedact || model.fileCommandsBlocked)
                         .accessibilityIdentifier("viewerClearRedactionMarks")
                 }
+                // #3: beside Redact, because the two are the pair people confuse and this is
+                // where the difference can be read in one glance -- one covers, one removes,
+                // and the hints say exactly that. A Toggle for the same reason Redact is one:
+                // in a menu the armed state is the row's own, so the platform draws the
+                // checkmark and announces it.
+                Toggle("Whiteout", isOn: Binding(get: { model.whiteoutMode },
+                                                 set: { _ in model.toggleWhiteoutMode() }))
+                    .disabled(!model.canWhiteout || model.fileCommandsBlocked)
+                    .accessibilityValue(model.whiteoutMode ? "On" : "Off")
+                    .accessibilityHint("Cover an area without removing what is under it")
+                    .accessibilityIdentifier("viewerWhiteout")
                 Divider()
                 // #506: reading mode's entry point on every iPhone and iPad, beside Share
                 // and Export as Markdown as the plan's §4 asks. A Button, not a Toggle:
@@ -1458,15 +1469,37 @@ struct ViewerView: View {
                     removeLabel: "Remove mark"
                 )
             }
-            if model.redactMode, let band = redactBand, band.pageIndex == index {
+            if model.redactMode || model.whiteoutMode, let band = redactBand, band.pageIndex == index {
+                // The band shows what the drag is about to do, and the two tools do opposite
+                // things (#3): a redaction mark is translucent, so the content you are about
+                // to lose can still be read; a cover is opaque white, because that is
+                // literally what will be on the page.
                 Rectangle()
-                    .fill(Brand.redactionMark)
-                    .overlay(Rectangle().stroke(Brand.redactionMarkOutline, lineWidth: 1))
+                    .fill(model.whiteoutMode ? Color.white : Brand.redactionMark)
+                    .overlay(Rectangle().stroke(model.whiteoutMode ? Brand.accent
+                                                                   : Brand.redactionMarkOutline,
+                                                lineWidth: 1))
                     .frame(width: abs(band.current.x - band.origin.x),
                            height: abs(band.current.y - band.origin.y))
                     .offset(x: min(band.origin.x, band.current.x),
                             y: min(band.origin.y, band.current.y))
                     .allowsHitTesting(false)
+            }
+            // The selected cover's chrome: drag to move, corner grip to resize, X to remove
+            // (#3). The same `SelectionOverlay` a signature, a text box and a redaction mark
+            // already use -- there was no new interaction model to invent and no new hit
+            // target to size, which is the answer to #565's question about this platform.
+            // Free-form, like a mark and unlike a signature: a cover is an area.
+            if let cover = model.selectedWhiteout, cover.pageIndex == index {
+                SelectionOverlay(
+                    rect: cover.rect,
+                    pageSize: size,
+                    viewSize: CGSize(width: width, height: height),
+                    onCommit: model.commitWhiteoutRect,
+                    onRemove: model.removeSelectedWhiteout,
+                    aspectLocked: false,
+                    removeLabel: "Remove whiteout"
+                )
             }
             if let stamp = model.selectedStamp, stamp.pageIndex == index {
                 SelectionOverlay(
@@ -1500,11 +1533,13 @@ struct ViewerView: View {
         }
         .frame(width: width, height: height)
         .clipped()
-        // While Redact is armed a drag marks an area instead of scrolling (#173). The
-        // gesture is attached only when the tool is on, so the scroll view keeps its
-        // scrolling the rest of the time — and `minimumDistance` keeps a tap a tap.
+        // While Redact or Whiteout is armed a drag draws a rectangle instead of scrolling
+        // (#173, #3). One gesture for both tools rather than a second one of its own -- the
+        // armed tool decides what the rectangle becomes, and the band above shows which. The
+        // gesture is attached only when a tool is on, so the scroll view keeps its scrolling
+        // the rest of the time — and `minimumDistance` keeps a tap a tap.
         .simultaneousGesture(
-            model.redactMode
+            model.redactMode || model.whiteoutMode
                 ? DragGesture(minimumDistance: 8)
                     .onChanged { value in
                         if redactBand?.pageIndex == index {
@@ -1522,12 +1557,19 @@ struct ViewerView: View {
                         let top = min(value.startLocation.y, value.location.y) / height
                         let bottom = max(value.startLocation.y, value.location.y) / height
                         guard right - left > 0.005, bottom - top > 0.005 else { return }
-                        model.markForRedaction(
-                            pageIndex: index,
-                            rect: PdfRect(left: Double(left) * size.width,
-                                          bottom: Double(1 - bottom) * size.height,
-                                          right: Double(right) * size.width,
-                                          top: Double(1 - top) * size.height))
+                        let area = PdfRect(left: Double(left) * size.width,
+                                           bottom: Double(1 - bottom) * size.height,
+                                           right: Double(right) * size.width,
+                                           top: Double(1 - top) * size.height)
+                        // Which tool is armed decides what the rectangle becomes. Whiteout is
+                        // asked first because arming it disarms Redact, so both can never be
+                        // on -- and if they somehow were, covering is the one that can be
+                        // undone.
+                        if model.whiteoutMode {
+                            model.placeWhiteout(pageIndex: index, rect: area)
+                        } else {
+                            model.markForRedaction(pageIndex: index, rect: area)
+                        }
                     }
                 : nil
         )
