@@ -345,6 +345,130 @@ enum {
 MEGAPDF_API unsigned int megapdf_document_flags(const megapdf_document* document);
 
 /* --------------------------------------------------------------------------
+ * Digital signatures (#576). MEGAPDF_DOC_SIGNED says a document carries one;
+ * these say what little can honestly be said about it, and remove it on request.
+ *
+ * Why an app needs more than the bit. A save invalidates the signature (#476,
+ * measured 33/33), so the app asks whether to remove it rather than deciding for
+ * the person — and a question about "the signature" has to name which signature,
+ * or the person cannot tell what they are being asked to throw away.
+ *
+ * What can be named, and what cannot. PDFium hands us the byte range, the raw
+ * contents, the certification permission, the *reason* and the *signing time*. It
+ * does NOT hand us the signer's name: that lives in the certificate's subject,
+ * inside the PKCS#7 blob, and reading it would mean ASN.1 and X.509 parsing in
+ * shared code that five platforms link. #476's study did exactly that parsing, in
+ * Python with a library, for a one-off measurement; doing it here is a different
+ * proposition. So this reports the date and the reason, which cost one dictionary
+ * read each, and the signer's name is a later improvement. The choice being
+ * offered — remove it or keep it — does not depend on knowing the name.
+ * ----------------------------------------------------------------------- */
+
+/**
+ * One of the document's digital signatures. Facts about the document as opened, not a
+ * verdict on the signature's cryptographic validity: the core verifies nothing (see
+ * MEGAPDF_DOC_SIGNED), and #476 settled that a signature cannot survive our save at all.
+ */
+typedef struct megapdf_signature {
+    /** 1, 2 or 3 for a certification (`/DocMDP`) signature; 0 for an ordinary approval one. */
+    int docmdp_permission;
+    /** The `/M` signing time, 0 in every field when the signature records none or records
+     *  one the core cannot read. Deliberately components rather than a formatted string:
+     *  a date shown to a person is formatted in their language, which is the app's job and
+     *  not the engine's, and parsing `D:YYYYMMDDHHMMSS` once here beats doing it in each of
+     *  the five apps. `utc_offset_minutes` is the signer's stated offset from UTC; the other
+     *  fields are the signer's own local time, unconverted, which is what a signature says. */
+    int year;                 /* 0, or 1-9999 */
+    int month;                /* 0, or 1-12 */
+    int day;                  /* 0, or 1-31 */
+    int hour;                 /* 0-23 */
+    int minute;               /* 0-59 */
+    int second;               /* 0-59 */
+    int utc_offset_minutes;   /* signed; 0 for Z, for no offset recorded, or for UTC itself */
+    /** Non-zero when the signature records a `/Reason`, so an app can ask for it without
+     *  a count-then-fill round trip that answers 0. */
+    int has_reason;
+} megapdf_signature;
+
+/**
+ * How many digital signatures `document` carries — the same population
+ * MEGAPDF_DOC_SIGNED is set from, so 0 exactly when that bit is clear. -1 for a NULL
+ * document.
+ *
+ * A signature *field* with no signature in it does not count, and this is the fix for
+ * a measured false positive (#476 §5b, #576): PDFium's FPDF_GetSignatureCount() counts
+ * every `/FT /Sig` entry in the AcroForm's field tree whether or not it holds a
+ * signature, so an unsigned signature field — a document prepared for signing and not
+ * yet signed — read as signed, and the app warned that saving would invalidate a
+ * signature that does not exist. Three documents in the 5,636-document corpus do this,
+ * all synthetic; none of the 4,337 private documents and none of the 33 genuinely
+ * signed government ones. The test is whether the field's `/V` carries signature data
+ * at all (a `/ByteRange` or `/Contents`), which is the same thing #476 measured against
+ * the decompressed bytes.
+ */
+MEGAPDF_API int megapdf_signature_count(const megapdf_document* document);
+
+/**
+ * The signature at `index` (0 to megapdf_signature_count()-1 — the counted population,
+ * so indices skip any valueless signature field). MEGAPDF_OK, or MEGAPDF_ERR_ARGUMENT
+ * for a NULL document, a NULL `out` or an index out of range.
+ */
+MEGAPDF_API int megapdf_signature_info(const megapdf_document* document, int index, megapdf_signature* out);
+
+/**
+ * The signature's `/Reason` — the signer's own words about why they signed, which is
+ * frequently the most identifying thing a document says about its signature. UTF-16 code
+ * units, no terminator, count-then-fill; 0 when there is no reason, for a bad index, or
+ * for a NULL document.
+ */
+MEGAPDF_API size_t megapdf_signature_reason(const megapdf_document* document, int index,
+                                            unsigned short* out, size_t capacity);
+
+/**
+ * Removes every digital signature from the open document, in memory: each signature
+ * field leaves the AcroForm's field tree with its value, and its widget leaves the page
+ * it was on. Returns the number removed, or -1 for a NULL document.
+ *
+ * It is not a repair and it does not pretend to be one. #476 measured that our save
+ * cannot preserve a signature — 33 of 33 real signed documents go from valid to digest
+ * mismatch with no edit at all — and #476 closed the question of preserving one as an
+ * accepted, permanent limitation. What this call is for is the other half: a save
+ * otherwise carries the dead signature dictionary into the output, where
+ * FPDF_GetSignatureCount() still counts it (98 of 98, #476 §5a), so the saved file
+ * presents as signed and the app warns, on the next open, about a signature it has
+ * already destroyed. Remove it and the saved file honestly reports what it is.
+ *
+ * Whose decision it is. Removing something the author put there is not the core's call
+ * and not the app's: the person looking at the document decides, and the apps ask
+ * (#481's warning gained the choice; #576). The core only does as it is told. Nothing
+ * here is automatic — megapdf_save() does not call this, and a save with the signature
+ * kept behaves exactly as it did before.
+ *
+ * It asks no permission bit, deliberately. The advisory bits are the subject of #558's
+ * rule — explain what the author asked, then let the person decide — and this call *is*
+ * that decision, arrived at through a question the app has already put and the person has
+ * already answered. Gating it would mean asking the same person the same thing twice, or
+ * putting back the wall #558 took down. A certification signature's own `/DocMDP` policy
+ * is not a gate either: a policy declaring the document closed to changes is a statement
+ * about the signed revision, and #476 settled that our save ends that revision whatever
+ * we do.
+ *
+ * Afterwards megapdf_signature_count() answers 0, megapdf_document_flags() reports
+ * neither MEGAPDF_DOC_SIGNED nor MEGAPDF_DOC_SIGNED_CERTIFICATION, and a save writes a
+ * file that opens the same way. In memory only: the file on disk is untouched until
+ * something saves, and nothing is recorded anywhere.
+ *
+ * One honest caveat, which is why this returns a count rather than a status. A
+ * signature field is reached through the widget annotation that draws it, and a
+ * signature with no widget on any page would be out of reach. Every one of #476's 33
+ * genuinely signed documents has its widget on a page (measured for #576, 33 of 33 —
+ * the field dictionary *is* the annotation), as do both fixtures, so this is a
+ * possibility rather than an observation; a caller that must be sure should ask
+ * megapdf_signature_count() afterwards rather than trust the count returned.
+ */
+MEGAPDF_API int megapdf_signatures_remove(megapdf_document* document);
+
+/* --------------------------------------------------------------------------
  * Pages
  * ----------------------------------------------------------------------- */
 

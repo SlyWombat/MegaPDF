@@ -131,6 +131,68 @@ internal static class CoreNative
     /// </summary>
     public const uint DocFlagSignedCertification = 1u << 2;
 
+    // Digital signatures (#576) --------------------------------------------
+
+    /// <summary>
+    /// megapdf_signature: all ints, so one layout on every platform. The signing time is
+    /// components rather than a formatted string because a date shown to a person is
+    /// formatted in their language, which is the app's job; the fields are the signer's own
+    /// stated local time, with <c>utc_offset_minutes</c> their stated offset, unconverted.
+    /// Every field is 0 when the signature records no date.
+    /// </summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct megapdf_signature
+    {
+        public int docmdp_permission;
+        public int year;
+        public int month;
+        public int day;
+        public int hour;
+        public int minute;
+        public int second;
+        public int utc_offset_minutes;
+        public int has_reason;
+    }
+
+    /// <summary>
+    /// How many digital signatures the document carries — 0 exactly when
+    /// <see cref="DocFlagSigned"/> is clear, because both are counted from the same
+    /// population: a signature *field* with no signature in it does not count (#576 fixes
+    /// that false positive, measured in #476 §5b).
+    /// </summary>
+    [DllImport(Dll)]
+    public static extern int megapdf_signature_count(IntPtr document);
+
+    [DllImport(Dll)]
+    public static extern int megapdf_signature_info(IntPtr document, int index, out megapdf_signature signature);
+
+    /// <summary>UTF-16 code units, no terminator, count-then-fill.</summary>
+    [DllImport(Dll)]
+    public static extern nuint megapdf_signature_reason(IntPtr document, int index,
+        [Out] ushort[]? outUnits, nuint capacity);
+
+    /// <summary>
+    /// The signature's <c>/Reason</c>, or "" when it records none — count-then-fill, as
+    /// <see cref="StampId"/> does it.
+    /// </summary>
+    public static string SignatureReason(IntPtr document, int index)
+    {
+        var n = (int)megapdf_signature_reason(document, index, null, 0);
+        if (n <= 0)
+            return "";
+        var units = new ushort[n];
+        megapdf_signature_reason(document, index, units, (nuint)n);
+        return new string(System.Runtime.InteropServices.MemoryMarshal.Cast<ushort, char>(units));
+    }
+
+    /// <summary>
+    /// Removes every digital signature from the open document, in memory, and answers how
+    /// many went. Only when the person asked: a save does not call it, and keeping the
+    /// signature behaves exactly as before (#576).
+    /// </summary>
+    [DllImport(Dll)]
+    public static extern int megapdf_signatures_remove(IntPtr document);
+
     // Pages ----------------------------------------------------------------
 
     [DllImport(Dll)]

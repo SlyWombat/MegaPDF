@@ -250,6 +250,62 @@ internal sealed class PdfiumDocument : IPdfDocument
         }
     }
 
+    public IReadOnlyList<PdfDigitalSignature> DigitalSignatures
+    {
+        get
+        {
+            ThrowIfDisposed();
+            var count = CoreNative.megapdf_signature_count(_core);
+            if (count <= 0)
+                return Array.Empty<PdfDigitalSignature>();
+            var list = new List<PdfDigitalSignature>(count);
+            for (var i = 0; i < count; i++)
+            {
+                if (CoreNative.megapdf_signature_info(_core, i, out var info) != 0)
+                    continue;
+                list.Add(new PdfDigitalSignature(SignedOn(info), Reason(i, info), info.docmdp_permission != 0));
+            }
+            return list;
+        }
+    }
+
+    /// <summary>
+    /// The core's date components as the moment the signer stated, offset and all. A date
+    /// the core could not read comes back with a zero year, and a date whose parts are
+    /// individually in range can still not be a date (31 February), so this is built inside
+    /// a try: a signature with a nonsense date must still be removable, which means the
+    /// question about it must still be askable.
+    /// </summary>
+    private static DateTimeOffset? SignedOn(CoreNative.megapdf_signature info)
+    {
+        if (info.year == 0 || info.month == 0 || info.day == 0)
+            return null;
+        try
+        {
+            return new DateTimeOffset(info.year, info.month, info.day, info.hour, info.minute, info.second,
+                                      TimeSpan.FromMinutes(info.utc_offset_minutes));
+        }
+        catch (ArgumentOutOfRangeException)
+        {
+            return null;
+        }
+    }
+
+    private string? Reason(int index, CoreNative.megapdf_signature info)
+    {
+        if (info.has_reason == 0)
+            return null;
+        var text = CoreNative.SignatureReason(_core, index).Trim();
+        return text.Length == 0 ? null : text;
+    }
+
+    public int RemoveDigitalSignatures()
+    {
+        ThrowIfDisposed();
+        var removed = CoreNative.megapdf_signatures_remove(_core);
+        return removed < 0 ? 0 : removed;
+    }
+
     public void SaveWithSecurity(Stream target, string userPassword, string? ownerPassword, PdfPermissions permissions)
     {
         ThrowIfDisposed();

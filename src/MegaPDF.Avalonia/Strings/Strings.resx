@@ -768,31 +768,55 @@
   </data>
   <data name="SignedSaveWarningTitle" xml:space="preserve">
     <value>This document has a digital signature</value>
-    <comment>#476, #481, #602: Save's confirmation before overwriting a signed original (ordinary/approval signature). Says "digital signature", not just "signed", so it cannot be read as "you have signed this" in a session where the user also placed a signature from the library</comment>
+    <comment>#476, #481, #602: Save's confirmation before overwriting a signed original (ordinary/approval signature). Says "digital signature", never bare "signed", so it cannot be read as "you have signed this" in a session where the user also placed a signature from the library</comment>
   </data>
   <data name="SignedSaveWarningBody" xml:space="preserve">
-    <value>Saving over this document will invalidate its digital signature. Save a copy instead to keep the signed original intact.</value>
-    <comment>#476, #481</comment>
+    <value>Saving will leave that signature invalid. MegaPDF rewrites the whole file when it saves, so the signature no longer describes the file it signed, and no way of saving can keep it valid. Save a copy to keep the signed original intact.</value>
+    <comment>#476, #481, #576: it says the save breaks the signature and that nothing can prevent that (#476 is closed as an accepted, permanent limitation). The steer to Save a copy is in the buttons, not here</comment>
   </data>
   <data name="CertifiedSaveWarningTitle" xml:space="preserve">
     <value>This document is certified against changes</value>
     <comment>#476, #481, #602: shown instead of SignedSaveWarningTitle when the signature carries a /DocMDP certification — measured as the common case, not the rare one, on real signed documents. The title states the certification, which nothing in the Signatures feature claims; the body names the digital signature</comment>
   </data>
   <data name="CertifiedSaveWarningBody" xml:space="preserve">
-    <value>This document's digital signature certifies it — its author declared that it should not be changed at all. Saving over it will invalidate that signature. Save a copy instead to keep the signed original intact.</value>
-    <comment>#476, #481</comment>
+    <value>This document's digital signature certifies it — its author declared that it should not be changed at all. Saving will leave that signature invalid: MegaPDF rewrites the whole file when it saves, so the signature no longer describes the file it signed, and no way of saving can keep it valid. Save a copy to keep the signed original intact.</value>
+    <comment>#476, #481, #576, #602</comment>
+  </data>
+  <data name="SignedSaveSignedOn" xml:space="preserve">
+    <value>Signed on {0}.</value>
+    <comment>#576: names the signature by its own recorded signing date (the signer's stated local date, not converted). Present on 33 of 33 of #476's genuinely signed documents. {0} is a long date in the person's own language</comment>
+  </data>
+  <data name="SignedSaveSignerReason" xml:space="preserve">
+    <value>The signer gave this reason: “{0}”</value>
+    <comment>#576: the signature's own /Reason, the signer's words. Present on 33 of 33 of #476's genuinely signed documents, and long — the real ones run to 86 and 118 characters, so this wraps</comment>
+  </data>
+  <data name="SignedSaveSeveralSignatures" xml:space="preserve">
+    <value>This document has {0} digital signatures.</value>
+    <comment>#576: said instead of naming one, when there is more than one — naming "the signature" would be naming only the first of several</comment>
+  </data>
+  <data name="SignedSaveRemoveSignature" xml:space="preserve">
+    <value>Also remove the signature, which will no longer be valid</value>
+    <comment>#576: Dave's tick, in the dialog body rather than a fourth button — a button would be a different destination and compete with the two already there, while a tick modifies the destination already chosen. Ticked by default. His own sketch said "the invalid signature"; the tense is wrong before the save that invalidates it, which is the only change from his words</comment>
+  </data>
+  <data name="SignedSaveRemoveOffer" xml:space="preserve">
+    <value>Left in, it travels with the file being saved and goes on claiming to describe a file it no longer describes, so MegaPDF and other readers report that file as signed. The document you opened is not changed either way — this reaches only the file being written. And a digital signature says a file has not changed since it was signed: it has never kept anyone from opening this document, so a file saved without it is readable by exactly the same people.</value>
+    <comment>#576, #602: what the tick means. Three things it must keep saying — the original file is untouched (removing a signature from a document you did not sign is a meaningful act), the choice reaches only the file being written, and a digital signature is not encryption and never was: nothing here may let someone think the document was protected, or that removing the signature exposes it</comment>
   </data>
   <data name="SaveACopyButton" xml:space="preserve">
     <value>Save a copy</value>
-    <comment>#476, #481: the signed-document save warning's primary, default action</comment>
+    <comment>#476, #481: the signed-document save warning's primary, default action, unchanged by #576 — the tick is a modifier on whichever of these is pressed, not a fourth button beside them</comment>
   </data>
   <data name="OverwriteSignedButton" xml:space="preserve">
     <value>Overwrite the original</value>
     <comment>#476, #481: the signed-document save warning's deliberate, secondary action</comment>
   </data>
   <data name="SignatureNotCarriedNotice" xml:space="preserve">
-    <value>The original's digital signature doesn't carry over to this copy.</value>
-    <comment>#476, #481, #602: said once, quietly, after Save a copy on a signed document — the document's own digital signature, not the one the user placed</comment>
+    <value>The copy carries the original's digital signature, and it is no longer valid.</value>
+    <comment>#476, #481, #576: said once, quietly, after a Save a copy that kept the signature. It used to say the signature "doesn't carry over to this copy", which #576 measured as untrue — the signature dictionary does carry over, and the copy reports as signed when it is reopened</comment>
+  </data>
+  <data name="SignatureRemovedNotice" xml:space="preserve">
+    <value>Saved without the document's digital signature. The document you opened is unchanged.</value>
+    <comment>#576: said once, quietly, after a Save a copy that removed the signature</comment>
   </data>
   <data name="UnsupportedProtection" xml:space="preserve">
     <value>This PDF uses a kind of protection MegaPDF can't open.</value>
