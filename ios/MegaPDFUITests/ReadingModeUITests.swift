@@ -54,14 +54,30 @@ final class ReadingModeUITests: XCTestCase {
     private func page(timeout: TimeInterval = 30) -> XCUIElement {
         let page = app.descendants(matching: .any)
             .matching(NSPredicate(format: "label == 'Page 1'")).firstMatch
-        XCTAssertTrue(page.waitForExistence(timeout: timeout), dump("the demo document did not open"))
+        XCTAssertTrue(appears(page, timeout: timeout), dump("the demo document did not open"))
         return page
+    }
+
+    /// Whether an element turns up — polled, where this suite used to say `waitForExistence`.
+    ///
+    /// `XCUIElement.waitForExistence` costs a flat second of XCTest waiter overhead per call
+    /// even when the element is already on screen (measured on the Mac mini: 1.049 s for
+    /// `timeout: 1`, 1.067 s for `timeout: 30`, against 0.021 s to read the same element
+    /// through `snapshot()`). Paid once that is nothing; paid inside `waitForProbe`'s loop it
+    /// was the whole budget — five seconds bought four looks at the app (#599).
+    private func appears(_ element: XCUIElement, timeout: TimeInterval = 10) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        repeat {
+            if element.exists { return true }
+            Thread.sleep(forTimeInterval: 0.1)
+        } while Date() < deadline
+        return false
     }
 
     /// The rectangle every synthesised touch here is aimed at (#465).
     private func pageProbe() -> XCUIElement {
         let probe = app.otherElements["viewerPinchProbe"]
-        XCTAssertTrue(probe.waitForExistence(timeout: 10),
+        XCTAssertTrue(appears(probe),
                       dump("the pinch probe is missing — did -uiTestZoomProbes survive? (#465)"))
         return probe
     }
@@ -79,24 +95,50 @@ final class ReadingModeUITests: XCTestCase {
     }
 
     /// `"reading on bar off page 0 tint Normal"`, as the app itself has it.
+    ///
+    /// One element snapshot and no existence wait, for the reason given on `appears` (#599).
+    /// A probe that has momentarily gone answers `""`, which `waitForProbe` reports as a state
+    /// the app never left rather than as a missing element.
+    private lazy var readingProbeElement: XCUIElement = app.descendants(matching: .any)
+        .matching(NSPredicate(format: "identifier == 'viewerReadingProbe'")).firstMatch
+
     private func readingProbe() -> String {
-        let probe = app.descendants(matching: .any)
-            .matching(NSPredicate(format: "identifier == 'viewerReadingProbe'")).firstMatch
-        guard probe.waitForExistence(timeout: 10) else {
-            XCTFail(dump("the reading probe is missing (#506)"))
-            return ""
-        }
-        return probe.label
+        (try? readingProbeElement.snapshot())?.label ?? ""
     }
 
+    private lazy var zoomProbeElement: XCUIElement = app.descendants(matching: .any)
+        .matching(NSPredicate(format: "identifier == 'viewerZoomProbe'")).firstMatch
+
     private func committedZoom() -> Double {
-        let probe = app.descendants(matching: .any)
-            .matching(NSPredicate(format: "identifier == 'viewerZoomProbe'")).firstMatch
-        guard probe.waitForExistence(timeout: 10) else {
+        guard let label = (try? zoomProbeElement.snapshot())?.label else {
             XCTFail(dump("the zoom probe is missing (#465)"))
             return .nan
         }
-        return Double(probe.label.replacingOccurrences(of: "zoom ", with: "")) ?? .nan
+        return Double(label.replacingOccurrences(of: "zoom ", with: "")) ?? .nan
+    }
+
+    /// Polls the committed zoom until it is past `floor`.
+    ///
+    /// The zoom used to be read **once**, after a fixed one-second sleep, which is how
+    /// `testExitComesBackToTheChromeAndToTheSamePlace` went red on `main` with "the double tap
+    /// did not zoom in" at a measured 1.0x: the gesture had arrived and the animation had not
+    /// committed yet. A second was simply the wrong unit — the commit is a spring, and nothing
+    /// says a loaded runner finishes one inside a second. Reading it on a poll asserts the same
+    /// thing without naming a duration.
+    @discardableResult
+    private func waitForZoom(above floor: Double, timeout: TimeInterval = 10) -> Double {
+        let deadline = Date().addingTimeInterval(timeout)
+        var last = Double.nan
+        var looks = 0
+        repeat {
+            looks += 1
+            last = committedZoom()
+            if last > floor { return last }
+            Thread.sleep(forTimeInterval: 0.1)
+        } while Date() < deadline
+        XCTFail(dump("the zoom never went past \(floor) in \(looks) looks over "
+                     + "\(String(format: "%.0f", timeout)) s — it measures \(last)"))
+        return last
     }
 
     /// Polls the reading probe until it says `expected`, so a passing assertion never
@@ -105,21 +147,24 @@ final class ReadingModeUITests: XCTestCase {
     private func waitForProbe(_ expected: String, timeout: TimeInterval = 5) -> Bool {
         let deadline = Date().addingTimeInterval(timeout)
         var last = ""
+        var looks = 0
         repeat {
+            looks += 1
             last = readingProbe()
             if last.contains(expected) { return true }
-            Thread.sleep(forTimeInterval: 0.2)
+            Thread.sleep(forTimeInterval: 0.1)
         } while Date() < deadline
-        XCTFail(dump("the app never reported '\(expected)' — it says '\(last)'"))
+        XCTFail(dump("the app never reported '\(expected)' in \(looks) looks over "
+                     + "\(String(format: "%.0f", timeout)) s — it says '\(last)'"))
         return false
     }
 
     private func enterReadingMode() {
         let more = app.buttons["viewerMore"].firstMatch
-        XCTAssertTrue(more.waitForExistence(timeout: 10), dump("no More menu"))
+        XCTAssertTrue(appears(more), dump("no More menu"))
         more.tap()
         let row = app.buttons["viewerReadingMode"].firstMatch
-        XCTAssertTrue(row.waitForExistence(timeout: 5), dump("the ⋯ menu has no Reading mode row"))
+        XCTAssertTrue(appears(row, timeout: 5), dump("the ⋯ menu has no Reading mode row"))
         row.tap()
         waitForProbe("reading on")
     }
@@ -136,7 +181,7 @@ final class ReadingModeUITests: XCTestCase {
         _ = page()
 
         // The chrome is there to begin with, so "gone" below means something.
-        XCTAssertTrue(app.buttons["Close"].firstMatch.waitForExistence(timeout: 10),
+        XCTAssertTrue(appears(app.buttons["Close"].firstMatch),
                       dump("there was no Close to hide"))
         XCTAssertTrue(app.buttons["viewerMore"].firstMatch.exists, dump("there was no ⋯ to hide"))
 
@@ -159,7 +204,7 @@ final class ReadingModeUITests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any)
             .matching(NSPredicate(format: "label == 'Page 1'")).firstMatch.exists,
                       dump("the page went with the chrome"))
-        XCTAssertTrue(readingBar().waitForExistence(timeout: 5),
+        XCTAssertTrue(appears(readingBar(), timeout: 5),
                       dump("no floating bar inside reading mode"))
         XCTAssertTrue(app.buttons["readingExit"].firstMatch.exists,
                       dump("the floating bar has no way out"))
@@ -183,7 +228,7 @@ final class ReadingModeUITests: XCTestCase {
 
         pageProbe().tap()
         waitForProbe("bar on")
-        XCTAssertTrue(readingBar().waitForExistence(timeout: 5),
+        XCTAssertTrue(appears(readingBar(), timeout: 5),
                       dump("a second tap did not bring the bar back"))
 
         let before = committedZoom()
@@ -202,9 +247,7 @@ final class ReadingModeUITests: XCTestCase {
 
         // Somewhere that is not the default, so "the same place" is a claim with content.
         pageProbe().doubleTap()
-        Thread.sleep(forTimeInterval: 1)
-        let zoomBefore = committedZoom()
-        XCTAssertGreaterThan(zoomBefore, 1.5, dump("the double tap did not zoom in"))
+        let zoomBefore = waitForZoom(above: 1.5)
         let pageBefore = readingProbe().components(separatedBy: " page ").last ?? ""
 
         enterReadingMode()
@@ -214,7 +257,7 @@ final class ReadingModeUITests: XCTestCase {
         app.buttons["readingExit"].firstMatch.tap()
         waitForProbe("reading off")
 
-        XCTAssertTrue(app.buttons["Close"].firstMatch.waitForExistence(timeout: 5),
+        XCTAssertTrue(appears(app.buttons["Close"].firstMatch, timeout: 5),
                       dump("the chrome did not come back"))
         XCTAssertEqual(committedZoom(), zoomBefore, accuracy: 0.0001,
                        dump("leaving reading mode moved the page"))
@@ -237,18 +280,18 @@ final class ReadingModeUITests: XCTestCase {
 
         app.buttons["readingFind"].firstMatch.tap()
         let done = app.buttons["Done"].firstMatch
-        XCTAssertTrue(done.waitForExistence(timeout: 5),
+        XCTAssertTrue(appears(done, timeout: 5),
                       dump("Find is unreachable from inside reading mode (#506)"))
 
         swipeFromTheLeadingEdge()
-        XCTAssertFalse(done.waitForExistence(timeout: 2),
+        XCTAssertFalse(appears(done, timeout: 2),
                        dump("the first swipe did not close the find bar"))
         XCTAssertTrue(readingProbe().contains("reading on"),
                       dump("the first swipe left reading mode with the find bar still open"))
 
         swipeFromTheLeadingEdge()
         waitForProbe("reading off")
-        XCTAssertTrue(app.buttons["Close"].firstMatch.waitForExistence(timeout: 5),
+        XCTAssertTrue(appears(app.buttons["Close"].firstMatch, timeout: 5),
                       dump("the chrome did not come back after the edge swipe"))
     }
 
@@ -262,7 +305,7 @@ final class ReadingModeUITests: XCTestCase {
         enterReadingMode()
 
         let bar = readingBar()
-        XCTAssertTrue(bar.waitForExistence(timeout: 5), dump("no floating bar to pin"))
+        XCTAssertTrue(appears(bar, timeout: 5), dump("no floating bar to pin"))
         Thread.sleep(forTimeInterval: 4)
         XCTAssertTrue(bar.exists,
                       dump("the bar faded with a screen reader running (#506) — a VoiceOver "
@@ -296,7 +339,7 @@ final class ReadingModeUITests: XCTestCase {
         app.launch()
         _ = page()
         let strip = app.otherElements["viewerToolStrip"].firstMatch
-        guard strip.waitForExistence(timeout: 5) else {
+        guard appears(strip, timeout: 5) else {
             // Compact width: the ⋯ row is the entry point, and every other test here
             // drives it.
             XCTAssertTrue(app.buttons["viewerMore"].firstMatch.exists,
@@ -304,7 +347,7 @@ final class ReadingModeUITests: XCTestCase {
             return
         }
         let button = app.buttons["viewerReadingModeButton"].firstMatch
-        XCTAssertTrue(button.waitForExistence(timeout: 5),
+        XCTAssertTrue(appears(button, timeout: 5),
                       dump("the iPad's tool strip has no Reading mode button (#506/#172)"))
         button.tap()
         waitForProbe("reading on")
@@ -322,12 +365,12 @@ final class ReadingModeUITests: XCTestCase {
 
         app.buttons["viewerMore"].firstMatch.tap()
         let row = app.buttons["viewerSettings"].firstMatch
-        XCTAssertTrue(row.waitForExistence(timeout: 5), dump("the ⋯ menu has no Settings row"))
+        XCTAssertTrue(appears(row, timeout: 5), dump("the ⋯ menu has no Settings row"))
         row.tap()
 
         let pageColours = app.descendants(matching: .any)
             .matching(NSPredicate(format: "label CONTAINS 'Page colours'")).firstMatch
-        XCTAssertTrue(pageColours.waitForExistence(timeout: 5),
+        XCTAssertTrue(appears(pageColours, timeout: 5),
                       dump("Settings has no Page colours control"))
         XCTAssertTrue(app.switches["settingsOpenInReadingMode"].firstMatch.exists,
                       dump("Settings has no Open documents in reading mode toggle"))

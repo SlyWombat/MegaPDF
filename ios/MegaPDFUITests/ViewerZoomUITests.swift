@@ -46,8 +46,23 @@ final class ViewerZoomUITests: XCTestCase {
     private func page(timeout: TimeInterval = 30) -> XCUIElement {
         let page = app.descendants(matching: .any)
             .matching(NSPredicate(format: "label == 'Page 1'")).firstMatch
-        XCTAssertTrue(page.waitForExistence(timeout: timeout), "the demo document did not open")
+        XCTAssertTrue(appears(page, timeout: timeout), "the demo document did not open")
         return page
+    }
+
+    /// Whether an element turns up — polled, where this suite used to say `waitForExistence`.
+    ///
+    /// `XCUIElement.waitForExistence` costs a flat second of XCTest waiter overhead per call
+    /// even when the element is already on screen: measured on the Mac mini at 1.049 s for
+    /// `timeout: 1` and 1.067 s for `timeout: 30`, against 0.021 s to read the same element
+    /// through `snapshot()` (#599).
+    private func appears(_ element: XCUIElement, timeout: TimeInterval = 10) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        repeat {
+            if element.exists { return true }
+            Thread.sleep(forTimeInterval: 0.1)
+        } while Date() < deadline
+        return false
     }
 
     /// The rectangle the pinches are synthesised from (#465). Re-queried for each gesture:
@@ -55,23 +70,24 @@ final class ViewerZoomUITests: XCTestCase {
     /// less thing to wonder about when this fails.
     private func pinchProbe() -> XCUIElement {
         let probe = app.otherElements["viewerPinchProbe"]
-        XCTAssertTrue(probe.waitForExistence(timeout: 10),
+        XCTAssertTrue(appears(probe),
                       "the pinch probe is missing — did the -uiTestZoomProbes launch argument "
                       + "survive, and does ViewerView still build zoomProbes? (#465)")
         return probe
     }
 
     /// The zoom the app has committed, read off `viewerZoomProbe`'s label.
+    private lazy var zoomProbeElement: XCUIElement = app.descendants(matching: .any)
+        .matching(NSPredicate(format: "identifier == 'viewerZoomProbe'")).firstMatch
+
     private func committedZoom() -> Double {
-        let probe = app.descendants(matching: .any)
-            .matching(NSPredicate(format: "identifier == 'viewerZoomProbe'")).firstMatch
-        guard probe.waitForExistence(timeout: 10) else {
+        guard let label = (try? zoomProbeElement.snapshot())?.label else {
             XCTFail("the zoom probe is missing (#465)")
             return .nan
         }
-        let text = probe.label.replacingOccurrences(of: "zoom ", with: "")
+        let text = label.replacingOccurrences(of: "zoom ", with: "")
         guard let value = Double(text) else {
-            XCTFail("the zoom probe read '\(probe.label)', which is not a zoom")
+            XCTFail("the zoom probe read '\(label)', which is not a zoom")
             return .nan
         }
         return value

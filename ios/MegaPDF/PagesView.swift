@@ -86,6 +86,58 @@ enum PageDrop {
     }
 }
 
+/// Whether a page tile offers itself as a drag source.
+///
+/// It always does, except under `-uiTestNoTileDrag`, and that lever exists for a measured
+/// reason (#599) rather than for convenience. A tile is both a drag source (`.onDrag`) and a
+/// context-menu host (`.contextMenu`), and a *synthesised* long press leaves the drag in
+/// flight: XCUITest then never sees the app quiescent for as long as the menu is up, and waits
+/// out its full sixty-second idle timeout on **every event** in that window. Measured on the
+/// Mac mini against an iPad Pro 13-inch: the long press that opens a tile's menu returns in
+/// 61.5 s and the tap on a menu row in 61.1 s, against 1.9 s and 1.1 s with `.onDrag` absent —
+/// 122 of the 135 seconds each of the three menu tests in `PageToolsUITests` costs. Worse than
+/// the time, those are two events dispatched into an app XCUITest has *given up* waiting for,
+/// which is the window #599's reds live in: a tap that does not take, read back afterwards as
+/// "the app never reported it".
+///
+/// Nothing is lost by turning it off there. Dragging a tile is already a by-hand gate on this
+/// platform (#570, `PageDragUITests`, `docs/qa/test-matrix.md`) — a synthesised drag cannot
+/// express the movement that tells a drag from a long press — so no CI lane drives it either
+/// way, and `PageToolsUITests` says in its own first paragraph that drag-to-reorder is not its
+/// business. The suite whose business it is passes no flag and gets the real thing.
+enum PageTileDrag {
+    /// Whether the tiles are drag sources, given a process's launch arguments.
+    static func isADragSource(arguments: [String]) -> Bool {
+        !arguments.contains("-uiTestNoTileDrag")
+    }
+
+    /// This process's answer, read once: a launch argument cannot change under a running app,
+    /// and this is read from a view body.
+    static let inThisProcess = isADragSource(arguments: ProcessInfo.processInfo.arguments)
+}
+
+/// `.onDrag`, unless this process is a UI test that asked for the tile not to be a drag source.
+///
+/// A modifier rather than an `if` around the tile, so that everything hung on the tile after it
+/// — the drop target, the accessibility actions, the identifier — is written once and applies
+/// either way.
+private struct TileDragSource: ViewModifier {
+    let index: Int
+    let onLift: () -> Void
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if PageTileDrag.inThisProcess {
+            content.onDrag {
+                onLift()
+                return NSItemProvider(object: "\(index)" as NSString)
+            }
+        } else {
+            content
+        }
+    }
+}
+
 /// The pages, and everything that can be done to them.
 struct PagesPanel: View {
     @ObservedObject var model: ViewerModel
@@ -399,11 +451,9 @@ struct PagesPanel: View {
         }
         .contextMenu { tileMenu(index) }
         // A long press picks the tile up. `NSItemProvider` carries the page number as text,
-        // which is all a drop needs: both ends of this drag are this grid.
-        .onDrag {
-            dragging = index
-            return NSItemProvider(object: "\(index)" as NSString)
-        }
+        // which is all a drop needs: both ends of this drag are this grid. Through
+        // `TileDragSource` rather than `.onDrag` directly, for the reason written there (#599).
+        .modifier(TileDragSource(index: index) { dragging = index })
         .onDrop(of: [UTType.plainText], isTargeted: nil) { providers, location in
             drop(providers, at: location, onto: index)
         }

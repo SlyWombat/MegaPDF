@@ -329,6 +329,59 @@ From the same pass: a page tile is labelled "Page 1" exactly as the document's o
 it should be — that is what VoiceOver ought to say about it. A test that wants the *document's*
 page must ask for an **image** with that label, because a tile is a button.
 
+## 10c. A second trap, and a worse one: a tile that cannot be *driven*
+
+§10b is about a screen that is awkward to **query**. This one is about a screen that is
+impossible to **drive at speed**, and it cost #599 four red runs on `main` before anyone
+measured it.
+
+A page tile is both a drag source (`.onDrag`) and a context-menu host (`.contextMenu`), which
+is right: that is what a long press means on iOS, and movement is what tells the two apart. A
+*synthesised* long press has no movement to offer, so the context menu opens and the drag is
+left in flight — and from that moment XCUITest never sees the app quiescent for as long as the
+menu is up. It will not synthesise an event into an app it believes is still busy, so it waits
+out its **full sixty-second idle timeout on every event in that window**. Measured on the Mac
+mini against an iPad Pro 13-inch (M5), Xcode 26.6:
+
+| gesture | tile is a drag source | tile is not |
+|---|---|---|
+| the long press that opens a tile's menu | 61.5 s | 1.9 s |
+| the tap on a menu row | 61.1 s | 1.1 s |
+| `PageToolsUITests` on the iPad, 14 tests | 551 s | 83 s |
+
+Two things follow, and the second matters more than the first.
+
+- **It is not machine speed, and no amount of patience helps.** Those are timeouts, not work:
+  the same test measured 135.1 s on an idle Mac mini and 134.5 s under a load average of 500,
+  and 139-146 s on a GitHub runner. A suite whose cost is a timeout looks identical everywhere
+  and gets no faster on better hardware.
+- **Each of those waits ends in a tap dispatched into an app XCUITest has given up on**, which
+  is where #599's reds came from: a tap that did not take, read back as "the app never reported
+  it". Twice the same test failed with the expected and the actual page orders *swapped* —
+  once the move had not happened, once the undo had not — which is one lost tap each time
+  rather than anything wrong with the app.
+
+So `PageToolsUITests` passes `-uiTestNoTileDrag` and drives a tile that is not a drag source
+(`PageTileDrag` in `PagesView.swift`). Nothing is lost: dragging a tile is already a by-hand
+gate on this platform (#570, and the section above), so no CI lane ever drove it.
+
+**For anybody writing a UI test here:**
+
+- A long press on a view that is also a drag source costs a minute per event. If a suite needs
+  the menu and not the drag, say so with the launch argument.
+- **Existence is not hittability.** Once the waits stopped costing a second apiece (below), the
+  first fast run failed with `Failed to synthesize event: Not hittable: Button, …, identifier:
+  'pageTile-2'` — the sidebar puts its tiles in the tree as it *begins* sliding in, and the old
+  waits had been covering that by accident. Wait for `isHittable` before a gesture.
+- **`XCUIElement.waitForExistence` costs a flat second even when the element is already
+  there.** Measured against the pages probe: 1.049 s asked for a one-second timeout, 1.067 s
+  asked for thirty, against 0.021 s to read the same element through `snapshot()`. That is
+  XCTest's waiter, not the query — `descendants(matching: .any)` with an identifier predicate
+  measures 0.015 s over this viewer's 61-element tree (84 with the grid open), and a narrower
+  `app.staticTexts[…]` measured no faster. **This app is cheap to query.** Paid once a wait,
+  the second is nothing; paid inside a poll loop it *is* the budget — ten seconds bought eight
+  looks at the app, and `ReadingModeUITests`' five-second waits bought four.
+
 ## 11. Things that look like defects but are not
 
 - Mode prompts and confirmations are **modal alerts**, by current design — not toasts.
