@@ -183,8 +183,8 @@ one went stale with the 2.1 tab strip (#348).
 | `shot-viewer/text/search/sign/draw/home.png` | `captures-2.1.1/ios-screenshots/en/iphone-6_9-<state>.png` (1320×2868) | exactly a third: **440×956** |
 | `screenshot-viewer.png` | `captures-2.1.1/ios-screenshots/en/iphone-6_9-viewer.png` | exactly a half: **660×1434** |
 | `shot-desktop.png` | `captures-2.1.1/macos-screenshots/en/light-05-redact.png` (1440×900) | exactly two-thirds: **960×600** |
-| `screenshots/linux/{en,fr-CA,fr-FR}/01-05` | `tools/linux/store-captures.sh` on 2026-09-26, from a `tools/build-linux-app.sh` build of main at `0733111`, 1280×800 (PR for #395) | as captured |
-| `screenshots/linux/{en,fr-CA,fr-FR}/06-home.png` | the same script, later on 2026-09-26, from a build of the #412 fix (the empty window's Open, zoom box and status line, which the `0733111` build showed disabled, blank and empty) | as captured |
+| `screenshots/linux/{en,fr-CA,fr-FR}/02-text, 03-sign, 05-search, 06-redact, 07-home` | `tools/linux/store-captures.sh` on 2026-10-01 (#310), from a `tools/build-linux-app.sh` build of main at `47c6e79`, 1280×800. Byte-for-byte the images #310 shot — the 2026-10-01 re-shoot for #613 reproduced all five exactly and only renumbered them | as captured |
+| `screenshots/linux/{en,fr-CA,fr-FR}/01-reading.png, 04-pages.png` | the same script and the same build, with the two slots #613 added: reading mode on the six-page demo agreement, and the Pages sidebar with two pages selected | as captured |
 
 The iPhone set is the App Store listing set, so its poses and the captions under
 them are the ones in `docs/app-store-listing.md` § Screenshots. The desktop shot
@@ -193,12 +193,15 @@ is Mac slot #5 and carries that slot's caption: since 2.1 the pose is the mark
 Windows would have done as well; the Mac set is the one that is not only on
 Dave's laptop.
 
-All eighteen Linux captures are staged, because the AppStream metainfo points at
-every one of them per language. The gallery itself shows **one** —
-`screenshots/linux/en/01-viewer.png`, beside the Mac shot — because the other
-five are the same poses the iPhone row already shows. Referenced in place rather
-than resized into a `shot-linux.png`, so there is one copy of each Linux capture
-and part A stays the only thing that writes them.
+All twenty-one Linux captures are staged, because the AppStream metainfo points
+at every one of them per language. The gallery itself shows **one** —
+`screenshots/linux/en/04-pages.png`, beside the Mac shot — because the rest are
+the same poses the iPhone row already shows. It was `01-viewer.png` until #613
+dropped that slot; the page-tools shot took its place because it is the one new
+slot that still shows the whole window, and the gallery's job there is "the same
+app on Linux". Referenced in place rather than resized into a `shot-linux.png`,
+so there is one copy of each Linux capture and part A stays the only thing that
+writes them.
 
 Refresh them by re-running the capture sets (the **iOS Screenshots** workflow for
 iPhone, `tools/macos-store-captures.sh` for the Mac, `tools/linux/store-captures.sh`
