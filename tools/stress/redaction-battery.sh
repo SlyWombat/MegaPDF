@@ -15,6 +15,11 @@
 # holds counts and timings only. Do not commit, upload or paste <out-dir>.
 set -uo pipefail
 
+# #609: corpus_coverage.sh, run at the end, says what this battery's document count is
+# a count OF -- ten recorded runs printed "public 1,381" with nothing anywhere saying it
+# was 1,381 of a 1,777-row manifest.
+STRESS_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+
 LEAKCHECK=${1:?usage: redaction-battery.sh <leakcheck> <corpus> <out-dir> [options]}
 CORPUS=${2:?}
 OUT=${3:?}
@@ -96,6 +101,10 @@ elapsed=$(( $(date +%s) - started ))
     echo "seconds:         $elapsed"
     echo "refusals by reason:"
     for r in "${!reasons[@]}"; do echo "  $r: ${reasons[$r]}"; done
+    # #609: what the count above is a count of. Last in the summary rather than first
+    # so it reads as the footnote to every number, and never gates -- a partial corpus
+    # is a fact about the machine, not a regression in the code under test.
+    "$STRESS_DIR/corpus_coverage.sh" "$CORPUS" "$opened" || true
 } | tee "$SUMMARY"
 
 [ "$leaked" -eq 0 ] && [ "$crashed" -eq 0 ] && [ "$hung" -eq 0 ] && [ "$changed" -eq 0 ]

@@ -33,6 +33,41 @@ writes to the destination (#470: it used to try to refresh the `WHERE-THESE-CAME
 marker even in this mode, which failed — harmlessly, since the shell does not run with
 `-e`, but noisily — against a read-only directory).
 
+As of 2026-10-01 (#609) it holds **1,494 of the manifest's 1,777 rows, 4.3 GB** — the UK
+forms and the seven very large documents were staged on Dave's decision, 112 of the 115
+arrived, and three `uk-hmrc` rows are #625. The remaining 280 are the `wiki-*` non-Latin
+rows, deferred by decision.
+
+## Saying what is staged, and what is deliberately not (#609)
+
+A staged corpus is almost always a *subset* of the manifest, and for ten recorded battery
+runs that subset was reported under the corpus's own name: every summary said "public
+1,381" and nothing said what it was 1,381 of. `tools/stress/corpus_coverage.sh` closes
+that — the four batteries call it at the end of their summaries, it reconciles the
+battery's own count against this manifest, and it names the gap by `source`. It needs no
+flag: the `WHERE-THESE-CAME-FROM.txt` marker `fetch.sh` leaves behind is what identifies a
+corpus as this one, because the failure being fixed is that nobody remembered to ask.
+
+It separates three numbers, because the gaps between them are different problems: manifest
+rows (what the corpus is defined to be), rows present on disk (a **staging** gap), and rows
+the battery's own `find -name '*.pdf'` reaches (a **tooling** gap — this is how the `.Pdf`
+case-mismatched qpdf fixture, footnoted in run after run as "assumed / not verified",
+finally became a counted number).
+
+**A deliberate absence belongs on the record, not in the gaps.** Put a
+`EXCLUDED-FROM-THIS-CORPUS.tsv` in the corpus directory, one `<source>` TAB `<reason>` line
+per source that is meant to be missing:
+
+    # one <manifest source> TAB <reason> per line; '#' comments
+    wiki-ar	non-Latin (Arabic): deferred by Dave decision, 2026-10-01 (#609)
+    wiki-he	non-Latin (Hebrew): deferred by Dave decision, 2026-10-01 (#609)
+
+Those rows are then reported as a recorded decision, with the reason, in every battery
+summary; everything else absent is reported as "NOT accounted for", by source. Nothing
+about coverage gates a battery — a partial corpus is a fact about the machine, not a
+regression in the code under test, and a battery that refused to run on a partial corpus
+would simply stop being run, which is how a reporting problem turns into a testing one.
+
 ## Network reality — two different machines, two different answers
 
 The corpus was first built (#434) from the Anthropic cloud sandbox, which cannot reach any
@@ -730,6 +765,25 @@ for these sizes** — raised in the PR only as a note that this is 7 documents t
 limits, worth re-checking rather than assumed permanently settled if the category grows.
 Not changed here either way: `tools/stress/*-battery.sh` is out of bounds for this change
 the same way it was out of bounds for #442/#445 (see those issues).
+
+**Re-confirmed 2026-10-01 (#609), this time inside a full-corpus run rather than against the
+category alone:** all 7 documents opened, zero refusals of any kind, zero timeouts on any
+battery, and `structure-battery`'s aggregate for the category measured **0.989955** — #488's
+own figure to six decimal places, with the fix deliberately not attempted. The category's
+5.33 M tokens do move the *public aggregate* (0.974441 → 0.980019) simply by joining it;
+that is arithmetic, not a change in anything, and TESTING.md's eleventh run shows the
+restriction back to the previous population reproducing 0.974441 exactly.
+
+**Fetching them is the hard part, not running them (#612).** `fetch.sh` used to abort both
+multi-gigabyte rows at around 875 MB every time, because it bounded every transfer with
+`--max-time 300` — a fixed wall clock on a fetch whose rows span five orders of magnitude of
+size. It now aborts on sustained low speed instead (under 1 KB/s for two minutes, which
+catches a dead connection at any size) and resumes rather than restarts, keeping the partial
+in place between runs under a `*.part` name. Budget about **25 minutes and 4.2 GB** for the
+category on an ordinary link, and if a run is interrupted just run the same command again:
+it picks up where it stopped and the manifest sha256 is still checked before anything is
+promoted into the corpus. `fetch-resume-test.sh` covers the transfer's behaviour against a
+local server built to misbehave; it is not in CI because it spends two minutes in sleeps.
 
 ## ⚠ The malformed set
 

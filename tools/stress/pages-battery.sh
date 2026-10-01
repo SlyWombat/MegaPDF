@@ -123,6 +123,11 @@
 # bounds a hang. qpdf and pdfinfo (poppler-utils) must be on PATH.
 set -uo pipefail
 
+# #609: corpus_coverage.sh, run at the end, says what this battery's document count is
+# a count OF -- ten recorded runs printed "public 1,381" with nothing anywhere saying it
+# was 1,381 of a 1,777-row manifest.
+STRESS_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+
 CLI=${1:?usage: pages-battery.sh <megapdf-cli> <corpus> <out-dir> [--limit N] [--jobs N]}
 CORPUS=${2:?}
 OUT=${3:?}
@@ -408,6 +413,10 @@ seen=$(grep -c "" "$LOG")
         echo "  HUNG:                $(count "$op=hung")"
     done
     echo "crashed or hung before the page count was known: $(( $(count ' hung$') + $(count ' crashed:') ))"
+    # #609: what the count above is a count of. Last in the summary rather than first
+    # so it reads as the footnote to every number, and never gates -- a partial corpus
+    # is a fact about the machine, not a regression in the code under test.
+    "$STRESS_DIR/corpus_coverage.sh" "$CORPUS" "$seen" || true
 } | tee "$SUMMARY"
 
 # #445: usage-error, refused-damaged-input, qpdf-carried-damage and (#567) dims-unknown are
