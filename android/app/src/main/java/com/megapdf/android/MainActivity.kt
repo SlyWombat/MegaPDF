@@ -369,6 +369,14 @@ fun MegaPdfApp(viewModel: ViewerViewModel = viewModel(), screenshotState: String
                 onRemoveRedactionMark = viewModel::removeRedactionMark,
                 onClearRedactionMarks = viewModel::clearRedactionMarks,
                 onCommitRedactionMarkRect = viewModel::commitRedactionMarkRect,
+                // Whiteout (#3): real page content the moment it lands, so unlike a mark the
+                // screen does not draw it — only the chrome once it is selected.
+                whiteoutMode = viewModel.whiteoutMode,
+                onToggleWhiteout = viewModel::toggleWhiteoutMode,
+                onPlaceWhiteout = viewModel::placeWhiteout,
+                selectedWhiteout = viewModel.selectedWhiteout,
+                onCommitWhiteoutRect = viewModel::commitWhiteoutRect,
+                onRemoveWhiteout = viewModel::removeSelectedWhiteout,
                 // Reading mode (#507, #513).
                 readingMode = viewModel.readingMode,
                 onEnterReadingMode = viewModel::enterReadingMode,

@@ -79,6 +79,18 @@ data class SelectedTextBox(
 )
 
 /**
+ * A whiteout currently selected for drag/resize/remove (#3). No id of its own — a
+ * whiteout is page content, not an annotation — so the pair identifies it, and
+ * [objectIndex] changes on every move: there is no native "move in place" for one of
+ * these, only a detach and a fresh add at the new bounds.
+ */
+data class SelectedWhiteout(
+    val pageIndex: Int,
+    val objectIndex: Int,
+    val rect: com.megapdf.engine.PdfRect,
+)
+
+/**
  * A tap that is waiting for the text the user is about to type (#34). When
  * [editingId] is set the tap re-opened an existing box to correct it (#36), and
  * ([x], [y]) is that box's bounds lower-left rather than the raw tap point.
@@ -202,11 +214,13 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
     fun enterReadingMode() {
         if (readingMode) return
         redactMode = false
+        whiteoutMode = false
         pendingSignature = null
         isPlacingText = false
         selectedStamp = null
         selectedTextBox = null
         selectedRedactionMark = null
+        selectedWhiteout = null
         readingMode = true
     }
 
@@ -271,11 +285,106 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         if (redactMode) {
             pendingSignature = null
             isPlacingText = false
+            whiteoutMode = false
         }
     }
 
     fun cancelRedactMode() {
         redactMode = false
+    }
+
+    // --- Whiteout (#3) ---
+    //
+    // Unlike a mark, a whiteout is real page content the moment it is placed: it is drawn
+    // into the raster like a signature or added text, not held apart like a redaction mark.
+
+    /** The Whiteout tool is armed: the next drag across a page covers that area. */
+    var whiteoutMode: Boolean by mutableStateOf(false)
+        private set
+
+    /** The whiteout the user has tapped, if any: it draws the same drag/resize/✕ chrome a
+     *  selected signature does (#3). */
+    var selectedWhiteout: SelectedWhiteout? by mutableStateOf(null)
+        private set
+
+    fun toggleWhiteoutMode() {
+        whiteoutMode = !whiteoutMode
+        if (whiteoutMode) {
+            pendingSignature = null
+            isPlacingText = false
+            redactMode = false
+            selectedStamp = null
+            selectedTextBox = null
+            selectedRedactionMark = null
+            selectedWhiteout = null
+        }
+    }
+
+    fun cancelWhiteoutMode() {
+        whiteoutMode = false
+    }
+
+    /** True when a restricted open forbids placing or changing a whiteout. */
+    val canWhiteout: Boolean get() = capabilities.canEditContent
+
+    /**
+     * Covers the dragged area (#3): a plain rectangle, never text-snapped the way Redact is —
+     * a whiteout covers whatever is under it, drawn or not, so there is nothing to snap to.
+     * Kept selected afterwards so its handles appear straight away, like a placed signature.
+     */
+    fun placeWhiteout(pageIndex: Int, rect: com.megapdf.engine.PdfRect) {
+        val doc = document ?: return
+        val state = uiState as? ViewerUiState.Viewing ?: return
+        if (editingBlocked) return
+        val clamped = clampToPage(rect, state.pageSizes[pageIndex])
+        val spot = BusySpot(pageIndex, clamped)
+        launchEdit(R.string.whiteout_failed) {
+            val add = WhiteoutAddOperation(pageIndex, clamped)
+            if (!confirmPageRewrite(add, doc, spot)) return@launchEdit
+            perform(add, doc, spot)
+            selectedWhiteout = SelectedWhiteout(pageIndex, add.currentObjectIndex, clamped)
+            whiteoutMode = false
+        }
+    }
+
+    /** Commits a drag or a corner-handle resize from the selection overlay (#3). */
+    fun commitWhiteoutRect(newRect: com.megapdf.engine.PdfRect) {
+        val sel = selectedWhiteout ?: return
+        val state = uiState as? ViewerUiState.Viewing ?: return
+        val doc = document ?: return
+        if (editingBlocked) {
+            // #145: another change is still going in; drop the dragged overlay, nothing moved.
+            selectedWhiteout = null
+            return
+        }
+        val rect = clampToPage(newRect, state.pageSizes[sel.pageIndex])
+        if (rect == sel.rect) return
+        val spot = BusySpot(sel.pageIndex, rect)
+        launchEdit(R.string.whiteout_move_failed) {
+            val move = MoveWhiteoutOperation(sel.pageIndex, sel.objectIndex, from = sel.rect, to = rect)
+            if (!confirmPageRewrite(move, doc, spot)) {
+                // Cancel: it never moved. Dropping the selection drops the dragged overlay too.
+                selectedWhiteout = null
+                return@launchEdit
+            }
+            perform(move, doc, spot)
+            selectedWhiteout = sel.copy(objectIndex = move.currentObjectIndex, rect = rect)
+        }
+    }
+
+    fun removeSelectedWhiteout() {
+        val sel = selectedWhiteout ?: return
+        val doc = document ?: return
+        val spot = BusySpot(sel.pageIndex, sel.rect)
+        launchEdit(R.string.whiteout_remove_failed) {
+            val remove = WhiteoutRemoveOperation(sel.pageIndex, sel.objectIndex)
+            if (!confirmPageRewrite(remove, doc, spot)) return@launchEdit
+            perform(remove, doc, spot)
+        }
+    }
+
+    fun deselectWhiteout() {
+        selectedWhiteout = null
     }
 
     /**
@@ -365,6 +474,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
             // One thing is selected at a time, as for stamps and text boxes.
             selectedStamp = null
             selectedTextBox = null
+            selectedWhiteout = null
         }
     }
 
@@ -586,11 +696,13 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         // Editing tools armed in the viewer have nothing to do with pages, and a tool left armed
         // behind this screen would fire on the way back (the reading-mode rule, #507).
         redactMode = false
+        whiteoutMode = false
         pendingSignature = null
         isPlacingText = false
         selectedStamp = null
         selectedTextBox = null
         selectedRedactionMark = null
+        selectedWhiteout = null
         isPagesOpen = true
     }
 
@@ -1889,6 +2001,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                         // #131: moving or removing it is an edit the owner did not allow.
                         selectedStamp = null
                         selectedTextBox = null
+                        selectedWhiteout = null
                         showRestricted()
                         return@launchEdit
                     }
@@ -1896,6 +2009,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                     selectedStamp = SelectedStamp(
                         pageIndex, signature.annotIndex, signature.id, signature.rect)
                     selectedTextBox = null
+                    selectedWhiteout = null
                     return@launchEdit
                 }
                 selectedStamp = null
@@ -1911,6 +2025,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                 if (box != null) {
                     if (!capabilities.canAddText) {
                         selectedTextBox = null
+                        selectedWhiteout = null
                         showRestricted()
                         return@launchEdit
                     }
@@ -1927,6 +2042,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                     }
                     val selected = SelectedTextBox(
                         pageIndex, box.id, box.text, box.fontSize, box.fontName, box.rect)
+                    selectedWhiteout = null
                     // A selected box is about to be moved, corrected or removed: check its page (#145).
                     preparePageCheck(pageIndex)
                     if (selectedTextBox?.id == box.id) {
@@ -1942,6 +2058,20 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                     return@launchEdit
                 }
                 selectedTextBox = null
+
+                // A whiteout (#3) ranks with signatures and text boxes: it too is
+                // something the user put on the page. Last match wins, same reason.
+                val whiteout = page.whiteouts().lastOrNull { it.rect.contains(x, y) }
+                if (whiteout != null) {
+                    if (!capabilities.canEditContent) {
+                        selectedWhiteout = null
+                        showRestricted()
+                        return@launchEdit
+                    }
+                    selectedWhiteout = SelectedWhiteout(pageIndex, whiteout.objectIndex, whiteout.rect)
+                    return@launchEdit
+                }
+                selectedWhiteout = null
 
                 val field = page.formFields().firstOrNull { it.rect.contains(x, y) }
                 operation = if (field != null) {
@@ -2089,6 +2219,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         cancelPlacement()
         selectedStamp = null
         selectedTextBox = null
+        selectedWhiteout = null
         isPlacingText = true
         statusMessage = str(R.string.tap_to_place_text)
         // The tool regenerates the page it lands on: check the current one early (#145).
@@ -2112,17 +2243,20 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         // Blocked while another change is still going in (#145): the dialog keeps what was typed.
         if (editingBlocked) return
         pendingTextTap = null
-        val trimmed = text.trim()
-        if (trimmed.isEmpty()) return
         lastFontSize = fontSize
         lastFontName = fontName
-        val style = TextBoxStyle(trimmed, fontSize, fontName)
         val spot = BusySpot(
             pending.pageIndex,
             com.megapdf.engine.PdfRect(pending.x, pending.y, pending.x, pending.y + fontSize),
         )
-        launchEdit(if (pending.editingId != null) R.string.text_change_failed else R.string.text_add_failed) {
-            if (pending.editingId != null) {
+        if (pending.editingId != null) {
+            // Correcting an existing box always restyles one box in place — it never grows
+            // into more than one line (#4): that is a different shape of edit (replace one
+            // object with several, under one undo step) than "same id, new text, new size".
+            val trimmed = text.trim()
+            if (trimmed.isEmpty()) return
+            val style = TextBoxStyle(trimmed, fontSize, fontName)
+            launchEdit(R.string.text_change_failed) {
                 val before = TextBoxStyle(
                     pending.initialText, pending.fontSize, pending.fontName)
                 if (before == style) return@launchEdit
@@ -2132,11 +2266,33 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                 if (!confirmPageRewrite(edit, doc, spot)) return@launchEdit
                 perform(edit, doc, spot)
                 reselectTextBox(doc, pending.pageIndex, pending.editingId)
-            } else {
+            }
+            return
+        }
+        // A new placement (#4): the phone's Enter key is its "new line", so a note of more
+        // than one non-blank line becomes that many boxes, placed and undone as one gesture,
+        // each staying its own separately-selectable box afterwards.
+        //
+        // Normalized the same way the Windows pass found it had to be (#564): a soft
+        // keyboard or an input method is not contractually bound to hand back "\n" for a
+        // line break — "\r\n" and a lone "\r" are both real possibilities — and splitting on
+        // "\n" alone against one of those would silently keep the whole note as a single
+        // object with a control character sitting in the middle of it.
+        val lines = text.replace("\r\n", "\n").replace('\r', '\n')
+            .split("\n").map { it.trim() }.filter { it.isNotEmpty() }
+        if (lines.isEmpty()) return
+        launchEdit(R.string.text_add_failed) {
+            if (lines.size == 1) {
                 val add = TextBoxOperation(
                     pending.pageIndex, "text:${java.util.UUID.randomUUID()}",
-                    trimmed, fontSize, pending.x, pending.y, adding = true,
+                    lines[0], fontSize, pending.x, pending.y, adding = true,
                     fontName = fontName)
+                if (!confirmPageRewrite(add, doc, spot)) return@launchEdit
+                perform(add, doc, spot)
+            } else {
+                val ids = lines.map { "text:${java.util.UUID.randomUUID()}" }
+                val add = AddTextBoxesOperation(
+                    pending.pageIndex, ids, lines, fontSize, pending.x, pending.y, fontName)
                 if (!confirmPageRewrite(add, doc, spot)) return@launchEdit
                 perform(add, doc, spot)
             }
@@ -2284,6 +2440,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         canRedo = history.canRedo
         selectedStamp = null
         selectedTextBox = null
+        selectedWhiteout = null
         // A page operation is asked which way it just went (#174): a delete's undo inserts where
         // its apply deleted, so the renumbering depends on the direction, and the operation is the
         // only thing that knows. A rotation renumbers nothing but changes the shape of the pages it
@@ -3026,6 +3183,8 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         pendingSignature = null
         selectedStamp = null
         selectedTextBox = null
+        selectedWhiteout = null
+        whiteoutMode = false
         // History belongs to the open document — never offer to undo an edit made
         // to a file that is no longer on screen.
         history.clear()

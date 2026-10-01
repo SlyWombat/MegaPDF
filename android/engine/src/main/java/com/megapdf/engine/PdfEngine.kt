@@ -676,6 +676,34 @@ class PdfPage internal constructor(
         }
     }
 
+    // ---- Whiteouts (#3) ----------------------------------------------------
+
+    /**
+     * Covers [rect] with an opaque white rectangle (contract 5): page content, not an
+     * annotation, appended above everything already on the page. What was there is still
+     * underneath — [detachObject] on the returned index uncovers it. There is no id, so the
+     * caller keeps this index to address it; it is only valid until something else changes
+     * the page's object order.
+     */
+    suspend fun addWhiteout(rect: PdfRect): Int = withContext(engine.dispatcher) {
+        check(!closed) { "page is closed" }
+        val index = PdfiumNative.nativeAddWhiteout(handle, rect.left, rect.bottom, rect.right, rect.top)
+        check(index >= 0) { "failed to add whiteout" }
+        index
+    }
+
+    /** Every whiteout on this page, in page-object order. */
+    suspend fun whiteouts(): List<Whiteout> = withContext(engine.dispatcher) {
+        check(!closed) { "page is closed" }
+        val packed = PdfiumNative.nativeWhiteoutsPacked(handle)
+        (0 until packed.size / 5).map { i ->
+            Whiteout(
+                objectIndex = packed[i * 5].toInt(),
+                rect = PdfRect(packed[i * 5 + 1], packed[i * 5 + 2], packed[i * 5 + 3], packed[i * 5 + 4]),
+            )
+        }
+    }
+
     // --- Redaction marks (#173) ---
 
     /**
@@ -1067,6 +1095,16 @@ val STANDARD_FONTS = listOf("Helvetica", "Times-Roman", "Courier")
 
 /** What a box with no recorded face is, and what a new one defaults to. */
 const val DEFAULT_FONT = "Helvetica"
+
+/**
+ * A whiteout (#3): an opaque white rectangle covering the page's own content, not an
+ * annotation and not a deletion — what was under it is still there, and removing the
+ * whiteout uncovers it. It carries no id of its own (contract 5 gives text boxes one;
+ * whiteouts predate that and were never given the same treatment), so it is addressed by
+ * [objectIndex] the way a detached body-text run is — which shifts on every move, since
+ * there is no native "move in place" for one of these.
+ */
+data class Whiteout(val objectIndex: Int, val rect: PdfRect)
 
 class PdfPasswordException : Exception("Password required or incorrect password")
 
