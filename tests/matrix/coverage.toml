@@ -625,10 +625,13 @@ area = "Filling in and marking up"
 [feature.windows]
 presence = "present"
 entry = "src/MegaPDF.App/DocumentView.xaml.cs::OnPageTapped"
-coverage = "engine"
-tests = ["tests/MegaPDF.Core.Tests/AcroFormTests.cs::Field"]
+coverage = "ui"
+tests = [
+  ".github/workflows/ci.yml::Run-Check \"fill\"",
+  "tests/MegaPDF.Core.Tests/AcroFormTests.cs::Field",
+]
 manual = "TESTING.md::**Form fields**"
-note = "no Windows self-test state fills a field; `click` exists in the harness for exactly this and CI does not run it."
+note = "#590: `fill` opens formtext.pdf's real AcroForm text widget (fixture.pdf has none), types into it and checks the value survives save and reopen. `click` ticks fixture.pdf's drawn square, not a form field — the row's old note crediting it for this was wrong (#590)."
 [feature.macos]
 presence = "present"
 entry = "src/MegaPDF.Avalonia/ViewModels/DocumentViewModel.cs::HandlePageClick"
@@ -666,13 +669,14 @@ area = "Filling in and marking up"
 [feature.windows]
 presence = "present"
 entry = "src/MegaPDF.App/MainWindow.xaml::MarkStyleChoice"
-coverage = "engine"
+coverage = "ui"
 tests = [
+  ".github/workflows/ci.yml::Run-Check \"fill\"",
   "tests/MegaPDF.Core.Tests/DrawnCheckboxTests.cs::Drawn",
   "tests/MegaPDF.Core.Tests/SettingsAndMarkStyleTests.cs::MarkStyle",
 ]
 manual = "TESTING.md::**Checkboxes**"
-note = "detection and the mark style are tested; no Windows self-test state clicks a box. The `click` state exists for this and CI does not run it."
+note = "#590: `fill` ticks forms.pdf's real AcroForm checkbox widget and undoes it; `click` (still not run by CI) ticks fixture.pdf's drawn square, the other kind this row covers."
 [feature.macos]
 presence = "present"
 entry = "src/MegaPDF.Avalonia/ViewModels/DocumentViewModel.cs::CheckboxToggleOperation"
@@ -717,13 +721,14 @@ import, which is where #99–#101 lived."""
 [feature.windows]
 presence = "present"
 entry = "src/MegaPDF.App/MainWindow.xaml::SignaturesToolbarButton"
-coverage = "engine"
+coverage = "ui"
 tests = [
+  ".github/workflows/ci.yml::Run-Check \"sign\"",
   "tests/MegaPDF.Core.Tests/SignatureCleanupTests.cs::Cleanup",
   "tests/MegaPDF.Core.Tests/SignatureLibraryTests.cs::Library",
 ]
 manual = "TESTING.md::**Signatures**"
-note = "the `sign` and `sign-missing` harness states exist and CI runs neither; nothing drives the pad, the typed field or a photo import."
+note = "#590: `sign` now runs in CI — the library opens with a seeded card and its thumbnail decodes. `sign-missing` still exists and CI still does not run it. Nothing drives the pad, the typed field or a photo import."
 [feature.macos]
 presence = "present"
 entry = "src/MegaPDF.Avalonia/Views/MainWindow.Toolbar.cs::SignButton"
@@ -770,13 +775,14 @@ area = "Filling in and marking up"
 [feature.windows]
 presence = "present"
 entry = "src/MegaPDF.App/MainWindow.xaml::SignaturesFlyout"
-coverage = "engine"
+coverage = "ui"
 tests = [
+  ".github/workflows/ci.yml::Run-Check \"sign\"",
   "tests/MegaPDF.Core.Tests/SignatureStampTests.cs::Stamp",
   "tests/MegaPDF.Core.Tests/HitTargetGeometryTests.cs::HitTarget",
 ]
 manual = "TESTING.md::**Signatures**"
-note = "no Windows self-test state places a signature, although `whiteout-text` drives the same move/resize chrome for whiteouts."
+note = "#590: `sign` places a card on the page, checks it is 180pt wide with its real aspect ratio preserved and centred on the click (the geometry SDD §3.3 promises), selects it for move/resize the same chrome `whiteout-text` already proved, drags it, and undoes it."
 [feature.macos]
 presence = "present"
 entry = "src/MegaPDF.Avalonia/ViewModels/DocumentViewModel.cs::PlaceSignature"
@@ -975,10 +981,13 @@ area = "Redaction"
 [feature.windows]
 presence = "present"
 entry = "src/MegaPDF.App/MainWindow.xaml::RedactButton"
-coverage = "engine"
-tests = ["tests/MegaPDF.Core.Tests/RedactionMarkTests.cs::Mark"]
+coverage = "ui"
+tests = [
+  ".github/workflows/ci.yml::Run-Check \"redact\"",
+  "tests/MegaPDF.Core.Tests/RedactionMarkTests.cs::Mark",
+]
 manual = "TESTING.md::**Redact**"
-note = "#329 was exactly this on Windows (mark then Undo, mark then reopen) and no Windows self-test state marks anything; the engine-level mark lifecycle is the only automated cover."
+note = "#590: `redact` now drags a mark in the real window, moves, resizes, removes, undoes, redoes, clears all and undoes the clear — the #329 lifecycle, through the window rather than only at the engine."
 issue = 329
 [feature.macos]
 presence = "present"
@@ -1263,15 +1272,16 @@ area = "Saving and output"
 [feature.windows]
 presence = "present"
 entry = "src/MegaPDF.App/MainWindow.xaml::SaveButton"
-coverage = "engine"
+coverage = "ui"
 tests = [
+  ".github/workflows/ci.yml::Run-Check \"save\"",
   "tests/MegaPDF.Core.Tests/VerifiedSaveTests.cs::Save",
   "tests/MegaPDF.Core.Tests/AtomicFileWriterTests.cs::Atomic",
   "tests/MegaPDF.Core.Tests/StagedStreamWriterTests.cs::Staged",
   "tests/MegaPDF.Core.Tests/FlattenTests.cs::Flatten",
 ]
 manual = "TESTING.md::**Saving**"
-note = "the save machinery is thoroughly tested; no Windows self-test state presses Save, and a read-only or provider-backed location is never used."
+note = "#590: `save` now presses the real SaveCommand on a dirtied document, checks the unsaved flag clears, the bytes on disk actually change, and an independently reopened copy has what was added. A read-only or provider-backed location is still never used."
 [feature.macos]
 presence = "present"
 entry = "src/MegaPDF.Avalonia/Views/MainWindow.MenuBar.cs::Strings.Save"
@@ -1449,12 +1459,13 @@ area = "Saving and output"
 [feature.windows]
 presence = "present"
 entry = "src/MegaPDF.App/MainWindow.xaml::SecurityButton"
-coverage = "engine"
+coverage = "ui"
 tests = [
+  ".github/workflows/ci.yml::Run-Check \"security\"",
   "tests/MegaPDF.Core.Tests/PasswordTests.cs::Password",
   "tests/MegaPDF.Core.Tests/SecurityTests.cs::Security",
 ]
-note = "no Windows self-test state opens the security dialog; every platform's UI path to this is untested except iOS's, and iOS's is excluded from CI."
+note = "#590: `security` opens the real Set Password dialog and reads it back (title, the two real password fields) through DialogGate.Current, cancels it — WinUI has no way to press an ad hoc ContentDialog's Primary button outside UI Automation on a live session (#462) — then drives the save-with-a-password path directly and proves the saved file is genuinely encrypted by reopening it with and without the password. Still the only platform besides iOS (excluded from CI) with any UI-level cover here; set/change/remove end-to-end through a real click is still nobody's."
 [feature.macos]
 presence = "present"
 entry = "src/MegaPDF.Avalonia/Views/MainWindow.MenuBar.cs::Strings.SecurityToolbar"
@@ -2043,9 +2054,10 @@ cell in this row — and why `entry` for this feature has to be a menu row, neve
 [feature.windows]
 presence = "present"
 entry = "src/MegaPDF.App/MainWindow.xaml::NoticesLink"
-coverage = "none"
+coverage = "ui"
+tests = [".github/workflows/ci.yml::Run-Check \"about\""]
 manual = "TESTING.md::**About**"
-note = "the settings flyout's About section and the notices dialog are not driven by any self-test state. The notices text itself is checked for drift by the `notices` job."
+note = "#590: `about` opens the real settings flyout and checks the version line against the running assembly's own version, loads the bundled notices text and checks it actually lists a component (PDFium), then opens the real notices dialog and reads it back through DialogGate.Current — the #571 shape (a window with nothing leading to it) checked directly rather than left to drift. The notices text itself is still checked for drift by the `notices` job."
 [feature.macos]
 presence = "present"
 entry = "src/MegaPDF.Avalonia/App.axaml.cs::NativeMenuItem(Strings.AboutMegaPDF)"

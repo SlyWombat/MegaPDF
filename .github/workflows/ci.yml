@@ -674,6 +674,25 @@ jobs:
           # fixture.pdf, so it needs nothing else from the fixtures directory.
           Run-Check "progress" 60
 
+          # #590: the six states that drive what a user actually opens the app for, and that
+          # this job did not run until now. Each gives itself a unique scratch directory per
+          # run (#569: a fixed one inherits RecentFiles' remembered state across runs).
+          #
+          # `fill` needs formtext.pdf and forms.pdf beside fixture.pdf for the real AcroForm
+          # widgets fixture.pdf does not have -- the "Generate fixtures" step above already
+          # wrote both next to it.
+          Run-Check "fill" 60
+          # `sign` already existed and was never run: the signature library with a seeded
+          # card, extended here to also place one on the page, select it, move it and undo.
+          Run-Check "sign" 60
+          Run-Check "redact" 60
+          Run-Check "save" 60
+          # Opens a real ContentDialog and reads it back through DialogGate.Current, then
+          # drives the save-with-a-password write path directly and reopens the result --
+          # give it a little more room than the others.
+          Run-Check "security" 75
+          Run-Check "about" 45
+
           if ($failed.Count -gt 0) {
             Write-Output "FAILED: $($failed -join ', ')"
             exit 1

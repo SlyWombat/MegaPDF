@@ -17,7 +17,7 @@ Each cell says two things and both are checked against the code:
 | `GAP` | the feature is **missing** where it should exist — the #571 shape |
 | `+m` | a by-hand step in `TESTING.md` / `docs/RELEASING.md` covers it too |
 
-220 pairings: 118 UI, 70 eng, 13 —, 14 n/a, 5 GAP.
+220 pairings: 126 UI, 63 eng, 12 —, 14 n/a, 5 GAP.
 
 This map is about *what is covered*, not whether the covering tests pass — that is the
 other jobs' business — and it does not replace the by-hand pass in `docs/RELEASING.md`
@@ -40,14 +40,13 @@ Nothing is failing; nothing is looking. #571 (Linux had an About window with no 
 | Shrink for email (`shrink`) | android | no shrink on Android either, for the same reason and with the same silence. | — |
 | Shrink for email (`shrink`) | ios | no shrink on iOS. Nothing in the source says it was decided against, and a phone mailing a scan is the case it exists for. | — |
 
-### Present, nothing automated (13)
+### Present, nothing automated (12)
 
 The feature is reachable and no test in CI touches it.
 
 | feature | platform | what is missing | issue |
 |---|---|---|---|
 | About, the version, and the third-party notices (`about-notices`) | ios | no test opens About or the notices on iOS. | — |
-| About, the version, and the third-party notices (`about-notices`) | windows | the settings flyout's About section and the notices dialog are not driven by any self-test state. The notices text itself is checked for drift by the `notices` job. | — |
 | Keyboard-only operation (`keyboard-only`) | ios | iPad keyboard commands are declared and no test presses one, on either destination. | — |
 | The build a user installs (MSIX, App Store sandbox, .deb, Snap, Flatpak, tarball) (`packaged-install`) | android | CI assembles a debug APK and tests it; the release AAB is only verified by hand. | — |
 | The build a user installs (MSIX, App Store sandbox, .deb, Snap, Flatpak, tarball) (`packaged-install`) | ios | CI builds and tests on the simulator only; nothing checks the shipped archive beyond the release workflow's own packaging. | — |
@@ -60,7 +59,7 @@ The feature is reachable and no test in CI touches it.
 | Print (`print`) | macos | the self-test checks the command's enablement and nothing else; no print is ever performed in CI. | — |
 | Print (`print`) | windows | nothing automated touches printing on Windows: no self-test state, no core test of PdfPrinter, and tools/windows-qa's print flow is manual. | — |
 
-### Engine only — this platform's own path is untested (70)
+### Engine only — this platform's own path is untested (63)
 
 The shared core proves the operation. Nothing proves this platform reaches it correctly, which is where #401 and #412 lived.
 
@@ -81,17 +80,13 @@ The shared core proves the operation. Nothing proves this platform reaches it co
 | Edit the document's own text (`body-text-edit`) | android | engine only — iOS has a live UI test for the same feature (#113/#114) and Android does not. | — |
 | Edit the document's own text (`body-text-edit`) | windows | the engine side is the best-tested part of the app; no Windows self-test state retypes a line in the UI. | — |
 | Checkboxes, real and drawn (`checkboxes`) | ios | no mark-style setting on iOS and no UI test taps a box. | — |
-| Checkboxes, real and drawn (`checkboxes`) | windows | detection and the mark style are tested; no Windows self-test state clicks a box. The `click` state exists for this and CI does not run it. | — |
 | Form text fields (`form-fields`) | ios | the engine and the gating are tested; DemoFlowUITests fills a field live but is excluded from CI as a video script. | — |
-| Form text fields (`form-fields`) | windows | no Windows self-test state fills a field; `click` exists in the harness for exactly this and CI does not run it. | — |
 | Make a signature (draw, type, photo) and the library (`signature-capture`) | android | no instrumented test opens the signatures sheet at all. | — |
 | Make a signature (draw, type, photo) and the library (`signature-capture`) | ios | cleanup and store only; the capture sheets are driven by DemoFlowUITests, which is excluded from CI. | — |
 | Make a signature (draw, type, photo) and the library (`signature-capture`) | linux | same as macOS. | — |
 | Make a signature (draw, type, photo) and the library (`signature-capture`) | macos | the self-test deliberately synthesises raw pixels rather than decoding a PNG, so the real image path is never run. | — |
-| Make a signature (draw, type, photo) and the library (`signature-capture`) | windows | the `sign` and `sign-missing` harness states exist and CI runs neither; nothing drives the pad, the typed field or a photo import. | — |
 | Place, move, resize and remove a signature (`signature-place`) | android | the stamp round-trips on a device; no Compose test places one through the UI. | — |
 | Place, move, resize and remove a signature (`signature-place`) | ios | engine placement only. | — |
-| Place, move, resize and remove a signature (`signature-place`) | windows | no Windows self-test state places a signature, although `whiteout-text` drives the same move/resize chrome for whiteouts. | — |
 | Recovery after a crash (`crash-recovery`) | windows | the journal and its replay are well covered; the restore dialog is never shown in CI, and the three-tabs-restored case TESTING.md describes is by hand only. | — |
 | Very large documents (1, 2.5 and 4.5 GB) (`large-files`) | ios | a real 1 GB open, search and save-a-copy with timings — and excluded from CI because the fixture is 1 GB. tools/ios-files-e2e.sh is how it runs. | — |
 | Very large documents (1, 2.5 and 4.5 GB) (`large-files`) | linux | as Windows; the corpus batteries on k3 are where real large documents are seen. | — |
@@ -110,7 +105,6 @@ The shared core proves the operation. Nothing proves this platform reaches it co
 | Redact — apply on save, and prove the words are gone (`redact-apply`) | android | the engine's apply is proved on a device, including image pixels; no Compose test taps through to the save-a-copy-or-overwrite question. | — |
 | Redact — apply on save, and prove the words are gone (`redact-apply`) | windows | RedactionApplyTests arrived with this map, because the cell was empty: the .NET apply path the Windows app takes had no test at all. It hunts for the word in the saved bytes the way tools/leakcheck does rather than asking the engine. No Windows self-test state marks and saves, so the UI above it is still uncovered. | — |
 | Redact — mark text or an area, move, resize, remove, clear all (`redact-mark`) | ios | the unit suite is thorough (mark, area with no text, move, remove, undo, redo); the UI test that checks the Redact row is armed is excluded from CI because the row is missing on the simulator (#405). | #405 |
-| Redact — mark text or an area, move, resize, remove, clear all (`redact-mark`) | windows | #329 was exactly this on Windows (mark then Undo, mark then reopen) and no Windows self-test state marks anything; the engine-level mark lifecycle is the only automated cover. | #329 |
 | Redact — the refusal path ("nothing was removed") (`redact-refusal`) | android | the engine refuses and leaves the file alone; no Compose test reads the refusal message back. | — |
 | Redact — the refusal path ("nothing was removed") (`redact-refusal`) | ios | the refusal leaves the document unchanged; the banner itself is not driven. | — |
 | Redact — the refusal path ("nothing was removed") (`redact-refusal`) | linux | same as macOS. | — |
@@ -121,13 +115,11 @@ The shared core proves the operation. Nothing proves this platform reaches it co
 | Password — set, change, remove, and opening a protected document (`password`) | ios | set-password and wrong-password-then-remove are real UI tests, and both are excluded from CI — the only platform with a UI test for this and it does not run. | — |
 | Password — set, change, remove, and opening a protected document (`password`) | linux | same as macOS. | — |
 | Password — set, change, remove, and opening a protected document (`password`) | macos | the self-test checks a password prompt survives a tab switch but never sets, changes or removes a password through the UI. | — |
-| Password — set, change, remove, and opening a protected document (`password`) | windows | no Windows self-test state opens the security dialog; every platform's UI path to this is untested except iOS's, and iOS's is excluded from CI. | — |
 | Progress and Stop on long operations (`progress-cancel`) | android | as iOS. | — |
 | Progress and Stop on long operations (`progress-cancel`) | ios | the timing state machine only; no UI test sees a busy strip or presses Stop. | — |
 | Save a copy / Save As (`save-a-copy`) | ios | the live cases are in FilesEndToEndUITests, excluded from CI. | — |
 | Save a copy / Save As (`save-a-copy`) | windows | no self-test state drives Save As; the picker is the OS's. | — |
 | Save (overwrite in place) (`save-in-place`) | ios | FilesEndToEndUITests saves through the real picker and is excluded from CI. | — |
-| Save (overwrite in place) (`save-in-place`) | windows | the save machinery is thoroughly tested; no Windows self-test state presses Save, and a read-only or provider-backed location is never used. | — |
 | Share (`share`) | ios | ShareVerificationUITests drives the real sheet and is excluded from CI for Files-app flakiness. | — |
 | Page colours (normal / sepia / night) (`page-colours`) | ios | the stored setting and its descriptions are tested; ReadingModeUITests checks the tint descriptions but not the rendered pixels. | — |
 | Render and scroll (`render-scroll`) | android | the render window's page-keeping arithmetic is unit-tested; no instrumented test scrolls. | — |
@@ -163,10 +155,10 @@ The shared core proves the operation. Nothing proves this platform reaches it co
 
 | feature | Windows | macOS | Linux | iOS/iPadOS | Android |
 |---|---|---|---|---|---|
-| **Form text fields** | eng+m | UI | UI | eng | UI |
-| **Checkboxes, real and drawn** | eng+m | UI | UI | eng | UI |
-| **Make a signature (draw, type, photo) and the library** | eng+m | eng+m | eng+m | eng | eng |
-| **Place, move, resize and remove a signature** | eng+m | UI | UI | eng | eng |
+| **Form text fields** | UI+m | UI | UI | eng | UI |
+| **Checkboxes, real and drawn** | UI+m | UI | UI | eng | UI |
+| **Make a signature (draw, type, photo) and the library** | UI+m | eng+m | eng+m | eng | eng |
+| **Place, move, resize and remove a signature** | UI+m | UI | UI | eng | eng |
 | **Add text** | UI+m | UI | UI | eng | UI |
 | **Edit the document's own text** | eng+m | UI | UI | UI | eng |
 | **Whiteout (cover)** | UI+m | UI | UI | GAP | UI |
@@ -175,7 +167,7 @@ The shared core proves the operation. Nothing proves this platform reaches it co
 
 | feature | Windows | macOS | Linux | iOS/iPadOS | Android |
 |---|---|---|---|---|---|
-| **Redact — mark text or an area, move, resize, remove, clear all** | eng+m | UI+m | UI+m | eng | UI |
+| **Redact — mark text or an area, move, resize, remove, clear all** | UI+m | UI+m | UI+m | eng | UI |
 | **Redact — apply on save, and prove the words are gone** | eng+m | UI+m | UI+m | UI | eng |
 | **Redact — the refusal path ("nothing was removed")** | eng | eng | eng | eng | eng |
 
@@ -191,11 +183,11 @@ The shared core proves the operation. Nothing proves this platform reaches it co
 
 | feature | Windows | macOS | Linux | iOS/iPadOS | Android |
 |---|---|---|---|---|---|
-| **Save (overwrite in place)** | eng+m | UI+m | UI+m | eng | UI |
+| **Save (overwrite in place)** | UI+m | UI+m | UI+m | eng | UI |
 | **Save a copy / Save As** | eng+m | UI+m | UI+m | eng | UI |
 | **Export as Markdown** | eng+m | UI+m | UI+m | UI | UI |
 | **Share** | n/a | n/a | n/a | eng+m | UI+m |
-| **Password — set, change, remove, and opening a protected document** | eng | eng | eng | eng | eng |
+| **Password — set, change, remove, and opening a protected document** | UI | eng | eng | eng | eng |
 | **Shrink for email** | UI+m | UI+m | UI+m | GAP | GAP |
 | **Print** | —+m | —+m | UI+m | GAP | GAP |
 | **Progress and Stop on long operations** | UI | UI | UI | eng | eng |
@@ -219,7 +211,7 @@ The shared core proves the operation. Nothing proves this platform reaches it co
 | **Light and dark app chrome** | eng | eng | eng | UI | eng |
 | **Screen-reader names and announcements** | UI | UI | UI | UI | eng |
 | **Keyboard-only operation** | UI | UI | UI | — | n/a |
-| **About, the version, and the third-party notices** | —+m | UI | UI | —+m | eng |
+| **About, the version, and the third-party notices** | UI+m | UI | UI | —+m | eng |
 | **Protected, restricted, XFA and damaged documents** | eng | UI | UI | UI | UI |
 | **The build a user installs (MSIX, App Store sandbox, .deb, Snap, Flatpak, tarball)** | eng+m | eng+m | UI+m | —+m | —+m |
 
@@ -319,7 +311,7 @@ the desktops it also means landing in the window that is already running.
 
 ### Form text fields (`form-fields`)
 
-- **Windows** — eng+m. coverage: engine only. reachable from `src/MegaPDF.App/DocumentView.xaml.cs::OnPageTapped`. tests: `tests/MegaPDF.Core.Tests/AcroFormTests.cs::Field`. by hand: `TESTING.md::**Form fields**`. no Windows self-test state fills a field; `click` exists in the harness for exactly this and CI does not run it.
+- **Windows** — UI+m. coverage: UI/VM. reachable from `src/MegaPDF.App/DocumentView.xaml.cs::OnPageTapped`. tests: `.github/workflows/ci.yml::Run-Check "fill"`, `tests/MegaPDF.Core.Tests/AcroFormTests.cs::Field`. by hand: `TESTING.md::**Form fields**`. #590: `fill` opens formtext.pdf's real AcroForm text widget (fixture.pdf has none), types into it and checks the value survives save and reopen. `click` ticks fixture.pdf's drawn square, not a form field — the row's old note crediting it for this was wrong (#590).
 - **macOS** — UI. coverage: UI/VM. reachable from `src/MegaPDF.Avalonia/ViewModels/DocumentViewModel.cs::HandlePageClick`. tests: `tests/MegaPDF.Core.Tests/AcroFormTests.cs::Field`. the self-test's fill-check-sign block drives the view model's hit test and round-trips the value through PDFium.
 - **Linux** — UI. coverage: UI/VM. reachable from `src/MegaPDF.Avalonia/ViewModels/DocumentViewModel.cs::HandlePageClick`. tests: `tests/MegaPDF.Core.Tests/AcroFormTests.cs::Field`. same as macOS.
 - **iOS/iPadOS** — eng. coverage: engine only. reachable from `ios/MegaPDF/ViewerModel.swift::formFields`. tests: `ios/MegaPDFTests/CheckboxTests.swift::class`, `ios/MegaPDFTests/DocumentCapabilitiesTests.swift::class`. the engine and the gating are tested; DemoFlowUITests fills a field live but is excluded from CI as a video script.
@@ -327,7 +319,7 @@ the desktops it also means landing in the window that is already running.
 
 ### Checkboxes, real and drawn (`checkboxes`)
 
-- **Windows** — eng+m. coverage: engine only. reachable from `src/MegaPDF.App/MainWindow.xaml::MarkStyleChoice`. tests: `tests/MegaPDF.Core.Tests/DrawnCheckboxTests.cs::Drawn`, `tests/MegaPDF.Core.Tests/SettingsAndMarkStyleTests.cs::MarkStyle`. by hand: `TESTING.md::**Checkboxes**`. detection and the mark style are tested; no Windows self-test state clicks a box. The `click` state exists for this and CI does not run it.
+- **Windows** — UI+m. coverage: UI/VM. reachable from `src/MegaPDF.App/MainWindow.xaml::MarkStyleChoice`. tests: `.github/workflows/ci.yml::Run-Check "fill"`, `tests/MegaPDF.Core.Tests/DrawnCheckboxTests.cs::Drawn`, `tests/MegaPDF.Core.Tests/SettingsAndMarkStyleTests.cs::MarkStyle`. by hand: `TESTING.md::**Checkboxes**`. #590: `fill` ticks forms.pdf's real AcroForm checkbox widget and undoes it; `click` (still not run by CI) ticks fixture.pdf's drawn square, the other kind this row covers.
 - **macOS** — UI. coverage: UI/VM. reachable from `src/MegaPDF.Avalonia/ViewModels/DocumentViewModel.cs::CheckboxToggleOperation`. tests: `tests/MegaPDF.Core.Tests/DrawnCheckboxTests.cs::Drawn`, `tests/MegaPDF.Core.Tests/SettingsAndMarkStyleTests.cs::MarkStyle`. the self-test ticks both a real AcroForm box and a drawn square through the view model.
 - **Linux** — UI. coverage: UI/VM. reachable from `src/MegaPDF.Avalonia/ViewModels/DocumentViewModel.cs::CheckboxToggleOperation`. tests: `tests/MegaPDF.Core.Tests/DrawnCheckboxTests.cs::Drawn`, `tests/MegaPDF.Core.Tests/SettingsAndMarkStyleTests.cs::MarkStyle`. same as macOS.
 - **iOS/iPadOS** — eng. coverage: engine only. reachable from `ios/MegaPDF/ViewerModel.swift::detectCheckboxSquares`. tests: `ios/MegaPDFTests/CheckboxTests.swift::class`. no mark-style setting on iOS and no UI test taps a box.
@@ -339,7 +331,7 @@ The weakest row on the board. Every platform tests the image cleanup and the lib
 storage; not one test on any platform drives the draw pad, the type field or the photo
 import, which is where #99–#101 lived.
 
-- **Windows** — eng+m. coverage: engine only. reachable from `src/MegaPDF.App/MainWindow.xaml::SignaturesToolbarButton`. tests: `tests/MegaPDF.Core.Tests/SignatureCleanupTests.cs::Cleanup`, `tests/MegaPDF.Core.Tests/SignatureLibraryTests.cs::Library`. by hand: `TESTING.md::**Signatures**`. the `sign` and `sign-missing` harness states exist and CI runs neither; nothing drives the pad, the typed field or a photo import.
+- **Windows** — UI+m. coverage: UI/VM. reachable from `src/MegaPDF.App/MainWindow.xaml::SignaturesToolbarButton`. tests: `.github/workflows/ci.yml::Run-Check "sign"`, `tests/MegaPDF.Core.Tests/SignatureCleanupTests.cs::Cleanup`, `tests/MegaPDF.Core.Tests/SignatureLibraryTests.cs::Library`. by hand: `TESTING.md::**Signatures**`. #590: `sign` now runs in CI — the library opens with a seeded card and its thumbnail decodes. `sign-missing` still exists and CI still does not run it. Nothing drives the pad, the typed field or a photo import.
 - **macOS** — eng+m. coverage: engine only. reachable from `src/MegaPDF.Avalonia/Views/MainWindow.Toolbar.cs::SignButton`. tests: `tests/MegaPDF.Core.Tests/SignatureCleanupTests.cs::Cleanup`, `tests/MegaPDF.Core.Tests/SignatureLibraryTests.cs::Library`. by hand: `TESTING.md::**Signatures**`. the self-test deliberately synthesises raw pixels rather than decoding a PNG, so the real image path is never run.
 - **Linux** — eng+m. coverage: engine only. reachable from `src/MegaPDF.Avalonia/Views/MainWindow.Toolbar.cs::SignButton`. tests: `tests/MegaPDF.Core.Tests/SignatureCleanupTests.cs::Cleanup`, `tests/MegaPDF.Core.Tests/SignatureLibraryTests.cs::Library`. by hand: `TESTING.md::**Signatures**`. same as macOS.
 - **iOS/iPadOS** — eng. coverage: engine only. reachable from `ios/MegaPDF/SignatureViews.swift::DrawSignatureView`. tests: `ios/MegaPDFTests/SignatureTests.swift::Processor`, `ios/MegaPDFTests/SignatureStoreTests.swift::class`. cleanup and store only; the capture sheets are driven by DemoFlowUITests, which is excluded from CI.
@@ -347,7 +339,7 @@ import, which is where #99–#101 lived.
 
 ### Place, move, resize and remove a signature (`signature-place`)
 
-- **Windows** — eng+m. coverage: engine only. reachable from `src/MegaPDF.App/MainWindow.xaml::SignaturesFlyout`. tests: `tests/MegaPDF.Core.Tests/SignatureStampTests.cs::Stamp`, `tests/MegaPDF.Core.Tests/HitTargetGeometryTests.cs::HitTarget`. by hand: `TESTING.md::**Signatures**`. no Windows self-test state places a signature, although `whiteout-text` drives the same move/resize chrome for whiteouts.
+- **Windows** — UI+m. coverage: UI/VM. reachable from `src/MegaPDF.App/MainWindow.xaml::SignaturesFlyout`. tests: `.github/workflows/ci.yml::Run-Check "sign"`, `tests/MegaPDF.Core.Tests/SignatureStampTests.cs::Stamp`, `tests/MegaPDF.Core.Tests/HitTargetGeometryTests.cs::HitTarget`. by hand: `TESTING.md::**Signatures**`. #590: `sign` places a card on the page, checks it is 180pt wide with its real aspect ratio preserved and centred on the click (the geometry SDD §3.3 promises), selects it for move/resize the same chrome `whiteout-text` already proved, drags it, and undoes it.
 - **macOS** — UI. coverage: UI/VM. reachable from `src/MegaPDF.Avalonia/ViewModels/DocumentViewModel.cs::PlaceSignature`. tests: `tests/MegaPDF.Core.Tests/SignatureStampTests.cs::Stamp`, `tests/MegaPDF.Core.Tests/HitTargetGeometryTests.cs::HitTarget`. the self-test places one and asserts its width, aspect and centring, and undoes it.
 - **Linux** — UI. coverage: UI/VM. reachable from `src/MegaPDF.Avalonia/ViewModels/DocumentViewModel.cs::PlaceSignature`. tests: `tests/MegaPDF.Core.Tests/SignatureStampTests.cs::Stamp`, `tests/MegaPDF.Core.Tests/HitTargetGeometryTests.cs::HitTarget`. same as macOS.
 - **iOS/iPadOS** — eng. coverage: engine only. reachable from `ios/MegaPDF/ViewerView.swift::Label("Sign"`. tests: `ios/MegaPDFTests/SignatureTests.swift::stamp`. engine placement only.
@@ -386,7 +378,7 @@ longer has.
 
 ### Redact — mark text or an area, move, resize, remove, clear all (`redact-mark`)
 
-- **Windows** — eng+m. coverage: engine only. reachable from `src/MegaPDF.App/MainWindow.xaml::RedactButton`. tests: `tests/MegaPDF.Core.Tests/RedactionMarkTests.cs::Mark`. by hand: `TESTING.md::**Redact**`. #329 was exactly this on Windows (mark then Undo, mark then reopen) and no Windows self-test state marks anything; the engine-level mark lifecycle is the only automated cover. #329.
+- **Windows** — UI+m. coverage: UI/VM. reachable from `src/MegaPDF.App/MainWindow.xaml::RedactButton`. tests: `.github/workflows/ci.yml::Run-Check "redact"`, `tests/MegaPDF.Core.Tests/RedactionMarkTests.cs::Mark`. by hand: `TESTING.md::**Redact**`. #590: `redact` now drags a mark in the real window, moves, resizes, removes, undoes, redoes, clears all and undoes the clear — the #329 lifecycle, through the window rather than only at the engine. #329.
 - **macOS** — UI+m. coverage: UI/VM. reachable from `src/MegaPDF.Avalonia/Views/MainWindow.MenuBar.cs::Strings.ToolbarRedact`. tests: `tests/MegaPDF.Core.Tests/RedactionMarkTests.cs::Mark`. by hand: `TESTING.md::**Redact**`. the self-test drags a mark, moves, resizes, removes, clears all and undoes each, and checks marking leaves the document clean (#329).
 - **Linux** — UI+m. coverage: UI/VM. reachable from `src/MegaPDF.Avalonia/Views/MainWindow.MenuBar.cs::Strings.ToolbarRedact`. tests: `tests/MegaPDF.Core.Tests/RedactionMarkTests.cs::Mark`. by hand: `TESTING.md::**Redact**`. same as macOS.
 - **iOS/iPadOS** — eng. coverage: engine only. reachable from `ios/MegaPDF/ViewerView.swift::viewerRedact`. tests: `ios/MegaPDFTests/RedactionTests.swift::class`. the unit suite is thorough (mark, area with no text, move, remove, undo, redo); the UI test that checks the Redact row is armed is excluded from CI because the row is missing on the simulator (#405). #405.
@@ -443,7 +435,7 @@ counters for two whole battery runs before #567's reporting fix.
 
 ### Save (overwrite in place) (`save-in-place`)
 
-- **Windows** — eng+m. coverage: engine only. reachable from `src/MegaPDF.App/MainWindow.xaml::SaveButton`. tests: `tests/MegaPDF.Core.Tests/VerifiedSaveTests.cs::Save`, `tests/MegaPDF.Core.Tests/AtomicFileWriterTests.cs::Atomic`, `tests/MegaPDF.Core.Tests/StagedStreamWriterTests.cs::Staged`, `tests/MegaPDF.Core.Tests/FlattenTests.cs::Flatten`. by hand: `TESTING.md::**Saving**`. the save machinery is thoroughly tested; no Windows self-test state presses Save, and a read-only or provider-backed location is never used.
+- **Windows** — UI+m. coverage: UI/VM. reachable from `src/MegaPDF.App/MainWindow.xaml::SaveButton`. tests: `.github/workflows/ci.yml::Run-Check "save"`, `tests/MegaPDF.Core.Tests/VerifiedSaveTests.cs::Save`, `tests/MegaPDF.Core.Tests/AtomicFileWriterTests.cs::Atomic`, `tests/MegaPDF.Core.Tests/StagedStreamWriterTests.cs::Staged`, `tests/MegaPDF.Core.Tests/FlattenTests.cs::Flatten`. by hand: `TESTING.md::**Saving**`. #590: `save` now presses the real SaveCommand on a dirtied document, checks the unsaved flag clears, the bytes on disk actually change, and an independently reopened copy has what was added. A read-only or provider-backed location is still never used.
 - **macOS** — UI+m. coverage: UI/VM. reachable from `src/MegaPDF.Avalonia/Views/MainWindow.MenuBar.cs::Strings.Save`. tests: `tests/MegaPDF.Core.Tests/VerifiedSaveTests.cs::Save`, `tests/MegaPDF.Core.Tests/AtomicFileWriterTests.cs::Atomic`, `tests/MegaPDF.Core.Tests/StagedStreamWriterTests.cs::Staged`, `tests/MegaPDF.Core.Tests/FlattenTests.cs::Flatten`. by hand: `TESTING.md::**Saving**`. the self-test saves by stream and by path and checks busy-state locking during the save.
 - **Linux** — UI+m. coverage: UI/VM. reachable from `src/MegaPDF.Avalonia/Views/MainWindow.MenuBar.cs::Strings.Save`. tests: `tests/MegaPDF.Core.Tests/VerifiedSaveTests.cs::Save`, `tests/MegaPDF.Core.Tests/AtomicFileWriterTests.cs::Atomic`, `tests/MegaPDF.Core.Tests/StagedStreamWriterTests.cs::Staged`, `tests/MegaPDF.Core.Tests/FlattenTests.cs::Flatten`. by hand: `TESTING.md::**Saving**`. also the only platform where CI checks saves are not staged on a RAM-backed filesystem and that an in-place save works where a hidden temp file is not allowed (snap, #158).
 - **iOS/iPadOS** — eng. coverage: engine only. reachable from `ios/MegaPDF/ViewerView.swift::saveTapped`. tests: `ios/MegaPDFTests/PdfEngineTests.swift::save`, `ios/MegaPDFTests/PageCheckTests.swift::class`. FilesEndToEndUITests saves through the real picker and is excluded from CI.
@@ -475,7 +467,7 @@ counters for two whole battery runs before #567's reporting fix.
 
 ### Password — set, change, remove, and opening a protected document (`password`)
 
-- **Windows** — eng. coverage: engine only. reachable from `src/MegaPDF.App/MainWindow.xaml::SecurityButton`. tests: `tests/MegaPDF.Core.Tests/PasswordTests.cs::Password`, `tests/MegaPDF.Core.Tests/SecurityTests.cs::Security`. no Windows self-test state opens the security dialog; every platform's UI path to this is untested except iOS's, and iOS's is excluded from CI.
+- **Windows** — UI. coverage: UI/VM. reachable from `src/MegaPDF.App/MainWindow.xaml::SecurityButton`. tests: `.github/workflows/ci.yml::Run-Check "security"`, `tests/MegaPDF.Core.Tests/PasswordTests.cs::Password`, `tests/MegaPDF.Core.Tests/SecurityTests.cs::Security`. #590: `security` opens the real Set Password dialog and reads it back (title, the two real password fields) through DialogGate.Current, cancels it — WinUI has no way to press an ad hoc ContentDialog's Primary button outside UI Automation on a live session (#462) — then drives the save-with-a-password path directly and proves the saved file is genuinely encrypted by reopening it with and without the password. Still the only platform besides iOS (excluded from CI) with any UI-level cover here; set/change/remove end-to-end through a real click is still nobody's.
 - **macOS** — eng. coverage: engine only. reachable from `src/MegaPDF.Avalonia/Views/MainWindow.MenuBar.cs::Strings.SecurityToolbar`. tests: `src/MegaPDF.Avalonia/Program.cs::CheckPasswordPromptAcrossTabSwitch`, `tests/MegaPDF.Core.Tests/PasswordTests.cs::Password`, `tests/MegaPDF.Core.Tests/SecurityTests.cs::Security`. the self-test checks a password prompt survives a tab switch but never sets, changes or removes a password through the UI.
 - **Linux** — eng. coverage: engine only. reachable from `src/MegaPDF.Avalonia/Views/MainWindow.MenuBar.cs::Strings.SecurityToolbar`. tests: `src/MegaPDF.Avalonia/Program.cs::CheckPasswordPromptAcrossTabSwitch`, `tests/MegaPDF.Core.Tests/PasswordTests.cs::Password`, `tests/MegaPDF.Core.Tests/SecurityTests.cs::Security`. same as macOS.
 - **iOS/iPadOS** — eng. coverage: engine only. reachable from `ios/MegaPDF/DocumentSecuritySheet.swift::DocumentSecuritySheet`. tests: `ios/MegaPDFTests/PdfEngineTests.swift::password`, `ios/MegaPDFUITests/FilesEndToEndUITests.swift::setPassword`. set-password and wrong-password-then-remove are real UI tests, and both are excluded from CI — the only platform with a UI test for this and it does not run.
@@ -602,7 +594,7 @@ screen reader in CI, and none can. NVDA, VoiceOver, TalkBack and Orca are by-han
 fix added the route and a self-test check for it, which is why Linux now has the strongest
 cell in this row — and why `entry` for this feature has to be a menu row, never the window.
 
-- **Windows** — —+m. coverage: nothing. reachable from `src/MegaPDF.App/MainWindow.xaml::NoticesLink`. by hand: `TESTING.md::**About**`. the settings flyout's About section and the notices dialog are not driven by any self-test state. The notices text itself is checked for drift by the `notices` job.
+- **Windows** — UI+m. coverage: UI/VM. reachable from `src/MegaPDF.App/MainWindow.xaml::NoticesLink`. tests: `.github/workflows/ci.yml::Run-Check "about"`. by hand: `TESTING.md::**About**`. #590: `about` opens the real settings flyout and checks the version line against the running assembly's own version, loads the bundled notices text and checks it actually lists a component (PDFium), then opens the real notices dialog and reads it back through DialogGate.Current — the #571 shape (a window with nothing leading to it) checked directly rather than left to drift. The notices text itself is still checked for drift by the `notices` job.
 - **macOS** — UI. coverage: UI/VM. reachable from `src/MegaPDF.Avalonia/App.axaml.cs::NativeMenuItem(Strings.AboutMegaPDF)`. tests: `src/MegaPDF.Avalonia/Program.cs::CheckAboutWindow`. the application menu is raised, About is clicked and the notices are read from what the bundle actually carries.
 - **Linux** — UI. coverage: UI/VM. reachable from `src/MegaPDF.Avalonia/Views/MainWindow.Toolbar.cs::CommandEntry(Strings.AboutMegaPDF`. tests: `src/MegaPDF.Avalonia/Program.cs::CheckAboutWindow`, `src/MegaPDF.Avalonia/Program.cs::CheckLinuxAboutRoute`. CheckLinuxAboutRoute asserts More carries About and clicking it opens the window — the check that #571's absence would have failed. #571.
 - **iOS/iPadOS** — —+m. coverage: nothing. reachable from `ios/MegaPDF/ViewerView.swift::About MegaPDF`. by hand: `docs/RELEASING.md::**About** says the version`. no test opens About or the notices on iOS.

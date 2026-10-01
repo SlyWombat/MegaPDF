@@ -1540,7 +1540,7 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
     {
         if (_document is not { } document || bounds.Width < 4 || bounds.Height < 4)
             return;
-        await DoMarkEditAsync(document, () => MarkForRedactionOperation.Place(document, pageIndex, bounds));
+        await DoMarkEditAsync(document, () => MarkForRedactionOperation.Place(document, pageIndex, bounds), appliedByMake: true);
     }
 
     /// <summary>The marks on a page, for the overlay that draws them.</summary>
@@ -1986,8 +1986,21 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
     ///
     /// <paramref name="make"/> runs off the UI thread and returns null when the gesture made
     /// nothing — a gesture to forget rather than an entry in the history that undoes to nothing.
+    ///
+    /// <paramref name="appliedByMake"/> is true only for <see cref="MarkForRedactionOperation.Place"/>,
+    /// whose factory performs the mark as the price of answering "did this cover text?". Move,
+    /// Remove and Clear build a plain operation object that does nothing until its own
+    /// <c>Apply()</c> runs (#590: found by the `redact` self-test, which selected a mark,
+    /// "moved" it, and watched <c>RedactionMarkAt</c> say it had never left — this method
+    /// recorded every one of them as already applied, which was true of Place alone, so a
+    /// drag's chrome landed on the new rectangle while the mark underneath stayed exactly where
+    /// it was until the next overlay refresh pulled the chrome back to it. Removing a mark and
+    /// Clear all marks had the same defect: the chip disappeared and the ⋮ menu reported
+    /// success, and the mark was still on the page). Undo and Redo were never affected — they
+    /// call <c>Revert()</c>/<c>Apply()</c> directly — which is why this was invisible to
+    /// anything that only pressed Ctrl+Z afterwards.
     /// </summary>
-    private async Task<bool> DoMarkEditAsync(IPdfDocument document, Func<IPageEditOperation?> make)
+    private async Task<bool> DoMarkEditAsync(IPdfDocument document, Func<IPageEditOperation?> make, bool appliedByMake = false)
     {
         if (!Capabilities.CanEditContent)
         {
@@ -2002,7 +2015,13 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
         {
             try
             {
-                op = await Task.Run(make);
+                op = await Task.Run(() =>
+                {
+                    var built = make();
+                    if (built is not null && !appliedByMake)
+                        built.Apply();
+                    return built;
+                });
             }
             catch (Exception ex)
             {
@@ -2906,6 +2925,20 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
                 return null;        // cancelled: nothing written, security unchanged
         }
     }
+
+    /// <summary>
+    /// For the `security` self-test (#590): the write path behind the Set/Change/Remove
+    /// Password dialog's own button click — <see cref="ApplySecurityAsync"/> — driven
+    /// directly, the same way <see cref="DocumentViewModel.SaveToPathForTestAsync"/> drives
+    /// <c>VerifiedSave</c> directly rather than a real Save click. WinUI offers no public way
+    /// to invoke an ad hoc <c>ContentDialog</c>'s Primary button short of UI Automation on a
+    /// live desktop session, which a CI runner does not reliably have (#462) — the same honest
+    /// limit <see cref="DocumentView.DragSelectionForTest"/> already documents for a gesture
+    /// this process cannot synthesize either. The dialog itself, and the validation its real
+    /// Primary click runs, are exercised separately by opening it and reading
+    /// <see cref="MegaPDF.App.DialogGate.Current"/>.
+    /// </summary>
+    internal Task SetPasswordForTestAsync(string password) => ApplySecurityAsync(password, Strings.PasswordSetNotice);
 
     /// <summary>
     /// Setting, changing or removing security is a save (ADR-004 §6): the document,
