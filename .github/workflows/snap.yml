@@ -6,8 +6,15 @@
 # input was ticked, and the SNAPCRAFT_STORE_CREDENTIALS secret exists. It does exist as of
 # 2026-09-28 (revision 1, 2.1.1, on edge); how it was made, and how to remake it when it
 # expires, is in tools/Linux-Packaging.md, "The Snap Store". The upload goes to the edge
-# channel, which no one is on unless they ask for it. Promotion to stable is a click in the
-# Snap Store dashboard, never this workflow.
+# channel, which no one is on unless they ask for it.
+#
+# Promotion to stable used to be described here as "a click in the Snap Store dashboard,
+# never this workflow". That was a policy, not a limitation — the stored login carries
+# package_release on edge AND stable — and it meant the one go-live that could be automated
+# was the one that required a browser. The `promote` input below does it instead, with the
+# same opt-in shape as `upload`: started by hand, explicitly ticked, and refusing without
+# the credential. Promoting is still a deliberate, public act; it is just no longer a
+# dashboard-only one (Dave, 2026-10-02, asked for exactly this from a phone).
 name: Snap
 
 on:
@@ -18,6 +25,16 @@ on:
         required: true
         default: false
         type: boolean
+      promote:
+        description: "Promote an EXISTING revision to stable. Give the revision number in promote_revision; builds nothing, uploads nothing."
+        required: false
+        default: false
+        type: boolean
+      promote_revision:
+        description: "The revision to promote to stable, e.g. 2. Read it off the Snap Store or an upload's output; never guessed."
+        required: false
+        default: ""
+        type: string
   push:
     branches: [main]
     paths:
@@ -137,3 +154,51 @@ jobs:
             exit 1
           fi
           snapcraft upload --release=edge "$(ls "$RUNNER_TEMP"/snap/megapdf_*_amd64.snap)"
+
+  # Promotion only. Builds nothing and uploads nothing: it moves a revision that is
+  # already in the store onto the stable channel, which is the Linux go-live.
+  #
+  # Separate job, not a step on the build, so a promote dispatch does not spend twenty
+  # minutes rebuilding a snap the store already has — and so the thing that makes a
+  # release public is visible on its own in the run list rather than buried in a build.
+  promote:
+    name: Snap (promote a revision to stable)
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.promote }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Refuse without a revision
+        run: |
+          if [ -z "${{ inputs.promote_revision }}" ]; then
+            echo "::error::promote needs promote_revision - the revision number to put on stable."
+            echo "::error::Read it off https://snapcraft.io/megapdf/releases or an upload's output. Never guess it:"
+            echo "::error::promoting the wrong revision publishes the wrong build to everyone on stable."
+            exit 1
+          fi
+          case "${{ inputs.promote_revision }}" in
+            ''|*[!0-9]*) echo "::error::promote_revision must be a plain number, got '${{ inputs.promote_revision }}'"; exit 1 ;;
+          esac
+
+      - name: Set up snapcraft
+        run: |
+          sudo snap install snapcraft --classic
+          snapcraft --version
+
+      - name: Promote to stable
+        env:
+          SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
+          REV: ${{ inputs.promote_revision }}
+        run: |
+          if [ -z "$SNAPCRAFT_STORE_CREDENTIALS" ]; then
+            echo "::error::no SNAPCRAFT_STORE_CREDENTIALS secret; see tools/Linux-Packaging.md, \"The Snap Store\""
+            exit 1
+          fi
+          echo "revision $REV -> stable"
+          snapcraft release megapdf "$REV" stable
+
+      - name: Read the channels back from the store
+        run: |
+          # The store, not the tool's own say-so. A promotion that did not take should
+          # not look like one that did.
+          curl -sS -H 'Snap-Device-Series: 16' \
+            "https://api.snapcraft.io/v2/snaps/info/megapdf" \
+            | jq -r '.["channel-map"][] | "\(.channel.name)\t\(.version)\trev \(.revision)"'
