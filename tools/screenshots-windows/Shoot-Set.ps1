@@ -53,7 +53,7 @@
 param(
     [ValidateSet('en-US', 'fr-CA', 'fr-FR')][string]$Lang = 'en-US',
     [string]$Dir = 'en',
-    [string]$Version = '2.1.1.0',
+    [string]$Version = '2.2.0.0',
     # Which phases to run. Each is a fresh launch, so they can be run one at a time
     # while the coordinates are being read off the probe shots.
     [ValidateSet('all', 'agreement', 'terms', 'home')][string]$Step = 'all',
