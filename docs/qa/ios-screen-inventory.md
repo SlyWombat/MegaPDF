@@ -23,8 +23,11 @@ xcrun simctl launch --console <udid> com.megapdf.ios \
   -screenshot search -AppleLanguages "(fr-CA)" -AppleLocale fr_CA
 ```
 
-`-screenshot` accepts `home viewer sign draw search text text-edit story`
-(`ViewerModel.swift:217`). Everything else must be tapped through, or driven from
+`-screenshot` accepts `home viewer sign draw search text text-edit story reading
+pages` (`ViewerModel.swift`, `applyScreenshotModeIfNeeded`). `reading` and `pages`
+(#613) both open the bundled six-page agreement rather than the one-page demo —
+a one-page document makes the reading bar's counter read "1 of 1" and the Pages
+strip a single tile. Everything else must be tapped through, or driven from
 `MegaPDFUITests`.
 
 Dynamic Type is set on the simulator, not by a launch argument:

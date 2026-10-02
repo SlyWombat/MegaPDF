@@ -217,6 +217,17 @@ final class ViewerModel: ObservableObject {
     /// bar with this term already entered and runs the search immediately.
     @Published private(set) var screenshotSearchTerm: String?
 
+    /// Set only by `-screenshot reading` and by nothing else (#613): pins the floating
+    /// reading bar up instead of letting it run its ordinary two-second idle fade.
+    ///
+    /// A named, capture-only flag rather than routing through the VoiceOver substitute
+    /// `ViewerView.screenReaderRunning()` already offers UI tests — the same shape Android's
+    /// `screenshotPinsReadingBar` and the desktop's `PinReadingPillForCapture` take, and for
+    /// the same reason: the state this slot needs ("never fades") is not actually "a screen
+    /// reader is running", and conflating the two would make a future VoiceOver-only test
+    /// pass or fail depending on what a screenshot script happened to also be doing.
+    @Published private(set) var screenshotPinsReadingBar = false
+
     private let recents = RecentsStore()
     private let signatureStore = SignatureStore()
     private let history = EditHistory()
@@ -906,6 +917,19 @@ final class ViewerModel: ObservableObject {
         #endif
     }
 
+    /// Writes a line to stdout the way the error path already writes to stderr: a raw
+    /// `write(2)` through `FileHandle`, not `print()`.
+    ///
+    /// `print()` goes through C stdio, which is fully buffered once stdout is not a
+    /// terminal — true of everything `xcrun simctl launch --stdout=<path>` redirects to.
+    /// The capture rig terminates this process rather than letting it exit on its own, so
+    /// nothing ever flushes that buffer, and the success line this exists for came back
+    /// as an empty log file on the very first run that tried to read one back (#613). A
+    /// `FileHandle` write has no such buffer to lose.
+    private static func logScreenshotLine(_ line: String) {
+        FileHandle.standardOutput.write(Data((line + "\n").utf8))
+    }
+
     private func applyScreenshotModeIfNeeded() {
         guard let mode = DemoContent.requestedState else { return }
         if signatures.isEmpty, let image = DemoContent.signatureImage(),
@@ -915,6 +939,85 @@ final class ViewerModel: ObservableObject {
         switch mode {
         case "home":
             state = .home(recents: DemoContent.demoRecents(), error: nil)
+        // Reading mode (#506), for the listing's lead slot (#613). The hard part of this
+        // picture is that the feature's whole point is that there is nothing to
+        // photograph: the navigation bar and the bottom toolbar are gone and what is left
+        // is a page. So two things are deliberate here, the same two the desktops and
+        // Android settled on for the same slot:
+        //
+        // The bar is *pinned up* rather than left to its own two-second idle fade —
+        // `screenshotPinsReadingBar`, set here and by nothing else. It is the only thing
+        // in the frame that says which app this is, and the fade would otherwise race the
+        // capture script's own timing.
+        //
+        // The page colour is left at `.normal` (`ReadingDefaults.pageTint()`'s default for
+        // a fresh container). Sepia and Night are reading mode's too, and both are better
+        // demonstrations of *a setting*; a listing set whose first image is the only
+        // tinted one reads as a different app from the six that follow it.
+        case "reading":
+            if let url = Bundle.main.url(forResource: DemoContent.pagesResource, withExtension: "pdf"),
+               let bytes = try? Data(contentsOf: url) {
+                Task {
+                    await open(source: .bytes(bytes), password: nil,
+                               displayName: DemoContent.documentName, sourceURL: nil)
+                    guard document != nil else {
+                        FileHandle.standardError.write(Data(
+                            "::error::-screenshot reading: the document did not open\n".utf8))
+                        return
+                    }
+                    screenshotPinsReadingBar = true
+                    setReadingMode(true)
+                    guard readingMode else {
+                        FileHandle.standardError.write(Data(
+                            ("::error::-screenshot reading: the mode did not turn on, so "
+                             + "this would be an ordinary viewer shot wearing the reading "
+                             + "slot's caption.\n").utf8))
+                        return
+                    }
+                    let tintName = pageTint == .normal ? "Normal" : pageTint.rawValue
+                    Self.logScreenshotLine(
+                        "screenshot reading: pinned, \(pageCount) pages, tint \(tintName)")
+                }
+            } else {
+                FileHandle.standardError.write(Data(
+                    "::error::-screenshot reading: could not load \(DemoContent.pagesResource).pdf\n".utf8))
+            }
+        // The Pages panel with a selection (#174), for the listing's page-tools slot
+        // (#613). A sheet on the phone, a sidebar beside the document on the iPad (#172)
+        // — `PagesPanel` already tells those apart by size class, so this picks nothing
+        // itself. A strip of thumbnails with two of them picked out is the whole feature
+        // in one picture, which is also why this opens the six-page document: the strip
+        // of a one-page document says nothing.
+        case "pages":
+            if let url = Bundle.main.url(forResource: DemoContent.pagesResource, withExtension: "pdf"),
+               let bytes = try? Data(contentsOf: url) {
+                Task {
+                    await open(source: .bytes(bytes), password: nil,
+                               displayName: DemoContent.documentName, sourceURL: nil)
+                    guard document != nil else {
+                        FileHandle.standardError.write(Data(
+                            "::error::-screenshot pages: the document did not open\n".utf8))
+                        return
+                    }
+                    guard pageCount >= 3 else {
+                        FileHandle.standardError.write(Data(
+                            ("::error::-screenshot pages: this document has \(pageCount) "
+                             + "page(s). The strip is the picture, so open one with several "
+                             + "(tools/gen_test_fixtures.py writes demo-pages.pdf).\n").utf8))
+                        return
+                    }
+                    setPagesOpen(true)
+                    setPagesSelecting(true)
+                    // Two pages, not one: a single selected tile reads as "the page you are
+                    // on", and the commands this strip exists for act on a set.
+                    pageSelection = [1, 2]
+                    Self.logScreenshotLine(
+                        "screenshot pages: \(pageCount) pages, \(pageSelection.count) selected")
+                }
+            } else {
+                FileHandle.standardError.write(Data(
+                    "::error::-screenshot pages: could not load \(DemoContent.pagesResource).pdf\n".utf8))
+            }
         // The #165 evidence shot: one file name from four places, one of them gone.
         case "recents":
             let scenario = DemoContent.recentsScenario()

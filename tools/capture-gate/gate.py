@@ -100,7 +100,11 @@ class Shot:
         spec = profile.get("toolbar")
         # Where the toolbar's background runs on into the canvas (Mica on
         # Windows), there is no edge to find and the profile gives the depth.
-        self.toolbar_end = (None if not spec else spec["depth"] if spec.get("fixed")
+        # A profile with no edge to measure *and* no depth to pin (#613's iOS
+        # profile: the posed status bar stays up at a height that differs by
+        # device) omits "depth" rather than guessing one, and this stays None.
+        self.toolbar_end = (None if not spec or "depth" not in spec
+                            else spec["depth"] if spec.get("fixed")
                             else im.top_band(path, spec["depth"]))
 
     @property
@@ -238,7 +242,20 @@ def constants(shots: list) -> list:
 
 
 def order_key(shot: Shot, profile: dict):
+    """Where this shot sorts on the sheet: by device, then by listing position.
+
+    `profile["order"]` is a plain list everywhere one sequence covers every
+    device in the store. iOS (PR #651) is the one store where it does not: the
+    iPad's own toolbar and sidebar (#172) earned it a different lead than the
+    iPhone's, so that profile's `"order"` is a `{device: [pose, ...]}` dict
+    instead — two sequences side by side rather than one list with an
+    iPad-shaped exception threaded through the rest of this function. A pose
+    this device's list does not name sorts after every pose that is, same as
+    an unlisted pose always has.
+    """
     order = profile["order"]
+    if isinstance(order, dict):
+        order = order.get(shot.device, ())
     rank = order.index(shot.pose) if shot.pose in order else len(order)
     return (shot.device, rank, shot.name)
 

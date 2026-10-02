@@ -429,6 +429,110 @@ class PlayReadingPose(unittest.TestCase):
 
 
 @unittest.skipUnless(shutil.which("convert"), "ImageMagick is not installed")
+class IosReadingPose(unittest.TestCase):
+    """#613: reading mode leads the iOS listing now too (`ios/MegaPDF/ViewerView.swift`
+    hides the navigation bar and bottom toolbar the same way the desktops hide their
+    own chrome), but iOS has no edge left in the frame a pixel check could measure
+    from — the posed status bar stays up, at a height that differs by device, unlike
+    Mac/Linux/Windows where the rest of the window is either measurable or pinned.
+
+    So unlike `MacReadingPose`/`LinuxReadingPose`, this platform's `toolbar` check
+    never passes or flags on this pose — it always skips, both for `reading` (handing
+    the assertion to the capture rig instead, #613) and for every other pose (this
+    platform never had a general toolbar band to begin with). What this test covers
+    is that the skip fires for the right reason in each case, and does not silently
+    turn into a pass.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.shots = os.path.join(self.tmp.name, "en")
+        os.makedirs(self.shots)
+        # The iPhone 6.9" slot size, so `size`/`_is_frame` treat these as whole frames.
+        for name in ("iphone-6_9-reading.png", "iphone-6_9-text.png"):
+            _solid(os.path.join(self.shots, name), "1320x2868", "white")
+        # The iPad 13" slot size, for the per-device order test below (PR #651):
+        # `pages` leads the iPad's sequence, `reading` the iPhone's.
+        for name in ("ipad-13-reading.png", "ipad-13-pages.png"):
+            _solid(os.path.join(self.shots, name), "2064x2752", "white")
+
+    def _toolbar(self, name):
+        with tempfile.TemporaryDirectory() as out:
+            result = gate.run(self.tmp.name, "ios", out, thumb_width=32)
+        image = next(i for i in result["images"]
+                     if os.path.basename(i["path"]) == name)
+        return next(f for f in image["findings"] if f["check"] == "toolbar")
+
+    def test_reading_hands_the_assertion_to_the_capture_rig(self):
+        finding = self._toolbar("iphone-6_9-reading.png")
+        self.assertEqual(finding["status"], "skip", finding["note"])
+        self.assertIn("capture rig asserts it instead", finding["note"])
+
+    def test_an_ordinary_pose_still_has_no_toolbar_band_to_measure(self):
+        """The stand-down for `reading` is a different reason from the platform's
+        ordinary one, and only `reading` gets it — `text` falls through to the
+        `chromeless_only` skip instead, not through the assert-only one."""
+        finding = self._toolbar("iphone-6_9-text.png")
+        self.assertEqual(finding["status"], "skip", finding["note"])
+        self.assertIn("only defined for the pose that must show none", finding["note"])
+
+    def test_the_pose_name_is_the_one_the_rig_writes(self):
+        """tools/ios-screenshots.sh writes iphone-6_9-reading.png and
+        iphone-6_9-pages.png; the profile's rules are keyed on the parsed pose
+        rather than on the file name."""
+        profile = stores.STORES["ios"]
+        for name, pose in (("iphone-6_9-reading.png", "reading"),
+                           ("iphone-6_9-pages.png", "pages")):
+            parsed = profile["parse"](name)
+            self.assertIsNotNone(parsed, name)
+            self.assertEqual(parsed[1], pose)
+        self.assertIn("reading", profile["toolbar"]["chromeless_poses"])
+        self.assertIn("pages", profile["accent_poses"])
+
+    def test_the_sheet_sorts_each_device_by_its_own_order(self):
+        """The thing a `{device: [...]}` `"order"` is actually for: `gate.py`'s
+        `order_key` has to pick the iPhone's list for an iPhone shot and the iPad's for
+        an iPad shot, not one list for both. Checked through `gate.run()` rather than
+        by calling `order_key` directly, because the sheet's own image order is what a
+        wrong lookup would actually get wrong."""
+        with tempfile.TemporaryDirectory() as out:
+            result = gate.run(self.tmp.name, "ios", out, thumb_width=32)
+        names = [os.path.basename(i["path"]) for i in result["images"]]
+        iphone = [n for n in names if n.startswith("iphone-")]
+        ipad = [n for n in names if n.startswith("ipad-")]
+        self.assertEqual(iphone, ["iphone-6_9-reading.png", "iphone-6_9-text.png"])
+        self.assertEqual(ipad, ["ipad-13-pages.png", "ipad-13-reading.png"])
+
+    def test_the_iphone_order_leads_with_reading_and_keeps_both_text_slots(self):
+        """The order #613 settled for the iPhone: reading and the page tools lead, both
+        the inline body-text edit and the Add Text slot are kept (the App Store's
+        ten-image limit never forced Android's choice between them), and `draw` — kept
+        on Apple's higher slot limit, PR #651 — sits beside `sign`."""
+        self.assertEqual(
+            stores.STORES["ios"]["order"]["iphone-6_9"],
+            ["reading", "text-edit", "sign", "draw", "pages", "text", "search",
+             "redact", "home"])
+
+    def test_the_ipad_order_is_a_different_sequence_not_the_iphones_reordered(self):
+        """PR #651: Dave's call on the iPad was to lead on the sidebar and the 2.2
+        toolbar (#172) rather than repeat the iPhone's argument, so `pages` and
+        `reading` swap to the front — and the two devices' orders are kept as two
+        entries of a `{device: [...]}` dict rather than one list with an iPad
+        exception threaded through it, which this test is also checking the shape of."""
+        profile = stores.STORES["ios"]
+        self.assertIsInstance(profile["order"], dict)
+        self.assertEqual(
+            profile["order"]["ipad-13"],
+            ["pages", "reading", "text-edit", "sign", "draw", "text", "search",
+             "redact", "home"])
+        # Same nine poses on both devices, different lead.
+        self.assertEqual(set(profile["order"]["iphone-6_9"]),
+                         set(profile["order"]["ipad-13"]))
+        self.assertNotEqual(profile["order"]["iphone-6_9"], profile["order"]["ipad-13"])
+
+
+@unittest.skipUnless(shutil.which("convert"), "ImageMagick is not installed")
 class WindowsChromelessPoses(unittest.TestCase):
     """#613: reading mode has no toolbar and no zoom chip, and the empty state has
     no zoom chip either.

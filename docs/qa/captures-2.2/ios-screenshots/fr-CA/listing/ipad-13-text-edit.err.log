@@ -1,0 +1,2 @@
+2026-10-02 00:32:10.232 MegaPDF[82372:24431101] CoreText note: Client requested name ".SFCompact", it will get TimesNewRomanPSMT rather than the intended font. All system UI font access should be through proper APIs such as CTFontCreateUIFontForLanguage() or +[UIFont systemFontOfSize:].
+2026-10-02 00:32:10.232 MegaPDF[82372:24431101] CoreText note: Set a breakpoint on CTFontLogSystemFontNameRequest to debug.

@@ -127,15 +127,29 @@ Before a document's own signature is lost
 Some documents arrive carrying a digital signature — the cryptographic kind, which stops verifying the moment the file changes at all. Saving over one of those now says so first and offers to save a copy instead, so the signed original stays intact. That is about a signature already in the document; the signature you draw, type or photograph and place on the page is a picture of your name, and placing one has not changed.
 ```
 
-**Screenshot captions** (optional overlay text), iPhone 6.9" and iPad 13" in this order
+**Screenshot captions** (optional overlay text) — iPhone 6.9", 9 files, in this order
 ```
-viewer: Checked and signed in under a minute
+reading: Reading mode leaves nothing but the page — the one you checked and signed
 text-edit: Fix a typo in the document itself
-redact: Redact removes it. It does not just cover it.
-text: Type on the blank line — your size, your font
-search: Find any word, on every page
 sign: Your signatures, saved on your device
 draw: Draw it once, use it everywhere
+pages: Rotate, reorder, delete — one Undo puts it all back
+text: Type on the blank line — your size, your font
+search: Find any word, on every page
+redact: Redact removes it. It does not just cover it.
+home: No account. No cloud. No tracking.
+```
+
+**Screenshot captions** (optional overlay text) — iPad 13", 9 files, in this order
+```
+pages: Your own toolbar, pages in a sidebar — built for the bigger screen
+reading: Then it's gone: reading mode leaves nothing but the page
+text-edit: Fix a typo in the document itself
+sign: Your signatures, saved on your device
+draw: Draw it once, use it everywhere
+text: Type on the blank line — your size, your font
+search: Find any word, on every page
+redact: Redact removes it. It does not just cover it.
 home: No account. No cloud. No tracking.
 ```
 
@@ -226,15 +240,29 @@ Avant que la signature du document ne soit perdue
 Certains documents arrivent avec une signature numérique — la signature cryptographique, adossée à un certificat — qui cesse d'être vérifiable dès que le fichier change. Enregistrer par-dessus un tel document le dit maintenant d'abord et propose d'enregistrer une copie, pour que l'original signé reste intact. Il s'agit d'une signature déjà présente dans le document; la signature que vous dessinez, tapez ou photographiez pour la poser sur la page est une image de votre nom, et rien n'a changé de ce côté.
 ```
 
-**Screenshot captions** (optional overlay text), iPhone 6.9" and iPad 13" in this order
+**Screenshot captions** (optional overlay text) — iPhone 6.9", 9 files, in this order
 ```
-viewer: Coché et signé en moins d'une minute
+reading: Le mode lecture ne laisse que la page : celle que vous avez cochée et signée
 text-edit: Corrigez une coquille dans le document même
-redact: Caviardez : c'est retiré, pas seulement couvert.
-text: Écrivez sur la ligne vide : votre taille, votre police
-search: Trouvez n'importe quel mot, sur chaque page
 sign: Vos signatures, enregistrées sur votre appareil
 draw: Dessinez-la une fois, utilisez-la partout
+pages: Faites pivoter, réordonnez, supprimez : une seule annulation remet tout en place
+text: Écrivez sur la ligne vide : votre taille, votre police
+search: Trouvez n'importe quel mot, sur chaque page
+redact: Caviardez : c'est retiré, pas seulement couvert.
+home: Pas de compte. Pas d'infonuagique. Pas de suivi.
+```
+
+**Screenshot captions** (optional overlay text) — iPad 13", 9 files, in this order
+```
+pages: Votre propre barre d'outils, vos pages dans un panneau latéral : conçu pour le grand écran
+reading: Puis tout disparaît : le mode lecture ne laisse que la page
+text-edit: Corrigez une coquille dans le document même
+sign: Vos signatures, enregistrées sur votre appareil
+draw: Dessinez-la une fois, utilisez-la partout
+text: Écrivez sur la ligne vide : votre taille, votre police
+search: Trouvez n'importe quel mot, sur chaque page
+redact: Caviardez : c'est retiré, pas seulement couvert.
 home: Pas de compte. Pas d'infonuagique. Pas de suivi.
 ```
 
@@ -325,15 +353,29 @@ Avant que la signature du document ne soit perdue
 Certains documents arrivent avec une signature numérique — la signature cryptographique, adossée à un certificat — qui cesse d'être vérifiable dès que le fichier change. Enregistrer par-dessus un tel document le dit maintenant d'abord et propose d'enregistrer une copie, pour que l'original signé reste intact. Il s'agit d'une signature déjà présente dans le document ; la signature que vous dessinez, tapez ou photographiez pour la poser sur la page est une image de votre nom, et rien n'a changé de ce côté.
 ```
 
-**Screenshot captions** (optional overlay text), iPhone 6.9" and iPad 13" in this order
+**Screenshot captions** (optional overlay text) — iPhone 6.9", 9 files, in this order
 ```
-viewer: Coché et signé en moins d'une minute
+reading: Le mode lecture ne laisse que la page : celle que vous avez cochée et signée
 text-edit: Corrigez une coquille dans le document même
-redact: Caviardez : c'est retiré, pas seulement couvert.
-text: Écrivez sur la ligne vide : votre taille, votre police
-search: Trouvez n'importe quel mot, sur chaque page
 sign: Vos signatures, enregistrées sur votre appareil
 draw: Dessinez-la une fois, utilisez-la partout
+pages: Faites pivoter, réordonnez, supprimez : une seule annulation remet tout en place
+text: Écrivez sur la ligne vide : votre taille, votre police
+search: Trouvez n'importe quel mot, sur chaque page
+redact: Caviardez : c'est retiré, pas seulement couvert.
+home: Pas de compte. Pas de cloud. Pas de suivi.
+```
+
+**Screenshot captions** (optional overlay text) — iPad 13", 9 files, in this order
+```
+pages: Votre propre barre d'outils, vos pages dans un panneau latéral : conçu pour le grand écran
+reading: Puis tout disparaît : le mode lecture ne laisse que la page
+text-edit: Corrigez une coquille dans le document même
+sign: Vos signatures, enregistrées sur votre appareil
+draw: Dessinez-la une fois, utilisez-la partout
+text: Écrivez sur la ligne vide : votre taille, votre police
+search: Trouvez n'importe quel mot, sur chaque page
+redact: Caviardez : c'est retiré, pas seulement couvert.
 home: Pas de compte. Pas de cloud. Pas de suivi.
 ```
 
@@ -509,30 +551,85 @@ French agreement (`demo-fr.pdf` for fr-CA, `demo-fr-FR.pdf` for fr — France's
 own text since #310 — both searched for "location"). Upload each set under
 its own localisation, same slots:
 
+**iPhone 6.9"** — read it, fix it, sign it (twice), organise it, fill it, find
+it, take something out, nothing leaves the device:
+
 | File | Slot | Suggested caption (optional overlay text) |
 |---|---|---|
-| `iphone-6_9-viewer.png` | iPhone 6.9" #1 | *Checked and signed in under a minute* |
+| `iphone-6_9-reading.png` | iPhone 6.9" #1 | *Reading mode leaves nothing but the page — the one you checked and signed* |
 | `iphone-6_9-text-edit.png` | iPhone 6.9" #2 | *Fix a typo in the document itself* |
-| `iphone-6_9-redact.png` | iPhone 6.9" #3 | *Redact removes it. It does not just cover it.* |
-| `iphone-6_9-text.png` | iPhone 6.9" #4 | *Type on the blank line — your size, your font* |
-| `iphone-6_9-search.png` | iPhone 6.9" #5 | *Find any word, on every page* |
-| `iphone-6_9-sign.png` | iPhone 6.9" #6 | *Your signatures, saved on your device* |
-| `iphone-6_9-draw.png` | iPhone 6.9" #7 | *Draw it once, use it everywhere* |
-| `iphone-6_9-home.png` | iPhone 6.9" #8 | *No account. No cloud. No tracking.* |
-| `ipad-13-*.png` | iPad 13" #1–8 | same order |
+| `iphone-6_9-sign.png` | iPhone 6.9" #3 | *Your signatures, saved on your device* |
+| `iphone-6_9-draw.png` | iPhone 6.9" #4 | *Draw it once, use it everywhere* |
+| `iphone-6_9-pages.png` | iPhone 6.9" #5 | *Rotate, reorder, delete — one Undo puts it all back* |
+| `iphone-6_9-text.png` | iPhone 6.9" #6 | *Type on the blank line — your size, your font* |
+| `iphone-6_9-search.png` | iPhone 6.9" #7 | *Find any word, on every page* |
+| `iphone-6_9-redact.png` | iPhone 6.9" #8 | *Redact removes it. It does not just cover it.* |
+| `iphone-6_9-home.png` | iPhone 6.9" #9 | *No account. No cloud. No tracking.* |
 
-Order matters: the viewer shot (a filled, signed agreement) leads, and the two
-things the 2.0 copy leads with — correcting the document's own text, and
-redaction — come straight after it (#146 §3, 2026-09-19). The App Store takes up
-to ten per device.
+**iPad 13" — a different sequence, not the iPhone's reordered (Dave, PR #651).**
+Lead on what only this device has — the Pages sidebar and the 2.2 toolbar
+(#172) — rather than repeat the phone's argument, then fall into the same
+seven stories in the same order, because nothing about *them* changed:
 
-**The set is re-shot for 2.1, and `redact` is the image that changes.** 2.0's
-pose armed the tool and marked a line; since #328 the tool is a row in the ⋮
-menu, so an armed tool draws nothing on the page to photograph. 2.1's pose shows
-the mark **selected** instead — its chrome, and the ✕ that takes it off (#329) —
-which is what the 2.1 notes say Redact now does. The other seven poses are
-unchanged by 2.1, and the run still shoots all eight so that the set is one
-build, one language and one status bar rather than eight images from two dates.
+| File | Slot | Suggested caption (optional overlay text) |
+|---|---|---|
+| `ipad-13-pages.png` | iPad 13" #1 | *Your own toolbar, pages in a sidebar — built for the bigger screen* |
+| `ipad-13-reading.png` | iPad 13" #2 | *Then it's gone: reading mode leaves nothing but the page* |
+| `ipad-13-text-edit.png` | iPad 13" #3 | *Fix a typo in the document itself* |
+| `ipad-13-sign.png` | iPad 13" #4 | *Your signatures, saved on your device* |
+| `ipad-13-draw.png` | iPad 13" #5 | *Draw it once, use it everywhere* |
+| `ipad-13-text.png` | iPad 13" #6 | *Type on the blank line — your size, your font* |
+| `ipad-13-search.png` | iPad 13" #7 | *Find any word, on every page* |
+| `ipad-13-redact.png` | iPad 13" #8 | *Redact removes it. It does not just cover it.* |
+| `ipad-13-home.png` | iPad 13" #9 | *No account. No cloud. No tracking.* |
+
+**Re-cut for 2.2 (#613, Dave 2026-10-01):** *"Redaction and whiteout are minor
+features that move to the back, signing, editing and reading are common
+features."* `viewer` — 2.0 through 2.1.1's lead slot, a filled and signed
+agreement with no feature of its own — is dropped from the listing on both
+devices; it is still shot, into `review/`, because the QA inventory is worth
+keeping even where the listing is not. Both `text-edit` (correcting the
+document's own text, #113) and `text` (adding a new line, #43) keep their own
+slot on both devices — different stories, and the App Store's ten-image limit
+never forces the choice Play's eight did on the same pose set. `draw` keeps
+its slot too (Dave, PR #651: the Play eight-slot limit that cut it on Android
+was never a constraint on Apple, and `sign`/`draw` make different true
+claims).
+
+**The two devices disagree on order on purpose (Dave, PR #651).** The iPhone's
+nine read as the #613 argument in sequence: read it, fix it, sign it (shown
+twice), organise it, fill it, find it, take something out, nothing leaves the
+device. The iPad got its own 2.2 toolbar and a sidebar for Pages rather than a
+sheet (#172), so Dave's call was to lead on that rather than make the same
+case twice — `pages` and `reading` swap to the front, and reading's caption
+changes from "the one you checked and signed" (closing a thought `reading`
+opened) to the contrast argument instead ("then it's gone": the same
+workspace `pages` just showed, taken away). The other seven slots keep the
+iPhone's words exactly; nothing about *them* is an iPad story.
+`tools/capture-gate/stores.py`'s `"ios"` profile's `"order"` is a
+`{"iphone-6_9": [...], "ipad-13": [...]}` dict now rather than one shared
+list, and `tools/gen_listing_copy.py`'s `AS_EN`/`AS_FR_CA` dicts carry
+`captions_iphone` and `captions_ipad` instead of one `captions` — in both
+places, two sequences side by side rather than one list with an iPad
+exception folded in, so the difference is something the next reader sees
+rather than has to reconstruct.
+
+Reading mode (#506) and Pages (#174, #613) both open the bundled six-page
+agreement (`demo-pages.pdf` / `demo-fr-pages.pdf` / `demo-fr-FR-pages.pdf`,
+`tools/gen_test_fixtures.py`) rather than the one-page demo every other slot
+opens: a single-page document makes the reading bar's counter read "1 of 1" and
+the Pages strip a single tile, both a picture of nothing. Page 1 of that document
+is byte-identical to the one-page demo's, so the set still reads as one
+document. The reading slot pins the floating bar up (`ViewerModel
+.screenshotPinsReadingBar`, set only by `-screenshot reading`) rather than
+leaving it to its ordinary two-second idle fade, and leaves the page colour at
+Normal — Sepia and Night are reading mode's too and are better shown as a
+*choice*, which is what the description already does. `-screenshot reading` and
+`-screenshot pages` each print `screenshot <state>: …` on success and
+`::error::…` on their own stderr if the mode did not actually turn on or the
+document did not have enough pages; `tools/ios-screenshots.sh` reads that log
+back for every state and fails the run rather than uploading an ordinary viewer
+shot wearing the reading slot's caption.
 
 Each shot only exists once its screenshot state ships. `search` is not in the
 1.0 builds, and `text` is newer still (#43) — upload each with the update that
@@ -543,10 +640,10 @@ The same set comes off the in-house Mac without a runner:
 `tools/ios-screenshots.sh <lang>` (see `tools/mac-mini.md`). Same files, same
 slots.
 
-**The eight above land in `listing/`; everything else the run takes lands in
-`review/`** — the dark-mode `search`, `sign` and `redact`. They are for looking
-at, not for uploading. A folder of more images than the table has slots is how a
-review shot ends up on a store listing.
+**The nine above land in `listing/`; everything else the run takes lands in
+`review/`** — `viewer`, and the dark-mode `search`, `sign` and `redact`. They are
+for looking at, not for uploading. A folder of more images than the table has
+slots is how a review shot ends up on a store listing.
 
 The iPad simulator is put in **Full Screen Apps** first (Settings → Multitasking
 & Gestures, driven by `CaptureSimulatorSetupUITests`): in Windowed Apps iPadOS 26

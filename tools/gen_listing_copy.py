@@ -219,14 +219,53 @@ Open a PDF from Mail, Files, iCloud Drive or any app that shares one — MegaPDF
 MegaPDF is deliberately simple: it doesn't bury you in toolbars. It opens, it fixes, it saves. Done.""",
     "keywords": "pdf,sign,signature,fill,form,checkbox,esign,editor,search,document,annotate,fill and sign,reader",
     "whatsnew": release_block("app-store.md", "English (Canada)"),
-    "captions": [
-        ("viewer", "Checked and signed in under a minute"),
+    # Re-cut for 2.2 (#613, Dave 2026-10-01): reading and the page tools lead, the way
+    # every platform's listing now opens; redaction moves back. `viewer`, the old lead,
+    # is dropped from the listing (still shot for the QA inventory, tools/ios-screenshots.sh).
+    # `text-edit` and `text` both keep a slot — correcting existing text and adding a new
+    # line are different stories, and the App Store's ten-image limit never forces the
+    # choice Play's eight did. `draw` keeps its slot too (Dave, PR #651: the Play eight-slot
+    # limit that cut it on Android was never a constraint on Apple, and `sign`/`draw` make
+    # different true claims).
+    #
+    # iPhone and iPad are two different sequences (Dave, PR #651) — two keys, not one list
+    # with exceptions, so the difference is visible rather than implied. The iPhone's reads
+    # as the common/#613 argument in order: read it, fix it, sign it (twice), organise it,
+    # fill it, find it, take something out, nothing leaves the device.
+    "captions_iphone": [
+        ("reading", "Reading mode leaves nothing but the page — the one you checked and signed"),
         ("text-edit", "Fix a typo in the document itself"),
-        ("redact", "Redact removes it. It does not just cover it."),
-        ("text", "Type on the blank line — your size, your font"),
-        ("search", "Find any word, on every page"),
         ("sign", "Your signatures, saved on your device"),
         ("draw", "Draw it once, use it everywhere"),
+        ("pages", "Rotate, reorder, delete — one Undo puts it all back"),
+        ("text", "Type on the blank line — your size, your font"),
+        ("search", "Find any word, on every page"),
+        ("redact", "Redact removes it. It does not just cover it."),
+        ("home", "No account. No cloud. No tracking."),
+    ],
+    # The iPad's argument is a different one (Dave, PR #651): lead on what only this device
+    # has — the sidebar and the 2.2 toolbar (#172) — rather than repeat the phone's case.
+    # `pages` and `reading` get their own captions to carry it; the other seven are read in
+    # the same order and the same words as the iPhone's, because nothing about *them* changed.
+    #
+    #   1. pages      leads: the sidebar and the new toolbar are the iPad's own thing
+    #   2. reading     the same workspace, taken away — the strongest proof slot 1 is real
+    #   3. text-edit   editing is still common, right after the two iPad-only slots
+    #   4. sign        common feature
+    #   5. draw        the other half of signing, not demoted on a platform with room for it
+    #   6. text        fill it
+    #   7. search      find anything — useful, not the reason someone installs it
+    #   8. redact      minor feature, still moved to the back
+    #   9. home        the close every platform's sequence ends on
+    "captions_ipad": [
+        ("pages", "Your own toolbar, pages in a sidebar — built for the bigger screen"),
+        ("reading", "Then it's gone: reading mode leaves nothing but the page"),
+        ("text-edit", "Fix a typo in the document itself"),
+        ("sign", "Your signatures, saved on your device"),
+        ("draw", "Draw it once, use it everywhere"),
+        ("text", "Type on the blank line — your size, your font"),
+        ("search", "Find any word, on every page"),
+        ("redact", "Redact removes it. It does not just cover it."),
         ("home", "No account. No cloud. No tracking."),
     ],
 }
@@ -275,14 +314,30 @@ Ouvrez un PDF depuis Mail, Fichiers, iCloud Drive ou toute application qui en pa
 MegaPDF est volontairement simple : il ne vous noie pas sous les barres d'outils. Il ouvre, il corrige, il enregistre. Terminé.""",
     "keywords": "pdf,signer,signature,remplir,formulaire,case,cocher,éditeur,recherche,document,annoter,lecture",
     "whatsnew": release_block("app-store.md", "Français (Canada)"),
-    "captions": [
-        ("viewer", "Coché et signé en moins d'une minute"),
+    # See AS_EN's captions comment (#613, PR #651) — same re-cut, two sequences.
+    "captions_iphone": [
+        ("reading", "Le mode lecture ne laisse que la page : celle que vous avez cochée et signée"),
         ("text-edit", "Corrigez une coquille dans le document même"),
-        ("redact", "Caviardez : c'est retiré, pas seulement couvert."),
-        ("text", "Écrivez sur la ligne vide : votre taille, votre police"),
-        ("search", "Trouvez n'importe quel mot, sur chaque page"),
         ("sign", "Vos signatures, enregistrées sur votre appareil"),
         ("draw", "Dessinez-la une fois, utilisez-la partout"),
+        ("pages", "Faites pivoter, réordonnez, supprimez : une seule annulation remet tout en place"),
+        ("text", "Écrivez sur la ligne vide : votre taille, votre police"),
+        ("search", "Trouvez n'importe quel mot, sur chaque page"),
+        ("redact", "Caviardez : c'est retiré, pas seulement couvert."),
+        ("home", "Pas de compte. Pas d'infonuagique. Pas de suivi."),
+    ],
+    # The iPad's own argument (Dave, PR #651): "panneau latéral" and "volet" are the words
+    # the rest of the catalogue already uses for this (docs/microsoft-store-listing.md,
+    # the Mac reading-mode copy) — not new vocabulary for this one pair of captions.
+    "captions_ipad": [
+        ("pages", "Votre propre barre d'outils, vos pages dans un panneau latéral : conçu pour le grand écran"),
+        ("reading", "Puis tout disparaît : le mode lecture ne laisse que la page"),
+        ("text-edit", "Corrigez une coquille dans le document même"),
+        ("sign", "Vos signatures, enregistrées sur votre appareil"),
+        ("draw", "Dessinez-la une fois, utilisez-la partout"),
+        ("text", "Écrivez sur la ligne vide : votre taille, votre police"),
+        ("search", "Trouvez n'importe quel mot, sur chaque page"),
+        ("redact", "Caviardez : c'est retiré, pas seulement couvert."),
         ("home", "Pas de compte. Pas d'infonuagique. Pas de suivi."),
     ],
 }
@@ -501,8 +556,14 @@ def as_section(title: str, tag: str, c: dict, note: str = "") -> str:
     parts.append(f"**Keywords** [100] ({len(c['keywords'])})\n" + block(c["keywords"]))
     parts.append(f"**What's new** [4000] ({len(c['whatsnew'])}) — {NOTES_VERSION}, from `docs/release-notes/{NOTES_VERSION}/app-store.md`\n"
                  + block(c["whatsnew"]))
-    parts.append("**Screenshot captions** (optional overlay text), iPhone 6.9\" and iPad 13\" in this order\n"
-                 + block("\n".join(f"{f}: {cap}" for f, cap in c["captions"])))
+    # Two sequences, not one (#613, PR #651): the iPad leads on the sidebar and the 2.2
+    # toolbar (#172) rather than repeating the iPhone's argument, so its slots 1 and 2
+    # swap and carry their own captions. Printed as two blocks under their own headings
+    # rather than one list with a footnote, so the difference is a glance, not a diff.
+    parts.append(f"**Screenshot captions** (optional overlay text) — iPhone 6.9\", {len(c['captions_iphone'])} files, in this order\n"
+                 + block("\n".join(f"{f}: {cap}" for f, cap in c["captions_iphone"])))
+    parts.append(f"**Screenshot captions** (optional overlay text) — iPad 13\", {len(c['captions_ipad'])} files, in this order\n"
+                 + block("\n".join(f"{f}: {cap}" for f, cap in c["captions_ipad"])))
     return "\n".join(p for p in parts if p)
 
 

@@ -25,6 +25,7 @@ unchanged:
 ```
 python3 tools/capture-gate/gate.py --store mac  docs/qa/captures-2.2/macos-screenshots --out /tmp/gate
 python3 tools/capture-gate/gate.py --store play docs/qa/captures-2.2/play/phone      --out /tmp/gate
+python3 tools/capture-gate/gate.py --store ios  docs/qa/captures-2.2/ios-screenshots  --out /tmp/gate
 ```
 
 ## What is here
@@ -33,14 +34,34 @@ python3 tools/capture-gate/gate.py --store play docs/qa/captures-2.2/play/phone 
 |---|---|---|---|---|
 | `macos-screenshots/<lang>/` | Mac App Store, 1440x900 | 7, `light-NN-<pose>.png` | `tools/macos-store-captures.sh` | `docs/qa/mac-store-captures.md` |
 | `play/phone/<lang>/` | Google Play phone, 1080x2400 | 8, `android-<pose>.png` | **Android Screenshots** workflow | `docs/qa/android-store-captures.md` |
+| `ios-screenshots/<lang>/listing/` | App Store (iOS), two devices | 9 × 2, `<device>-<pose>.png` | `tools/ios-screenshots.sh` | `docs/app-store-listing.md` § Screenshots |
 
 Languages are `en`, `fr-CA` and `fr-FR` throughout. (The Mac rig spells France's
 `fr`, which is what App Store Connect calls that localisation; the folder is
-named for it and the gate reads it as `fr-FR`.)
+named for it and the gate reads it as `fr-FR`. The iOS rig does the same.)
 
 Each Mac language folder carries the run's own `RUN.txt`: the bundle, the
 binary's sha256, the language, the window size, which demo document each slot
-opened, and when it was taken.
+opened, and when it was taken. `ios-screenshots/<lang>/listing/` carries a
+`.out.log`/`.err.log` pair beside every PNG instead — what
+`ViewerModel.applyScreenshotModeIfNeeded` printed on that launch, which is also
+what `tools/ios-screenshots.sh` itself checked before trusting the image: a
+`reading` or `pages` shot whose mode did not actually turn on fails the run
+rather than being filed quietly.
 
 **The French has not been read by a francophone.** That is a gate on store
 submission, not on these captures (Dave, #343/#613).
+
+**The iOS iPhone and iPad sets were not shot in the same pass.** The original
+three-locale run crossed midnight between `en`/`fr-CA` and `fr`, and the iPad's
+date indicator — the one piece of its posed status bar `simctl status_bar`
+cannot override — came back a calendar day apart, which the gate's
+cross-language comparison caught on all nine `fr-FR` iPad poses (a 30% status-bar
+difference against `en`'s). Re-shooting just the iPad for `fr` did not fix it:
+real time had already moved past midnight, so it only produced a *third* date.
+The iPad set for all three locales was re-shot together instead, back to back,
+so all three land on the same day; the iPhone set is untouched from the
+original run. Both runs are reflected in the committed files' timestamps —
+`iphone-6_9-*` predates `ipad-13-*` by roughly 45 minutes in every language
+folder — and the gate is clean over the result (`0 image(s) to look at` in all
+three languages).
