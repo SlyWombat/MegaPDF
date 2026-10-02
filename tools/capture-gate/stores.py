@@ -304,6 +304,12 @@ STORES: dict[str, dict] = {
         # document's title and a Save button, both of which translate.
         "status_band": {"height_frac": 0.045,
                         "by_device": {"ipad-13": 0.019}},
+        # `tools/ios-screenshots.sh` files the demoted `viewer` pose and the dark-mode
+        # QA shots here, same idea as the Windows profile's `work`: a folder of more
+        # images than the table has slots is how a review shot ends up on a listing
+        # (#146 §3), so the gate reads the listing set without them rather than
+        # reporting findings for poses nobody is about to upload.
+        "not_listing_folders": ("review",),
         "notes": "tools/ios-screenshots.sh, listing/ and review/ sets.",
     },
     # ---------------------------------------------------------------- Android

@@ -917,6 +917,19 @@ final class ViewerModel: ObservableObject {
         #endif
     }
 
+    /// Writes a line to stdout the way the error path already writes to stderr: a raw
+    /// `write(2)` through `FileHandle`, not `print()`.
+    ///
+    /// `print()` goes through C stdio, which is fully buffered once stdout is not a
+    /// terminal — true of everything `xcrun simctl launch --stdout=<path>` redirects to.
+    /// The capture rig terminates this process rather than letting it exit on its own, so
+    /// nothing ever flushes that buffer, and the success line this exists for came back
+    /// as an empty log file on the very first run that tried to read one back (#613). A
+    /// `FileHandle` write has no such buffer to lose.
+    private static func logScreenshotLine(_ line: String) {
+        FileHandle.standardOutput.write(Data((line + "\n").utf8))
+    }
+
     private func applyScreenshotModeIfNeeded() {
         guard let mode = DemoContent.requestedState else { return }
         if signatures.isEmpty, let image = DemoContent.signatureImage(),
@@ -962,7 +975,8 @@ final class ViewerModel: ObservableObject {
                         return
                     }
                     let tintName = pageTint == .normal ? "Normal" : pageTint.rawValue
-                    print("screenshot reading: pinned, \(pageCount) pages, tint \(tintName)")
+                    Self.logScreenshotLine(
+                        "screenshot reading: pinned, \(pageCount) pages, tint \(tintName)")
                 }
             } else {
                 FileHandle.standardError.write(Data(
@@ -997,8 +1011,8 @@ final class ViewerModel: ObservableObject {
                     // Two pages, not one: a single selected tile reads as "the page you are
                     // on", and the commands this strip exists for act on a set.
                     pageSelection = [1, 2]
-                    print("screenshot pages: \(pageCount) pages, "
-                          + "\(pageSelection.count) selected")
+                    Self.logScreenshotLine(
+                        "screenshot pages: \(pageCount) pages, \(pageSelection.count) selected")
                 }
             } else {
                 FileHandle.standardError.write(Data(
