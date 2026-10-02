@@ -3,6 +3,11 @@
 # time limit, so nothing on the WSL side (a tool call ending, a shell exiting) can
 # cancel the pending prompt. Approving it starts wack-run.ps1 elevated.
 $log = 'D:\megapdf-qa\wack-launch.log'
+# Create the folder rather than assuming it: D:\megapdf-qa is scratch, and agents
+# are told to clean up after themselves, so it gets deleted between releases. When
+# it was missing this script threw on its first line and the UAC prompt never
+# appeared at all - a silent failure that looks exactly like "nothing happened".
+New-Item -ItemType Directory -Force -Path (Split-Path $log) | Out-Null
 "$(Get-Date -Format s) raising UAC for wack-run.ps1" | Out-File $log -Append
 try {
     Start-Process -FilePath 'powershell.exe' -Verb RunAs -ArgumentList @(
