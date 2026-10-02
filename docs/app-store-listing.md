@@ -536,7 +536,7 @@ QA inventory is worth keeping even where the listing is not. Both `text-edit`
 keep their own slot — different stories, and the App Store's ten-image limit
 never forces the choice Play's eight did on the same pose set. `draw` keeps its
 slot too, next to `sign`, both being signature-adjacent — **pending Dave's
-sign-off on keeping it at all; see the PR that introduced this order.** The
+sign-off on keeping it at all; see PR #651, which introduced this order.** The
 iPad's nine slots are shot in the same order as the iPhone's: its page tools
 are a sidebar rather than a sheet and its own toolbar is new in 2.2 (#172), but
 the same nine stories are told either way, and

@@ -9,8 +9,7 @@
 # the way every other platform's re-shoot now opens, redaction moves back, and `viewer`
 # — the old lead — is demoted to the review set. `draw` keeps its slot, pending Dave's
 # sign-off (the App Store takes up to ten images, so the squeeze that cut it from
-# Android's eight-slot Play set does not apply here); see the PR that introduced this
-# order for the open question.
+# Android's eight-slot Play set does not apply here); see PR #651 for the open question.
 #
 # Usage: tools/ios-screenshots.sh [lang] [out-dir]
 #   lang     en (default), fr-CA or fr
