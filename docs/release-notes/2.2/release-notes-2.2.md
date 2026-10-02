@@ -14,8 +14,8 @@ Stop a long job, now on every platform (#145, behind #568 / #563 / #580 / #591);
 whiteout's move/resize chrome and text that takes more than one line, also now on
 every platform (#3, #4, behind #564 / #535 / #565 / #591); a withheld page
 permission that explains itself instead of only refusing (#558, #581); a warning
-before saving destroys a document's own digital signature, with an option to strip
-one a save is about to break, so far on the Mac and Linux (#476, #481, #576, #610,
+before saving destroys a document's own digital signature, on every platform, with
+an option to strip one a save is about to break (#476, #481, #576, #610, #641,
 behind #486 / #491 / #492 / #497); the iPad's own toolbar (#172, #435); the
 vocabulary fix that keeps the two meanings of "signature" apart (#602, #606); a
 fix to the Windows empty state, which had offered document commands with no
@@ -159,13 +159,16 @@ changed at all. Either way, the warning appears once, at the point of Save, on
 every platform (#476, #481, behind #486 core / #491 desktop / #492 iOS / #497
 Android).
 
-**On the Mac and Linux, that warning now also offers to remove the signature
-it's about to break** — a checkbox, unchecked by default, so whether an
-already-broken signature still travels with the saved file is the person's
-choice, not the app's. The three buttons the warning already had are untouched;
-overwriting and keeping the original signature bytes exactly as they are is
-still one click. Windows, Android and iOS still only warn, as before — this is
-the Mac and Linux half of a change that isn't finished (#576, #610).
+**That warning now also offers to remove the signature it's about to break, on
+every platform.** On Windows, the Mac, Linux and Android it's a checkbox in the
+same dialog — ticked by default, since the save has already ended the
+signature's validity either way — so removing the dead signature is what
+happens unless you say otherwise. On iPhone and iPad, where the system's
+confirmation sheet has no room for a checkbox, the same choice is two separate
+buttons instead: the plain Save button removes the signature, and a second row
+beneath it keeps the original bytes untouched for whoever wants them. The three
+buttons the warning already had are otherwise unchanged (#476, #481, #576,
+#610, #641).
 
 **This is not a new way to sign.** The signature you draw, type or photograph and
 place on a page — what the app has always called *Signatures*, *sign*, *your
@@ -207,14 +210,17 @@ instead of leaving a blank slot (#402, #428).
   page tools, the selection tools and Password stayed enabled although the app
   would ignore a tap; eleven controls and two separate guards are now one
   (#611, #636).
+- **A quiet note after saving a copy of a signed document said the signature
+  "doesn't carry over to the copy." It does** — a saved copy still carries the
+  signature dictionary; only its validity doesn't survive the rewrite, which
+  is a narrower and more accurate thing to say. Fixed on Windows too, not only
+  the phones (#576, #641).
 
 ### What isn't here
 
 - **The informed page-permission choice is Android only.** Windows, macOS,
   Linux and iOS still refuse outright when a document's owner restricted page
   assembly.
-- **Stripping a signature a save is about to break is Mac and Linux only**
-  (above). Windows, Android and iOS still warn without that option.
 - **Reflow — a document laid out to fit the screen — is not in 2.2**, on any
   platform.
 
@@ -229,6 +235,9 @@ instead of leaving a blank slot (#402, #428).
   can be stopped (#568).
 - Whiteout stays selected to move, resize or delete; added text takes more than
   one line (#564).
+- The save warning before overwriting a signed document now offers a checkbox,
+  ticked by default, to also strip the signature it's about to break (#576,
+  #641).
 - The signature library's thumbnails come from the signature's own bytes, and a
   reload says which images are missing (#402, #428).
 - Fix: a tab opened from File Explorer or a second launch now reliably gets its
@@ -251,8 +260,9 @@ instead of leaving a blank slot (#402, #428).
   can be stopped (#563).
 - Whiteout stays selected to move, resize or delete; added text takes more than
   one line (#535).
-- The save warning before overwriting a signed document now offers a checkbox to
-  also strip the signature it's about to break (#576, #610).
+- The save warning before overwriting a signed document now offers a checkbox,
+  ticked by default, to also strip the signature it's about to break (#576,
+  #610, #641).
 - Fix: a file opened from the Finder, the Dock or a second launch lands as its own
   tab however it arrives, and the window's title follows the active tab (#398,
   #399).
@@ -271,8 +281,9 @@ instead of leaving a blank slot (#402, #428).
   can be stopped (#563).
 - Whiteout stays selected to move, resize or delete; added text takes more than
   one line (#535).
-- The save warning before overwriting a signed document now offers a checkbox to
-  also strip the signature it's about to break (#576, #610).
+- The save warning before overwriting a signed document now offers a checkbox,
+  ticked by default, to also strip the signature it's about to break (#576,
+  #610, #641).
 - No change: a withheld page permission still refuses outright, and `megapdf-cli`
   is unchanged, in every package.
 
@@ -291,6 +302,9 @@ instead of leaving a blank slot (#402, #428).
   line (#565).
 - **The one platform where a withheld page permission explains itself and leaves
   the choice to you**, instead of only refusing (#558, #581).
+- The save warning before overwriting a signed document now offers a checkbox,
+  ticked by default, to also strip the signature it's about to break (#576,
+  #641).
 - Fix: a redaction mark keeps its identity when an undo brings it back (#429).
 - Fix: the toolbar no longer offers a command it's about to silently refuse in
   the brief window right after an edit (#611, #636).
@@ -310,6 +324,11 @@ instead of leaving a blank slot (#402, #428).
   separately-selectable text boxes under one undo step (#591).
 - Long work shows progress; searching and extracting pages can be stopped.
   There is no shrink feature on iOS to stop (#591).
+- The save warning before overwriting a signed document now offers to also
+  strip the signature it's about to break — as two buttons rather than a
+  checkbox, since the system's confirmation sheet has no room for one: the
+  plain Save button removes it, and a second row below keeps the original
+  bytes (#576, #641).
 - Fix: Save a copy lets you keep working with the file it just wrote (#572, #589,
   #597).
 - Fix: a redaction mark keeps its identity when an undo brings it back (#441).
@@ -456,14 +475,17 @@ subir aucune modification. Dans les deux cas, l'avertissement apparaît une fois
 au moment d'enregistrer, sur toutes les plateformes (#476, #481, derrière #486
 pour le moteur, #491 ordinateurs de bureau, #492 iOS, #497 Android).
 
-**Sur le Mac et Linux, cet avertissement propose maintenant aussi de retirer la
-signature qu'il s'apprête à briser** — une case à cocher, décochée par défaut,
-pour que ce soit la personne, et non l'application, qui décide si une signature
-déjà brisée continue de voyager avec le fichier enregistré. Les trois boutons que
-l'avertissement avait déjà ne changent pas; écraser l'original en conservant les
-octets de la signature tels quels reste possible en un clic. Windows, Android et
-iOS ne font encore qu'avertir, comme avant — c'est la moitié Mac et Linux d'un
-changement qui n'est pas terminé (#576, #610).
+**Cet avertissement propose maintenant aussi de retirer la signature qu'il
+s'apprête à briser, sur toutes les plateformes.** Sur Windows, le Mac, Linux et
+Android, c'est une case à cocher dans la même boîte de dialogue — cochée par
+défaut, puisque l'enregistrement a de toute façon déjà mis fin à la validité de
+la signature — si bien que retirer la signature morte est ce qui se passe à
+moins d'indiquer le contraire. Sur iPhone et iPad, où la feuille de
+confirmation du système n'a pas de place pour une case à cocher, le même choix
+prend la forme de deux boutons distincts : le bouton Enregistrer simple retire
+la signature, et une seconde rangée en dessous garde les octets d'origine
+intacts pour qui les veut. Les trois boutons que l'avertissement avait déjà ne
+changent pas par ailleurs (#476, #481, #576, #610, #641).
 
 **Ce n'est pas une nouvelle façon de signer.** La signature que vous dessinez,
 tapez ou photographiez pour la poser sur une page — ce que l'application a
@@ -506,15 +528,24 @@ images manquent plutôt que de laisser un espace vide (#402, #428).
 - **Windows : un onglet ouvert de l'extérieur de l'application** — l'Explorateur
   de fichiers, un second lancement — **obtient maintenant sa barre d'outils de
   façon fiable**, corrigeant un manque intermittent de 2.1.1 (#427).
+- **Android : la barre d'outils n'offre plus une commande qu'elle s'apprête à
+  refuser en silence.** Pendant quelques centaines de millisecondes après
+  chaque modification, Annuler, Rétablir, les outils de page, les outils de
+  sélection et Mot de passe restaient activés alors que l'application
+  ignorerait un appui; onze commandes et deux conditions distinctes n'en font
+  maintenant plus qu'une (#611, #636).
+- **Une note discrète après l'enregistrement d'une copie d'un document signé
+  disait que la signature « ne sera pas reportée dans la copie ». C'est faux**
+  — une copie enregistrée porte toujours le dictionnaire de la signature;
+  seule sa validité ne survit pas à la réécriture, ce qui est une chose plus
+  étroite et plus exacte à dire. Corrigé sur Windows aussi, pas seulement sur
+  les téléphones (#576, #641).
 
 ### Ce qui n'y est pas
 
 - **Le choix éclairé pour une permission de page est réservé à Android.**
   Windows, macOS, Linux et iOS refusent toujours carrément quand le propriétaire
   d'un document a restreint l'assemblage des pages.
-- **Retirer une signature qu'un enregistrement s'apprête à briser est réservé au
-  Mac et à Linux** (voir plus haut). Windows, Android et iOS ne font encore
-  qu'avertir, sans cette option.
 - **La redistribution du texte — un document remis en page pour s'ajuster à
   l'écran — n'est
   pas dans 2.2**, sur aucune plateforme.
@@ -532,6 +563,9 @@ images manquent plutôt que de laisser un espace vide (#402, #428).
   réduite pour courriel et l'extraction de pages peuvent être arrêtées (#568).
 - Le correcteur reste sélectionné pour le déplacer, le redimensionner ou le
   supprimer; le texte ajouté tient sur plus d'une ligne (#564).
+- L'avertissement avant d'écraser un document signé propose maintenant une
+  case à cocher, cochée par défaut, pour retirer aussi la signature qu'il
+  s'apprête à briser (#576, #641).
 - Les vignettes de la bibliothèque de signatures viennent des octets de la
   signature elle-même, et un rechargement dit quelles images manquent (#402,
   #428).
@@ -558,7 +592,8 @@ images manquent plutôt que de laisser un espace vide (#402, #428).
 - Le correcteur reste sélectionné pour le déplacer, le redimensionner ou le
   supprimer; le texte ajouté tient sur plus d'une ligne (#535).
 - L'avertissement avant d'écraser un document signé propose maintenant une case
-  à cocher pour retirer aussi la signature qu'il s'apprête à briser (#576, #610).
+  à cocher, cochée par défaut, pour retirer aussi la signature qu'il s'apprête
+  à briser (#576, #610, #641).
 - Correction : un fichier ouvert depuis le Finder, le Dock ou un second
   lancement arrive dans son propre onglet quel que soit son chemin, et le titre
   de la fenêtre suit l'onglet actif (#398, #399).
@@ -580,7 +615,8 @@ images manquent plutôt que de laisser un espace vide (#402, #428).
 - Le correcteur reste sélectionné pour le déplacer, le redimensionner ou le
   supprimer; le texte ajouté tient sur plus d'une ligne (#535).
 - L'avertissement avant d'écraser un document signé propose maintenant une case
-  à cocher pour retirer aussi la signature qu'il s'apprête à briser (#576, #610).
+  à cocher, cochée par défaut, pour retirer aussi la signature qu'il s'apprête
+  à briser (#576, #610, #641).
 - Sans changement : une permission de page refusée refuse toujours carrément, et
   `megapdf-cli` est inchangé, dans chaque paquet.
 
@@ -601,6 +637,9 @@ images manquent plutôt que de laisser un espace vide (#402, #428).
   texte ajouté tient maintenant sur plus d'une ligne (#565).
 - **La seule plateforme où une permission de page refusée s'explique et vous
   laisse choisir**, au lieu de seulement refuser (#558, #581).
+- L'avertissement avant d'écraser un document signé propose maintenant une
+  case à cocher, cochée par défaut, pour retirer aussi la signature qu'il
+  s'apprête à briser (#576, #641).
 - Correction : une marque de caviardage garde son identité quand une annulation
   la ramène (#429).
 - Correction : la barre d'outils n'offre plus une commande qu'elle s'apprête
@@ -625,6 +664,11 @@ images manquent plutôt que de laisser un espace vide (#402, #428).
 - Les longues opérations montrent leur progression; la recherche et
   l'extraction de pages peuvent être arrêtées. Il n'y a pas de fonction de
   copie réduite sur iOS à arrêter (#591).
+- L'avertissement avant d'écraser un document signé propose maintenant de
+  retirer aussi la signature qu'il s'apprête à briser — deux boutons plutôt
+  qu'une case à cocher, puisque la feuille de confirmation du système n'a pas
+  de place pour une case : le bouton Enregistrer simple la retire, et une
+  rangée en dessous garde les octets d'origine (#576, #641).
 - Correction : Enregistrer une copie vous laisse continuer à travailler avec le
   fichier qu'elle vient d'écrire (#572, #589, #597).
 - Correction : une marque de caviardage garde son identité quand une annulation
@@ -779,14 +823,17 @@ subir aucune modification. Dans les deux cas, l'avertissement apparaît une fois
 au moment d'enregistrer, sur toutes les plateformes (#476, #481, derrière #486
 pour le moteur, #491 ordinateurs de bureau, #492 iOS, #497 Android).
 
-**Sur le Mac et Linux, cet avertissement propose maintenant aussi de retirer la
-signature qu'il s'apprête à briser** — une case à cocher, décochée par défaut,
-pour que ce soit la personne, et non l'application, qui décide si une signature
-déjà brisée continue de voyager avec le fichier enregistré. Les trois boutons que
-l'avertissement avait déjà ne changent pas ; écraser l'original en conservant les
-octets de la signature tels quels reste possible en un clic. Windows, Android et
-iOS ne font encore qu'avertir, comme avant — c'est la moitié Mac et Linux d'un
-changement qui n'est pas terminé (#576, #610).
+**Cet avertissement propose maintenant aussi de retirer la signature qu'il
+s'apprête à briser, sur toutes les plateformes.** Sur Windows, le Mac, Linux et
+Android, c'est une case à cocher dans la même boîte de dialogue — cochée par
+défaut, puisque l'enregistrement a de toute façon déjà mis fin à la validité de
+la signature — si bien que retirer la signature morte est ce qui se passe à
+moins d'indiquer le contraire. Sur iPhone et iPad, où la feuille de
+confirmation du système n'a pas de place pour une case à cocher, le même choix
+prend la forme de deux boutons distincts : le bouton Enregistrer simple retire
+la signature, et une seconde rangée en dessous garde les octets d'origine
+intacts pour qui les veut. Les trois boutons que l'avertissement avait déjà ne
+changent pas par ailleurs (#476, #481, #576, #610, #641).
 
 **Ce n'est pas une nouvelle façon de signer.** La signature que vous dessinez,
 tapez ou photographiez pour la poser sur une page — ce que l'application a
@@ -829,15 +876,24 @@ images manquent plutôt que de laisser un espace vide (#402, #428).
 - **Windows : un onglet ouvert de l'extérieur de l'application** — l'Explorateur
   de fichiers, un second lancement — **obtient maintenant sa barre d'outils de
   façon fiable**, corrigeant un manque intermittent de 2.1.1 (#427).
+- **Android : la barre d'outils n'offre plus une commande qu'elle s'apprête à
+  refuser en silence.** Pendant quelques centaines de millisecondes après
+  chaque modification, Annuler, Rétablir, les outils de page, les outils de
+  sélection et Mot de passe restaient activés alors que l'application
+  ignorerait un appui ; onze commandes et deux conditions distinctes n'en font
+  maintenant plus qu'une (#611, #636).
+- **Une note discrète après l'enregistrement d'une copie d'un document signé
+  disait que la signature « ne sera pas reportée dans la copie ». C'est faux**
+  — une copie enregistrée porte toujours le dictionnaire de la signature ;
+  seule sa validité ne survit pas à la réécriture, ce qui est une chose plus
+  étroite et plus exacte à dire. Corrigé sur Windows aussi, pas seulement sur
+  les téléphones (#576, #641).
 
 ### Ce qui n'y est pas
 
 - **Le choix éclairé pour une permission de page est réservé à Android.**
   Windows, macOS, Linux et iOS refusent toujours carrément quand le propriétaire
   d'un document a restreint l'assemblage des pages.
-- **Retirer une signature qu'un enregistrement s'apprête à briser est réservé au
-  Mac et à Linux** (voir plus haut). Windows, Android et iOS ne font encore
-  qu'avertir, sans cette option.
 - **La redistribution du texte — un document remis en page pour s'ajuster à
   l'écran — n'est
   pas dans 2.2**, sur aucune plateforme.
@@ -855,6 +911,9 @@ images manquent plutôt que de laisser un espace vide (#402, #428).
   réduite pour l'e-mail et l'extraction de pages peuvent être arrêtées (#568).
 - Le correcteur reste sélectionné pour le déplacer, le redimensionner ou le
   supprimer ; le texte ajouté tient sur plus d'une ligne (#564).
+- L'avertissement avant d'écraser un document signé propose maintenant une
+  case à cocher, cochée par défaut, pour retirer aussi la signature qu'il
+  s'apprête à briser (#576, #641).
 - Les vignettes de la bibliothèque de signatures viennent des octets de la
   signature elle-même, et un rechargement dit quelles images manquent (#402,
   #428).
@@ -881,7 +940,8 @@ images manquent plutôt que de laisser un espace vide (#402, #428).
 - Le correcteur reste sélectionné pour le déplacer, le redimensionner ou le
   supprimer ; le texte ajouté tient sur plus d'une ligne (#535).
 - L'avertissement avant d'écraser un document signé propose maintenant une case
-  à cocher pour retirer aussi la signature qu'il s'apprête à briser (#576, #610).
+  à cocher, cochée par défaut, pour retirer aussi la signature qu'il s'apprête
+  à briser (#576, #610, #641).
 - Correction : un fichier ouvert depuis le Finder, le Dock ou un second
   lancement arrive dans son propre onglet quel que soit son chemin, et le titre
   de la fenêtre suit l'onglet actif (#398, #399).
@@ -903,7 +963,8 @@ images manquent plutôt que de laisser un espace vide (#402, #428).
 - Le correcteur reste sélectionné pour le déplacer, le redimensionner ou le
   supprimer ; le texte ajouté tient sur plus d'une ligne (#535).
 - L'avertissement avant d'écraser un document signé propose maintenant une case
-  à cocher pour retirer aussi la signature qu'il s'apprête à briser (#576, #610).
+  à cocher, cochée par défaut, pour retirer aussi la signature qu'il s'apprête
+  à briser (#576, #610, #641).
 - Sans changement : une permission de page refusée refuse toujours carrément, et
   `megapdf-cli` est inchangé, dans chaque paquet.
 
@@ -924,6 +985,9 @@ images manquent plutôt que de laisser un espace vide (#402, #428).
   texte ajouté tient maintenant sur plus d'une ligne (#565).
 - **La seule plateforme où une permission de page refusée s'explique et vous
   laisse choisir**, au lieu de seulement refuser (#558, #581).
+- L'avertissement avant d'écraser un document signé propose maintenant une
+  case à cocher, cochée par défaut, pour retirer aussi la signature qu'il
+  s'apprête à briser (#576, #641).
 - Correction : une marque de caviardage garde son identité quand une annulation
   la ramène (#429).
 - Correction : la barre d'outils n'offre plus une commande qu'elle s'apprête
@@ -948,6 +1012,11 @@ images manquent plutôt que de laisser un espace vide (#402, #428).
 - Les longues opérations montrent leur progression ; la recherche et
   l'extraction de pages peuvent être arrêtées. Il n'y a pas de fonction de
   copie réduite sur iOS à arrêter (#591).
+- L'avertissement avant d'écraser un document signé propose maintenant de
+  retirer aussi la signature qu'il s'apprête à briser — deux boutons plutôt
+  qu'une case à cocher, puisque la feuille de confirmation du système n'a pas
+  de place pour une case : le bouton Enregistrer simple la retire, et une
+  rangée en dessous garde les octets d'origine (#576, #641).
 - Correction : Enregistrer une copie vous laisse continuer à travailler avec le
   fichier qu'elle vient d'écrire (#572, #589, #597).
 - Correction : une marque de caviardage garde son identité quand une annulation
