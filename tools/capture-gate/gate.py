@@ -242,7 +242,20 @@ def constants(shots: list) -> list:
 
 
 def order_key(shot: Shot, profile: dict):
+    """Where this shot sorts on the sheet: by device, then by listing position.
+
+    `profile["order"]` is a plain list everywhere one sequence covers every
+    device in the store. iOS (PR #651) is the one store where it does not: the
+    iPad's own toolbar and sidebar (#172) earned it a different lead than the
+    iPhone's, so that profile's `"order"` is a `{device: [pose, ...]}` dict
+    instead — two sequences side by side rather than one list with an
+    iPad-shaped exception threaded through the rest of this function. A pose
+    this device's list does not name sorts after every pose that is, same as
+    an unlisted pose always has.
+    """
     order = profile["order"]
+    if isinstance(order, dict):
+        order = order.get(shot.device, ())
     rank = order.index(shot.pose) if shot.pose in order else len(order)
     return (shot.device, rank, shot.name)
 

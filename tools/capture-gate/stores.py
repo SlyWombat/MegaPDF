@@ -247,22 +247,38 @@ STORES: dict[str, dict] = {
             "iphone-6_5": [(1242, 2688), (1284, 2778)],
             "ipad-13": [(2064, 2752), (2048, 2732)],
         },
-        # Re-cut for 2.2 (#613, Dave 2026-10-01): reading and the page tools lead, the way
-        # every other platform's listing now opens, and `viewer` — the old lead — is
-        # demoted: still shot for the QA inventory, but a pose this list does not name
-        # sorts to the end of the sheet rather than beside its siblings (same rule Mac's
-        # profile applies to its own `viewer`).
+        # Re-cut for 2.2 (#613, PR #651), and — unlike every other store in this file —
+        # **two sequences, not one**, because Dave's call on the iPad was to lead on what
+        # only that device has rather than repeat the iPhone's case. A `{device: [...]}`
+        # dict rather than a flat list, so the two orders are two things to look at side
+        # by side, not one list with an iPad exception threaded through it; `order_key`
+        # in gate.py reads whichever one matches the shot's own device, and a pose a
+        # device's list does not name still sorts to the end of that device's run of the
+        # sheet (the same rule every other profile's flat `order` already gives an
+        # unlisted pose — `viewer` on this store, `viewer`'s Mac counterpart).
         #
-        # `text-edit` and `text` both keep their own slot, as Android's 8-slot set did —
-        # correcting existing body text (#113) and adding a new line (#43) are different
-        # stories — and `draw` keeps its slot too: the App Store takes up to ten images,
-        # so the Play-only squeeze that cut it there (#613 §draw) does not apply here.
-        # Placed right after `sign`, the position Android's own #613 note says it would
-        # have taken had there been room: both are signature-adjacent, "your saved mark"
-        # and "draw one now". **Pending Dave's sign-off on keeping it at all** — see the
-        # PR that introduced this order.
-        "order": ["reading", "text-edit", "sign", "draw", "pages", "text", "search",
-                  "redact", "home"],
+        # `text-edit` and `text` both keep their own slot on both devices, as Android's
+        # 8-slot set did — correcting existing body text (#113) and adding a new line
+        # (#43) are different stories — and `draw` keeps its slot on both too (Dave, PR
+        # #651): the App Store takes up to ten images, so the Play-only squeeze that cut
+        # `draw` there (#613 §draw) never applied here.
+        #
+        # **iPhone** reads as the #613 argument in sequence: read it, fix it, sign it
+        # (twice), organise it, fill it, find it, take something out, nothing leaves the
+        # device.
+        #
+        # **iPad** leads on the sidebar and the 2.2 toolbar (#172) instead (Dave, PR
+        # #651): `pages` and `reading` swap to the front — the workspace, then the same
+        # workspace taken away, which is the strongest argument that the toolbar in slot
+        # 1 is real — and the other seven keep the iPhone's order and the iPhone's
+        # captions (`tools/gen_listing_copy.py`'s `captions_ipad`), because nothing about
+        # *them* is an iPad story.
+        "order": {
+            "iphone-6_9": ["reading", "text-edit", "sign", "draw", "pages", "text",
+                          "search", "redact", "home"],
+            "ipad-13": ["pages", "reading", "text-edit", "sign", "draw", "text",
+                       "search", "redact", "home"],
+        },
         "parse": _pose(r"(?:[a-z]-)?(?:(?P<lang>[a-z]{2}(?:-[A-Za-z]{2})?)-)?"
                        r"(?P<device>iphone-[0-9_]+|ipad-[0-9]+)-"
                        r"(?P<pose>[a-z][a-z0-9-]*)\.png$"),

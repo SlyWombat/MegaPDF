@@ -128,11 +128,19 @@ jobs:
             xcrun simctl uninstall "$udid" com.megapdf.ios 2>/dev/null || true
             xcrun simctl install "$udid" "$APP"
             xcrun simctl ui "$udid" appearance light || true
-            # The nine listing slots, in listing order (#613,
-            # tools/capture-gate/stores.py's "ios" profile), plus `viewer` for the
-            # QA inventory — it is no longer a listing slot, reading replaced it at
-            # the front, but the comparison is still worth having.
-            for state in reading text-edit sign draw pages text search redact home viewer; do
+            # The nine listing slots — two sequences, one per device (#613, PR #651,
+            # tools/capture-gate/stores.py's "ios" profile `"order"` dict): the iPhone
+            # reads as the common-features argument in sequence; the iPad leads on the
+            # sidebar and the 2.2 toolbar (#172) instead, so `pages` and `reading` swap
+            # to the front there. `viewer` is appended for the QA inventory on both —
+            # it is no longer a listing slot on either device, but the comparison is
+            # still worth having.
+            case "$label" in
+              iphone-6_9) STATES=(reading text-edit sign draw pages text search redact home viewer) ;;
+              ipad-13)    STATES=(pages reading text-edit sign draw text search redact home viewer) ;;
+              *) echo "::error::no listing order known for device label '$label'"; return 1 ;;
+            esac
+            for state in "${STATES[@]}"; do
               outlog="$RUNNER_TEMP/${label}-${state}.out.log"
               errlog="$RUNNER_TEMP/${label}-${state}.err.log"
               # `reading` and `pages` say, on their own stdout/stderr, whether the

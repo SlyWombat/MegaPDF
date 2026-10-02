@@ -125,19 +125,43 @@ capture() {
 
     mkdir -p "$OUT/listing" "$OUT/review"
     xcrun simctl ui "$udid" appearance light || true
-    # The nine listing slots, in listing order (#613, tools/capture-gate/stores.py's
-    # "ios" profile). Each is its own launch: a state left over from the shot before
-    # is the defect the Windows set was bitten by twice.
-    #   reading   the agreement with the chrome gone and the bar pinned up
-    #   text-edit the body-text editor open on the heading, mid-correction (#113)
-    #   sign      the signature library flyout
-    #   draw      the draw-a-signature pad — pending Dave's sign-off on keeping it
-    #   pages     the Pages panel beside/under the document, two pages picked out
-    #   text      a typed name on the blank line, nothing selected
-    #   search    the find bar with a term and a hit count
-    #   redact    a line marked and selected, with the chrome that takes it off
-    #   home      the empty window with a recents list
-    for state in reading text-edit sign draw pages text search redact home; do
+    # The nine listing slots — two different sequences, one per device (#613, PR #651,
+    # tools/capture-gate/stores.py's "ios" profile `"order"` dict). Each is its own
+    # launch: a state left over from the shot before is the defect the Windows set was
+    # bitten by twice.
+    case "$label" in
+        iphone-6_9)
+            # iPhone: the #613 argument in sequence — read it, fix it, sign it (twice),
+            # organise it, fill it, find it, take something out, nothing leaves the device.
+            #   reading   the agreement with the chrome gone and the bar pinned up
+            #   text-edit the body-text editor open on the heading, mid-correction (#113)
+            #   sign      the signature library flyout
+            #   draw      the draw-a-signature pad
+            #   pages     the Pages sheet, two pages picked out
+            #   text      a typed name on the blank line, nothing selected
+            #   search    the find bar with a term and a hit count
+            #   redact    a line marked and selected, with the chrome that takes it off
+            #   home      the empty window with a recents list
+            STATES=(reading text-edit sign draw pages text search redact home) ;;
+        ipad-13)
+            # iPad: a different argument (Dave, PR #651) — lead on what only this device
+            # has, the sidebar and the 2.2 toolbar (#172), rather than repeat the
+            # iPhone's case. `pages` and `reading` swap to the front; the rest is the
+            # iPhone's order unchanged, because nothing about them is an iPad story.
+            #   pages     the Pages sidebar beside the document, two pages picked out —
+            #             the iPad's own toolbar and workspace, shown first
+            #   reading   the same workspace, taken away — the chrome in `pages` was real
+            #   text-edit the body-text editor open on the heading, mid-correction (#113)
+            #   sign      the signature library flyout
+            #   draw      the draw-a-signature pad
+            #   text      a typed name on the blank line, nothing selected
+            #   search    the find bar with a term and a hit count
+            #   redact    a line marked and selected, with the chrome that takes it off
+            #   home      the empty window with a recents list
+            STATES=(pages reading text-edit sign draw text search redact home) ;;
+        *) echo "no listing order known for device label '$label'" >&2; return 1 ;;
+    esac
+    for state in "${STATES[@]}"; do
         shot "$state" listing ""
     done
     # `viewer` is no longer a listing slot (reading replaced it at the front), but it
