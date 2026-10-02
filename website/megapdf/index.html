@@ -102,11 +102,6 @@
         .feature h3 .dot { color: var(--accent); }
         .feature p { color: var(--muted); font-size: 14.5px; }
 
-        .whatsnew { padding: 16px 0 8px; }
-        .whatsnew .features { padding-top: 18px; }
-        .whatsnew .feature { border-color: rgba(53,182,224,.34); }
-        .whatsnew.prev .feature { border-color: rgba(53,182,224,.16); }
-        .whatsnew.prev h2 { opacity: .8; }
         .gallery { padding: 16px 0 48px; }
         .gallery h2 { font-size: 26px; margin-bottom: 6px; }
         .gallery p.lead { color: var(--muted); margin-bottom: 26px; }
@@ -192,9 +187,45 @@
             </div>
         </section>
 
-        <section class="whatsnew" aria-label="New in MegaPDF 2.2">
-            <h2 class="sec">New in 2.2</h2>
+        <section aria-label="Highlighted features">
+            <h2 class="sec">Highlighted features</h2>
+            <p class="lead">What MegaPDF does today, not a log of what changed to get here.</p>
             <div class="features">
+                <article class="feature">
+                    <h3><span class="dot">✓</span> Check any box</h3>
+                    <p>Real form fields and plain printed squares alike — MegaPDF recognizes
+                       drawn checkboxes that other apps treat as decoration.</p>
+                </article>
+                <article class="feature">
+                    <h3><span class="dot">T</span> Type on any line</h3>
+                    <p>Tap or click where the answer goes and type it. Pick the size and
+                       the face so it matches the form you are filling in — then drag it
+                       into place, or open it again to fix a typo.</p>
+                </article>
+                <article class="feature">
+                    <h3><span class="dot">✏</span> Fix the document's own text</h3>
+                    <p>Wrong date? Misspelled name? Tap or click the line and retype it.
+                       MegaPDF keeps the document's own font where it can, says so when it
+                       had to use a similar one, and Undo puts the original back exactly.
+                       It stays layout-safe on a very wide range of edits: a 22,000-edit
+                       test run found none that disturbed the page.</p>
+                </article>
+                <article class="feature">
+                    <h3><span class="dot">■</span> Redact, and it really is gone</h3>
+                    <p>Mark what has to come out — a name, an address, a picture — and
+                       MegaPDF takes it out of the file rather than covering it over. What
+                       was underneath is gone: no other app can copy it or search for it.
+                       Whiteout (Cover on the Mac) still only covers, and says so. A mark
+                       can be selected, moved, reshaped and removed before you save — one
+                       drag is one undo step, Clear all marks drops every mark at once, and
+                       a mark never outlives the document it was made on.</p>
+                </article>
+                <article class="feature">
+                    <h3><span class="dot">✎</span> Sign like you mean it</h3>
+                    <p>Draw your signature, type it, or use a photo of the one on paper —
+                       the white background disappears. Place it, move it, resize it until it sits
+                       right on the line.</p>
+                </article>
                 <article class="feature">
                     <h3><span class="dot">◐</span> Reading mode</h3>
                     <p>One tap or click takes the toolbars — and the side pane on the
@@ -213,29 +244,24 @@
                 </article>
                 <article class="feature">
                     <h3><span class="dot">⊕</span> Zoom where you're looking</h3>
-                    <p>Zoom now holds the point you're pointing at instead of the
-                       corner of the page, however you ask for it — the menu, the
-                       keyboard, a pinch, or the wheel.</p>
+                    <p>Zoom holds the point you're pointing at instead of the corner of
+                       the page, however you ask for it — the menu, the keyboard, a pinch,
+                       or the wheel.</p>
                 </article>
-                <article class="feature">
-                    <h3><span class="dot">▤</span> A toolbar made for the iPad</h3>
-                    <p>The everyday tools now sit in a wide row of their own under the
-                       navigation bar, each with its title beside its icon, instead of
-                       quietly running the iPhone's layout stretched wide.</p>
-                </article>
-            </div>
-        </section>
-
-        <section class="whatsnew prev" aria-label="New in MegaPDF 2.1">
-            <h2 class="sec">New in 2.1</h2>
-            <div class="features">
                 <article class="feature">
                     <h3><span class="dot">⧉</span> Tabs</h3>
                     <p>On Windows, Mac and Linux, a second PDF opens in a tab beside the
                        first, in the same window — from Open, from a file dropped on the
-                       window, or from a double-click in the file manager, which now
-                       lands in the window you already have. Each tab keeps its own undo, find and
+                       window, or from a double-click in the file manager, which lands in
+                       the window you already have. Each tab keeps its own undo, find and
                        zoom, and closing asks about each document that needs saving.</p>
+                </article>
+                <article class="feature">
+                    <h3><span class="dot">↗</span> Open with, and Share</h3>
+                    <p>On iPhone, iPad and Android, MegaPDF is a PDF viewer: open a PDF
+                       from Files, Mail, Drive or any app's share sheet straight into it,
+                       and send it back with Share. With unsaved changes, it asks — Save,
+                       Share without saving, or Cancel.</p>
                 </article>
                 <article class="feature">
                     <h3><span class="dot">M↓</span> Export as Markdown</h3>
@@ -247,75 +273,42 @@
                        and Mac.</p>
                 </article>
                 <article class="feature">
-                    <h3><span class="dot">↗</span> Open with, and Share</h3>
-                    <p>On iPhone, iPad and Android, MegaPDF is now a PDF viewer: open a
-                       PDF from Files, Mail, Drive or any app's share sheet straight into
-                       it, and send it back with Share. With unsaved changes, it asks —
-                       Save, Share without saving, or Cancel.</p>
+                    <h3><span class="dot">💾</span> Save without fear</h3>
+                    <p>Every save is verified before it touches your original, so a failed
+                       write can never corrupt the file someone sent you.</p>
                 </article>
                 <article class="feature">
-                    <h3><span class="dot">■</span> Redaction marks you can take back</h3>
-                    <p>A mark can be selected, moved, reshaped and removed, one drag is
-                       one undo step, Clear all marks drops every mark at once, and a
-                       mark no longer outlives the document it was made on. Nothing is
-                       removed until you save.</p>
+                    <h3><span class="dot">🔍</span> Find any word</h3>
+                    <p>Search the whole document as you type. Every match lights up, the
+                       counter tells you how many, and one tap or Enter walks you to the next.</p>
+                </article>
+                <article class="feature">
+                    <h3><span class="dot">🔑</span> Protected PDFs</h3>
+                    <p>Open one with its password. If its owner restricted what may be
+                       changed, MegaPDF respects that and says so, and the owner password
+                       unlocks it. Set a password on a document, change it, or remove it.</p>
+                </article>
+                <article class="feature">
+                    <h3><span class="dot">XL</span> Very large PDFs</h3>
+                    <p>A 2.5 GB file opens straight away, without using gigabytes of
+                       memory. Banner-size pages measure at their real size, and pages
+                       full of pictures draw several times faster.</p>
+                </article>
+                <article class="feature">
+                    <h3><span class="dot">▤</span> One toolbar, fit to the platform</h3>
+                    <p>On Windows, Mac and Linux, the toolbar is a single row, with
+                       pickers appearing beside the tool they belong to and everything
+                       else under More. On iPad, the everyday tools sit in a wide row of
+                       their own under the navigation bar, each with its title beside its
+                       icon.</p>
+                </article>
+                <article class="feature">
+                    <h3><span class="dot">🔒</span> Private by design</h3>
+                    <p>No permissions to grant, no network access, no analytics. There is no
+                       server for your documents to go to — and the code is open, so
+                       anyone can check. In English and in French, following your device.</p>
                 </article>
             </div>
-        </section>
-
-        <section class="features" aria-label="What MegaPDF does">
-            <article class="feature">
-                <h3><span class="dot">✓</span> Check any box</h3>
-                <p>Real form fields and plain printed squares alike — MegaPDF recognizes
-                   drawn checkboxes that other apps treat as decoration.</p>
-            </article>
-            <article class="feature">
-                <h3><span class="dot">T</span> Type on any line</h3>
-                <p>Tap or click where the answer goes and type it. Pick the size and
-                   the face so it matches the form you are filling in — then drag it
-                   into place, or open it again to fix a typo.</p>
-            </article>
-            <article class="feature">
-                <h3><span class="dot">✏</span> Fix the document's own text</h3>
-                <p>Wrong date? Misspelled name? Tap or click the line and retype it.
-                   MegaPDF keeps the document's own font where it can, says so when it
-                   had to use a similar one, and Undo puts the original back exactly.</p>
-            </article>
-            <article class="feature">
-                <h3><span class="dot">■</span> Redact, and it really is gone</h3>
-                <p>Mark what has to come out — a name, an address, a picture — and
-                   MegaPDF takes it out of the file rather than covering it over. What
-                   was underneath is gone: no other app can copy it or search for it.
-                   Whiteout (Cover on the Mac) still only covers, and says so.</p>
-            </article>
-            <article class="feature">
-                <h3><span class="dot">✎</span> Sign like you mean it</h3>
-                <p>Draw your signature, type it, or use a photo of the one on paper —
-                   the white background disappears. Place it, move it, resize it until it sits
-                   right on the line.</p>
-            </article>
-            <article class="feature">
-                <h3><span class="dot">💾</span> Save without fear</h3>
-                <p>Every save is verified before it touches your original, so a failed
-                   write can never corrupt the file someone sent you.</p>
-            </article>
-            <article class="feature">
-                <h3><span class="dot">🔍</span> Find any word</h3>
-                <p>Search the whole document as you type. Every match lights up, the
-                   counter tells you how many, and one tap or Enter walks you to the next.</p>
-            </article>
-            <article class="feature">
-                <h3><span class="dot">🔑</span> Protected PDFs</h3>
-                <p>Open one with its password. If its owner restricted what may be
-                   changed, MegaPDF respects that and says so, and the owner password
-                   unlocks it. Set a password on a document, change it, or remove it.</p>
-            </article>
-            <article class="feature">
-                <h3><span class="dot">🔒</span> Private by design</h3>
-                <p>No permissions to grant, no network access, no analytics. There is no
-                   server for your documents to go to — and the code is open, so
-                   anyone can check. In English and in French, following your device.</p>
-            </article>
         </section>
 
         <section class="gallery" aria-label="Screenshots">

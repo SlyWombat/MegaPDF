@@ -223,11 +223,14 @@ Delete the scheduled task afterwards.
 ### 2.7 Docs
 
 `README.md`, `TESTING.md`, `tools/Linux-Packaging.md`, `tools/linux/megapdf-cli.1` (the
-man page ships in the .deb and tarball), and the website: a **New in x.y** block above the
-previous release's, the gallery from this release's sets
-(`docs/release-notes/<x.y.z>/website-renders/`), the source link in the footer, the
-privacy policy's effective date if it changed. The site is **not deployed** until the
-go-lives (§3, website).
+man page ships in the .deb and tarball), and the website: since #652, this release's
+still-true features fold into the highlighted-features section (organised by what the
+app does, not by release — nothing added there expires when the next version ships), the
+gallery from this release's sets (`docs/release-notes/<x.y.z>/website-renders/`), the
+source link in the footer, the privacy policy's effective date if it changed. A **New in
+x.y** block starts fresh at 2.3 and stays a single current block with no stack behind it;
+until then there is no per-release block to maintain. The site is **not deployed** until
+the go-lives (§3, website).
 
 ## 3. Submission, per channel
 
