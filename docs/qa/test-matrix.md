@@ -697,6 +697,8 @@ These are the exceptions, each with its reason.
 
 | artefact | why not |
 |---|---|
+| `ios/MegaPDFUITests/DocumentOpening.swift` | the shared wait for a document to open (#599), not a test: it holds no assertion of its own and the eleven suites that call it are each on the map |
+| `ios/MegaPDFTests/ModelOpening.swift` | the same wait for the unit suites (#599), replacing nine identical private copies; a harness, not a test |
 | `android/app/src/androidTest/java/com/megapdf/android/TestPdfs.kt` | fixture builder for the instrumented suite, not a test |
 | `android/app/src/androidTest/java/com/megapdf/android/ViewerHarness.kt` | Compose harness for the instrumented suite, not a test |
 | `android/app/src/test/java/com/megapdf/android/ScaffoldTest.kt` | toolchain smoke test — proves Gradle and JUnit are wired, covers no feature |

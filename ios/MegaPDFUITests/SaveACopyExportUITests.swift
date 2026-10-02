@@ -62,7 +62,7 @@ final class SaveACopyExportUITests: XCTestCase {
         app.launchEnvironment["MEGAPDF_UITEST_PDF_BASE64"] = onePagePdfBase64(text: text)
         app.launch()
         let page = app.descendants(matching: .any).matching(NSPredicate(format: "label == 'Page 1'")).firstMatch
-        XCTAssertTrue(page.waitForExistence(timeout: 30), dump("the document did not open"))
+        XCTAssertTrue(DocumentOpening.wait(for: page, in: app), dump(DocumentOpening.why(app, "the document did not open")))
     }
 
     /// Waits for a control to stop being disabled. Everything that writes is disabled while a

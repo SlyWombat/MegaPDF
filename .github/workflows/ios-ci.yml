@@ -243,12 +243,27 @@ jobs:
       # the keyboard flag can be written first: the first keyboard on a fresh
       # simulator comes up under iOS's QuickPath tip, and the flag is what a
       # first keyboard would have left (#406).
-      - name: Boot the simulator
+      #
+      # **Both of them now, which is a gap rather than an improvement being closed.**
+      # Since #615 this job creates both simulators, and only the iPhone was ever booted
+      # here; the iPad was left for xcodebuild to boot inside its own test step. On a
+      # hosted runner that put a cold first boot inside the first assertion of that lane
+      # (#599, run 36929065249 — `app.launch()` took a minute, forty seconds of it in
+      # "Setting up automation session").
+      #
+      # Booting is all this does. Installing the app and launching it once was tried as
+      # well and is NOT here: measured on a hosted runner it cost ten minutes and the
+      # first test still took 76 s, because the forty seconds is XCTest's own automation
+      # session and `simctl` cannot warm it. The waits themselves had to stop assuming a
+      # machine instead — see `PageToolsUITests.launch(with:)`.
+      - name: Boot the simulators
         run: |
-          xcrun simctl boot "$SIM_UDID" || true
-          xcrun simctl bootstatus "$SIM_UDID" -b
-          xcrun simctl spawn "$SIM_UDID" defaults write com.apple.keyboard.preferences \
-            DidShowContinuousPathIntroduction -bool true
+          for u in "$SIM_UDID" "$IPAD_UDID"; do
+            xcrun simctl boot "$u" || true
+            xcrun simctl bootstatus "$u" -b
+            xcrun simctl spawn "$u" defaults write com.apple.keyboard.preferences \
+              DidShowContinuousPathIntroduction -bool true
+          done
 
       - name: Run the UI tests
         run: |

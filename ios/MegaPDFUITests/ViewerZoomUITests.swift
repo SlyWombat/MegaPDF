@@ -46,7 +46,7 @@ final class ViewerZoomUITests: XCTestCase {
     private func page(timeout: TimeInterval = 30) -> XCUIElement {
         let page = app.descendants(matching: .any)
             .matching(NSPredicate(format: "label == 'Page 1'")).firstMatch
-        XCTAssertTrue(appears(page, timeout: timeout), "the demo document did not open")
+        XCTAssertTrue(DocumentOpening.wait(for: page, in: app), DocumentOpening.why(app, "the demo document did not open"))
         return page
     }
 

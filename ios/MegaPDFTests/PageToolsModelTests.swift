@@ -54,10 +54,7 @@ final class PageToolsModelTests: XCTestCase {
         try pdf(pageSizes: sizes ?? fourSizes).write(to: url)
         let model = ViewerModel()
         model.openPicked(url: url)
-        try await waitUntil("the document opens") {
-            if case .viewing = model.state { return model.document != nil && !model.busy.isBlocked }
-            return false
-        }
+        try await ModelOpening.waitForTheDocument(model)
         return (model, url)
     }
 

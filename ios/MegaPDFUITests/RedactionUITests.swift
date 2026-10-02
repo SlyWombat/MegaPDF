@@ -80,7 +80,7 @@ final class RedactionUITests: XCTestCase {
 
         let page = app.descendants(matching: .any)
             .matching(NSPredicate(format: "label == 'Page 1'")).firstMatch
-        XCTAssertTrue(page.waitForExistence(timeout: 30), "the demo document did not open")
+        XCTAssertTrue(DocumentOpening.wait(for: page, in: app), DocumentOpening.why(app, "the demo document did not open"))
 
         XCTAssertTrue(waitForArmed(false),
                       "an unarmed Redact row says nothing about its state")

@@ -29,7 +29,7 @@ final class ProgressStripUITests: XCTestCase {
 
         let page = app.descendants(matching: .any)
             .matching(NSPredicate(format: "label == 'Page 1'")).firstMatch
-        XCTAssertTrue(page.waitForExistence(timeout: 30), "the demo document did not open")
+        XCTAssertTrue(DocumentOpening.wait(for: page, in: app), DocumentOpening.why(app, "the demo document did not open"))
 
         app.buttons["Find in document"].tap()
         let field = app.textFields["Find in document"]

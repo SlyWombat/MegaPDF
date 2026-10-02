@@ -393,6 +393,102 @@ gate on this platform (#570, and the section above), so no CI lane ever drove it
   the second is nothing; paid inside a poll loop it *is* the budget — ten seconds bought eight
   looks at the app, and `ReadingModeUITests`' five-second waits bought four.
 
+## 10d. The cold start, and why it wore a different test's name each time
+
+§10c is about a screen that cannot be driven quickly. This one is not about a screen at all —
+it is about *when* a lane's first test runs — and it is here because it was read as five flaky
+tests before anyone looked at the clock.
+
+Since #615 the iOS job **creates** both simulators instead of picking a long-lived one by name.
+A created simulator has never booted, has no app installed, and has not started the services a
+first launch needs. That cost lands on whichever test runs first in a lane, inside an assertion
+with a thirty-second budget. From the xcresult of run 36929065249 (hosted runner, iPad lane):
+
+| | since launch began |
+|---|---|
+| `Launch com.megapdf.ios` | 0.0 s |
+| `Setting up automation session` | **40.6 s** |
+| `Wait for com.megapdf.ios to idle` | 60.0 s |
+| first `exists` check — *the 30 s wait starts here* | 63.9 s |
+| second `exists` check | 68.8 s |
+| next activity (so that check took 25.6 s) | 94.5 s |
+| the assertion gives up | 96.7 s |
+
+So `app.launch()` alone took a minute, and the thirty-second wait that followed got **two
+looks**. The screen recording attached to the failure shows what the second look saw: the app
+sitting on **"Opening…"** with its progress bar running. It had not failed to open the
+document; it had not finished opening it.
+
+**The test it lands on is alphabetical, not guilty.** On the iPad lane that is
+`PageToolsUITests.testDeletingAPageAndUndoingItPutsThePageBack` ("the test document did not
+open"); on the iPhone lane it is `BodyTextEditUITests` ("Timed out while launching application
+via Xcode") — the same event caught one step earlier. One mechanism, two lanes, a different
+name each time, which is exactly what made it look like a family of unrelated flakes.
+
+Three things to keep:
+
+- **It is a hosted-runner cost.** The same first test measures 14 s on our own Mac mini against
+  98–105 s hosted. That is not the 2–4 % spread §10c records for the quiescence stalls: this one
+  really is the machine, because it is I/O and first-launch services rather than a timeout.
+- **Warming the simulator was TRIED AND IT FAILED. Do not try it again.** Installing the app
+  and launching it once on both simulators, so the cold start is paid in a step: on a hosted
+  dispatch (36937838115) that step cost **10 minutes 22 seconds**, and the first test of the
+  iPhone lane *still* took **76.6 s**. The reason is in the table above — forty of the sixty
+  seconds are XCTest's own *Setting up automation session*, which belongs to the test runner,
+  and `simctl` cannot reach it. The install-and-launch half was removed again. What stays is
+  the **boot**, for both devices, because only the iPhone was ever booted here and leaving the
+  iPad's first boot inside its own lane's first assertion was a real gap.
+- **A budget is the wrong instrument, so the wait stops using one alone.** The same run measured
+  `testDeletingAPageAndUndoingItPutsThePageBack` at **530 s — passing**, against 98 s and 105 s
+  on two other hosted runners and 14 s on our own Mac. No single number is right for all four,
+  and picking one moves the threshold to the next slow runner (#515). `launch(with:)` now renews
+  its deadline for as long as the app is *actively reporting* `busyOpening`, up to a cap, and
+  fails in thirty seconds when it is not. A wedged app still fails fast, because a wedged app
+  stops saying "Opening…".
+- **Ask the app what it is doing before concluding it failed.** `busyOpening` was in the
+  accessibility tree throughout, and reading it turns "the test document did not open" into "the
+  app is still busy: Opening…". A wait that gives up should report the app's own answer, the way
+  §10c's waits report how many times they looked.
+- **Where this treatment belongs, and where it does not.** `DocumentOpening` (UI tests) and
+  `ModelOpening` (unit tests) now carry it, and every wait on a document opening or on the app
+  launching goes through them — eleven UI suites and twelve unit-test call sites that had each
+  written their own number. It does **not** belong on a wait for a sheet to appear, a count to
+  change or a menu row to take a tap: those are a different condition, and #634 showed several
+  of them are genuinely *lost events*, where a renewing deadline would turn a fast honest
+  failure into a slow one. The test for whether a wait qualifies is the one the reds forced:
+  can the app tell you it is **still working**, as opposed to having **never done it**?
+
+**Both halves of the hardware question, because one rule would have been wrong.** §10c's
+sixty-second stalls were *not* caused by the machine: they measured 135.1 s idle and 134.5 s
+under a load average of 500, a 2-4 % spread, because a timeout is a timeout wherever you run
+it. This one *is* the machine, and plainly: across 2026-10-01 the same test measured **14 s** on
+our Mac mini, **98 s** and **105 s** on two hosted runners, and **530 s — passing** on a third.
+Hold both. "Hardware is never the cause" would have sent the §10c work the wrong way, and
+"hardware is the cause" would have sent this one the wrong way.
+
+That 530-second pass is also the answer to the obvious review question, *why not just raise the
+budget to 120 seconds*: because 530 > 120, and the next runner may be slower still. A hosted
+verdict is not comparable with another hosted verdict, which is worth remembering before reading
+two runs as a trend.
+
+Two sightings from the same hour, **neither diagnosed nor fixed**. The first: on another hosted run
+`SaveACopyExportUITests.testBothExportsPresentTheirSheetInOneSession` failed because the
+*second* system export sheet never appeared in thirty seconds. The activity log shows the
+document picker's own remote process answering `kAXErrorServerNotResponding` and "Error getting
+main window" during the *first* export, and the app then non-idle for 24 s. That is a system
+service not answering, on the same runner that was taking a minute to launch an app, so
+starvation is the likeliest common cause rather than a second app defect — but it is a guess
+until someone catches it again. It passed on re-run.
+
+The second, from the hosted dispatch above: `PageToolsUITests.testMoveToPutsThePageAtThe-
+PositionTyped` failed with *"the app never reported 'pages on' in **32 looks over 10 s** — it
+says 'pages off …'"*. Thirty-two looks is not a wait that was starved of attempts, and the app
+had not opened the panel at all, so the tap on the ⋯ menu's **Pages** row did not take. That is
+the same family as #634's lost taps, on a `Menu` rather than a tile's context menu, and on a
+runner that was taking 530 s for a neighbouring test. Recorded rather than fixed; the message it
+produced is the one #634's instrumentation exists for, and it says plainly that this is a lost
+event rather than a slow one.
+
 ## 11. Things that look like defects but are not
 
 - Mode prompts and confirmations are **modal alerts**, by current design — not toasts.

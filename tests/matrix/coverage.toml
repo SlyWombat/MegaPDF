@@ -2382,6 +2382,14 @@ note = "CI assembles a debug APK and tests it; the release AAB is only verified 
 # =============================================================================
 
 [[exempt]]
+ref = "ios/MegaPDFUITests/DocumentOpening.swift"
+why = "the shared wait for a document to open (#599), not a test: it holds no assertion of its own and the eleven suites that call it are each on the map"
+
+[[exempt]]
+ref = "ios/MegaPDFTests/ModelOpening.swift"
+why = "the same wait for the unit suites (#599), replacing nine identical private copies; a harness, not a test"
+
+[[exempt]]
 ref = "android/app/src/androidTest/java/com/megapdf/android/TestPdfs.kt"
 why = "fixture builder for the instrumented suite, not a test"
 

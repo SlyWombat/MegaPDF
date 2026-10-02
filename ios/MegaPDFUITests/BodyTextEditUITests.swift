@@ -87,7 +87,7 @@ final class BodyTextEditUITests: XCTestCase {
         app.launchEnvironment["MEGAPDF_UITEST_PDF_BASE64"] = base64
         app.launch()
         let page = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Page 1")).firstMatch
-        XCTAssertTrue(page.waitForExistence(timeout: 20), "the test document did not open")
+        XCTAssertTrue(DocumentOpening.wait(for: page, in: app), DocumentOpening.why(app, "the test document did not open"))
         return page
     }
 

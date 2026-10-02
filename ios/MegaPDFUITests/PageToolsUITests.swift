@@ -95,7 +95,8 @@ final class PageToolsUITests: XCTestCase {
         app.launchEnvironment["MEGAPDF_UITEST_PDF_BASE64"] = base64
         app.launch()
         let page = documentPage()
-        XCTAssertTrue(appears(page, timeout: 30), dump("the test document did not open"))
+        XCTAssertTrue(DocumentOpening.wait(for: page, in: app),
+                      dump(DocumentOpening.why(app, "the test document did not open")))
         // Asked once, here, rather than on every read of it — see `pagesProbe`.
         XCTAssertTrue(appears(pagesProbe, timeout: 30),
                       dump("the pages probe is missing — did -uiTestZoomProbes survive? (#174)"))
