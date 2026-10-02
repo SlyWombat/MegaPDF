@@ -1684,6 +1684,129 @@ this run. This is a pre-flight only: `docs/RELEASING.md` §2.2's gate run still 
 against the actual release commit once the version bump and the two in-flight feature PRs
 land.
 
+### Thirteenth run, 2026-10-02: the §2.2 release gate for 2.2.0, all three batteries, all four corpora, `main` at 983fcdf
+
+**This is the gate, not another pre-flight.** The release commit is `main` at `983fcdf`
+(merge of #646, `wip/version-2-2-0` — "Version 2.2.0 everywhere"), the commit Dave has called
+the 2.2.0 release candidate. `megapdf-cli --version` in the built tree reports `megapdf-cli
+2.2.0`, confirming the bump is live on the commit under test.
+
+**Run on kdocker3, not kdocker2, same as the twelfth run and for the same reason.**
+`docs/RELEASING.md` §2.2 still names kdocker2; `CLAUDE.md`'s own machine table still says
+kdocker3 is "general builds, corpus batteries" and kdocker2 is Android-only with no
+`/data/megapdf-work` role in a corpus battery at all. `~/pdf-public`, `~/pdf-test-ca` and
+`~/pdf-test-un` exist only on kdocker3. Noted here rather than silently switched, as the
+twelfth run's own entry did; the runbook's §2.2 heading and body text could be corrected to
+say kdocker3 in one small edit, but that is a documentation fix for its own change, not a
+side effect of a gate run, so it is named here and left alone.
+
+Built fresh in a throwaway `megapdf:base` container (Ubuntu 24.04, build-essential/cmake/
+ninja/qpdf/poppler-utils/cmark) from a clean clone of `983fcdf`, repo and all four corpora
+mounted read-only except the repo's own build tree: `tools/fetch-pdfium-linux.sh` pulled the
+same pinned release the eleventh and twelfth runs used (`pdfium-7934-megapdf-2b3b415e86b1`,
+33 patches, confirmed by the configure log), then `cmake -S core -B core/build/linux-x64 -G
+Ninja -DCMAKE_BUILD_TYPE=Release -DMEGAPDF_CORE_TESTS=ON -DMEGAPDF_FIXTURES_DIR=...` and
+`cmake --build ... --target megapdf_cli megapdf_structure_check`. All four corpora read
+1,493/134/90/4,158 documents on disk, matching the eleventh/twelfth runs exactly before a
+single document was opened. Container and workspace removed afterward (the build tree was
+root-owned inside the container; a throwaway `alpine` container did the final `rm -rf` after
+`docker rm` left files behind); the corpora were only read.
+
+**`tools/stress/compare_runs.py` does not apply to this battery shape, and the git diff between
+the two commits confirms why a bit-for-bit match was the only sane expectation.**
+`compare_runs.py` reads a `MegaPDF.Stress run --out .../edits` directory's `results.jsonl`
+(the edit-battery harness); `structure-battery.sh`, `markdown-battery.sh` and
+`pages-battery.sh` each write their own plain-text `.log`, as they have since the seventh run
+established "all three batteries" as structure/markdown/pages, not structure/markdown/edits.
+So the comparison against the twelfth run below is done the way the twelfth run compared
+itself against the eleventh: number for number, against this file's own recorded figures.
+`git diff --stat c108240 983fcdf` touches 69 files over 23 commits (the signature-strip parity
+#641, the iOS cold-start deadline #599/#643, the scroll-position indicator, Fable's French
+review, the MS Store certification notes #647, and the version bump itself) and exactly one
+line inside `core/` or `libs/pdfium/`: `core/cli/megapdf_cli.cpp`'s version string,
+`"megapdf-cli 2.1.1"` to `"megapdf-cli 2.2.0"`. `tools/stress/` itself is byte-identical
+between the two commits. Nothing in the diff touches engine behaviour, so an exact match on
+every figure below is the expected result, not a coincidence to be explained.
+
+**Zero crashes and zero hangs, in every battery, on every corpus. 5,875 documents, identical
+to the eleventh and twelfth runs on every corpus:**
+
+| corpus | on disk | visited | opened (structure/markdown) | the rest |
+|---|---:|---:|---:|---|
+| private | 4,158 | 4,158 | 4,084 | 12 encrypted, 62 unreadable format |
+| public | 1,493 | 1,493 | 1,480 | 5 encrypted, 8 unreadable format |
+| Canadian | 134 | 134 | 134 | — |
+| UN | 90 | 90 | 90 | — |
+
+**Structure, against F1 >= 0.998 and order agreement tau >= 0.9 — matches the twelfth run to
+six decimal places on every corpus:**
+
+| corpus | token F1, internal | token F1, CLI | tau median | CLI bad exits | |
+|---|---:|---:|---:|---:|---|
+| private | **0.998997** | 0.998997 | 0.951 | 0 | pass |
+| public | **0.980019** | 0.980019 | 0.978 | 0 | **fail — #498, confirmed, unmoved** |
+| Canadian | **0.999932** | 0.999932 | 0.994 | 0 | pass |
+| UN | **0.999136** | 0.999136 | 0.967 | 0 | pass |
+
+**Markdown: every gate passes on all four corpora** (0 crashes, 0 hangs, 0 other bad exit
+codes, 0 cmark parse failures, 0 cmark timeouts) — private 4,158 visited/2,982 extracted/
+1,102 textless/12 password-gated; public 1,493/937/543/5; Canadian 134/134/0/0; UN 90/83/7/0.
+All four match the eleventh and twelfth runs' own figures exactly.
+
+**Pages** (0 crashes/hangs, 0 qpdf failures, 0 count mismatches, 0 write failures, 0 refusals
+outside the contract's own two), matching the twelfth run exactly on every cell:
+
+| corpus | crashes/hangs | QPDF FAILED | COUNT MISMATCH | WRITE FAILED | REFUSED, other | |
+|---|---:|---:|---:|---:|---:|---|
+| private | 0/0 | 0 | 0 | 0 | 0 | pass |
+| public | 0/0 | 0 | 0 | 0 | **9** | **fail — #445, confirmed, unmoved** |
+| Canadian | 0/0 | 0 | 0 | 0 | 0 | pass |
+| UN | 0/0 | 0 | 0 | 0 | 0 | pass |
+
+Public's opened count (the pages path counts differently, as every prior run notes): 1,486
+opened (4 protected, 3 did-not-open, 5 of those separately flagged `input already damaged`).
+Private: 4,084 opened (12 protected, 62 did-not-open). Canadian/UN: 134/90, nothing flagged.
+The nine public `REFUSED, other` are #445's known pair (`pdfium` 7: rotate 2, move 1,
+extract 2, importself 2; `verapdf` 2: importpair only) — the same four documents, nine
+refusals, the ninth/tenth/eleventh/twelfth runs' own accounting.
+
+Field-`/Parent`-hierarchy refusal, through `import` only:
+
+| corpus | importself refused-fields | rate | importpair refused-fields | rate |
+|---|---:|---:|---:|---:|
+| private | 37 / 4,084 | **0.91%** | 0 / 4,084 | 0% |
+| public | 230 / 1,486 | **15.48%** | 0 / 1,486 | 0% |
+| Canadian | 5 / 134 | 3.7% | 4 / 134 | 3.0% |
+| UN | 0 / 90 | 0% | 0 / 90 | 0% |
+
+Every one of these numbers is the eleventh and twelfth runs' own, unchanged.
+
+**Coverage arithmetic reconciles exactly as before, printed identically by all three battery
+summaries:** 1,493 reachable + 1 staged-but-unreached (the `.Pdf` case-mismatch qpdf fixture)
++ 283 stated exclusion (280 `wiki-*`, deferred by Dave decision, plus 3 `uk-hmrc` rows
+resolved as permanently unfetchable by #625) + 0 unexplained = 1,777 manifest rows.
+`corpus_coverage.sh`'s own block lists every exclusion by name; nothing is silently absent.
+
+**Gates, per `docs/RELEASING.md` §2.2 and this task's own checklist — pass on every corpus
+except the two already-tracked, out-of-milestone exceptions, unmoved from the twelfth run:**
+structure F1 >= 0.998 (private/Canadian/UN pass; public fails at 0.980019, #498); order tau
+>= 0.9 (all four pass); zero crashes (pass, all batteries, all corpora); zero hangs (pass, all
+batteries, all corpora); zero out-of-contract refusals (private/Canadian/UN pass; public has
+the same nine #445 `REFUSED, other`, none outside the known pair); the markdown battery's own
+checks (pass on all four corpora); the pages battery's own checks other than the refusal count
+above (0 qpdf failures, 0 count mismatches, 0 write failures on all four corpora).
+
+**Nothing moved since the twelfth run.** Every gate verdict, every F1 to six decimal places,
+every crash/hang/refusal count and the coverage arithmetic are identical to the twelfth run
+(itself identical to the eleventh), across all three batteries and all four corpora, over the
+23 commits that separate `c108240` from `983fcdf` — which the `core`/`libs/pdfium` diff above
+shows touched no engine code but one version string. The two known, tracked failures (#498 on
+the public structure gate, #445's nine `REFUSED, other` on the public pages battery) are
+confirmed unchanged for the fourth consecutive full-corpus run and are not new findings. No
+issue filed from this run; no regression found. This is the §2.2 release gate against the
+actual 2.2.0 release commit, and it is green except for the two conditions #498 and #445
+already carry outside milestone 2.2.
+
 ## Reporting
 
 For each issue: what you clicked, what you expected, what happened, and the PDF
