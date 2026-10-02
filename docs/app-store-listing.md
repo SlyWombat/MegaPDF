@@ -537,11 +537,11 @@ keep their own slot — different stories, and the App Store's ten-image limit
 never forces the choice Play's eight did on the same pose set. `draw` keeps its
 slot too, next to `sign`, both being signature-adjacent — **pending Dave's
 sign-off on keeping it at all; see the PR that introduced this order.** The
-iPad's nine slots are shot in
-the same order as the iPhone's: its page tools are a sidebar rather than a sheet
-and its own toolbar is new in 2.2 (#172), but the same nine stories are told
-either way, and `tools/capture-gate/stores.py`'s single `order` list for this
-store assumes one sequence shared by both devices.
+iPad's nine slots are shot in the same order as the iPhone's: its page tools
+are a sidebar rather than a sheet and its own toolbar is new in 2.2 (#172), but
+the same nine stories are told either way, and
+`tools/capture-gate/stores.py`'s single `order` list for this store assumes
+one sequence shared by both devices.
 
 Reading mode (#506) and Pages (#174, #613) both open the bundled six-page
 agreement (`demo-pages.pdf` / `demo-fr-pages.pdf` / `demo-fr-FR-pages.pdf`,
