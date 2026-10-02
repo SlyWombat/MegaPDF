@@ -107,7 +107,7 @@ final class PageDragUITests: XCTestCase {
             pdf(pageSizes: [(300, 400), (400, 420), (500, 440), (600, 460)])
         app.launch()
         let page = app.images.matching(NSPredicate(format: "label == 'Page 1'")).firstMatch
-        XCTAssertTrue(page.waitForExistence(timeout: 30), "the test document did not open")
+        XCTAssertTrue(DocumentOpening.wait(for: page, in: app), DocumentOpening.why(app, "the test document did not open"))
 
         // Open the pages: the strip on an iPad, the ⋯ menu on a phone.
         let strip = app.descendants(matching: .button)

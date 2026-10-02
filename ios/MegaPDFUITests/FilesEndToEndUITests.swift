@@ -187,7 +187,7 @@ final class FilesEndToEndUITests: XCTestCase {
 
     private func page() -> XCUIElement {
         let page = app.descendants(matching: .any).matching(NSPredicate(format: "label == 'Page 1'")).firstMatch
-        XCTAssertTrue(page.waitForExistence(timeout: 60), dump("the document did not open"))
+        XCTAssertTrue(DocumentOpening.wait(for: page, in: app), dump(DocumentOpening.why(app, "the document did not open")))
         return page
     }
 

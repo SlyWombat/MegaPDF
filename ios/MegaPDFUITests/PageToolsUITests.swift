@@ -95,61 +95,12 @@ final class PageToolsUITests: XCTestCase {
         app.launchEnvironment["MEGAPDF_UITEST_PDF_BASE64"] = base64
         app.launch()
         let page = documentPage()
-        XCTAssertTrue(waitForTheDocument(page), dump(openingState()))
+        XCTAssertTrue(DocumentOpening.wait(for: page, in: app),
+                      dump(DocumentOpening.why(app, "the test document did not open")))
         // Asked once, here, rather than on every read of it — see `pagesProbe`.
         XCTAssertTrue(appears(pagesProbe, timeout: 30),
                       dump("the pages probe is missing — did -uiTestZoomProbes survive? (#174)"))
         return page
-    }
-
-    /// What the app says it is doing, if it says anything: the label on `busyOpening`.
-    ///
-    /// On the hosted run that went red (36929065249) the screen recording shows the app
-    /// sitting on **"Opening…"** with its progress bar running — the app saying "I am still
-    /// working", not "I failed". `busyOpening` was in the tree the whole time, and nothing
-    /// read it (#145, #599).
-    private func opening() -> String? {
-        let strip = app.descendants(matching: .any)
-            .matching(NSPredicate(format: "identifier == 'busyOpening'")).firstMatch
-        return (try? strip.snapshot())?.label
-    }
-
-    private func openingState() -> String {
-        if let label = opening() {
-            return "the test document did not open — the app is still busy: '\(label)'"
-        }
-        return "the test document did not open, and the app was not reporting itself busy"
-    }
-
-    /// Waits for the document, by the app's own account rather than by a stopwatch.
-    ///
-    /// A fixed budget here assumes a machine, and hosted runners are not reliably that
-    /// machine (#599): the same first test measured 98 s, 105 s and **530 s** on three of
-    /// them against 14 s on our own Mac, and on run 36929065249 `app.launch()` alone took a
-    /// minute, after which a thirty-second wait got **two looks** and gave up while the app
-    /// was still saying "Opening…". Guessing a bigger number would only move that threshold
-    /// to the next slow runner (#515).
-    ///
-    /// So the deadline is renewed for as long as the app is **actively reporting that it is
-    /// opening**, up to a cap, and the test fails promptly when it is not. That makes "still
-    /// working" and "never did it" different answers, which is the whole of it: a wedged app
-    /// still fails in `grace`, because a wedged app stops saying "Opening…".
-    ///
-    /// Warming the simulator was tried first and did not work: `simctl install` plus one
-    /// launch cost ten minutes on a hosted runner and the first test still took 76 s, because
-    /// forty of those seconds are XCTest's own "Setting up automation session", which no
-    /// amount of `simctl` touches. The boot is still done in the workflow, for both devices.
-    private func waitForTheDocument(_ page: XCUIElement, grace: TimeInterval = 30,
-                                    cap: TimeInterval = 240) -> Bool {
-        let start = Date()
-        var deadline = start.addingTimeInterval(grace)
-        while Date() < deadline && Date().timeIntervalSince(start) < cap {
-            if page.exists { return true }
-            // Still opening? Then it has not failed, and the clock starts again.
-            if opening() != nil { deadline = Date().addingTimeInterval(grace) }
-            Thread.sleep(forTimeInterval: 0.2)
-        }
-        return page.exists
     }
 
     /// The document's first page, as an **image**.

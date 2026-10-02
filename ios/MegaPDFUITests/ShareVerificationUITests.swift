@@ -51,7 +51,7 @@ final class ShareVerificationUITests: XCTestCase {
         // CI run failed here with the More menu not yet there and Add text not yet
         // tappable.
         let page = app.descendants(matching: .any).matching(NSPredicate(format: "label == 'Page 1'")).firstMatch
-        XCTAssertTrue(page.waitForExistence(timeout: 60), "\(name) did not open")
+        XCTAssertTrue(DocumentOpening.wait(for: page, in: app), DocumentOpening.why(app, "\(name) did not open"))
     }
 
     private func more(_ item: String) {

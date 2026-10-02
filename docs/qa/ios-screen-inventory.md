@@ -430,13 +430,14 @@ Three things to keep:
 - **It is a hosted-runner cost.** The same first test measures 14 s on our own Mac mini against
   98–105 s hosted. That is not the 2–4 % spread §10c records for the quiescence stalls: this one
   really is the machine, because it is I/O and first-launch services rather than a timeout.
-- **Warming the simulator does not fix it, and that is worth knowing.** Installing the app and
-  launching it once on both simulators was tried: on a hosted dispatch (36937838115) it cost
-  **10 m 22 s** and the first test of the iPhone lane still took **76.6 s**. Forty of the sixty
-  seconds above are XCTest's own *Setting up automation session*, which belongs to the test
-  runner and which `simctl` cannot touch. The install-and-launch half was removed again. What
-  stays is the **boot**, for both devices, because only the iPhone was ever booted here and
-  leaving the iPad's first boot inside its own lane's first assertion was a real gap.
+- **Warming the simulator was TRIED AND IT FAILED. Do not try it again.** Installing the app
+  and launching it once on both simulators, so the cold start is paid in a step: on a hosted
+  dispatch (36937838115) that step cost **10 minutes 22 seconds**, and the first test of the
+  iPhone lane *still* took **76.6 s**. The reason is in the table above — forty of the sixty
+  seconds are XCTest's own *Setting up automation session*, which belongs to the test runner,
+  and `simctl` cannot reach it. The install-and-launch half was removed again. What stays is
+  the **boot**, for both devices, because only the iPhone was ever booted here and leaving the
+  iPad's first boot inside its own lane's first assertion was a real gap.
 - **A budget is the wrong instrument, so the wait stops using one alone.** The same run measured
   `testDeletingAPageAndUndoingItPutsThePageBack` at **530 s — passing**, against 98 s and 105 s
   on two other hosted runners and 14 s on our own Mac. No single number is right for all four,
@@ -448,11 +449,27 @@ Three things to keep:
   accessibility tree throughout, and reading it turns "the test document did not open" into "the
   app is still busy: Opening…". A wait that gives up should report the app's own answer, the way
   §10c's waits report how many times they looked.
+- **Where this treatment belongs, and where it does not.** `DocumentOpening` (UI tests) and
+  `ModelOpening` (unit tests) now carry it, and every wait on a document opening or on the app
+  launching goes through them — eleven UI suites and twelve unit-test call sites that had each
+  written their own number. It does **not** belong on a wait for a sheet to appear, a count to
+  change or a menu row to take a tap: those are a different condition, and #634 showed several
+  of them are genuinely *lost events*, where a renewing deadline would turn a fast honest
+  failure into a slow one. The test for whether a wait qualifies is the one the reds forced:
+  can the app tell you it is **still working**, as opposed to having **never done it**?
 
-**Hosted runner variance is the background to all of this**, and it is not the 2-4 % §10c
-records for the quiescence stalls. Across four hosted runs on 2026-10-01 the same test measured
-98 s, 105 s, 530 s and (on our Mac) 14 s. A hosted verdict is not comparable with another hosted
-verdict, which is worth remembering before reading two runs as a trend.
+**Both halves of the hardware question, because one rule would have been wrong.** §10c's
+sixty-second stalls were *not* caused by the machine: they measured 135.1 s idle and 134.5 s
+under a load average of 500, a 2-4 % spread, because a timeout is a timeout wherever you run
+it. This one *is* the machine, and plainly: across 2026-10-01 the same test measured **14 s** on
+our Mac mini, **98 s** and **105 s** on two hosted runners, and **530 s — passing** on a third.
+Hold both. "Hardware is never the cause" would have sent the §10c work the wrong way, and
+"hardware is the cause" would have sent this one the wrong way.
+
+That 530-second pass is also the answer to the obvious review question, *why not just raise the
+budget to 120 seconds*: because 530 > 120, and the next runner may be slower still. A hosted
+verdict is not comparable with another hosted verdict, which is worth remembering before reading
+two runs as a trend.
 
 Two sightings from the same hour, **neither diagnosed nor fixed**. The first: on another hosted run
 `SaveACopyExportUITests.testBothExportsPresentTheirSheetInOneSession` failed because the

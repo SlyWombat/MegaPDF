@@ -71,7 +71,7 @@ final class MarkdownExportUITests: XCTestCase {
             onePagePdfBase64(text: "MegaPDF Markdown Export Test")
         app.launch()
         let page = app.descendants(matching: .any).matching(NSPredicate(format: "label == 'Page 1'")).firstMatch
-        XCTAssertTrue(page.waitForExistence(timeout: 30), dump("the document did not open"))
+        XCTAssertTrue(DocumentOpening.wait(for: page, in: app), dump(DocumentOpening.why(app, "the document did not open")))
 
         exportMarkdown()
 
