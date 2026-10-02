@@ -10,7 +10,8 @@ and the build. Idempotent: run it again and it replaces what is there.
     tools/asc_publish.py status                      what the record looks like now
     tools/asc_publish.py version 1.7.0               name the editable version (or create it)
     tools/asc_publish.py copy                        names, subtitles, descriptions, keywords, URLs
-    tools/asc_publish.py screenshots <captures-dir>  <dir>/{ios,macos}-screenshots/<lang>/*.png
+    tools/asc_publish.py screenshots <captures-dir>  <dir>/macos-screenshots/<lang>/*.png or
+                                                      <dir>/ios-screenshots/<lang>/listing/*.png
     tools/asc_publish.py previews <captures-dir>     <dir>/ios/<lang>/*-preview.mp4
     tools/asc_publish.py review [attachment...]      notes + contact, plus files for the reviewer
     tools/asc_publish.py build [<build number>]      attach the newest processed build (or the given one)
@@ -40,21 +41,44 @@ PLATFORM = os.environ.get("ASC_PLATFORM", "IOS")
 LOCALES = ["en-CA", "fr-CA", "fr-FR"]
 REPO_LOCALE = {"en-CA": "en", "fr-FR": "fr"}
 
-# Listing slots, in order (docs/app-store-listing.md § Screenshots). The Mac
-# is a platform of the same record: ASC_PLATFORM=MAC_OS switches the version,
-# the slot types, and where the captures come from (tools/mac-mini.md).
+# Listing slots, per label, in order (docs/app-store-listing.md § Screenshots).
+# The Mac is a platform of the same record: ASC_PLATFORM=MAC_OS switches the
+# version, the slot types, and where the captures come from (tools/mac-mini.md).
+#
+# SHOT_ORDER is a {label: [states]} map, one order per SHOT_SETS label, rather
+# than one shared list with an exception threaded through it: since #613 (PR
+# #651) the iPad's sequence genuinely differs from the iPhone's (Dave's call —
+# the iPad leads on the sidebar and its own 2.2 toolbar instead of repeating
+# the phone's case), so the divergence needs to be visible, the same shape #651
+# itself used in tools/capture-gate/stores.py and tools/gen_listing_copy.py.
+#
+# Both orders below are taken verbatim from those two files, not reinvented
+# here:
+#   - tools/capture-gate/stores.py, profile "ios", order["iphone-6_9"] /
+#     order["ipad-13"] (the merged source of truth for the capture rig itself).
+#   - cross-checked against tools/gen_listing_copy.py's captions_iphone /
+#     captions_ipad, which name the same states in the same order.
+# Neither file's state names carry the numeric prefixes the Mac's capture
+# filenames do (light-01-reading.png, …) — tools/capture-gate/stores.py's own
+# "mac" profile `parse` strips them with `(?:\d+[-_])?`. The Mac order here
+# spells them out because this file matches literal filenames, not poses.
 if PLATFORM == "MAC_OS":
-    # The set tools/macos-store-captures.sh produces, in listing order; the old
-    # five were the #144 review shots and had no Redact in them (#146 §3).
-    SHOT_ORDER = ["01-viewer", "02-text", "03-search", "04-sign", "05-redact", "06-home"]
+    # tools/macos-store-captures.sh's seven listing slots (#613 cut Viewer from
+    # the front in favour of Reading, and added Pages).
     SHOT_SETS = {"light": "APP_DESKTOP"}
+    SHOT_ORDER = {"light": ["01-reading", "02-text", "03-sign", "04-pages",
+                            "05-search", "06-redact", "07-home"]}
     # One clip per listing language: macos-<lang>-light-recorded-preview.mp4.
     PREVIEW_SETS = {"macos-{lang}-light-recorded": "DESKTOP"}
 else:
-    # Eight slots from 2.0: the two things the 2.0 copy leads with come straight
-    # after the viewer (docs/app-store-listing.md § Screenshots, #146 §3).
-    SHOT_ORDER = ["viewer", "text-edit", "redact", "text", "search", "sign", "draw", "home"]
+    # Nine slots since #613 (PR #651): two sequences, not one.
     SHOT_SETS = {"iphone-6_9": "APP_IPHONE_67", "ipad-13": "APP_IPAD_PRO_3GEN_129"}
+    SHOT_ORDER = {
+        "iphone-6_9": ["reading", "text-edit", "sign", "draw", "pages", "text",
+                       "search", "redact", "home"],
+        "ipad-13": ["pages", "reading", "text-edit", "sign", "draw", "text",
+                    "search", "redact", "home"],
+    }
     PREVIEW_SETS = {"iphone-6_9": "IPHONE_67", "ipad-13": "IPAD_PRO_3GEN_129"}
 
 
@@ -324,12 +348,19 @@ def _replace_set_contents(list_path, item_type, delete_path_prefix):
 def cmd_screenshots(captures):
     v = editable_version()
     locs = version_localizations(v["id"])
+    problems = []
     for locale in LOCALES:
         # One folder per listing language on both platforms: the Mac set used to be a
-        # single folder, from when it was English only (#146 §3).
+        # single folder, from when it was English only (#146 §3). iOS captures land
+        # one directory deeper, in a listing/ subfolder next to a review/ one that
+        # holds App Review's extra dark-mode shots — read straight from the layout
+        # the capture rig itself produces (tools/ios-screenshots.sh: `mkdir -p
+        # "$OUT/listing" "$OUT/review"`) rather than guessing a flatter one;
+        # tools/capture-gate/stores.py's "ios" profile excludes "review" from its
+        # listing set ("not_listing_folders") the same way.
         repo_locale = REPO_LOCALE.get(locale, locale)
         folder = (os.path.join(captures, "macos-screenshots", repo_locale) if PLATFORM == "MAC_OS"
-                  else os.path.join(captures, "ios-screenshots", repo_locale))
+                  else os.path.join(captures, "ios-screenshots", repo_locale, "listing"))
         if locale not in locs or not os.path.isdir(folder):
             print(f"  {locale}: no localization or no folder {folder}; skipped")
             continue
@@ -337,6 +368,7 @@ def cmd_screenshots(captures):
         sets = {s["attributes"]["screenshotDisplayType"]: s for s in
                 paged(f"/v1/appStoreVersionLocalizations/{lid}/appScreenshotSets?limit=50")}
         for label, display in SHOT_SETS.items():
+            order = SHOT_ORDER[label]
             if display in sets:
                 sid = sets[display]["id"]
                 try:
@@ -358,12 +390,28 @@ def cmd_screenshots(captures):
                     "relationships": {"appStoreVersionLocalization": {"data": {
                         "type": "appStoreVersionLocalizations", "id": lid}}}}})["data"]["id"]
             n = 0
-            for state in SHOT_ORDER:
+            missing = []
+            for state in order:
                 path = os.path.join(folder, f"{label}-{state}.png")
                 if os.path.exists(path):
                     upload_asset("/v1/appScreenshots", "appScreenshotSet", sid, path)
                     n += 1
-            print(f"  {locale} {display}: {n} screenshots")
+                else:
+                    missing.append(os.path.basename(path))
+            status = f"  {locale} {display}: {n} screenshots"
+            if missing:
+                status += f"  -- MISSING {len(missing)}/{len(order)}: {', '.join(missing)}"
+                problems.append(f"{locale} {display}: found {n}/{len(order)} in {folder}, "
+                                f"missing {', '.join(missing)}")
+            print(status)
+    if problems:
+        # The real defect this guards against: a stale slot list silently uploaded
+        # one of seven screenshots to the Mac listing and reported "1 screenshots"
+        # as if nothing were wrong. A short set is never acceptable — it ships a
+        # near-empty listing — so this fails loudly, after finishing every locale,
+        # naming exactly what is missing.
+        sys.exit("screenshots: " + str(len(problems)) + " set(s) short of their expected "
+                 "slot count:\n  " + "\n  ".join(problems))
 
 
 def cmd_previews(captures):
