@@ -71,14 +71,20 @@ LOGO_SIZE = (300, 300)
 OWNED_IMAGE_TYPES = ("Screenshot", LOGO_TYPE)
 
 CERT_NOTES = (
-    "MegaPDF 2.1.1 is a local PDF editor: no account, no sign-in, no network use. "
+    "MegaPDF 2.2.0 is a local PDF editor: no account, no sign-in, no network use. "
     "To try it, open any PDF with the toolbar's Open button (Ctrl+O), or double-click a "
     ".pdf once MegaPDF is the default app. Open a second PDF and it appears as a tab in "
     "the same window (Ctrl+W closes a tab). Click text to edit it, click an empty square "
     "to tick it, use Redact on the toolbar to mark a name (click the mark to select, move "
     "or remove it), and Save. Save As offers Markdown document as well as PDF document: "
-    "the Markdown file is a text export and leaves the PDF unchanged. This update "
-    "replaces the 2.1.0 x64 and ARM64 packages."
+    "the Markdown file is a text export and leaves the PDF unchanged. New in this "
+    "version: Ctrl+H is reading mode, which takes the tools off the screen and leaves "
+    "the page (Escape brings them back; page colours are in Settings, under Reading). "
+    "The Pages pane rotates, deletes, reorders and inserts pages and can save the pages "
+    "you picked as a file of their own, each as one undo step. If a document already "
+    "carries a digital signature, saving says the signature will no longer verify and "
+    "offers to remove it; MegaPDF neither creates nor validates cryptographic "
+    "signatures. This update replaces the 2.1.1 x64 and ARM64 packages."
 )
 
 
