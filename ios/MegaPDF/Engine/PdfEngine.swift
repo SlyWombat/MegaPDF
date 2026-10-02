@@ -255,6 +255,21 @@ actor PdfEngine {
         return PdfDocumentFlags(rawValue: megapdf_document_flags(document.core))
     }
 
+    /// Removes every digital signature from `document`, in memory, on the person's explicit
+    /// say-so (#576) — the same `megapdf_signatures_remove()` call Windows and the Avalonia
+    /// desktops already make through their own bindings. The file on disk is untouched; this
+    /// reaches only what a save writes next.
+    ///
+    /// Returns whether any signature went. Callers should re-read `documentFlags(_:)`
+    /// afterwards rather than trust this alone, since `.signed` is what the rest of the app
+    /// acts on. Nothing calls this on its own: a save nobody asked to remove the signature
+    /// from behaves exactly as it did before #576.
+    @discardableResult
+    func removeDigitalSignatures(_ document: PdfDocument) -> Bool {
+        guard !document.isDestroyed else { return false }
+        return megapdf_signatures_remove(document.core) > 0
+    }
+
     /// Whether the document is encrypted and what this open may do (#131).
     func security(_ document: PdfDocument) -> PdfSecurity {
         guard !document.isDestroyed else { return .unprotected }

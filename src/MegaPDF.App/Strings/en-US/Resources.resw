@@ -208,8 +208,20 @@
     <comment>#476, #481: the signed-document save warning's deliberate, secondary action</comment>
   </data>
   <data name="SignatureNotCarriedNotice" xml:space="preserve">
-    <value>The original's digital signature doesn't carry over to this copy.</value>
-    <comment>#476, #481, #602: said once, quietly, after Save a copy on a signed document — the document's own digital signature, not the one the user placed</comment>
+    <value>The copy carries the original's digital signature, and it is no longer valid.</value>
+    <comment>#476, #481, #602, #576: said once, quietly, after Save a copy that kept the signature. It used to say the signature "doesn't carry over to this copy", which #576 measured as untrue on every platform that still said it — the signature dictionary does carry over (FPDF_SaveAsCopy re-serialises it), and the copy reports as signed when it is reopened; only its validity does not carry over</comment>
+  </data>
+  <data name="SignedSaveRemoveSignature" xml:space="preserve">
+    <value>Also remove the signature, which will no longer be valid</value>
+    <comment>#576: the tick added to this same warning rather than a fourth button — a button would be a different destination competing with the two already there, while a tick modifies the destination already chosen. Ticked by default: by the time this box matters the save has already ended the signature, so the tick chooses between a file that admits it is unsigned and a file that goes on claiming a signature it cannot support</comment>
+  </data>
+  <data name="SignedSaveRemoveOffer" xml:space="preserve">
+    <value>Left in, it travels with the file being saved and goes on claiming to describe a file it no longer describes, so MegaPDF and other readers report that file as signed. The document you opened is not changed either way — this reaches only the file being written. And a digital signature says a file has not changed since it was signed: it has never kept anyone from opening this document, so a file saved without it is readable by exactly the same people.</value>
+    <comment>#576: what the tick means. Three things it must keep saying — the original file is untouched, the choice reaches only the file being written, and a digital signature is not encryption and never was. No "encrypt", "password", "protect", "secure", "lock" or "unlock" anywhere near it: those belong to the password feature</comment>
+  </data>
+  <data name="SignatureRemovedNotice" xml:space="preserve">
+    <value>Saved without the document's digital signature. The document you opened is unchanged.</value>
+    <comment>#576: said once, quietly, after a save that removed the signature — either Save a copy or Overwrite the original, whichever the tick applied to</comment>
   </data>
 
   <!-- Find bar -->

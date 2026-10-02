@@ -103,11 +103,11 @@ struct ContentView: View {
                     busy: model.busy,
                     displayName: displayName,
                     pageSizes: pageSizes,
-                    onSaveCopy: {
+                    onSaveCopy: { removeSignature in
                         // Repeat taps are ignored while the copy is prepared (#145).
                         guard !model.fileCommandsBlocked else { return }
                         Task {
-                            if let file = await model.exportFile(named: displayName) {
+                            if let file = await model.exportFile(named: displayName, removeSignature: removeSignature) {
                                 // Kind, document and name are all set before `exporting`, in
                                 // one hop on the main actor, so the render that presents the
                                 // sheet already knows it is presenting for a PDF (#589).

@@ -128,6 +128,14 @@ internal static class Screenshot
                 vm.ShowSignedSaveWarningForScreenshot();
                 return true;
 
+            // #576: the removal tick the signed-save warning now offers, and the write path
+            // it drives — parity with the same choice Avalonia's desktops already have.
+            // Unlike `signed-save` above, this is a functional check, not a screenshot:
+            // needs a signed document already open (signed-approval.pdf,
+            // tools/gen_signature_fixtures.py). The exit code is the test.
+            case "signed-save-remove":
+                return await CheckSignedSaveRemovalAsync(window);
+
             case "sign":
                 return await OpenSignatureLibraryAsync(window);
 
@@ -2963,6 +2971,124 @@ internal static class Screenshot
             using var withPassword = engine.Open(work, password);
             Check("and opens with the right one", withPassword.PageCount > 0);
         }
+    }
+
+    /// <summary>
+    /// #576: the removal tick <c>ConfirmOverwriteSignedAsync</c>'s warning offers before
+    /// Save overwrites a signed original — parity with the same choice Avalonia's desktops
+    /// already have. Needs a signed document (signed-approval.pdf or signed-certified.pdf,
+    /// tools/gen_signature_fixtures.py), not fixture.pdf.
+    ///
+    /// Two halves, the same shape <see cref="CheckSecurityDialogAsync"/> already established.
+    /// The dialog itself is opened for real and read back through
+    /// <see cref="DialogGate.Current"/> — its title, the real <see cref="CheckBox"/> and its
+    /// ticked-by-default state, and the explanation beside it — then cancelled, because WinUI
+    /// gives this process no way to press a <see cref="ContentDialog"/>'s button itself
+    /// (#462). The write path a Primary/Secondary click would have run is driven directly
+    /// through <see cref="DocumentViewModel.OverwriteSignedForTestAsync"/>, and the saved
+    /// file is reopened through a fresh engine to check what it actually contains, both when
+    /// the tick is honoured and when a save asks for nothing special — the latter is what
+    /// would catch a removal creeping into the ordinary save path, the one thing #576
+    /// decided against. The exit code is the test.
+    /// </summary>
+    private static async Task<bool> CheckSignedSaveRemovalAsync(MainWindow window)
+    {
+        var passed = 0;
+        var failed = 0;
+        void Check(string what, bool ok)
+        {
+            Console.Error.WriteLine($"{(ok ? "PASS" : "FAIL")}: {what}");
+            if (ok)
+                passed++;
+            else
+                failed++;
+        }
+
+        if (window.Shell.Active is not { IsDocumentOpen: true } fixtureTab
+            || fixtureTab.DocumentPath is not { } fixturePath)
+        {
+            Console.Error.WriteLine("--screenshot-state signed-save-remove needs a document.");
+            return false;
+        }
+        if (!fixtureTab.IsSigned)
+        {
+            Console.Error.WriteLine(
+                "--screenshot-state signed-save-remove needs a signed document (pass "
+                + "signed-approval.pdf or signed-certified.pdf, not fixture.pdf).");
+            return false;
+        }
+
+        var scratch = Path.Combine(Path.GetTempPath(), "megapdf-signed-save-remove-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(scratch);
+        try
+        {
+            // --- The dialog itself: the real tick, ticked by default -----------------------
+            var kept = Path.Combine(scratch, "kept.pdf");
+            File.Copy(fixturePath, kept, overwrite: true);
+            var keptTab = await window.Shell.OpenInTabAsync(kept);
+            await Task.Delay(500);
+            Check("a scratch copy opened and is signed", keptTab.IsDocumentOpen && keptTab.IsSigned);
+
+            // DialogGate.Current is one slot, not a stack (see the `security` check's own
+            // remark) — matched by title, not trusted on sight.
+            var showing = keptTab.SaveCommand.ExecuteAsync(null);
+            await PumpUntilAsync(() => DialogGate.Current is not null, TimeSpan.FromSeconds(5));
+            if (DialogGate.Current is { } dialog
+                && (Equals(dialog.Title, Strings.SignedSaveWarningTitle) || Equals(dialog.Title, Strings.CertifiedSaveWarningTitle)))
+            {
+                Check("it is the signed-save warning", true);
+                var panel = dialog.Content as Panel;
+                var checkBox = panel?.Children.OfType<CheckBox>().FirstOrDefault();
+                Check("it offers the removal tick", checkBox is not null);
+                Check("  labelled the way #576 settled on", Equals(checkBox?.Content, Strings.SignedSaveRemoveSignature));
+                Check("  ticked by default", checkBox?.IsChecked == true);
+                var texts = panel?.Children.OfType<TextBlock>().Select(t => t.Text).ToList() ?? [];
+                Check("  and explains what leaving it in or taking it out means",
+                      texts.Contains(Strings.SignedSaveRemoveOffer));
+                dialog.Hide(); // cancel — WinUI gives this process no way to press a button itself
+            }
+            else
+            {
+                var found = DialogGate.Current is { } other ? $"found \"{other.Title}\" instead" : "nothing is open";
+                Check($"the signed-save dialog actually opened ({found})", false);
+            }
+            if (await Task.WhenAny(showing, Task.Delay(TimeSpan.FromSeconds(5))) != showing)
+                Check("Save returned once the dialog closed (it did not, within 5s)", false);
+            Check("cancelling leaves the signature alone", keptTab.IsSigned);
+
+            // --- The write path a ticked Overwrite would have run ---------------------------
+            var removedOk = await keptTab.OverwriteSignedForTestAsync(removeSignature: true);
+            Check("removing it reports success and leaves the tab reporting unsigned",
+                  removedOk && !keptTab.IsSigned);
+            using (var engine = new PdfiumEngine())
+            using (var reopened = engine.Open(kept))
+                Check("and the saved file genuinely carries no signature when reopened", !reopened.IsSigned);
+
+            // --- The twin: a save nobody asked to remove anything keeps the signature -------
+            // (#576's own worry: a removal creeping into the save path itself).
+            var copy = Path.Combine(scratch, "left-in.pdf");
+            File.Copy(fixturePath, copy, overwrite: true);
+            var leftInTab = await window.Shell.OpenInTabAsync(copy);
+            await Task.Delay(500);
+            await leftInTab.OverwriteSignedForTestAsync(removeSignature: false);
+            Check("not asking to remove it leaves the tab still reporting signed", leftInTab.IsSigned);
+            using (var engine = new PdfiumEngine())
+            using (var reopened = engine.Open(copy))
+                Check("and the saved file still reports a (now invalid) signature", reopened.IsSigned);
+
+            foreach (var tab in new[] { keptTab, leftInTab })
+            {
+                tab.HasUnsavedChanges = false;
+                await window.CloseTabAsync(tab);
+            }
+        }
+        finally
+        {
+            try { Directory.Delete(scratch, recursive: true); } catch { /* best-effort scratch cleanup */ }
+        }
+
+        Console.Error.WriteLine($"signed-save-remove: {passed} passed, {failed} failed ({passed + failed} checks)");
+        return failed == 0;
     }
 
     /// <summary>

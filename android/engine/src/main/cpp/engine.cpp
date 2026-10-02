@@ -190,6 +190,17 @@ Java_com_megapdf_engine_PdfiumNative_nativeDocumentFlags(JNIEnv*, jobject, jlong
     return static_cast<jint>(megapdf_document_flags(reinterpret_cast<Document*>(handle)->core));
 }
 
+// megapdf_signatures_remove() (#576): takes every signature field out of the AcroForm field
+// tree, value and widget both (PDFium patch 0028, FPDFDoc_RemoveFormField) — the same call
+// Windows and the Avalonia desktops make, through the same shared core. Returns the number
+// removed, 0 on an unsigned document, -1 on a null document. The caller re-reads
+// nativeDocumentFlags() afterwards rather than trusting this count alone, the same way the
+// .NET callers re-read IsSigned from the document rather than the removal's own return value.
+JNIEXPORT jint JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativeRemoveDigitalSignatures(JNIEnv*, jobject, jlong handle) {
+    return static_cast<jint>(megapdf_signatures_remove(reinterpret_cast<Document*>(handle)->core));
+}
+
 JNIEXPORT jlong JNICALL
 Java_com_megapdf_engine_PdfiumNative_nativeOpenPage(JNIEnv*, jobject, jlong handle, jint index) {
     auto* d = reinterpret_cast<Document*>(handle);

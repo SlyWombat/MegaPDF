@@ -2135,6 +2135,31 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
     private bool CanSave() => IsDocumentOpen && !Busy.IsBusy;
 
     /// <summary>
+    /// Removes every digital signature from the open document, in memory, on the person's
+    /// explicit say-so (#576), and answers whether any went. The file on disk is untouched;
+    /// this reaches only what a save writes next, which is what the signed-save question
+    /// promises — parity with the tick Avalonia's desktops already have
+    /// (<c>MegaPDF.Avalonia.ViewModels.DocumentViewModel.RemoveDigitalSignatures</c>).
+    ///
+    /// <para>The document is marked dirty, and <see cref="IsSigned"/> goes false, because
+    /// the open document is now genuinely different from its file — telling the truth about
+    /// that matters more than the removal usually being followed immediately by a save.
+    /// Nothing calls this on its own: a save that was not asked to remove the signature
+    /// behaves exactly as it did before #576.</para>
+    /// </summary>
+    private bool RemoveDigitalSignatures()
+    {
+        if (_document is not { } document || !IsSigned)
+            return false;
+        if (document.RemoveDigitalSignatures() <= 0)
+            return false;
+        IsSigned = document.IsSigned;
+        IsSignedCertification = document.IsSignedCertification;
+        HasUnsavedChanges = true;
+        return true;
+    }
+
+    /// <summary>
     /// #476, #481: the warning before Save overwrites a signed original — the one
     /// destructive path (Dave's framing: filling in a form and saving a copy under your
     /// own name is the common case and is already safe, so this never appears there).
@@ -2143,16 +2168,45 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
     /// refused: overwriting a signed document is available, it just cannot be an accident.
     /// Returns true when the caller should go on and overwrite; false when Save a copy
     /// already handled the save (or the user cancelled), so the caller must not save again.
+    ///
+    /// <para>#576 adds a tick to this same conversation rather than a fourth button or a
+    /// second dialog: save the copy, or overwrite, without the signature. Dave's reasoning,
+    /// carried over from the Avalonia dialog this mirrors — a button is a different
+    /// destination that would compete with the two already here, while a tick modifies
+    /// whichever of those the person has already chosen. Ticked by default: by the time
+    /// this box matters, the save has already ended the signature (it cannot be preserved
+    /// across MegaPDF's full-file rewrite), so the tick is choosing between a file that
+    /// admits it is unsigned and a file that goes on claiming a signature it cannot
+    /// support — not choosing whether to delete the author's signature.</para>
     /// </summary>
     private async Task<bool> ConfirmOverwriteSignedAsync()
     {
         if (_document is null || !IsSigned || window.Content?.XamlRoot is not { } xamlRoot)
             return true;
 
+        var removeCheck = new CheckBox
+        {
+            Content = Strings.SignedSaveRemoveSignature,
+            IsChecked = true,
+        };
+        var panel = new StackPanel { Spacing = 8 };
+        panel.Children.Add(new TextBlock
+        {
+            Text = IsSignedCertification ? Strings.CertifiedSaveWarningBody : Strings.SignedSaveWarningBody,
+            TextWrapping = TextWrapping.Wrap,
+        });
+        panel.Children.Add(removeCheck);
+        panel.Children.Add(new TextBlock
+        {
+            Text = Strings.SignedSaveRemoveOffer,
+            TextWrapping = TextWrapping.Wrap,
+            Opacity = 0.85,
+        });
+
         var dialog = new ContentDialog
         {
             Title = IsSignedCertification ? Strings.CertifiedSaveWarningTitle : Strings.SignedSaveWarningTitle,
-            Content = IsSignedCertification ? Strings.CertifiedSaveWarningBody : Strings.SignedSaveWarningBody,
+            Content = panel,
             // Save a copy is primary/default because it is the safe path and the common
             // one (Dave's framing); overwriting needs a deliberate secondary click.
             PrimaryButtonText = Strings.SaveACopyButton,
@@ -2164,12 +2218,18 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
         switch (await dialog.ShowOneAtATimeAsync())
         {
             case ContentDialogResult.Primary:
-                await SaveAsCommand.ExecuteAsync(null);
+                await SaveAsCoreAsync(removeSignature: removeCheck.IsChecked == true);
                 return false;   // the copy path has saved; the caller must not save again
             case ContentDialogResult.Secondary:
+                // Deliberate: overwrite the signed original anyway. The tick takes effect
+                // here, before the bytes are written, and only on the open document in
+                // memory — the file on disk is replaced by the save that follows, not by
+                // this.
+                if (removeCheck.IsChecked == true)
+                    RemoveDigitalSignatures();
                 return true;    // deliberate: overwrite the signed original anyway
             default:
-                return false;   // cancelled: nothing saved
+                return false;   // cancelled: nothing saved, and the tick means nothing
         }
     }
 
@@ -2331,6 +2391,20 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
         if (!await ConfirmAndApplyRedactionsAsync(alreadySavingACopy: false))
             return;
 
+        await SaveCoreAsync();
+    }
+
+    /// <summary>
+    /// The actual overwrite write, split out from <see cref="SaveAsync"/> so the #576
+    /// self-test can drive it directly once the tick's answer is already decided — the same
+    /// bypass <see cref="SetPasswordForTestAsync"/> uses for the password dialog, because
+    /// WinUI gives this process no way to press a ContentDialog's button itself (#462).
+    /// </summary>
+    private async Task<bool> SaveCoreAsync()
+    {
+        if (_document is null || DocumentPath is null)
+            return false;
+
         var document = _document;
         var path = DocumentPath;
         var editsBefore = _editCount;
@@ -2356,11 +2430,28 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
             Announced?.Invoke(Strings.SavedAnnouncement(Path.GetFileName(path)));
             if (flattened)
                 await OnDocumentFlattenedAsync();
+            return true;
         }
         catch (Exception ex)
         {
             await ShowErrorAsync(Strings.CouldNotSaveTitle, $"{UserFacing.Describe(ex)}\n\n{Strings.TrySaveAsHint}");
+            return false;
         }
+    }
+
+    /// <summary>
+    /// For the `signed-save-remove` self-test (#576): the write path a ticked Overwrite
+    /// button in <see cref="ConfirmOverwriteSignedAsync"/> would have run, driven directly
+    /// the way <see cref="SetPasswordForTestAsync"/> drives the password write path — see
+    /// that method's doc comment for why. The dialog itself (its title, the real CheckBox
+    /// and its ticked-by-default state) is exercised separately by opening it and reading
+    /// <see cref="MegaPDF.App.DialogGate.Current"/>, which this bypasses rather than proves.
+    /// </summary>
+    internal async Task<bool> OverwriteSignedForTestAsync(bool removeSignature)
+    {
+        if (removeSignature)
+            RemoveDigitalSignatures();
+        return await SaveCoreAsync();
     }
 
     /// <summary>Applies the flatten-on-save setting. Returns true when the document was baked.</summary>
@@ -2389,7 +2480,21 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
     }
 
     [RelayCommand(CanExecute = nameof(CanSave))]
-    private async Task SaveAsAsync()
+    private async Task SaveAsAsync() => await SaveAsCoreAsync(removeSignature: false);
+
+    /// <summary>
+    /// The actual Save As, split out from the <see cref="SaveAsCommand"/> entry point so
+    /// <see cref="ConfirmOverwriteSignedAsync"/>'s Save-a-copy branch can call it with the
+    /// signed-save tick's answer already in hand (#576), the same split
+    /// <see cref="SaveCoreAsync"/> makes for the overwrite path.
+    /// </summary>
+    /// <param name="removeSignature">
+    /// #576: leave the document's digital signature out of the copy, because the person
+    /// said so in the signed-save question. Applied after the picker and immediately
+    /// before the write, never before — a removal ahead of a picker the person then
+    /// cancels would have taken the signature out of the open document for nothing.
+    /// </param>
+    private async Task SaveAsCoreAsync(bool removeSignature)
     {
         if (_document is null || DocumentPath is null)
             return;
@@ -2440,6 +2545,12 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
             return;
         }
 
+        // #576: the picker is past, so this is the moment the person's answer takes effect.
+        // It reaches only the bytes about to be written — the file the document was opened
+        // from is not touched by it, which is what the signed-save question promised.
+        var wasSigned = IsSigned;
+        var removed = removeSignature && RemoveDigitalSignatures();
+
         var editsBefore = _editCount;
         try
         {
@@ -2458,10 +2569,18 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
             }
             if (flattened)
                 await OnDocumentFlattenedAsync();
-            // #476, #481: said quietly, once, then out of the way — the common, already-safe
-            // path (Dave's framing) still deserves the one fact that the signature on the
-            // original does not carry to this copy, but never a dialog to dismiss.
-            if (IsSigned)
+            // #476, #481, #576: said quietly, once, then out of the way — the common,
+            // already-safe path (Dave's framing) still deserves the one fact about what
+            // became of the signature, but never a dialog to dismiss. The signature
+            // dictionary does carry over into a copy that keeps it (FPDF_SaveAsCopy
+            // re-serialises it) — only its validity does not, which is why this no longer
+            // says the signature "doesn't carry over".
+            if (removed)
+            {
+                SecurityNotice = Strings.SignatureRemovedNotice;
+                IsSecurityNoticeOpen = true;
+            }
+            else if (wasSigned)
             {
                 SecurityNotice = Strings.SignatureNotCarriedNotice;
                 IsSecurityNoticeOpen = true;
@@ -2897,6 +3016,11 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
     /// so a signed document gets the same warning first, with the same Save-a-copy
     /// alternative, this time writing the changed security to a picked file rather than
     /// discarding it. Returns the path to write to, or null when the user cancelled.
+    ///
+    /// <para>#576: the same removal tick <see cref="ConfirmOverwriteSignedAsync"/> offers,
+    /// applied directly here rather than threaded through the return value — this method
+    /// only hands back a path, not a save, so by the time anything is written the choice
+    /// has already been made the same way: after the picker (if any), never before.</para>
     /// </summary>
     private async Task<string?> ConfirmSecurityWriteTargetAsync(string fileName)
     {
@@ -2905,10 +3029,29 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
         if (!IsSigned || window.Content?.XamlRoot is not { } xamlRoot)
             return current;
 
+        var removeCheck = new CheckBox
+        {
+            Content = Strings.SignedSaveRemoveSignature,
+            IsChecked = true,
+        };
+        var panel = new StackPanel { Spacing = 8 };
+        panel.Children.Add(new TextBlock
+        {
+            Text = IsSignedCertification ? Strings.CertifiedSaveWarningBody : Strings.SignedSaveWarningBody,
+            TextWrapping = TextWrapping.Wrap,
+        });
+        panel.Children.Add(removeCheck);
+        panel.Children.Add(new TextBlock
+        {
+            Text = Strings.SignedSaveRemoveOffer,
+            TextWrapping = TextWrapping.Wrap,
+            Opacity = 0.85,
+        });
+
         var dialog = new ContentDialog
         {
             Title = IsSignedCertification ? Strings.CertifiedSaveWarningTitle : Strings.SignedSaveWarningTitle,
-            Content = IsSignedCertification ? Strings.CertifiedSaveWarningBody : Strings.SignedSaveWarningBody,
+            Content = panel,
             PrimaryButtonText = Strings.SaveACopyButton,
             SecondaryButtonText = Strings.OverwriteSignedButton,
             CloseButtonText = Strings.Cancel,
@@ -2925,8 +3068,16 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
                 picker.SuggestedFileName = Strings.EditedFileName(Path.GetFileNameWithoutExtension(fileName));
                 WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(window));
                 var file = await picker.PickSaveFileAsync();
-                return file?.Path;
+                if (file is null)
+                    return null;
+                // #576: after the picker, never before — a removal ahead of a picker the
+                // person then cancels would have taken the signature out for nothing.
+                if (removeCheck.IsChecked == true)
+                    RemoveDigitalSignatures();
+                return file.Path;
             case ContentDialogResult.Secondary:
+                if (removeCheck.IsChecked == true)
+                    RemoveDigitalSignatures();
                 return current;    // deliberate: overwrite the signed original anyway
             default:
                 return null;        // cancelled: nothing written, security unchanged

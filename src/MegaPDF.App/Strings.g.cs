@@ -37,8 +37,17 @@ public static partial class Strings
     /// <summary>Overwrite the original</summary>
     public static string OverwriteSignedButton => Get("OverwriteSignedButton");
 
-    /// <summary>The original's digital signature doesn't carry over to this copy.</summary>
+    /// <summary>The copy carries the original's digital signature, and it is no longer valid.</summary>
     public static string SignatureNotCarriedNotice => Get("SignatureNotCarriedNotice");
+
+    /// <summary>Also remove the signature, which will no longer be valid</summary>
+    public static string SignedSaveRemoveSignature => Get("SignedSaveRemoveSignature");
+
+    /// <summary>Left in, it travels with the file being saved and goes on claiming to describe a file it no longer describes, so MegaPDF and other readers report that file as signed. The document you opened is not changed either way — this reaches only the file being written. And a digital signature says a file has not changed since it was signed: it has never kept anyone from opening this document, so a file saved without it is readable by exactly the same people.</summary>
+    public static string SignedSaveRemoveOffer => Get("SignedSaveRemoveOffer");
+
+    /// <summary>Saved without the document's digital signature. The document you opened is unchanged.</summary>
+    public static string SignatureRemovedNotice => Get("SignatureRemovedNotice");
 
     /// <summary>A lightweight PDF editor — open, fix, save, done.</summary>
     public static string AppDescription => Get("AppDescription");

@@ -120,7 +120,16 @@
     <string name="signed_overwrite_body">MegaPDF réécrit le fichier au complet lors de l\'enregistrement, donc la signature numérique du document ne sera plus valide une fois que vous aurez enregistré ici. Enregistrez plutôt une copie pour laisser l\'original signé intact.</string>
     <string name="signed_overwrite_title_certified">Ce document n\'autorise aucune modification</string>
     <string name="signed_overwrite_body_certified">Ce document a été certifié comme ne pouvant être modifié — son auteur a déclaré qu\'aucune modification n\'est permise. L\'enregistrer ici brisera cette certification en plus de la signature numérique. Enregistrez plutôt une copie pour laisser l\'original signé intact.</string>
-    <string name="signed_copy_notice">Enregistré. La signature numérique ne se transfère pas à une copie.</string>
+    <!-- FR-REVIEW #576 — new, not yet read by the reviewer. -->
+    <string name="signed_overwrite_remove_signature">Supprimer aussi la signature, qui ne sera plus valide</string>
+    <!-- FR-REVIEW #576 — new, not yet read by the reviewer. -->
+    <string name="signed_overwrite_remove_offer">Si elle reste, elle suit le fichier enregistré et continue d\'affirmer qu\'elle décrit un fichier qu\'elle ne décrit plus&#160;: MegaPDF et les autres lecteurs présenteront donc ce fichier comme signé. Le document que vous avez ouvert n\'est modifié en aucun cas — ce choix ne touche que le fichier enregistré. Et une signature numérique indique qu\'un fichier n\'a pas changé depuis sa signature&#160;: elle n\'a jamais empêché qui que ce soit d\'ouvrir ce document, alors un fichier enregistré sans elle est lisible par exactement les mêmes personnes.</string>
+    <!-- FR-REVIEW #576 — corrected wording, not yet read by the reviewer. The previous wording
+         said the signature does not carry over to the copy, which is untrue: only its validity
+         fails to carry over. -->
+    <string name="signed_copy_notice">Enregistré. La copie porte la signature numérique du document, et celle-ci n\'est plus valide.</string>
+    <!-- FR-REVIEW #576 — new, not yet read by the reviewer. -->
+    <string name="signature_removed_notice">Enregistré sans la signature numérique du document. Le document que vous avez ouvert est inchangé.</string>
 
     <!-- Added text -->
     <string name="add_text">Ajouter du texte</string>

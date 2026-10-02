@@ -105,4 +105,84 @@ class DocumentFlagsTest {
             }
         }
     }
+
+    // --- Removing a dead signature (#576): the JNI binding for megapdf_signatures_remove(),
+    // the same core call Windows and the Avalonia desktops already make. The core's own
+    // behaviour (field tree + value + widget all removed, FPDFDoc_RemoveFormField) is covered
+    // by core_tests.cpp against the real GPO corpus; this proves it crosses the JNI boundary
+    // and that the saved file genuinely stops reporting as signed when reopened.
+
+    @Test
+    fun removingSignaturesOnASignedDocumentReportsSuccessAndClearsTheFlag() {
+        runBlocking {
+            val doc = engine.open(assetBytes("signed-approval.pdf"))
+            try {
+                assertTrue(doc.documentFlags().isSigned)
+                assertTrue(doc.removeDigitalSignatures())
+                assertFalse(doc.documentFlags().isSigned)
+            } finally {
+                doc.close()
+            }
+        }
+    }
+
+    @Test
+    fun theSavedFileGenuinelyCarriesNoSignatureOnceRemoved() {
+        runBlocking {
+            val doc = engine.open(assetBytes("signed-approval.pdf"))
+            val bytes = try {
+                doc.removeDigitalSignatures()
+                val out = java.io.ByteArrayOutputStream()
+                doc.save(out)
+                out.toByteArray()
+            } finally {
+                doc.close()
+            }
+
+            val reopened = engine.open(bytes)
+            try {
+                assertFalse("a save nobody asked to keep the signature must not still report one",
+                    reopened.documentFlags().isSigned)
+            } finally {
+                reopened.close()
+            }
+        }
+    }
+
+    @Test
+    fun aSaveThatDoesNotAskToRemoveTheSignatureKeepsIt() {
+        // #576's own worry, held here the same way CheckSignedSaveRemovalAsync holds it on
+        // Windows: a removal creeping into the ordinary save path is the one thing this
+        // feature decided against.
+        runBlocking {
+            val doc = engine.open(assetBytes("signed-approval.pdf"))
+            val bytes = try {
+                val out = java.io.ByteArrayOutputStream()
+                doc.save(out)
+                out.toByteArray()
+            } finally {
+                doc.close()
+            }
+
+            val reopened = engine.open(bytes)
+            try {
+                assertTrue("a save nobody asked to remove the signature from must still report one (now invalid)",
+                    reopened.documentFlags().isSigned)
+            } finally {
+                reopened.close()
+            }
+        }
+    }
+
+    @Test
+    fun removingSignaturesOnAnUnsignedDocumentReportsNothingRemoved() {
+        runBlocking {
+            val doc = engine.open(assetBytes("forms.pdf"))
+            try {
+                assertFalse(doc.removeDigitalSignatures())
+            } finally {
+                doc.close()
+            }
+        }
+    }
 }

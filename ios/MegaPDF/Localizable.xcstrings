@@ -2545,6 +2545,23 @@
         }
       }
     },
+    "Overwrite, keeping the invalid signature" : {
+      "comment" : "#576: the explicit row for keeping the author's signature bytes verbatim when overwriting -- see the 'Save a copy, keeping the invalid signature' comment for why this is two rows, not a checkbox. FR-REVIEW #576 — new, not yet read by the reviewer.",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Écraser en gardant la signature invalide"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Écraser en gardant la signature invalide"
+          }
+        }
+      }
+    },
     "Owner password" : {
       "localizations" : {
         "fr" : {
@@ -3362,6 +3379,23 @@
         }
       }
     },
+    "Save a copy, keeping the invalid signature" : {
+      "comment" : "#576: the explicit row for keeping the author's signature bytes verbatim -- SwiftUI's confirmationDialog has no room for a Toggle the way a WinUI/Avalonia dialog or a Compose AlertDialog can host one inline, so the removal choice is two rows rather than a checkbox; the plain 'Save a copy' button above removes the signature by default. FR-REVIEW #576 — new, not yet read by the reviewer.",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enregistrer une copie en gardant la signature invalide"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enregistrer une copie en gardant la signature invalide"
+          }
+        }
+      }
+    },
     "Save as a copy" : {
       "comment" : "The default action of the redaction confirmation (#173)",
       "localizations" : {
@@ -3375,6 +3409,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Enregistrer une copie"
+          }
+        }
+      }
+    },
+    "Save as a copy, keeping the invalid signature" : {
+      "comment" : "#576: the redaction-confirm sheet's own row for keeping the author's signature bytes verbatim, keyed \"Save as a copy\" (matching that sheet's plain row) rather than \"Save a copy\" the way the pure signature-confirm sheet's equivalent row is -- see that key's own comment for why this is two rows, not a checkbox. FR-REVIEW #576 — new, not yet read by the reviewer.",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enregistrer une copie en gardant la signature invalide"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enregistrer une copie en gardant la signature invalide"
           }
         }
       }
@@ -3441,6 +3492,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Enregistré"
+          }
+        }
+      }
+    },
+    "Saved without the document's digital signature. The document you opened is unchanged." : {
+      "comment" : "#576: said once, quietly, after a Save a copy that removed the signature instead. FR-REVIEW #576 — new, not yet read by the reviewer.",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enregistré sans la signature numérique du document. Le document que vous avez ouvert est inchangé."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enregistré sans la signature numérique du document. Le document que vous avez ouvert est inchangé."
           }
         }
       }
@@ -3982,6 +4050,23 @@
         }
       }
     },
+    "The copy carries the original's digital signature, and it is no longer valid." : {
+      "comment" : "#481, #576: said once, quietly, after a Save a copy that kept the signature -- the common, already-safe path still deserves the one fact about what became of the signature. FR-REVIEW #576 — corrected wording, not yet read by the reviewer. The previous wording said the signature does not carry over to the copy, which is untrue: only its validity fails to carry over.",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La copie porte la signature numérique de l'original, et celle-ci n'est plus valide."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La copie porte la signature numérique de l'original, et celle-ci n'est plus valide."
+          }
+        }
+      }
+    },
     "The file couldn't be read or written." : {
       "localizations" : {
         "fr" : {
@@ -4386,23 +4471,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Ce document est protégé."
-          }
-        }
-      }
-    },
-    "This document's digital signature doesn't carry over to the copy." : {
-      "comment" : "#481: the quiet, once-per-open notice shown the first time Save a copy is used on a signed document -- the common, already-safe path still deserves to know the copy isn't signed",
-      "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "La signature numérique de ce document ne sera pas reportée dans la copie."
-          }
-        },
-        "fr-CA" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "La signature numérique de ce document ne sera pas reportée dans la copie."
           }
         }
       }
