@@ -3,25 +3,33 @@
 </p>
 <p align="center"><em>Open. Fix. Save. Done.</em></p>
 
-A free, open-source, lightweight PDF editor for Windows 11 — built for people who find Acrobat too bloated and complex.
+A free, open-source, lightweight PDF editor for Windows, Mac, Linux, iPhone/iPad
+and Android — built for people who find Acrobat too bloated and complex.
 
-MegaPDF does four things exceptionally well and deliberately nothing else:
+MegaPDF does the one job most people actually have with a PDF: someone sent you
+a form, and you need to send it back filled in, checked off, and signed. No
+account. No cloud. No subscription. Everything happens on your device.
 
-1. **Edit text** — click any text in the document and type, like editing a Word file.
-2. **Check boxes** — click an empty square and it becomes a checked box.
-3. **Apply signatures** — keep a small personal library of signature images; drag one onto the page.
-4. **Save** — Save overwrites, Save As creates a copy. No export wizards, no "flatten" dialogs.
+MegaPDF does eight things exceptionally well and deliberately nothing else:
+
+1. **Read** — a reading mode that takes the toolbars off the screen and leaves
+   the page, in Normal, Sepia or Night colours, on every platform.
+2. **Edit text** — click any text in the document and type, like editing a Word file.
+3. **Add text** — click a blank line and type on it, in the size and face that
+   matches the form you're filling in.
+4. **Redact** — mark what has to come out and MegaPDF takes it out of the file
+   rather than covering it over.
+5. **Check boxes** — click an empty square and it becomes a checked box.
+6. **Apply signatures** — keep a small personal library of signature images; drag one onto the page.
+7. **Save** — Save overwrites, Save As creates a copy. No export wizards, no "flatten" dialogs.
    Save As can also write the document's text as a **Markdown** file — a one-way export
    that leaves the PDF untouched.
+8. **Pages** — rotate, delete, reorder, insert and extract pages — each a single undo step.
 
 Also included, because long documents need it: **Find** (the toolbar button, or
 `Ctrl+F`) searches the whole document — type and every match lights up, Enter
 walks through them. Documents open as **tabs** in one window on Windows, the Mac
 and Linux, and a PDF opened from the file manager joins the window you already have.
-
-**Reading mode** takes the toolbars off the screen and leaves the page, in Normal,
-Sepia or Night colours, on every platform. The **Pages** pane rotates, deletes,
-reorders, inserts and extracts pages — each a single undo step.
 
 Also on the command line: `megapdf-cli extract file.pdf` writes the text;
 `--format md` writes Markdown. It ships in every Linux package (on `PATH`), and
@@ -29,6 +37,15 @@ for Windows and macOS as a zip on the releases page (`windows-cli-v*`,
 `macos-cli-v*`) — not inside any store package.
 
 No account. No cloud. No subscription. All processing is local.
+
+## Get it
+
+**[electricrv.ca/megapdf](https://electricrv.ca/megapdf/)** has the store badges
+for every platform plus the Linux install page. Store status as of 2.2.0:
+**Linux** (APT repository, `.deb`, tarball, or `sudo snap install megapdf`) and
+**Google Play** are live; **Windows** has passed Microsoft certification and is
+releasing to the Store; **Mac and iOS** are submitted and awaiting App Store
+review.
 
 ## Design
 
@@ -90,10 +107,9 @@ The `.deb` and its signed APT repository are how Linux ships (see "Installing"
 below); AppImage was decided against in favor of the `.deb` (`tools/Linux-Packaging.md`
 says why). Flathub is on hold pending a Flathub account (#254 did the prep; no
 open issue tracks the submission itself yet) — the manifest, its CI checks and
-the tooling are ready and wait in `tools/linux/flatpak/`. The Snap Store is live on its
-**edge** channel (`sudo snap install megapdf --edge`) since 2026-09-28; promoting a
-revision to stable, which is what makes the plain install command work, is tracked
-in #314.
+the tooling are ready and wait in `tools/linux/flatpak/`. The Snap Store is live on
+its **stable** channel — `sudo snap install megapdf` needs no channel flag — since
+2026-10-02 (#314).
 
 ## Installing
 
