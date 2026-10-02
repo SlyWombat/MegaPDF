@@ -241,8 +241,11 @@ papier** — the English stays *Sign like you mean it* unchanged.
   set shows either; `docs/app-store-listing.md`'s screenshot tables and
   `tools/capture-gate` are unchanged by this pull request. A listing whose images
   are all 2.1's undersells the release.
-- The long form (`release-notes-2.2.md`) for the GitHub release and the website.
-  `check_copy.py` will derive its France section once it exists.
+- ~~The long form (`release-notes-2.2.md`) for the GitHub release and the
+  website.~~ Written, and `check_copy.py` derives its France section along with
+  the four store files'. It covers the full milestone-2.2 pull-request list
+  (91 issues), cross-checked against the per-platform matrix above, and is
+  equally unreviewed French.
 - `website/megapdf/linux/index.html`'s intro names tabs, Markdown and
   `megapdf-cli` and not reading mode. It is not a store listing, so it is left
   alone here.
