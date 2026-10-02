@@ -37,7 +37,9 @@ Windows is four-part with revision 0 (`x.y.z.0`); Android's `versionCode` goes u
 per upload, whatever the name does.
 
 **Where a version lives.** The app reports it from six places; the release tooling reads
-it from five more. All eleven change in **one commit, alone**, titled `Version x.y.z
+it from five more; a twelfth, the Linux man page, ships to users but sits outside both
+groups and outside the verification grep below, which is exactly why it has gone stale.
+All twelve change in **one commit, alone**, titled `Version x.y.z
 everywhere` — the built artifacts are then checked against it in §2.3, and a bump mixed
 into a feature commit is what makes that check inconclusive.
 
@@ -54,8 +56,24 @@ into a feature commit is what makes that check inconclusive.
 | Linux metainfo | `tools/linux/flatpak/ca.electricrv.MegaPDF.metainfo.xml` | a new `<release version="x.y.z" date=…>` first; dated within 30 days of the tag or the tarball build refuses |
 | Linux packages | `tools/linux/PACKAGE-REVISION` | reset to `x.y.z 1` |
 | Linux page | `website/megapdf/linux/index.html` | every download link and `.deb` name; `deploy.py --linux` refuses if it disagrees with the repository |
+| Linux man page | `tools/linux/megapdf-cli.1` | the `.TH` line: `.TH MEGAPDF-CLI 1 "<date>" "MegaPDF x.y.z" "User Commands"` — ships in the .deb and tarball |
 
-`grep -rn '<old version>' --include='*.csproj' --include='*.yml' --include='*.kts' --include='*.cpp' --include='*.py' --include='*.ps1' --include='*.xml' --include='*.html' src ios android core tools website` after the bump must find only history (release notes, metainfo's older entries).
+`grep -rn '<old version>' --include='*.csproj' --include='*.yml' --include='*.kts' --include='*.cpp' --include='*.py' --include='*.ps1' --include='*.xml' --include='*.html' --include='*.1' src ios android core tools website` after the bump must find only history (release notes, metainfo's older entries).
+
+`*.1` was missing from that list until 2.2.0: the man page's `.TH` line was left at the
+old version, unnoticed by the grep, and failed three Linux CI jobs on the bump PR within
+90 seconds of each other — Linux app, Snap build, and the tarball/.deb/APT/Flathub job —
+each with "`.TH` line does not say MegaPDF 2.2.0". §2.7 used to list the man page only
+as a doc to update, which looked covered and was not; it is a version-bump item (above),
+not a docs edit.
+
+Two more places name a version in prose, not as a parseable string, so the bump commit
+must leave them alone — they need authoring, not a mechanical swap, when that release's
+copy is written (§2.5/§3), not when the table above is bumped: `tools/msstore_submit.py`'s
+`CERT_NOTES`, read by a human certification tester, which can go on describing an older
+release and claiming to replace the wrong packages (fixed for 2.2.0 in #647); and
+`website/megapdf/support/index.html`'s "The current release is **x.y.z** everywhere" line
+(§2.7, website).
 
 ## 2. Gates, in order
 
@@ -81,10 +99,12 @@ commit has no CI run and no `MegaPDF-store-packages` artifact of its own; the Wi
 packages then come from the last run whose tree matches (`git diff --stat <that sha>
 <release sha> -- . ':!android' ':!ios'` must be empty). Record the run id in the issue.
 
-### 2.2 Corpus batteries, on kdocker2
+### 2.2 Corpus batteries, on kdocker3
 
-The 4,337-PDF corpus is at `~/pdf-test` on kdocker2 (`/mnt/pdf-test` here). Results go
-to the **gitignored** `tests/Private/stress/release-<x.y.z>-kdocker2/`; no corpus
+The 4,337-PDF corpus is at `~/pdf-test` on **kdocker3** (`/mnt/pdf-test` here) — not
+kdocker2, which has no corpus-battery role; two agents hit this during 2.2.0 and both
+ran on kdocker3 instead, documenting the deviation. Results go
+to the **gitignored** `tests/Private/stress/release-<x.y.z>-kdocker3/`; no corpus
 filename is ever written into the repo, an issue or a commit message.
 
 ```
@@ -207,11 +227,23 @@ recorded in the README with every change and every deliberate non-change.
 ### 2.6 WACK (Windows)
 
 On a test-signed copy of the **CI** x64 package, never a local rebuild
-(`tools/Store-Submission.md` § Certification prep). Move the previous report aside first:
-`appcert` refuses to overwrite one and exits `-1` *after* the elevated round-trip.
+(`tools/Store-Submission.md` § Certification prep). Get that package into place first —
+download it from the release commit's CI run, and write `SHA256SUMS` naming the run and
+commit, the same as §3's rule for the submission packages:
 
 ```
-# GPD-DAVE: point tools/windows-qa/wack-prep.ps1 at the CI x64 .msix, run it, then
+gh run download <run> -n MegaPDF-store-packages -D artifacts/store/rc-<x.y.z.0>
+```
+
+`tools/windows-qa/wack-prep.ps1` takes `-Msix` and defaults to the newest
+`artifacts/store/rc-<x.y.z.0>/*_x64.msix`, so it needs no local build directory. (2.2.0:
+it instead carried a hardcoded path to a local `2.0.0.0` build directory, contradicting
+the never-a-local-rebuild rule above — fixed by the `-Msix` default.) Move the previous
+report aside first: `appcert` refuses to overwrite one and exits `-1` *after* the elevated
+round-trip.
+
+```
+# GPD-DAVE: tools/windows-qa/wack-prep.ps1 [-Msix <path>], then
 Register-ScheduledTask -TaskName 'MegaPDF WACK' … -LogonType Interactive -RunLevel Limited   # action: tools/windows-qa/wack-launch.ps1
 Start-ScheduledTask -TaskName 'MegaPDF WACK'      # only when Dave is at the console to click Yes
 ```
@@ -222,15 +254,18 @@ Delete the scheduled task afterwards.
 
 ### 2.7 Docs
 
-`README.md`, `TESTING.md`, `tools/Linux-Packaging.md`, `tools/linux/megapdf-cli.1` (the
-man page ships in the .deb and tarball), and the website: since #652, this release's
+`README.md`, `TESTING.md`, `tools/Linux-Packaging.md`, and the website — **not**
+`tools/linux/megapdf-cli.1`, whose `.TH` version line is §1's version-bump table, not a
+docs edit (it fails Linux CI, not a doc review): since #652, this release's
 still-true features fold into the highlighted-features section (organised by what the
 app does, not by release — nothing added there expires when the next version ships), the
 gallery from this release's sets (`docs/release-notes/<x.y.z>/website-renders/`), the
-source link in the footer, the privacy policy's effective date if it changed. A **New in
-x.y** block starts fresh at 2.3 and stays a single current block with no stack behind it;
-until then there is no per-release block to maintain. The site is **not deployed** until
-the go-lives (§3, website).
+source link in the footer, the privacy policy's effective date if it changed, and
+`website/megapdf/support/index.html`'s "The current release is **x.y.z** everywhere"
+line — prose, not a version string, so §1's grep does not catch a stale one either. A
+**New in x.y** block starts fresh at 2.3 and stays a single current block with no stack
+behind it; until then there is no per-release block to maintain. The site is **not
+deployed** until the go-lives (§3, website).
 
 ## 3. Submission, per channel
 
@@ -292,13 +327,19 @@ tools/play.sh listing readback artifacts/store/captures-<x.y.z> --production <ve
 ```
 
 **Linux** — `tools/Linux-Packaging.md` § The day. Not a store: the tag build makes a
-*draft* release; publishing it is the go-live.
+*draft* release; publishing it is the go-live. Check `git log --oneline -1 HEAD`
+against `origin/main` before any `deploy.py` call below — a checkout even a few commits
+behind can pass its own `--dry-run` while still being behind the live site, and a real
+deploy from it then regresses the live site rather than advancing it.
 
 ```
 git tag -a linux-v$(tools/linux/package-version.sh <x.y.z>) <sha> -m "MegaPDF <x.y.z> for Linux" && git push origin linux-v<x.y.z>
 gh release edit linux-v<x.y.z> --draft=false
-gh run download <run> -n MegaPDF-apt-repository -D website/megapdf/apt   # the tag build's pool already holds every published .deb
-python3 website/deploy.py --dry-run --linux --privacy
+gh run download <run> -n MegaPDF-apt-repository -D <scratch>/apt   # NOT straight into website/megapdf/apt: the artifact also carries
+                                                                     # the tracked megapdf.asc/.gpg/.sources and a direct download collides on them
+diff <scratch>/apt/megapdf.asc website/megapdf/apt/megapdf.asc     # confirm the signing key is unchanged (and the other tracked key files), then
+cp -r <scratch>/apt/dists <scratch>/apt/pool website/megapdf/apt/  # only dists/ and pool/ — both gitignored; the tracked key files are untouched
+python3 website/deploy.py --dry-run --linux --privacy               # read the last three lines, not just that it ran
 python3 website/deploy.py --linux --privacy
 ```
 
@@ -312,13 +353,17 @@ gh release download windows-cli-v<x.y.z> -D <scratch>      # then run megapdf-cl
 gh release edit windows-cli-v<x.y.z> --draft=false; gh release edit macos-cli-v<x.y.z> --draft=false
 ```
 
-**Snap** — `tools/Linux-Packaging.md` § The Snap Store. The workflow only ever reaches
-**edge**; stable is a promotion in the Snap Store dashboard's Releases tab, which is
-Dave's click, the same as every other store's go-live.
+**Snap** — `tools/Linux-Packaging.md` § The Snap Store. The upload goes to **edge**.
+Promotion to stable used to be "a click in the Snap Store dashboard, never this
+workflow" — that was a policy, not a limit, since the stored login carries
+`package_release` on stable too (#654, 2026-10-02). It is now a second, deliberate run of
+the same workflow; the revision is **required and never inferred** — promoting the wrong
+one publishes the wrong build to everyone on stable.
 
 ```
-gh workflow run snap.yml -f upload=true --ref main      # ~6 min, edge only
-sudo snap install megapdf --edge                        # then promote in the dashboard
+gh workflow run snap.yml -f upload=true --ref main                              # ~6 min, edge only
+sudo snap install megapdf --edge                                                # verify edge
+gh workflow run snap.yml -f promote=true -f promote_revision=<n> --ref main     # the exact revision, read off the Store or the upload's output
 ```
 
 **Website** — after the go-lives, never before (`website/README.md` § Launch runbook):
@@ -368,3 +413,9 @@ Terse, with the date each one bit.
 - **Both Windows packages from one CI run** (2026-09-19, #306). 2.0's x64 was built locally and its ARM64 in CI, from different commits, with different .NET runtimes. `MegaPDF-store-packages` of one run, both files, recorded in `SHA256SUMS`.
 - **The metainfo's newest `<release>` must be dated within 30 days** (2026-09-26). Or `make-release-tarball.sh` refuses at the tag. Re-date if the tag slips.
 - **CI green ≠ works** (2026-09-26). The lost click (#401), the disabled Open button (#412), the Android picker that made `.md.pdf` (#409), the CLI that would not load (#397): all on green runs. Real-machine verification is the gate, and every image is read.
+- **WACK can silently do nothing, and it looks exactly like not having started** (2026-10-01). `wack-launch.ps1` wrote its log to `D:\megapdf-qa\` as its first statement; an agent's routine scratch cleanup had deleted that directory, so the script threw before it ever raised the UAC prompt. Symptom: "no WACK on screen". Diagnose with `Get-ScheduledTaskInfo -TaskName 'MegaPDF WACK'` — `LastTaskResult 267011` with a 1999 `LastRunTime` means it has never run. The launcher now creates the directory. Also move the **done-marker** aside with the report, not just the report — a stale marker can make the gate look finished when it is not.
+- **Windows PowerShell reads a BOM-less `.ps1` as ANSI** (2026-10-01). A non-ASCII character in a *comment* broke string parsing with a misleading `Missing closing '}'` pointing at an unrelated line. Keep the `tools/windows-qa` scripts ASCII-only.
+- **Renaming capture slots silently breaks `tools/asc_publish.py`** (2026-10-01, #655). It hardcodes slot names. After the 2.2 capture work renamed them, `screenshots` uploaded **1 of 7** on Mac — only `02-text` survived the rename — and would have uploaded **0** on iOS, whose captures sit in a `listing/` subdirectory the tool did not read. It printed "1 screenshots" and exited 0. Fixed in #655 to fail loudly on a short set. Rule: when a capture set's slots change, update the submission tool in the same breath, and read the orders out of `tools/capture-gate/stores.py` and `tools/gen_listing_copy.py` rather than from memory — iPhone and iPad now have **different** orders by decision.
+- **Publish the release before deploying the website** (2026-10-02). Deploying first left the live Linux page offering 2.2.0 `.deb` and tarball links that **404'd**, because the GitHub release was still a draft. `gh release edit linux-v<x.y.z> --draft=false` first, then deploy — §3's Linux sequence already has this order; this is the concrete failure that order prevents.
+- **Deploying from a stale checkout silently regresses the live site** (2026-10-02). A `--dry-run` from a tree 63 commits behind reported "`linux/index.html` offers 2.1.1" against a repository holding 2.1.1 — passed, because both sides were stale the same way — but a real deploy from that tree would have rolled the live Linux section **back** from 2.2.0. §3's Linux step now opens with the `git log` check this would have caught.
+- **`deploy.py --linux`'s refusal is correct; a direct download into `website/megapdf/apt` is not** (2026-10-02). "`linux/index.html` offers X, but the repository holds Y" means run the tag build and download its `MegaPDF-apt-repository` artifact — but downloading straight into `website/megapdf/apt` fails "file exists" and can abort part-way, because the artifact also carries the **tracked** `megapdf.asc`/`.gpg`/`.sources`. §3's Linux step now extracts to a scratch directory and copies in only `dists/` and `pool/`.
