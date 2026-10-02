@@ -38,6 +38,20 @@ unsaved changes in two tabs and you should be asked about each; answer Cancel on
 second and the first must still be there, edits and all. Kill the app with three tabs
 open and the next launch should offer to restore each of them, into its own tab.
 
+**Reading mode** — the View menu, or **Ctrl+H**, takes the toolbars and the side pane
+off the screen and leaves the page. A small floating bar carries the page number and
+the way back; click the page number to jump to one directly. Esc (or the bar's own
+button) returns to the normal view. Settings (⚙) has page colours — **Normal**,
+**Sepia** for a long read, **Night** for a dark room (night inverts pictures too,
+which is deliberate) — and **Open documents in reading mode**, which should make
+every document you open afterward start this way.
+
+**Pages** — the Pages button opens a pane of page thumbnails. Rotate a page that was
+scanned sideways, delete one, drag pages into a different order, insert a blank page,
+insert another PDF's pages, or save the pages you picked out as a file of their own.
+Each of those is one step in the undo history — Ctrl+Z should put the document back
+exactly as it was, one operation at a time.
+
 **Save As → Markdown** — Save As offers **Markdown document** beside PDF document.
 Pick it and you get the document's text as a `.md` file: headings, paragraphs, lists,
 and the values you filled in. It is an export, not a save: the busy strip says
@@ -148,7 +162,6 @@ Scroll through a long document; pages should appear as you reach them.
 - Editing text sometimes substitutes a similar font, with a notice — expected when
   the document doesn't embed a complete font.
 - Password-protected PDFs show an error instead of a password prompt.
-- No page add/remove/reorder, no merging — out of scope for 1.0.
 - **Redact refuses rather than half-finishes.** Some documents draw part of a page from a
   shared block MegaPDF cannot take apart safely; marking inside one gets "Nothing was
   removed" and an explanation. Removing nothing is the deliberate choice: a file that

@@ -19,6 +19,10 @@ Also included, because long documents need it: **Find** (the toolbar button, or
 walks through them. Documents open as **tabs** in one window on Windows, the Mac
 and Linux, and a PDF opened from the file manager joins the window you already have.
 
+**Reading mode** takes the toolbars off the screen and leaves the page, in Normal,
+Sepia or Night colours, on every platform. The **Pages** pane rotates, deletes,
+reorders, inserts and extracts pages — each a single undo step.
+
 Also on the command line: `megapdf-cli extract file.pdf` writes the text;
 `--format md` writes Markdown. It ships in every Linux package (on `PATH`), and
 for Windows and macOS as a zip on the releases page (`windows-cli-v*`,
