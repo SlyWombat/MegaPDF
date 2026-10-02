@@ -1589,6 +1589,101 @@ release-candidate condition in #537 that a full corpus battery be green still ca
 claimed -- but for the first time the reason is written in the run's own output rather than
 inferred from a count nobody could interpret.
 
+### Twelfth run, 2026-10-01: pre-flight for 2.2.0, all three batteries, all four corpora, main at c108240
+
+**Not the §2.2 release gate.** The 2.2.0 version bump and two feature PRs were still landing
+at the time of this run, so this is not a run against a release commit and the checklist
+issue should not cite it as the gate. It is an early-warning pass, asked for so a regression
+would be found now rather than after the release commit exists; the gate run against the
+actual release commit is separate and still to come.
+
+**Run on kdocker3, not kdocker2.** The task brief named kdocker2, but the three non-private
+corpora (`~/pdf-public`, `~/pdf-test-ca`, `~/pdf-test-un`) are staged on kdocker3, not
+kdocker2 -- kdocker2 holds only the private corpus mirror and has no `/data/megapdf-work`
+role in corpus batteries at all (`CLAUDE.md`'s own machine table: kdocker3 is "general
+builds, corpus batteries"; kdocker2 is Android only). This looks like the same k2/k3
+mix-up noted elsewhere. Run in `megapdf:base` (PDFium still at 33 patches,
+`pdfium-7934-megapdf-2b3b415e86b1`, the same image the tenth and eleventh runs used), built
+fresh from `origin/main` at `c108240` (`megapdf-cli --version` reports `2.1.1`, confirming
+the version bump has not landed). Scratch workspace and container removed afterward; the four
+corpora were only read.
+
+**Compared directly against the eleventh run (993ba98 -> 77 commits -> c108240), not just
+against the gates**, per the brief: every structure, markdown and pages number below is the
+eleventh run's own number, to six decimal places on every F1 and exactly on every count. 77
+commits landed on `main` between the two runs (iOS whiteout/signature tools, the Windows/
+Android screenshot slots, the scroll-position indicator, the NDK pin, the French review,
+this file's own `agent-guide`), none of which touched anything this battery measures.
+
+**Zero crashes and zero hangs, in every battery, on every corpus. 5,875 documents, identical
+to the eleventh run on every corpus:**
+
+| corpus | on disk | visited | opened (structure/markdown) | the rest |
+|---|---:|---:|---:|---|
+| private | 4,158 | 4,158 | 4,084 | 12 encrypted, 62 unreadable format |
+| public | 1,493 | 1,493 | 1,480 | 5 encrypted, 8 unreadable format |
+| Canadian | 134 | 134 | 134 | — |
+| UN | 90 | 90 | 90 | — |
+
+**Structure, against F1 >= 0.998 and order agreement tau >= 0.9 -- matches the eleventh run to
+six decimal places on every corpus:**
+
+| corpus | token F1, internal | token F1, CLI | tau median | CLI bad exits | |
+|---|---:|---:|---:|---:|---|
+| private | **0.998997** | 0.998997 | 0.951 | 0 | pass |
+| public | **0.980019** | 0.980019 | 0.978 | 0 | **fail — #498, confirmed, unmoved** |
+| Canadian | **0.999932** | 0.999932 | 0.994 | 0 | pass |
+| UN | **0.999136** | 0.999136 | 0.967 | 0 | pass |
+
+**Markdown: every gate passes on all four corpora** (0 crashes, 0 hangs, 0 other bad exit
+codes, 0 cmark parse failures, 0 cmark timeouts) -- private 4,158 visited/2,982 extracted/
+1,102 textless/12 password-gated; public 1,493/937/543/5; Canadian 134/134/0/0; UN 90/83/7/0.
+All four match the eleventh run's own figures exactly.
+
+**Pages** (0 crashes/hangs, 0 qpdf failures, 0 count mismatches, 0 write failures, 0 refusals
+outside the contract's own two), matching the eleventh run exactly on every cell:
+
+| corpus | crashes/hangs | QPDF FAILED | COUNT MISMATCH | WRITE FAILED | REFUSED, other | |
+|---|---:|---:|---:|---:|---:|---|
+| private | 0/0 | 0 | 0 | 0 | 0 | pass |
+| public | 0/0 | 0 | 0 | 0 | **9** | **fail — #445, confirmed, unmoved** |
+| Canadian | 0/0 | 0 | 0 | 0 | 0 | pass |
+| UN | 0/0 | 0 | 0 | 0 | 0 | pass |
+
+Public's opened count (the pages path counts differently, as every prior run notes): 1,486
+opened (4 protected, 3 did-not-open, 5 of those separately flagged `input already damaged`).
+Private: 4,084 opened (12 protected, 62 did-not-open). Canadian/UN: 134/90, nothing flagged.
+The nine public `REFUSED, other` are #445's known pair (`pdfium` 7: rotate 2, move 1,
+extract 2, importself 2; `verapdf` 2: importpair only) -- the same four documents, nine
+refusals, the ninth/tenth/eleventh runs' own accounting.
+
+Field-`/Parent`-hierarchy refusal, through `import` only:
+
+| corpus | importself refused-fields | rate | importpair refused-fields | rate |
+|---|---:|---:|---:|---:|
+| private | 37 / 4,084 | **0.91%** | 0 / 4,084 | 0% |
+| public | 230 / 1,486 | **15.48%** | 0 / 1,486 | 0% |
+| Canadian | 5 / 134 | 3.7% | 4 / 134 | 3.0% |
+| UN | 0 / 90 | 0% | 0 / 90 | 0% |
+
+Every one of these numbers is the eleventh run's own, unchanged.
+
+**Coverage arithmetic reconciles exactly as stated in the brief, and matches what the eleventh
+run's own block plus #625 together predict:** 1,493 reachable + 1 staged-but-unreached (the
+`.Pdf` case-mismatch qpdf fixture) + 283 stated exclusion (280 `wiki-*`, deferred by Dave
+decision, plus 3 `uk-hmrc` rows resolved as permanently unfetchable by #625) + 0 unexplained
+= 1,777 manifest rows. `corpus_coverage.sh`'s own block (printed identically by the structure,
+markdown and pages summaries) lists every exclusion by name; nothing is silently absent.
+
+**Nothing moved since the eleventh run.** Every gate verdict, every F1 to six decimals, every
+crash/hang/refusal count and the coverage arithmetic are identical to the eleventh run across
+all three batteries and all four corpora, over 77 intervening commits. The two known,
+tracked failures (#498 on the public structure gate, #445's nine `REFUSED, other` on the
+public pages battery) are confirmed unchanged and are not new findings. No issue filed from
+this run. This is a pre-flight only: `docs/RELEASING.md` §2.2's gate run still has to happen
+against the actual release commit once the version bump and the two in-flight feature PRs
+land.
+
 ## Reporting
 
 For each issue: what you clicked, what you expected, what happened, and the PDF
