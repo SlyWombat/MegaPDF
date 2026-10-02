@@ -38,10 +38,20 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BASE = f"/androidpublisher/v3/applications/{ps.PACKAGE}"
 UPLOAD = f"/upload/androidpublisher/v3/applications/{ps.PACKAGE}"
 LOCALES = {"en-CA": "en", "fr-CA": "fr-CA", "fr-FR": "fr-FR"}   # Play -> capture folder
-# Listing order (docs/release-notes/2.0/capture-gate-report.md §7): the signed
-# agreement first, the 2.0 text editing next, redaction last because a marked
-# outline sells least; the tablet never leads with its mostly empty home.
-ORDER = ["viewer", "text-edit", "text", "search", "sign", "draw", "home", "redact"]
+# Listing order. The source of truth is the capture gate's play profile,
+# tools/capture-gate/stores.py -> "order", and this list must stay equal to its
+# first eight entries (the gate keeps `viewer` and `draw` behind them because the
+# QA matrix still shoots both, but Play takes eight and neither is a listing slot
+# since #613).
+#
+# Keeping a second copy here has already cost a release: when #613 renamed the
+# slots, this list still read ["viewer", "text-edit", "text", "search", "sign",
+# "draw", "home", "redact"] and `listing push` died on "missing
+# .../android-viewer.png" during the 2.2.0 submission. The same stale-copy bug hit
+# tools/asc_publish.py at the same time, where it was worse: it uploaded 1 of 7
+# screenshots to the Mac listing and exited 0. If you change the slots, change
+# them here too - or better, see #656 and make this read from the profile.
+ORDER = ["reading", "text-edit", "sign", "pages", "text", "search", "redact", "home"]
 IMAGE_TYPES = {"phone": "phoneScreenshots", "tablet": "tenInchScreenshots"}
 LIMITS = {"title": 30, "shortDescription": 80, "fullDescription": 4000, "notes": 500}
 
