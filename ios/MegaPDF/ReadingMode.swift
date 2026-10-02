@@ -127,5 +127,12 @@ enum ReadingBarFade {
     /// read it. With VoiceOver on the bar is pinned — it does not auto-hide at all — and
     /// this is the one place that decides so, so the rule can be tested without a screen
     /// reader in the room.
-    static func armsTimer(voiceOverRunning: Bool) -> Bool { !voiceOverRunning }
+    ///
+    /// **Nor while a screenshot is pinning it (#613).** A separate reason from VoiceOver —
+    /// `ViewerModel.screenshotPinsReadingBar` is set only by `-screenshot reading` — kept as
+    /// its own parameter rather than folded into `voiceOverRunning` so that a test of one
+    /// reason can never be read as a test of the other.
+    static func armsTimer(voiceOverRunning: Bool, screenshotPin: Bool = false) -> Bool {
+        !voiceOverRunning && !screenshotPin
+    }
 }

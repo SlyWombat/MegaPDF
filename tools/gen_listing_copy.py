@@ -219,14 +219,22 @@ Open a PDF from Mail, Files, iCloud Drive or any app that shares one — MegaPDF
 MegaPDF is deliberately simple: it doesn't bury you in toolbars. It opens, it fixes, it saves. Done.""",
     "keywords": "pdf,sign,signature,fill,form,checkbox,esign,editor,search,document,annotate,fill and sign,reader",
     "whatsnew": release_block("app-store.md", "English (Canada)"),
+    # Re-cut for 2.2 (#613, Dave 2026-10-01): reading and the page tools lead, the way
+    # every platform's listing now opens; redaction moves back. `viewer`, the old lead,
+    # is dropped from the listing (still shot for the QA inventory, tools/ios-screenshots.sh).
+    # `text-edit` and `text` both keep a slot — correcting existing text and adding a new
+    # line are different stories, and the App Store's ten-image limit never forces the
+    # choice Play's eight did. `draw` keeps its slot too, pending Dave's sign-off; see the
+    # PR that introduced this order for the open question.
     "captions": [
-        ("viewer", "Checked and signed in under a minute"),
+        ("reading", "Reading mode leaves nothing but the page — the one you checked and signed"),
         ("text-edit", "Fix a typo in the document itself"),
-        ("redact", "Redact removes it. It does not just cover it."),
-        ("text", "Type on the blank line — your size, your font"),
-        ("search", "Find any word, on every page"),
         ("sign", "Your signatures, saved on your device"),
         ("draw", "Draw it once, use it everywhere"),
+        ("pages", "Rotate, reorder, delete — one Undo puts it all back"),
+        ("text", "Type on the blank line — your size, your font"),
+        ("search", "Find any word, on every page"),
+        ("redact", "Redact removes it. It does not just cover it."),
         ("home", "No account. No cloud. No tracking."),
     ],
 }
@@ -275,14 +283,16 @@ Ouvrez un PDF depuis Mail, Fichiers, iCloud Drive ou toute application qui en pa
 MegaPDF est volontairement simple : il ne vous noie pas sous les barres d'outils. Il ouvre, il corrige, il enregistre. Terminé.""",
     "keywords": "pdf,signer,signature,remplir,formulaire,case,cocher,éditeur,recherche,document,annoter,lecture",
     "whatsnew": release_block("app-store.md", "Français (Canada)"),
+    # See AS_EN's captions comment (#613) — same re-cut, same open question on `draw`.
     "captions": [
-        ("viewer", "Coché et signé en moins d'une minute"),
+        ("reading", "Le mode lecture ne laisse que la page : celle que vous avez cochée et signée"),
         ("text-edit", "Corrigez une coquille dans le document même"),
-        ("redact", "Caviardez : c'est retiré, pas seulement couvert."),
-        ("text", "Écrivez sur la ligne vide : votre taille, votre police"),
-        ("search", "Trouvez n'importe quel mot, sur chaque page"),
         ("sign", "Vos signatures, enregistrées sur votre appareil"),
         ("draw", "Dessinez-la une fois, utilisez-la partout"),
+        ("pages", "Faites pivoter, réordonnez, supprimez : une seule annulation remet tout en place"),
+        ("text", "Écrivez sur la ligne vide : votre taille, votre police"),
+        ("search", "Trouvez n'importe quel mot, sur chaque page"),
+        ("redact", "Caviardez : c'est retiré, pas seulement couvert."),
         ("home", "Pas de compte. Pas d'infonuagique. Pas de suivi."),
     ],
 }

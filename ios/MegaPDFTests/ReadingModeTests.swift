@@ -116,6 +116,16 @@ final class ReadingModeTests: XCTestCase {
         XCTAssertFalse(ReadingBarFade.armsTimer(voiceOverRunning: true))
     }
 
+    /// #613: the listing's reading-mode slot pins the bar through its own flag, a
+    /// different reason from VoiceOver and checked independently of it — neither can
+    /// override the other, which is what lets a screenshot run stay pinned without
+    /// quietly also satisfying (or failing) a VoiceOver-only assertion.
+    func testTheFadeTimerIsNeverArmedWhileAScreenshotIsPinningIt() {
+        XCTAssertTrue(ReadingBarFade.armsTimer(voiceOverRunning: false, screenshotPin: false))
+        XCTAssertFalse(ReadingBarFade.armsTimer(voiceOverRunning: false, screenshotPin: true))
+        XCTAssertFalse(ReadingBarFade.armsTimer(voiceOverRunning: true, screenshotPin: true))
+    }
+
     // MARK: - the model
 
     func testEnteringReadingModePutsEveryArmedToolAway() async throws {

@@ -5,6 +5,13 @@
 # `-screenshot <state>` launch mode on the two required simulators (6.9" iPhone
 # and 13" iPad); docs/app-store-listing.md maps the files to listing slots.
 #
+# Nine listing slots since #613 (Dave, 2026-10-01): reading and the page tools lead,
+# the way every other platform's re-shoot now opens, redaction moves back, and `viewer`
+# — the old lead — is demoted to the review set. `draw` keeps its slot, pending Dave's
+# sign-off (the App Store takes up to ten images, so the squeeze that cut it from
+# Android's eight-slot Play set does not apply here); see the PR that introduced this
+# order for the open question.
+#
 # Usage: tools/ios-screenshots.sh [lang] [out-dir]
 #   lang     en (default), fr-CA or fr
 #   out-dir  default artifacts/store/screenshots-ios/<lang>
@@ -90,20 +97,53 @@ capture() {
     xcrun simctl uninstall "$udid" com.megapdf.ios 2>/dev/null || true
     xcrun simctl install "$udid" "$APP"
     shot() {   # shot <state> <dir> <suffix>
-        xcrun simctl launch "$udid" com.megapdf.ios -screenshot "$1" ${LANG_ARGS[@]+${LANG_ARGS[@]+"${LANG_ARGS[@]}"}} >/dev/null
-        sleep 8
-        xcrun simctl io "$udid" screenshot "$OUT/$2/$label-$1$3.png" >/dev/null
+        local state="$1" dir="$2" suffix="$3"
+        local outlog="$OUT/$dir/$label-$state$suffix.out.log"
+        local errlog="$OUT/$dir/$label-$state$suffix.err.log"
+        # `-screenshot reading` and `-screenshot pages` say, on their own stdout/stderr,
+        # whether the mode they pose actually turned on — the same thing Windows'
+        # Shot-Reading.ps1 asks the automation tree and Mac/Linux's App.axaml.cs prints
+        # to the console (#613). `--stdout`/`--stderr` are what get that out of the
+        # simulator: without them the app's own log goes to the unified log, which
+        # nothing here reads. Captured for every state, not just those two, so a
+        # silent failure elsewhere is just as loud.
+        xcrun simctl launch --stdout="$outlog" --stderr="$errlog" "$udid" com.megapdf.ios \
+            -screenshot "$state" ${LANG_ARGS[@]+${LANG_ARGS[@]+"${LANG_ARGS[@]}"}}
+        # The six-page document reading/pages open is still small, but it is a cold
+        # open plus (for pages) a grid of thumbnails rendering, so both get the same
+        # margin every other state already had room to spare in.
+        sleep 10
+        xcrun simctl io "$udid" screenshot "$OUT/$dir/$label-$state$suffix.png" >/dev/null
         xcrun simctl terminate "$udid" com.megapdf.ios || true
         sleep 1
+        if grep -q '::error::' "$errlog" 2>/dev/null; then
+            echo "FAILED $label-$state$suffix — the state did not pose:" >&2
+            grep '::error::' "$errlog" >&2
+            return 1
+        fi
+        echo "  $label-$state$suffix: $(grep -h '^screenshot ' "$outlog" "$errlog" 2>/dev/null | tail -1)"
     }
 
     mkdir -p "$OUT/listing" "$OUT/review"
     xcrun simctl ui "$udid" appearance light || true
-    # The eight listing slots, in the order docs/app-store-listing.md gives them:
-    # the signed agreement leads, then the two things the 2.0 copy leads with.
-    for state in viewer text-edit redact text search sign draw home; do
+    # The nine listing slots, in listing order (#613, tools/capture-gate/stores.py's
+    # "ios" profile). Each is its own launch: a state left over from the shot before
+    # is the defect the Windows set was bitten by twice.
+    #   reading   the agreement with the chrome gone and the bar pinned up
+    #   text-edit the body-text editor open on the heading, mid-correction (#113)
+    #   sign      the signature library flyout
+    #   draw      the draw-a-signature pad — pending Dave's sign-off on keeping it
+    #   pages     the Pages panel beside/under the document, two pages picked out
+    #   text      a typed name on the blank line, nothing selected
+    #   search    the find bar with a term and a hit count
+    #   redact    a line marked and selected, with the chrome that takes it off
+    #   home      the empty window with a recents list
+    for state in reading text-edit sign draw pages text search redact home; do
         shot "$state" listing ""
     done
+    # `viewer` is no longer a listing slot (reading replaced it at the front), but it
+    # is still worth having for the QA inventory, so it moves here rather than away.
+    shot viewer review ""
     # Everything else is for review, in its own folder. The dry run's point: a
     # folder of more images than the table has slots is how a review shot ends
     # up on a store listing (#146 §3).
@@ -117,5 +157,5 @@ capture() {
 
 capture 'iPhone .*Pro Max' iphone-6_9
 capture 'iPad Pro 13' ipad-13
-echo "listing slots:"; ls -la "$OUT/listing"
-echo "review shots:"; ls -la "$OUT/review"
+echo "listing slots:"; ls -la "$OUT/listing"/*.png
+echo "review shots:"; ls -la "$OUT/review"/*.png

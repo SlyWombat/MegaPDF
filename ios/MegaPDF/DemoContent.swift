@@ -26,6 +26,16 @@ enum DemoContent {
     /// video can tick, sign and type on camera instead of over a finished page.
     static var blankDemoResource: String { demoResource + "-blank" }
 
+    /// The six-page agreement (#613): page 1 is byte-identical to `demoResource`'s,
+    /// followed by the four sections it refers to and a landscape rate schedule
+    /// (`tools/gen_test_fixtures.py`). What `-screenshot reading` and `-screenshot
+    /// pages` open — a one-page document makes the reading bar's counter read
+    /// "1 of 1" and the Pages strip a single tile, both a picture of nothing.
+    static var pagesResource: String {
+        String(localized: "demo-pages",
+               comment: "screenshot demo PDF resource name: the multi-page agreement (#613)")
+    }
+
     /// The demo agreement's display name in the title bar and the recents list.
     static var documentName: String { String(localized: "Rental Agreement.pdf") }
 

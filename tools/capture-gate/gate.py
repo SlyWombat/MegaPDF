@@ -100,7 +100,11 @@ class Shot:
         spec = profile.get("toolbar")
         # Where the toolbar's background runs on into the canvas (Mica on
         # Windows), there is no edge to find and the profile gives the depth.
-        self.toolbar_end = (None if not spec else spec["depth"] if spec.get("fixed")
+        # A profile with no edge to measure *and* no depth to pin (#613's iOS
+        # profile: the posed status bar stays up at a height that differs by
+        # device) omits "depth" rather than guessing one, and this stays None.
+        self.toolbar_end = (None if not spec or "depth" not in spec
+                            else spec["depth"] if spec.get("fixed")
                             else im.top_band(path, spec["depth"]))
 
     @property

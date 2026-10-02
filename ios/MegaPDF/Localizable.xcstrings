@@ -4964,6 +4964,22 @@
         }
       }
     },
+    "demo-pages" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "demo-fr-FR-pages"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "demo-fr-pages"
+          }
+        }
+      }
+    },
     "iCloud Drive" : {
       "localizations" : {
         "fr" : {

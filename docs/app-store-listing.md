@@ -129,13 +129,14 @@ Some documents arrive carrying a digital signature — the cryptographic kind, w
 
 **Screenshot captions** (optional overlay text), iPhone 6.9" and iPad 13" in this order
 ```
-viewer: Checked and signed in under a minute
+reading: Reading mode leaves nothing but the page — the one you checked and signed
 text-edit: Fix a typo in the document itself
-redact: Redact removes it. It does not just cover it.
-text: Type on the blank line — your size, your font
-search: Find any word, on every page
 sign: Your signatures, saved on your device
 draw: Draw it once, use it everywhere
+pages: Rotate, reorder, delete — one Undo puts it all back
+text: Type on the blank line — your size, your font
+search: Find any word, on every page
+redact: Redact removes it. It does not just cover it.
 home: No account. No cloud. No tracking.
 ```
 
@@ -228,13 +229,14 @@ Certains documents arrivent avec une signature numérique — la signature crypt
 
 **Screenshot captions** (optional overlay text), iPhone 6.9" and iPad 13" in this order
 ```
-viewer: Coché et signé en moins d'une minute
+reading: Le mode lecture ne laisse que la page : celle que vous avez cochée et signée
 text-edit: Corrigez une coquille dans le document même
-redact: Caviardez : c'est retiré, pas seulement couvert.
-text: Écrivez sur la ligne vide : votre taille, votre police
-search: Trouvez n'importe quel mot, sur chaque page
 sign: Vos signatures, enregistrées sur votre appareil
 draw: Dessinez-la une fois, utilisez-la partout
+pages: Faites pivoter, réordonnez, supprimez : une seule annulation remet tout en place
+text: Écrivez sur la ligne vide : votre taille, votre police
+search: Trouvez n'importe quel mot, sur chaque page
+redact: Caviardez : c'est retiré, pas seulement couvert.
 home: Pas de compte. Pas d'infonuagique. Pas de suivi.
 ```
 
@@ -327,13 +329,14 @@ Certains documents arrivent avec une signature numérique — la signature crypt
 
 **Screenshot captions** (optional overlay text), iPhone 6.9" and iPad 13" in this order
 ```
-viewer: Coché et signé en moins d'une minute
+reading: Le mode lecture ne laisse que la page : celle que vous avez cochée et signée
 text-edit: Corrigez une coquille dans le document même
-redact: Caviardez : c'est retiré, pas seulement couvert.
-text: Écrivez sur la ligne vide : votre taille, votre police
-search: Trouvez n'importe quel mot, sur chaque page
 sign: Vos signatures, enregistrées sur votre appareil
 draw: Dessinez-la une fois, utilisez-la partout
+pages: Faites pivoter, réordonnez, supprimez : une seule annulation remet tout en place
+text: Écrivez sur la ligne vide : votre taille, votre police
+search: Trouvez n'importe quel mot, sur chaque page
+redact: Caviardez : c'est retiré, pas seulement couvert.
 home: Pas de compte. Pas de cloud. Pas de suivi.
 ```
 
@@ -511,28 +514,51 @@ its own localisation, same slots:
 
 | File | Slot | Suggested caption (optional overlay text) |
 |---|---|---|
-| `iphone-6_9-viewer.png` | iPhone 6.9" #1 | *Checked and signed in under a minute* |
+| `iphone-6_9-reading.png` | iPhone 6.9" #1 | *Reading mode leaves nothing but the page — the one you checked and signed* |
 | `iphone-6_9-text-edit.png` | iPhone 6.9" #2 | *Fix a typo in the document itself* |
-| `iphone-6_9-redact.png` | iPhone 6.9" #3 | *Redact removes it. It does not just cover it.* |
-| `iphone-6_9-text.png` | iPhone 6.9" #4 | *Type on the blank line — your size, your font* |
-| `iphone-6_9-search.png` | iPhone 6.9" #5 | *Find any word, on every page* |
-| `iphone-6_9-sign.png` | iPhone 6.9" #6 | *Your signatures, saved on your device* |
-| `iphone-6_9-draw.png` | iPhone 6.9" #7 | *Draw it once, use it everywhere* |
-| `iphone-6_9-home.png` | iPhone 6.9" #8 | *No account. No cloud. No tracking.* |
-| `ipad-13-*.png` | iPad 13" #1–8 | same order |
+| `iphone-6_9-sign.png` | iPhone 6.9" #3 | *Your signatures, saved on your device* |
+| `iphone-6_9-draw.png` | iPhone 6.9" #4 | *Draw it once, use it everywhere* |
+| `iphone-6_9-pages.png` | iPhone 6.9" #5 | *Rotate, reorder, delete — one Undo puts it all back* |
+| `iphone-6_9-text.png` | iPhone 6.9" #6 | *Type on the blank line — your size, your font* |
+| `iphone-6_9-search.png` | iPhone 6.9" #7 | *Find any word, on every page* |
+| `iphone-6_9-redact.png` | iPhone 6.9" #8 | *Redact removes it. It does not just cover it.* |
+| `iphone-6_9-home.png` | iPhone 6.9" #9 | *No account. No cloud. No tracking.* |
+| `ipad-13-*.png` | iPad 13" #1–9 | same order |
 
-Order matters: the viewer shot (a filled, signed agreement) leads, and the two
-things the 2.0 copy leads with — correcting the document's own text, and
-redaction — come straight after it (#146 §3, 2026-09-19). The App Store takes up
-to ten per device.
+**Re-cut for 2.2 (#613, Dave 2026-10-01):** *"Redaction and whiteout are minor
+features that move to the back, signing, editing and reading are common
+features."* Reading and the page tools lead, the way Mac, Linux, Windows and
+Android all now open; redaction moves back behind search. `viewer` — 2.0
+through 2.1.1's lead slot, a filled and signed agreement with no feature of its
+own — is dropped from the listing; it is still shot, into `review/`, because the
+QA inventory is worth keeping even where the listing is not. Both `text-edit`
+(correcting the document's own text, #113) and `text` (adding a new line, #43)
+keep their own slot — different stories, and the App Store's ten-image limit
+never forces the choice Play's eight did on the same pose set. `draw` keeps its
+slot too, next to `sign`, both being signature-adjacent — **pending Dave's
+sign-off on keeping it at all; see the PR that introduced this order.** The
+iPad's nine slots are shot in
+the same order as the iPhone's: its page tools are a sidebar rather than a sheet
+and its own toolbar is new in 2.2 (#172), but the same nine stories are told
+either way, and `tools/capture-gate/stores.py`'s single `order` list for this
+store assumes one sequence shared by both devices.
 
-**The set is re-shot for 2.1, and `redact` is the image that changes.** 2.0's
-pose armed the tool and marked a line; since #328 the tool is a row in the ⋮
-menu, so an armed tool draws nothing on the page to photograph. 2.1's pose shows
-the mark **selected** instead — its chrome, and the ✕ that takes it off (#329) —
-which is what the 2.1 notes say Redact now does. The other seven poses are
-unchanged by 2.1, and the run still shoots all eight so that the set is one
-build, one language and one status bar rather than eight images from two dates.
+Reading mode (#506) and Pages (#174, #613) both open the bundled six-page
+agreement (`demo-pages.pdf` / `demo-fr-pages.pdf` / `demo-fr-FR-pages.pdf`,
+`tools/gen_test_fixtures.py`) rather than the one-page demo every other slot
+opens: a single-page document makes the reading bar's counter read "1 of 1" and
+the Pages strip a single tile, both a picture of nothing. Page 1 of that document
+is byte-identical to the one-page demo's, so the set still reads as one
+document. The reading slot pins the floating bar up (`ViewerModel
+.screenshotPinsReadingBar`, set only by `-screenshot reading`) rather than
+leaving it to its ordinary two-second idle fade, and leaves the page colour at
+Normal — Sepia and Night are reading mode's too and are better shown as a
+*choice*, which is what the description already does. `-screenshot reading` and
+`-screenshot pages` each print `screenshot <state>: …` on success and
+`::error::…` on their own stderr if the mode did not actually turn on or the
+document did not have enough pages; `tools/ios-screenshots.sh` reads that log
+back for every state and fails the run rather than uploading an ordinary viewer
+shot wearing the reading slot's caption.
 
 Each shot only exists once its screenshot state ships. `search` is not in the
 1.0 builds, and `text` is newer still (#43) — upload each with the update that
@@ -543,10 +569,10 @@ The same set comes off the in-house Mac without a runner:
 `tools/ios-screenshots.sh <lang>` (see `tools/mac-mini.md`). Same files, same
 slots.
 
-**The eight above land in `listing/`; everything else the run takes lands in
-`review/`** — the dark-mode `search`, `sign` and `redact`. They are for looking
-at, not for uploading. A folder of more images than the table has slots is how a
-review shot ends up on a store listing.
+**The nine above land in `listing/`; everything else the run takes lands in
+`review/`** — `viewer`, and the dark-mode `search`, `sign` and `redact`. They are
+for looking at, not for uploading. A folder of more images than the table has
+slots is how a review shot ends up on a store listing.
 
 The iPad simulator is put in **Full Screen Apps** first (Settings → Multitasking
 & Gestures, driven by `CaptureSimulatorSetupUITests`): in Windowed Apps iPadOS 26

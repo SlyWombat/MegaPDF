@@ -247,17 +247,50 @@ STORES: dict[str, dict] = {
             "iphone-6_5": [(1242, 2688), (1284, 2778)],
             "ipad-13": [(2064, 2752), (2048, 2732)],
         },
-        # The listing order, docs/app-store-listing.md § Screenshots (2026-09-19).
-        "order": ["viewer", "text-edit", "redact", "text", "search", "sign", "draw", "home"],
+        # Re-cut for 2.2 (#613, Dave 2026-10-01): reading and the page tools lead, the way
+        # every other platform's listing now opens, and `viewer` — the old lead — is
+        # demoted: still shot for the QA inventory, but a pose this list does not name
+        # sorts to the end of the sheet rather than beside its siblings (same rule Mac's
+        # profile applies to its own `viewer`).
+        #
+        # `text-edit` and `text` both keep their own slot, as Android's 8-slot set did —
+        # correcting existing body text (#113) and adding a new line (#43) are different
+        # stories — and `draw` keeps its slot too: the App Store takes up to ten images,
+        # so the Play-only squeeze that cut it there (#613 §draw) does not apply here.
+        # Placed right after `sign`, the position Android's own #613 note says it would
+        # have taken had there been room: both are signature-adjacent, "your saved mark"
+        # and "draw one now". **Pending Dave's sign-off on keeping it at all** — see the
+        # PR that introduced this order.
+        "order": ["reading", "text-edit", "sign", "draw", "pages", "text", "search",
+                  "redact", "home"],
         "parse": _pose(r"(?:[a-z]-)?(?:(?P<lang>[a-z]{2}(?:-[A-Za-z]{2})?)-)?"
                        r"(?P<device>iphone-[0-9_]+|ipad-[0-9]+)-"
                        r"(?P<pose>[a-z][a-z0-9-]*)\.png$"),
-        # iOS draws no toolbar band of the desktop kind, and no zoom chip:
-        # the viewer is laid out to the container's width. Both checks stand
-        # down by profile rather than by accident.
-        "toolbar": None,
+        # iOS draws no toolbar band of the desktop kind, and no zoom chip: the viewer is
+        # laid out to the container's width. Both checks stand down by profile rather
+        # than by accident — except for one named exception (#613): reading mode
+        # (`ios/MegaPDF/ViewerView.swift`) hides the navigation bar and the bottom
+        # toolbar the same way the desktops hide their own chrome for the same slot, so
+        # that pose needs the same assertion Mac, Linux and Windows added. Unlike theirs,
+        # no edge of the remaining frame is a stable place to measure from — the posed
+        # status bar stays up, at a height that differs by device and does not move when
+        # the bars beneath it do — so this platform cannot tell a pixel apart from the
+        # image the way a measured or even a fixed desktop band can. `assert_only` skips
+        # with that reason instead of guessing, and the capture rig
+        # (`tools/ios-screenshots.sh`) asserts it directly at capture time instead,
+        # reading `ViewerModel.readingMode` back through the app's own screenshot log —
+        # the same posture Windows' `Shot-Reading.ps1` takes on its automation tree.
+        # `chromeless_only` keeps every other pose skipped exactly as before: iOS has no
+        # general-purpose toolbar band to measure, named pose or not.
+        "toolbar": {"chromeless_poses": ("reading",), "assert_only": True,
+                   "chromeless_only": True},
         "zoom": None,
-        "accent_poses": {"redact": ("banner", "mark")},
+        "accent_poses": {"redact": ("banner", "mark"),
+                         # The Pages panel (#174, #613): a no-op under
+                         # `accent_strict: False` (every iOS control is tinted), named
+                         # anyway for the same reason `redact` already was — documenting
+                         # what the strict desktop profiles would have to allow here.
+                         "pages": ("the selected page tiles",)},
         # Not strict: on iOS the accent is the tint of every control, so its
         # presence means nothing and only a difference between the languages of
         # one pose does. On the desktop the accent is reserved for armed modes

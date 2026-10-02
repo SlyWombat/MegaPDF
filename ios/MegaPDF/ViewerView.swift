@@ -349,7 +349,8 @@ struct ViewerView: View {
     private func armReadingBarFade() {
         readingFadeGeneration &+= 1
         let generation = readingFadeGeneration
-        guard ReadingBarFade.armsTimer(voiceOverRunning: voiceOverRunning) else { return }
+        guard ReadingBarFade.armsTimer(voiceOverRunning: voiceOverRunning,
+                                       screenshotPin: model.screenshotPinsReadingBar) else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + ReadingBarFade.idle) {
             guard generation == readingFadeGeneration, model.readingMode else { return }
             withReadingAnimation { readingBarVisible = false }

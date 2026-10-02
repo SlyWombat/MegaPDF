@@ -197,6 +197,17 @@ def toolbar(shot, profile) -> list[Finding]:
     # capture time: Shot-Reading.ps1 fails the step unless the toolbar's Open
     # button has left the automation tree altogether.
     if shot.pose in spec.get("chromeless_poses", ()):
+        # Some platforms have no edge left in the frame to measure from at all — iOS's
+        # posed status bar stays up in reading mode, at a height that differs by device,
+        # so there is no fixed *or* measured depth this check could name. Rather than
+        # invent one, it skips with the reason and leaves the assertion to the capture
+        # rig, which can see the thing the image cannot: whether the mode actually
+        # turned on (#613).
+        if spec.get("assert_only"):
+            return [_skip("toolbar", f"the {shot.pose} pose hides its chrome on "
+                                     f"purpose, and this platform has no edge left "
+                                     f"in the frame to measure it from — the "
+                                     f"capture rig asserts it instead (#613)")]
         depth = spec["depth"]
         if spec.get("fixed"):
             return [_skip("toolbar", f"the {shot.pose} pose hides the toolbar on "
@@ -210,6 +221,11 @@ def toolbar(shot, profile) -> list[Finding]:
                                      f"did reading mode turn on?")]
         return [_ok("toolbar", f"no chrome band in the top {depth} px, which is "
                                f"what this pose is")]
+    # iOS's whole profile is this: it has no general-purpose toolbar band to measure on
+    # any pose, named here or not, so nothing past this point ever applies to it.
+    if spec.get("chromeless_only"):
+        return [_skip("toolbar", "this platform's toolbar band is only defined for "
+                                 "the pose that must show none of it")]
     raster = im.gray(shot.path)
     end = shot.toolbar_end
     # A title bar of its own (Windows) sits above the commands and is not a
