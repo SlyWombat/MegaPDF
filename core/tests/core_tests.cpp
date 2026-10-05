@@ -194,6 +194,23 @@ void test_open_failures(const std::string& fixtures) {
         check(msg.find("incomplete") != std::string::npos && msg.find("2.3 MB") != std::string::npos,
               "#665: the message names what is present and what the PDF's own index declares", msg);
 
+        // The shape the reporter corrected us on (SlyWombat/CaseMaker#233): both truncated
+        // manuals DO contain a %%EOF -- the linearization one, at byte 700 and 664 -- and it
+        // is the TRAILING %%EOF that is missing. A "contains no %%EOF" test would call these
+        // two complete. Only the last 4 KiB is searched, and the /L test fires before it
+        // either way, but the early marker has to be in a test or that stays an accident.
+        std::string early = "%PDF-1.7\n1 0 obj\n<< /Linearized 1 /L 2424405 /O 5 /E 90000 /N 20 /T 2400000 >>\nendobj\n";
+        early += std::string(560, 'z');
+        early += "\n%%EOF\n";                 // the first-page cross-reference's own marker
+        early += std::string(4600, 'w');      // ...and then the file simply stops, 4.6 KiB later
+        check(early.find("%%EOF") < 700, "#665 fixture: the early %%EOF really is near the start",
+              std::to_string(early.find("%%EOF")));
+        check(megapdf_open(early.data(), early.size(), nullptr) == nullptr,
+              "a truncated PDF with only its linearization %%EOF does not open");
+        check(megapdf_last_error() == MEGAPDF_OPEN_ERR_INCOMPLETE,
+              "#665: an early %%EOF does not make a truncated file look complete",
+              std::to_string(megapdf_last_error()));
+
         // No linearization dictionary, so the evidence is the missing %%EOF alone.
         std::string noeof = "%PDF-1.7\n1 0 obj\n<< /Type /Catalog >>\nendobj\n";
         noeof += std::string(600, 'y');
