@@ -316,6 +316,9 @@ public static partial class Strings
     /// <summary>That file is not a PDF.</summary>
     public static string ErrorNotAPdf => Get("ErrorNotAPdf");
 
+    /// <summary>That file looks incomplete. It may be a download that stopped before it finished.</summary>
+    public static string ErrorFileIncomplete => Get("ErrorFileIncomplete");
+
     /// <summary>The file is password-protected.</summary>
     public static string ErrorPasswordProtected => Get("ErrorPasswordProtected");
 

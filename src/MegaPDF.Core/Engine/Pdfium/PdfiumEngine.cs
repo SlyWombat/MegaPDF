@@ -30,6 +30,13 @@ public sealed class PdfLoadException(string path, uint errorCode) : Exception(Me
     /// </summary>
     public bool IsTooLargeError => ErrorCode == CoreNative.OpenErrTooLarge;
 
+    /// <summary>
+    /// True when the file begins as a PDF but stops before its end — most often a download
+    /// that was cut off (#665). A narrower answer than <see cref="IsFormatError"/>, which the
+    /// core used to give for this: the fix is to fetch the file again, not to repair it.
+    /// </summary>
+    public bool IsIncompleteError => ErrorCode == CoreNative.OpenErrIncomplete;
+
     private static string MessageFor(string path, uint code) => code switch
     {
         PdfiumNative.FPDF_ERR_FILE => $"The file could not be read: {path}",
@@ -37,6 +44,7 @@ public sealed class PdfLoadException(string path, uint errorCode) : Exception(Me
         PdfiumNative.FPDF_ERR_PASSWORD => $"The PDF is password-protected: {path}",
         PdfiumNative.FPDF_ERR_SECURITY => $"The PDF uses an unsupported security handler: {path}",
         CoreNative.OpenErrTooLarge => $"The file is too large to open: {path}",
+        CoreNative.OpenErrIncomplete => $"The file is incomplete, most likely a download that stopped early: {path}",
         _ => $"The PDF could not be opened (error {code}): {path}",
     };
 }

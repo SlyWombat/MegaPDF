@@ -51,6 +51,17 @@ internal static class CoreNative
     /// </summary>
     public const uint OpenErrTooLarge = 100;
 
+    /// <summary>
+    /// <see cref="megapdf_last_error"/> when a failed open's bytes are the BEGINNING of a PDF
+    /// rather than something that is not a PDF: a %PDF- header, and either a linearization
+    /// dictionary declaring more bytes than the file holds or no %%EOF near its end. PDFium
+    /// reports FPDF_ERR_FORMAT for this and for genuine rubbish alike, and the two have
+    /// different fixes — this one's is to fetch the file again (#665). A caller that does not
+    /// care may treat it as FPDF_ERR_FORMAT; it is only ever returned where that would have
+    /// been.
+    /// </summary>
+    public const uint OpenErrIncomplete = 102;
+
     /// <summary>Opens a document from memory; the core copies the bytes. Zero on failure.</summary>
     [DllImport(Dll)]
     public static extern unsafe IntPtr megapdf_open(byte* bytes, nuint length,

@@ -325,6 +325,10 @@
     <value>Ce fichier n'est pas un PDF valide.</value>
     <comment>PdfLoadException FPDF_ERR_FORMAT</comment>
   </data>
+  <data name="FileIncomplete" xml:space="preserve">
+    <value>Ce fichier semble incomplet. Le téléchargement s'est peut-être arrêté avant la fin.</value>
+    <comment>FR-REVIEW #665 — PdfLoadException MEGAPDF_OPEN_ERR_INCOMPLETE. Deliberately free of ':' ';' '?' '!' so the fr-FR derivation has no non-breaking space to insert</comment>
+  </data>
   <data name="FileCouldNotBeOpened" xml:space="preserve">
     <value>Impossible d'ouvrir ce fichier (erreur {0}).</value>
     <comment>PdfLoadException, any other code</comment>

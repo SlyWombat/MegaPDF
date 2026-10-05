@@ -169,6 +169,14 @@ constexpr double kParagraphGapPitchFactor = 1.5;               // gap >= 1.5x pi
 constexpr double kMaxSingleLinePitchToBodySizeRatio = 1.5;
 
 constexpr double kListMarkerGapEm = 0.5;                       // marker -> body text gap >= 0.5 em.
+// #664: the same gap for a marker that can only be a marker. 0.5 em was chosen to be wider
+// than an ordinary word space, so that a dash or an ordinal in running prose is not read as a
+// list -- a test an unambiguous bullet glyph does not need, and fails on real documents. The
+// 184-item laser-welder manual in the private corpus sets its bullet-to-text gap at 0.235-0.463
+// em (measured over its first 20 items, mean 0.33), so 63 of its items missed the bar on the
+// gap alone even once the glyph was recognised. This only has to be wide enough to tell a
+// marker followed by text from one glyph abutting the next.
+constexpr double kGlyphMarkerGapEm = 0.15;
 constexpr double kListDepthClusterEm = 1.0;                    // marker x-clusters, 1 em tolerance.
 
 constexpr double kFurnitureBandFraction = 0.08;                // top/bottom 8% of the page.
@@ -268,16 +276,65 @@ constexpr unsigned int kHyphenChar = 0x2010;
 // and LibreOffice are documented to export via their PDF ToUnicode CMap into the Private Use
 // Area (Symbol and ZapfDingbats have no natural Unicode bullet of their own). U+F0B7 is the
 // common, well-documented case (Symbol's bullet, code 0xB7 in Symbol's built-in encoding);
-// U+F0A7 is LibreOffice's own square-bullet export through the same mechanism. This is the
-// design's stated starting set; #354's corpus census is expected to find others.
+// U+F0A7 is LibreOffice's own square-bullet export through the same mechanism.
+//
+// #664 is the census the comment here used to anticipate. Scanning the private corpus for
+// line-leading single-character words found two documents whose every list comes out as prose
+// for no reason but a missing code point, and both are ordinary glyphs no producer could mean
+// as anything else:
+//
+//   U+25CF BLACK CIRCLE   184 items, T700w_Manual.pdf      (1 of 184 classified before this)
+//   U+2610 BALLOT BOX     100 items, Rain Contingency.pdf  (0 of 100 classified before this)
+//
+// Those two are measured. The rest below are their immediate repertoire siblings — the
+// geometric-shape and ballot-box fills and outlines, and the dingbat bullets a Wingdings or
+// ZapfDingbats list exports to — added with them because a producer picking the hollow square
+// over the filled one is making a typographic choice, not a semantic one, and splitting the
+// family would leave the same bug waiting behind the next document. None of them is ever a
+// letter or a digit, so widening here cannot change how prose is read; the corpus run on #664
+// confirms that (see the issue for the before/after counts).
 bool IsBulletCodepoint(unsigned int cp) {
     switch (cp) {
         case 0x2022: case 0x25E6: case 0x25AA: case 0x2013: case 0x2014: case 0x00B7:
         case '*': case '-':
         case 0xF0B7: case 0xF0A7:
+        // Geometric shapes used as bullets (U+25A0 block): filled and hollow squares, small
+        // squares, triangles pointing right, circles. U+25CF is the measured one.
+        case 0x25A0: case 0x25A1: case 0x25AB: case 0x25B6: case 0x25B8: case 0x25BA:
+        case 0x25CB: case 0x25CF: case 0x25D8: case 0x25D9:
+        // Ballot boxes, as a checklist's bullets. U+2610 is the measured one; a list whose
+        // items are already ticked or crossed is the same list.
+        case 0x2610: case 0x2611: case 0x2612:
+        // Bullet-family punctuation: hyphen bullet, and the two-dot/four-dot punctuation
+        // LibreOffice exports for its own list levels.
+        case 0x2043: case 0x204C: case 0x204D:
+        // Operators producers reach for as small bullets (bullet operator, ring operator).
+        case 0x2219: case 0x2218:
+        // Dingbat bullets (ZapfDingbats/Wingdings): arrowheads, stars, diamonds, and the
+        // check and cross marks a checklist uses as its marker.
+        case 0x27A2: case 0x279E: case 0x2794: case 0x2726: case 0x2727: case 0x2756:
+        case 0x2713: case 0x2714: case 0x2717: case 0x2718:
+        // More of the same Symbol/Wingdings PUA exports as U+F0B7/U+F0A7 above: Wingdings'
+        // own filled square and the open and filled circles of its list levels.
+        case 0xF06C: case 0xF071: case 0xF0A8:
             return true;
         default:
             return false;
+    }
+}
+
+// #664: a bullet glyph that cannot be anything else at the start of a line, as against the
+// members of the set above that genuinely occur in prose -- '-', '*', the en and em dashes,
+// the middle dot, and the two ring/bullet operators a formula uses. The distinction exists
+// only to set how wide the gap to the body text has to be (kListMarkerGapEm below): a lone
+// filled circle followed by text is a list item at any gap, while "-- as it happens --" is
+// not, so the ambiguous ones keep the strict bar.
+bool IsUnambiguousBulletCodepoint(unsigned int cp) {
+    switch (cp) {
+        case '*': case '-': case 0x2013: case 0x2014: case 0x00B7: case 0x2219: case 0x2218:
+            return false;
+        default:
+            return IsBulletCodepoint(cp);
     }
 }
 
@@ -319,6 +376,24 @@ bool IsListMarker(const std::vector<unsigned int>& cps) {
     if (body_len == 1 && IsAsciiLetter(cps[0])) return true;
     if (all_roman) return true;
     return false;
+}
+
+// #664: a single character that is a word in its own right in one of our three locales, so it
+// can stand alone at the start of a line as prose. The letter-marker rule below must never
+// fire on one of these, because "A " and "I " really do begin English sentences and « y » and
+// « à » begin French ones. Everything else -- 'l' is the case #664 reports -- is not a word,
+// which is what makes a repeated one evidence of a marker.
+bool IsPlausibleSingleLetterWord(unsigned int cp) {
+    switch (cp) {
+        case 'a': case 'A':          // English article; French verb ("il a")
+        case 'i': case 'I':          // English pronoun
+        case 'y': case 'Y':          // French pronoun ("il y a")
+        case 0x00E0: case 0x00C0:    // a-grave: French preposition
+        case 'o': case 'O':          // vocative O, and a lone O is read as a word often enough
+            return true;
+        default:
+            return false;
+    }
 }
 
 U16 EncodeUtf16(const std::vector<unsigned int>& cps) {
@@ -1625,23 +1700,116 @@ double PageMedianPitch(const std::vector<Line>& lines) {
     return pitches[pitches.size() / 2];
 }
 
-// A line's first word is a marker (design §1.2 "Lists") followed by a gap >= 0.5 em and more
-// body text on the same line.
-bool LineStartsListItem(const PageWork& pw, const Line& line) {
+// #664: the letter-valued markers one page repeats, which is the only evidence there is that
+// such a marker is a marker.
+//
+// A producer may draw its bullets with a symbol face whose ToUnicode maps the glyph to an
+// ordinary letter -- #664's 257-page manual draws all 576 of its bullets with a glyph that
+// reads back as U+006C, lowercase L. No code point rule can catch that: 'l' is a letter, and
+// a roman numeral, and widening IsBulletCodepoint to admit it would turn every "l" in the
+// corpus into a bullet.
+//
+// The font was the obvious discriminator and it does not survive measurement. Probing
+// FPDFText_GetFontInfo across the corpus's own bullet documents:
+//
+//   T700w_Manual.pdf        marker and body are BOTH MMOKCB+OPPOSans-M, both symbolic
+//   Rain Contingency.pdf    marker Menlo-Regular symbolic, body TimesNewRomanPSMT not
+//   Semco proposal_6.pdf    marker font is literally named "Symbol" and reports NOT symbolic
+//
+// So "the marker's face differs from the body's" finds nothing on the first, and the
+// descriptor's own Symbolic bit is producer-set and wrong on the third. #664 reports its
+// manual's body face as unnamed, which removes the name comparison there too. A font rule
+// would have been three different rules, each right about one document.
+//
+// What is left is the property that makes a list a list: the marker repeats, at one x, down
+// the page. A lone "l " is prose; eight lines beginning "l " at the same indent are a list,
+// whatever the glyph was drawn with. So a letter-valued single-character word counts as a
+// marker only where this page puts at least kMinRepeatedLetterMarker of them in one x-cluster
+// -- which is also why this is page-local state and not a property of the character.
+constexpr int kMinRepeatedLetterMarker = 3;
+
+struct ListMarkerContext {
+    // The letter code points this page has earned the right to read as markers.
+    std::vector<unsigned int> letters;
+
+    bool AdmitsLetter(unsigned int cp) const {
+        return std::find(letters.begin(), letters.end(), cp) != letters.end();
+    }
+};
+
+// The geometry every marker route needs: `line`'s first word, and the gap from it to the body
+// text that follows, in ems of the marker's own size. Returns false when the line has no body
+// text after its first word at all. The gap each route then demands is its own business --
+// #664 measured that one bar does not fit both.
+bool LineMarkerCandidate(const PageWork& pw, const Line& line, std::vector<unsigned int>* cps, double* gap_em) {
     if (line.words.size() < 2) return false;
     const Word& marker = pw.words[static_cast<size_t>(line.words[0])];
-    const auto cps = WordCodepoints(pw.chars, marker);
-    if (!IsListMarker(cps)) return false;
+    *cps = WordCodepoints(pw.chars, marker);
+    if (cps->empty()) return false;
     const Word& body0 = pw.words[static_cast<size_t>(line.words[1])];
-    const double gap = body0.l - marker.r;
-    return gap >= kListMarkerGapEm * Em(marker.font_size);
+    *gap_em = (body0.l - marker.r) / Em(marker.font_size);
+    return true;
 }
 
-std::vector<double> ComputeListDepthClusters(const PageWork& pw, const std::vector<int>& order, double body_size) {
+// A line's first word is a marker (design §1.2 "Lists") followed by a gap and more body text
+// on the same line. `ctx` carries the page's repeated letter markers (#664).
+bool LineStartsListItem(const PageWork& pw, const Line& line, const ListMarkerContext& ctx) {
+    std::vector<unsigned int> cps;
+    double gap_em = 0;
+    if (!LineMarkerCandidate(pw, line, &cps, &gap_em)) return false;
+    if (IsListMarker(cps)) {
+        // A glyph that can only be a marker needs only to be separated from the text; a dash,
+        // a middle dot or an ordinal has to clear a gap wider than a word space (#664).
+        const bool unambiguous = cps.size() == 1 && IsUnambiguousBulletCodepoint(cps[0]);
+        return gap_em >= (unambiguous ? kGlyphMarkerGapEm : kListMarkerGapEm);
+    }
+    // A letter-valued marker has already earned its place by repeating down the page, so the
+    // strict gap would be asking the same question twice.
+    return cps.size() == 1 && !IsPlausibleSingleLetterWord(cps[0]) && ctx.AdmitsLetter(cps[0]) &&
+           gap_em >= kGlyphMarkerGapEm;
+}
+
+// Which letter-valued single-character markers this page repeats at a stable x (#664). Run
+// before classification, on the same reading order the classifier walks, and deliberately
+// ignorant of IsBulletCodepoint: a code point that is already a bullet needs no evidence.
+ListMarkerContext ComputeListMarkerContext(const PageWork& pw, const std::vector<int>& order, double body_size) {
+    struct Seen { unsigned int cp; double x; };
+    std::vector<Seen> seen;
+    for (int li : order) {
+        const Line& line = pw.lines[static_cast<size_t>(li)];
+        std::vector<unsigned int> cps;
+        double gap_em = 0;
+        if (!LineMarkerCandidate(pw, line, &cps, &gap_em)) continue;
+        if (cps.size() != 1 || gap_em < kGlyphMarkerGapEm) continue;
+        const unsigned int cp = cps[0];
+        // A letter, and not one that stands alone as a word. Anything IsListMarker already
+        // accepts is not this rule's business.
+        if (!IsAsciiLetter(cp) && cp != 0x00E0 && cp != 0x00C0) continue;
+        if (IsPlausibleSingleLetterWord(cp)) continue;
+        if (IsListMarker(cps)) continue;
+        seen.push_back(Seen{cp, line.l});
+    }
+    ListMarkerContext ctx;
+    for (size_t i = 0; i < seen.size(); i++) {
+        if (ctx.AdmitsLetter(seen[i].cp)) continue;
+        // Count this code point's occurrences that share an x-cluster with this one, at the
+        // same tolerance the depth clusters use.
+        int in_cluster = 0;
+        for (size_t k = 0; k < seen.size(); k++) {
+            if (seen[k].cp != seen[i].cp) continue;
+            if (std::fabs(seen[k].x - seen[i].x) <= kListDepthClusterEm * Em(body_size)) in_cluster++;
+        }
+        if (in_cluster >= kMinRepeatedLetterMarker) ctx.letters.push_back(seen[i].cp);
+    }
+    return ctx;
+}
+
+std::vector<double> ComputeListDepthClusters(const PageWork& pw, const std::vector<int>& order, double body_size,
+                                             const ListMarkerContext& ctx) {
     std::vector<double> xs;
     for (int li : order) {
         const Line& line = pw.lines[static_cast<size_t>(li)];
-        if (LineStartsListItem(pw, line)) xs.push_back(line.l);
+        if (LineStartsListItem(pw, line, ctx)) xs.push_back(line.l);
     }
     std::sort(xs.begin(), xs.end());
     std::vector<double> clusters;
@@ -1672,7 +1840,8 @@ bool LineQualifiesBySize(double line_size, double body_size) { return line_size 
 // lines consumed (always >= 1).
 size_t GatherOneBlock(const PageWork& pw, const std::vector<int>& order, size_t i, double body_size,
                       double raw_median_pitch, const std::vector<double>& column_width,
-                      const std::vector<double>& list_clusters, int page_index, BlockImpl* out) {
+                      const std::vector<double>& list_clusters, const ListMarkerContext& marker_ctx,
+                      int page_index, BlockImpl* out) {
     const int li = order[i];
     const Line& line = pw.lines[static_cast<size_t>(li)];
     const double line_size = LineFontSize(pw, line);
@@ -1741,7 +1910,7 @@ size_t GatherOneBlock(const PageWork& pw, const std::vector<int>& order, size_t 
     }
 
     // --- List item ---
-    if (LineStartsListItem(pw, line)) {
+    if (LineStartsListItem(pw, line, marker_ctx)) {
         const Word& marker_word = pw.words[static_cast<size_t>(line.words[0])];
         const Word& first_body_word = pw.words[static_cast<size_t>(line.words[1])];
         std::vector<int> group{li};
@@ -1750,7 +1919,7 @@ size_t GatherOneBlock(const PageWork& pw, const std::vector<int>& order, size_t 
         while (j < order.size()) {
             const int nli = order[j];
             const Line& nline = pw.lines[static_cast<size_t>(nli)];
-            if (LineStartsListItem(pw, nline)) break;
+            if (LineStartsListItem(pw, nline, marker_ctx)) break;
             if (LineQualifiesBySize(LineFontSize(pw, nline), body_size)) break;
             if (std::fabs(nline.l - item_text_left) > kParagraphLeftEdgeToleranceEm * Em(body_size)) break;
             const double pitch = LineCentre(pw.lines[static_cast<size_t>(group.back())]) - LineCentre(nline);
@@ -1785,7 +1954,7 @@ size_t GatherOneBlock(const PageWork& pw, const std::vector<int>& order, size_t 
             const int nli = order[j];
             const Line& nline = pw.lines[static_cast<size_t>(nli)];
             if (LineQualifiesBySize(LineFontSize(pw, nline), body_size)) break;
-            if (LineStartsListItem(pw, nline)) break;
+            if (LineStartsListItem(pw, nline, marker_ctx)) break;
             const double pitch = LineCentre(pw.lines[static_cast<size_t>(group.back())]) - LineCentre(nline);
             if (pitch >= kParagraphGapPitchFactor * median_pitch || pitch >= kParagraphPitchFactor * median_pitch) break;
             const double left_diff = nline.l - first_left;
@@ -2076,14 +2245,17 @@ PageResult BuildPageContent(const megapdf_page* page, PageWork* pw, int page_ind
     std::vector<double> column_width;
     const std::vector<int> order = OrderLines(pw->lines, &too_many_columns, &column_width);
     const double median_pitch = PageMedianPitch(pw->lines);
-    const std::vector<double> list_clusters = ComputeListDepthClusters(*pw, order, body_size);
+    // #664: the page's repeated letter markers first -- the depth clusters and the classifier
+    // both have to agree about what counts as a marker, so they read the same context.
+    const ListMarkerContext marker_ctx = ComputeListMarkerContext(*pw, order, body_size);
+    const std::vector<double> list_clusters = ComputeListDepthClusters(*pw, order, body_size, marker_ctx);
 
     std::vector<BlockImpl> content;
     size_t i = 0;
     while (i < order.size()) {
         BlockImpl block;
         const size_t consumed = GatherOneBlock(*pw, order, i, body_size, median_pitch, column_width, list_clusters,
-                                               page_index, &block);
+                                               marker_ctx, page_index, &block);
         block.info.source = MEGAPDF_STRUCTURE_SOURCE_HEURISTIC;
         content.push_back(std::move(block));
         i += (std::max<size_t>)(1, consumed);

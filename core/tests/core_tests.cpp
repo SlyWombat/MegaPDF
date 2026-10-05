@@ -178,6 +178,39 @@ void test_open_failures(const std::string& fixtures) {
     check(std::string(megapdf_last_error_message()).find("valid PDF") != std::string::npos, "junk has a message",
           megapdf_last_error_message());
 
+    // #665: a PDF that stops early is a different answer from rubbish. Three shapes, because
+    // the one that matters most to a caller is the one it can act on -- the declared length.
+    {
+        // A linearized file's own /L says it should be far longer than it is, which is the
+        // reported case (two manuals cut off at exactly 1 MiB, /L declaring 2.4 and 6.9 MB).
+        std::string lin = "%PDF-1.7\n1 0 obj\n<< /Linearized 1 /L 2424405 /H [ 1000 200 ] /O 5 "
+                          "/E 90000 /N 20 /T 2400000 >>\nendobj\n";
+        lin += std::string(600, 'x');   // a body that simply stops
+        check(megapdf_open(lin.data(), lin.size(), nullptr) == nullptr, "a truncated linearized PDF does not open");
+        check(megapdf_last_error() == MEGAPDF_OPEN_ERR_INCOMPLETE,
+              "#665: a truncated linearized PDF reports MEGAPDF_OPEN_ERR_INCOMPLETE, not FPDF_ERR_FORMAT",
+              std::to_string(megapdf_last_error()));
+        const std::string msg = megapdf_last_error_message();
+        check(msg.find("incomplete") != std::string::npos && msg.find("2.3 MB") != std::string::npos,
+              "#665: the message names what is present and what the PDF's own index declares", msg);
+
+        // No linearization dictionary, so the evidence is the missing %%EOF alone.
+        std::string noeof = "%PDF-1.7\n1 0 obj\n<< /Type /Catalog >>\nendobj\n";
+        noeof += std::string(600, 'y');
+        check(megapdf_open(noeof.data(), noeof.size(), nullptr) == nullptr, "a PDF with no %%EOF does not open");
+        check(megapdf_last_error() == MEGAPDF_OPEN_ERR_INCOMPLETE,
+              "#665: a header with no end-of-file marker reports MEGAPDF_OPEN_ERR_INCOMPLETE",
+              std::to_string(megapdf_last_error()));
+
+        // The regression half: bytes that are not a PDF at all must still say so. Without
+        // this, #665's fix would relabel every unreadable file as an interrupted download.
+        const unsigned char rubbish[] = "\x7f\x45\x4c\x46 this is an ELF binary, not a PDF, and has no %%EOF";
+        check(megapdf_open(rubbish, sizeof(rubbish), nullptr) == nullptr, "non-PDF bytes do not open");
+        check(megapdf_last_error() == 3 /* FPDF_ERR_FORMAT */,
+              "#665: bytes with no %PDF- header are still 'not a valid PDF', not 'incomplete'",
+              std::to_string(megapdf_last_error()));
+    }
+
     Doc d(fixtures + "/fixture.pdf");
     check(d.doc != nullptr, "fixture.pdf opens");
     check(megapdf_last_error() == 0, "a successful open clears the last error");
@@ -6555,6 +6588,11 @@ void test_structure_goldens(const std::string& fixtures, const std::string& sche
         {"columns", repo + "/structure/columns.pdf", 0, 0, 0},
         {"furniture", repo + "/structure/furniture.pdf", 0, 0, MEGAPDF_STRUCTURE_KEEP_FURNITURE},
         {"lists", repo + "/structure/lists.pdf", 0, 0, 0},
+        // #664: a bullet glyph that reads back as a letter, and the negative page that stops
+        // the repetition rule becoming "the first word of any line is a bullet". See
+        // gen_symbol_bullets()'s comment for the shape; test_structure_symbol_bullets()
+        // below asserts the classification itself rather than leaving it to a golden diff.
+        {"symbol-bullets", repo + "/structure/symbol-bullets.pdf", 0, 0, 0},
         {"headings", repo + "/structure/headings.pdf", 0, 0, 0},
         // #375: two genuine bold-at-body headings bracketing a run of two false-positive
         // "form label" lines and one isolated numeric-like false positive -- see
@@ -7030,6 +7068,7 @@ void test_structure_no_stray_control_characters(const std::string& fixtures, con
         {"columns", repo + "/structure/columns.pdf", 0},
         {"furniture", repo + "/structure/furniture.pdf", MEGAPDF_STRUCTURE_KEEP_FURNITURE},
         {"lists", repo + "/structure/lists.pdf", 0},
+        {"symbol-bullets", repo + "/structure/symbol-bullets.pdf", 0},
         {"headings", repo + "/structure/headings.pdf", 0},
         {"tabular-headings", repo + "/structure/tabular-headings.pdf", 0},
         {"reading-order-jump", repo + "/structure/reading-order-jump.pdf", 0},
@@ -7508,6 +7547,52 @@ void test_structure_reading_order_jump(const std::string& repo) {
     megapdf_structure_free(s);
 }
 
+// #664: a bullet drawn with a symbol face whose glyph maps to an ordinary letter. Both halves
+// of the rule are asserted here, because only one of them is a feature: page 1 proves the
+// items are found, and page 2 proves the rule that finds them has not become "the first word
+// of any line is a bullet". gen_symbol_bullets()'s comment has the shape and why no code point
+// or font rule can take this case.
+void test_structure_symbol_bullets(const std::string& repo) {
+    Doc d(repo + "/structure/symbol-bullets.pdf");
+    if (!d.doc) { check(false, "structure symbol-bullets: opens"); return; }
+    megapdf_structure* s = megapdf_structure_load(d.doc, 0, 2, 0, nullptr);
+    check(s != nullptr, "structure symbol-bullets: loads");
+    if (s == nullptr) return;
+
+    // Page 1: five items, each a LIST_ITEM whose marker is the letter the glyph maps to.
+    int items = 0, lone = 0, word_marked = 0;
+    const size_t n = megapdf_block_count(s);
+    for (size_t i = 0; i < n; i++) {
+        megapdf_block b{};
+        megapdf_block_get(s, i, &b);
+        if (b.kind != MEGAPDF_BLOCK_LIST_ITEM) continue;
+        if (b.page == 0) items++;
+        if (b.page == 1) lone++;
+    }
+    check(items == 5,
+          "structure symbol-bullets: all five repeated 'l' markers are LIST_ITEM blocks (#664)",
+          std::to_string(items));
+    // Page 2 is the regression half: one unrepeated 'l' and three 'A' lines, none a marker.
+    check(lone == 0,
+          "structure symbol-bullets: page 2 has no list items -- an unrepeated letter is prose, "
+          "and 'A' is a word however often it repeats (#664)",
+          std::to_string(lone));
+
+    const long first = find_block(s, 0, MEGAPDF_BLOCK_LIST_ITEM, "Your phone number");
+    check(first >= 0, "structure symbol-bullets: the first item's text excludes the marker");
+    if (first >= 0) {
+        // The marker is reported separately, as the tagged path reports a /Lbl.
+        const int len = megapdf_block_string(s, static_cast<size_t>(first), MEGAPDF_BLOCK_MARKER, nullptr, 0);
+        std::vector<unsigned short> buf(static_cast<size_t>(len > 0 ? len : 1), 0);
+        megapdf_block_string(s, static_cast<size_t>(first), MEGAPDF_BLOCK_MARKER, buf.data(), len);
+        check(len == 1 && buf[0] == 'l',
+              "structure symbol-bullets: the marker is carried as the document wrote it, not normalised",
+              std::to_string(len) + " u+" + std::to_string(buf.empty() ? 0 : buf[0]));
+    }
+    (void)word_marked;
+    megapdf_structure_free(s);
+}
+
 // #145's cancellation pattern: a cancel raised before the call returns NULL, with
 // megapdf_last_error() reading back MEGAPDF_ERR_CANCELLED (cast to unsigned — the same
 // extension of that field MEGAPDF_OPEN_ERR_TOO_LARGE already makes for megapdf_open_file()).
@@ -7593,6 +7678,7 @@ void test_write_text_goldens(const std::string& repo, const std::string& expecte
     const Case cases[] = {
         {"columns", repo + "/structure/columns.pdf"},     {"furniture", repo + "/structure/furniture.pdf"},
         {"lists", repo + "/structure/lists.pdf"},          {"headings", repo + "/structure/headings.pdf"},
+        {"symbol-bullets", repo + "/structure/symbol-bullets.pdf"},
         {"tabular-headings", repo + "/structure/tabular-headings.pdf"},
         {"xobject-text", repo + "/structure/xobject-text.pdf"}, {"scan", repo + "/structure/scan.pdf"},
         {"mixed", repo + "/structure/mixed.pdf"},
@@ -7650,6 +7736,7 @@ void test_write_markdown_goldens(const std::string& repo, const std::string& exp
     const Case cases[] = {
         {"columns", repo + "/structure/columns.pdf"},     {"furniture", repo + "/structure/furniture.pdf"},
         {"lists", repo + "/structure/lists.pdf"},          {"headings", repo + "/structure/headings.pdf"},
+        {"symbol-bullets", repo + "/structure/symbol-bullets.pdf"},
         {"tabular-headings", repo + "/structure/tabular-headings.pdf"},
         {"xobject-text", repo + "/structure/xobject-text.pdf"}, {"scan", repo + "/structure/scan.pdf"},
         {"mixed", repo + "/structure/mixed.pdf"},
@@ -7861,6 +7948,7 @@ void test_markdown_round_trips(const std::string& repo, const std::string& expec
     const Case cases[] = {
         {"columns", repo + "/structure/columns.pdf"},     {"furniture", repo + "/structure/furniture.pdf"},
         {"lists", repo + "/structure/lists.pdf"},          {"headings", repo + "/structure/headings.pdf"},
+        {"symbol-bullets", repo + "/structure/symbol-bullets.pdf"},
         {"tabular-headings", repo + "/structure/tabular-headings.pdf"},
         {"xobject-text", repo + "/structure/xobject-text.pdf"}, {"scan", repo + "/structure/scan.pdf"},
         {"mixed", repo + "/structure/mixed.pdf"},
@@ -9327,6 +9415,7 @@ int main(int argc, char** argv) {
     test_structure_fields(argv[1]);
     test_structure_furniture(std::string(MEGAPDF_REPO_FIXTURES));
     test_structure_reading_order_jump(std::string(MEGAPDF_REPO_FIXTURES));
+    test_structure_symbol_bullets(std::string(MEGAPDF_REPO_FIXTURES));
     test_structure_cancel(argv[2]);
     test_structure_rotated_pages(std::string(MEGAPDF_REPO_FIXTURES));
     test_structure_no_stray_control_characters(argv[1], argv[2], std::string(MEGAPDF_REPO_FIXTURES));

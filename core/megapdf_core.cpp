@@ -740,6 +740,90 @@ bool FileSourceCopy(const FileSource& s, const char* path_utf8, FileSource* out)
     return true;
 }
 
+// #665: "the download stopped" and "this is not a PDF" are different problems with different
+// fixes, and PDFium reports both as FPDF_ERR_FORMAT. Two archived vendor manuals cut off at
+// exactly 1,048,576 bytes are the reported case: a %PDF-1.7 header, a /Linearized dictionary
+// whose own /L declares 2.4 MB, and no %%EOF anywhere. The file IS a PDF -- the first megabyte
+// of one -- so telling the reader to suspect a corrupt document sends them to the wrong fix.
+//
+// None of this needs a PDFium change, and none of it runs unless the open has ALREADY failed.
+constexpr size_t kIncompleteHeadBytes = 2048;   // the header, and a linearized file's parameter dict
+constexpr size_t kIncompleteTailBytes = 4096;   // where %%EOF has to be if it is anywhere
+
+struct IncompleteVerdict {
+    bool incomplete = false;
+    unsigned long long present = 0;    // what the file actually holds
+    unsigned long long declared = 0;   // the linearization dict's /L, 0 when there is none
+};
+
+// The `/L <n>` of a linearization parameter dictionary: the total length its producer wrote
+// the file to have. Returns 0 when absent or unparseable. `/Length` also begins "/L", which is
+// why the key has to be followed by whitespace.
+unsigned long long LinearizedDeclaredLength(const unsigned char* head, size_t n) {
+    const std::string s(reinterpret_cast<const char*>(head), n);
+    if (s.find("/Linearized") == std::string::npos) return 0;
+    for (size_t i = 0; i + 2 < s.size(); i++) {
+        if (s[i] != '/' || s[i + 1] != 'L') continue;
+        size_t k = i + 2;
+        if (k >= s.size() || (s[k] != ' ' && s[k] != '\t' && s[k] != '\r' && s[k] != '\n')) continue;
+        while (k < s.size() && (s[k] == ' ' || s[k] == '\t' || s[k] == '\r' || s[k] == '\n')) k++;
+        unsigned long long v = 0;
+        size_t digits = 0;
+        while (k < s.size() && s[k] >= '0' && s[k] <= '9' && digits < 19) {
+            v = v * 10 + static_cast<unsigned long long>(s[k] - '0');
+            k++;
+            digits++;
+        }
+        if (digits > 0) return v;
+    }
+    return 0;
+}
+
+// Whether the bytes that just failed to open look like the beginning of a PDF rather than
+// something that is not a PDF at all. `read` hands back `size` bytes at `pos`, or false.
+template <typename Read>
+IncompleteVerdict JudgeIncomplete(unsigned long long length, Read read) {
+    IncompleteVerdict v;
+    v.present = length;
+    if (length < 8) return v;
+
+    unsigned char head[kIncompleteHeadBytes] = {0};
+    const size_t head_n = static_cast<size_t>((std::min<unsigned long long>)(sizeof(head), length));
+    if (!read(0, head, head_n)) return v;
+    // A PDF's header must be at the very start or within the first 1,024 bytes; anything with
+    // no header at all is the "not a PDF" this is here to stop claiming.
+    const std::string head_s(reinterpret_cast<const char*>(head), head_n);
+    if (head_s.find("%PDF-") == std::string::npos) return v;
+
+    v.declared = LinearizedDeclaredLength(head, head_n);
+    if (v.declared > length) {
+        v.incomplete = true;
+        return v;
+    }
+
+    unsigned char tail[kIncompleteTailBytes] = {0};
+    const size_t tail_n = static_cast<size_t>((std::min<unsigned long long>)(sizeof(tail), length));
+    if (!read(length - tail_n, tail, tail_n)) return v;
+    const std::string tail_s(reinterpret_cast<const char*>(tail), tail_n);
+    // No end-of-file marker where one has to be: the file stops mid-stream.
+    if (tail_s.find("%%EOF") == std::string::npos) v.incomplete = true;
+    return v;
+}
+
+// "1.0 MB", "2.4 MB", "734 KB" -- enough to let a reader compare what arrived with what was
+// promised, which is the whole point of saying it.
+std::string HumanSize(unsigned long long bytes) {
+    char buf[64] = {0};
+    if (bytes >= 1024ull * 1024ull) {
+        std::snprintf(buf, sizeof(buf), "%.1f MB", static_cast<double>(bytes) / (1024.0 * 1024.0));
+    } else if (bytes >= 1024ull) {
+        std::snprintf(buf, sizeof(buf), "%.0f KB", static_cast<double>(bytes) / 1024.0);
+    } else {
+        std::snprintf(buf, sizeof(buf), "%llu bytes", bytes);
+    }
+    return std::string(buf);
+}
+
 // The tail every open shares. PDFium has either produced the document or it has not;
 // the failure message, the password kept for megapdf_open_like() (#132) and the
 // form-fill environment are the same however the bytes arrived. Takes ownership of
@@ -747,8 +831,38 @@ bool FileSourceCopy(const FileSource& s, const char* path_utf8, FileSource* out)
 megapdf_document* FinishOpenUnlocked(megapdf_document* d, const char* password_utf8) {
     if (d->doc == nullptr) {
         const unsigned long code = FPDF_GetLastError();
+        // #665: before the source goes, ask whether this is a PDF that stopped early. Only a
+        // format complaint can be one -- a password or a security handler is a different
+        // answer about a file PDFium could read.
+        IncompleteVerdict incomplete;
+        if (code == FPDF_ERR_FORMAT) {
+            if (!d->bytes.empty()) {
+                const std::vector<unsigned char>& b = d->bytes;
+                incomplete = JudgeIncomplete(b.size(), [&b](unsigned long long pos, unsigned char* out, size_t n) {
+                    if (pos + n > b.size()) return false;
+                    std::memcpy(out, b.data() + pos, n);
+                    return true;
+                });
+            } else if (d->source.open) {
+                FileSource* src = &d->source;
+                incomplete = JudgeIncomplete(src->length, [src](unsigned long long pos, unsigned char* out, size_t n) {
+                    return FileSourceRead(src, pos, out, n);
+                });
+            }
+        }
         FileSourceClose(&d->source);
         delete d;
+        if (incomplete.incomplete) {
+            std::string msg = "the file looks incomplete: " + HumanSize(incomplete.present) + " present";
+            if (incomplete.declared > incomplete.present) {
+                msg += ", the PDF's own index says " + HumanSize(incomplete.declared);
+            } else {
+                msg += " and no end-of-file marker";
+            }
+            msg += " — it may be a download that stopped early";
+            SetError(MEGAPDF_OPEN_ERR_INCOMPLETE, msg.c_str());
+            return nullptr;
+        }
         SetError(code, code == FPDF_ERR_PASSWORD ? "the document needs a password, or the password is wrong"
                      : code == FPDF_ERR_FORMAT   ? "the file is not a valid PDF"
                      : code == FPDF_ERR_SECURITY ? "the document's security handler is not supported"

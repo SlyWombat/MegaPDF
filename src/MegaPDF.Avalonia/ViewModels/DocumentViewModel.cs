@@ -687,6 +687,9 @@ public sealed partial class DocumentViewModel : ObservableObject, IDisposable
         { IsPasswordError: true } => Strings.PdfIsPasswordProtected,
         { IsTooLargeError: true } => Strings.FileTooLarge,
         { IsFileError: true } => Strings.FileCouldNotBeRead,
+        // #665 before IsFormatError: a cut-off download used to reach here as a format error
+        // and be told it was not a PDF, which sent the reader to the wrong fix.
+        { IsIncompleteError: true } => Strings.FileIncomplete,
         { IsFormatError: true } => Strings.FileNotValidPdf,
         // Not corrupt and not a wrong password: a handler PDFium cannot open (ADR-004 §8).
         { IsSecurityError: true } => Strings.UnsupportedProtection,

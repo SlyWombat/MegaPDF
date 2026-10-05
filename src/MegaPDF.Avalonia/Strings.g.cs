@@ -236,6 +236,9 @@ public static partial class Strings
     /// <summary>That file is not a valid PDF.</summary>
     public static string FileNotValidPdf => Get("FileNotValidPdf");
 
+    /// <summary>That file looks incomplete. It may be a download that stopped before it finished.</summary>
+    public static string FileIncomplete => Get("FileIncomplete");
+
     /// <summary>That file could not be opened (error {0}).</summary>
     public static string FileCouldNotBeOpened(object? arg0) => string.Format(CultureInfo.CurrentCulture, Get("FileCouldNotBeOpened"), arg0);
 
