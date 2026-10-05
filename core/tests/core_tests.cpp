@@ -191,7 +191,7 @@ void test_open_failures(const std::string& fixtures) {
               "#665: a truncated linearized PDF reports MEGAPDF_OPEN_ERR_INCOMPLETE, not FPDF_ERR_FORMAT",
               std::to_string(megapdf_last_error()));
         const std::string msg = megapdf_last_error_message();
-        check(msg.find("incomplete") != std::string::npos && msg.find("2.3 MB") != std::string::npos,
+        check(msg.find("incomplete") != std::string::npos && msg.find("2.4 MB") != std::string::npos,
               "#665: the message names what is present and what the PDF's own index declares", msg);
 
         // The shape the reporter corrected us on (SlyWombat/CaseMaker#233): both truncated

@@ -812,12 +812,18 @@ IncompleteVerdict JudgeIncomplete(unsigned long long length, Read read) {
 
 // "1.0 MB", "2.4 MB", "734 KB" -- enough to let a reader compare what arrived with what was
 // promised, which is the whole point of saying it.
+// Decimal MB and KB, not MiB and KiB, and deliberately: the only reason this number exists
+// is so a reader can hold it against the size something else told them to expect -- a
+// browser's download panel, a file listing, the vendor's own "2.4 MB" on the page they got it
+// from -- and every one of those is decimal. Dividing by 1024 while writing "MB" reported the
+// reported file's own /L of 2,424,405 as "2.3 MB" against the 2.4 MB its publisher advertises,
+// which is exactly the comparison the message is for (#665).
 std::string HumanSize(unsigned long long bytes) {
     char buf[64] = {0};
-    if (bytes >= 1024ull * 1024ull) {
-        std::snprintf(buf, sizeof(buf), "%.1f MB", static_cast<double>(bytes) / (1024.0 * 1024.0));
-    } else if (bytes >= 1024ull) {
-        std::snprintf(buf, sizeof(buf), "%.0f KB", static_cast<double>(bytes) / 1024.0);
+    if (bytes >= 1000ull * 1000ull) {
+        std::snprintf(buf, sizeof(buf), "%.1f MB", static_cast<double>(bytes) / 1000000.0);
+    } else if (bytes >= 1000ull) {
+        std::snprintf(buf, sizeof(buf), "%.0f KB", static_cast<double>(bytes) / 1000.0);
     } else {
         std::snprintf(buf, sizeof(buf), "%llu bytes", bytes);
     }
