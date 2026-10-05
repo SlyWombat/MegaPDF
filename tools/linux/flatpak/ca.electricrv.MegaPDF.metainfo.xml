@@ -249,6 +249,11 @@
        tag build is where that is enforced (#254 A3) rather than left to whoever
        remembers. -->
   <releases>
+    <!-- 2.2.1's date is the day the entry was written; make-release-tarball.sh
+         refuses a top entry older than 30 days or in the future, so re-date it to the
+         tag day if the tag comes later. A Linux-only point release (#664, #665): the
+         other platforms stay on 2.2.0 until they next ship. -->
+    <release version="2.2.1" date="2026-10-05"/>
     <!-- 2.2.0's date is the day the entry was written; make-release-tarball.sh
          refuses a top entry older than 30 days or in the future, so re-date it to the
          tag day if the tag comes later. This entry is deliberately self-closing, like

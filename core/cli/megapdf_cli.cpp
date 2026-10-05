@@ -65,7 +65,7 @@ namespace {
 // so nothing bumps this one automatically. It carries the app's version: the CLI is the
 // same core as the app on the same commit, and the tags that publish it
 // (windows-cli-v*, macos-cli-v*, linux-v*) are cut from the release commit.
-constexpr const char* kVersion = "megapdf-cli 2.2.0";
+constexpr const char* kVersion = "megapdf-cli 2.2.1";
 
 void PrintUsage(std::FILE* out) {
     std::fprintf(out,

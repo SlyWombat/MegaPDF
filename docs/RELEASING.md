@@ -38,7 +38,8 @@ per upload, whatever the name does.
 
 **Where a version lives.** The app reports it from six places; the release tooling reads
 it from five more; a twelfth, the Linux man page, ships to users but sits outside both
-groups and outside the verification grep below, which is exactly why it has gone stale.
+groups and outside the verification grep below, so nothing but someone remembering
+checks it.
 All twelve change in **one commit, alone**, titled `Version x.y.z
 everywhere` — the built artifacts are then checked against it in §2.3, and a bump mixed
 into a feature commit is what makes that check inconclusive.
@@ -56,6 +57,7 @@ into a feature commit is what makes that check inconclusive.
 | Linux metainfo | `tools/linux/flatpak/ca.electricrv.MegaPDF.metainfo.xml` | a new `<release version="x.y.z" date=…>` first; dated within 30 days of the tag or the tarball build refuses |
 | Linux packages | `tools/linux/PACKAGE-REVISION` | reset to `x.y.z 1` |
 | Linux page | `website/megapdf/linux/index.html` | every download link and `.deb` name; `deploy.py --linux` refuses if it disagrees with the repository |
+| CLI man page | `tools/linux/megapdf-cli.1` | the `.TH` line's `"MegaPDF x.y.z"` and its date — it ships inside the .deb and the tarball. Listed here only from 2.2.1; 2.1.1 and 2.2.0 both got it right (6a27aee) without the table asking, which is the kind of luck this row exists to replace |
 | Linux man page | `tools/linux/megapdf-cli.1` | the `.TH` line: `.TH MEGAPDF-CLI 1 "<date>" "MegaPDF x.y.z" "User Commands"` — ships in the .deb and tarball |
 
 `grep -rn '<old version>' --include='*.csproj' --include='*.yml' --include='*.kts' --include='*.cpp' --include='*.py' --include='*.ps1' --include='*.xml' --include='*.html' --include='*.1' src ios android core tools website` after the bump must find only history (release notes, metainfo's older entries).
