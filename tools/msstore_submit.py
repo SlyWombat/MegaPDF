@@ -44,7 +44,7 @@ APP_ID = "9PF4TRRH4M76"          # Store ID of "Mega PDF"
 TITLE = "Mega PDF"               # must match the name reserved in Partner Center
 API = "https://manage.devcenter.microsoft.com/v1.0/my"
 RESOURCE = "https://manage.devcenter.microsoft.com"
-VERSION = "2.2.0.0"
+VERSION = "2.2.1.0"
 REPO = Path(__file__).resolve().parent.parent
 
 # Partner Center listing language -> the screenshot set and the release-notes block
@@ -71,7 +71,7 @@ LOGO_SIZE = (300, 300)
 OWNED_IMAGE_TYPES = ("Screenshot", LOGO_TYPE)
 
 CERT_NOTES = (
-    "MegaPDF 2.2.0 is a local PDF editor: no account, no sign-in, no network use. "
+    "MegaPDF 2.2.1 is a local PDF editor: no account, no sign-in, no network use. "
     "To try it, open any PDF with the toolbar's Open button (Ctrl+O), or double-click a "
     ".pdf once MegaPDF is the default app. Open a second PDF and it appears as a tab in "
     "the same window (Ctrl+W closes a tab). Click text to edit it, click an empty square "
