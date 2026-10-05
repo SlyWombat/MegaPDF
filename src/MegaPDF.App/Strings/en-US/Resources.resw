@@ -562,6 +562,10 @@ Saved as {2} — ready to email.</value>
   <data name="ErrorNotAPdf" xml:space="preserve">
     <value>That file is not a PDF.</value>
   </data>
+  <data name="ErrorFileIncomplete" xml:space="preserve">
+    <value>That file looks incomplete. It may be a download that stopped before it finished.</value>
+    <comment>PdfLoadException MEGAPDF_OPEN_ERR_INCOMPLETE (#665)</comment>
+  </data>
   <data name="ErrorPasswordProtected" xml:space="preserve">
     <value>The file is password-protected.</value>
   </data>

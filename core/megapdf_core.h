@@ -157,6 +157,22 @@ MEGAPDF_API const char* megapdf_last_error_message(void);
 #define MEGAPDF_OPEN_ERR_TOO_LARGE 100u
 
 /**
+ * #665: the bytes are the beginning of a PDF, not something that is not a PDF. PDFium answers
+ * FPDF_ERR_FORMAT for both "this is not a PDF" and "this download stopped", which are
+ * different problems with different fixes — the second one's fix is to fetch the file again,
+ * and "the file is not a valid PDF" never suggests it.
+ *
+ * Reported in place of FPDF_ERR_FORMAT when a failed open's bytes carry a %PDF- header AND
+ * either a /Linearized dictionary whose own /L exceeds the file's length, or no %%EOF within
+ * the last 4 KiB. megapdf_last_error_message() then names both sizes, which is what makes it
+ * actionable: "1.0 MB present, the PDF's own index says 2.4 MB".
+ *
+ * A caller that does not care about the distinction can treat it exactly as FPDF_ERR_FORMAT;
+ * it is a strictly narrower answer, never returned where that one would not have been.
+ */
+#define MEGAPDF_OPEN_ERR_INCOMPLETE 102u
+
+/**
  * Opens a document from memory. The bytes are copied; the caller may free them
  * on return. `password_utf8` may be NULL. Returns NULL on failure, with
  * megapdf_last_error() carrying PDFium's code (FPDF_ERR_PASSWORD when one is

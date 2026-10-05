@@ -20,6 +20,9 @@ internal static class UserFacing
     {
         PdfLoadException { IsTooLargeError: true } => Strings.ErrorFileTooLarge,
         PdfLoadException { IsFileError: true } => Strings.ErrorFileUnreadable,
+        // #665 before IsFormatError: a cut-off download used to reach here as a format error
+        // and be told it was not a PDF, which sent the reader to the wrong fix.
+        PdfLoadException { IsIncompleteError: true } => Strings.ErrorFileIncomplete,
         PdfLoadException { IsFormatError: true } => Strings.ErrorNotAPdf,
         PdfLoadException { IsPasswordError: true } => Strings.ErrorPasswordProtected,
         // Not corrupt and not a wrong password: a handler PDFium cannot open (ADR-004 §8).

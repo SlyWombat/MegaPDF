@@ -164,6 +164,11 @@ no text on any requested page
 .B 7
 the output could not be written (\-\-out's file, or standard output)
 .TP
+.B 10
+the file is incomplete: it begins as a PDF but stops before its end, most often a
+download that was cut off (#665). Distinguished from exit 2 because the fix is to
+fetch the file again, not to repair it
+.TP
 .B 130
 interrupted (Ctrl+C)
 .PP

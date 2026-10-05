@@ -94,8 +94,8 @@ void PrintUsage(std::FILE* out) {
         "\n"
         "exit codes: 0 text written; 1 usage; 2 cannot open or read; 3 password required or\n"
         "wrong; 4 unsupported security handler; 5 no text on any requested page; 6 --strict\n"
-        "and some requested page had no text; 7 output could not be written; 130 interrupted\n"
-        "(Ctrl+C).\n"
+        "and some requested page had no text; 7 output could not be written; 10 the file is\n"
+        "incomplete, most likely a download that stopped early; 130 interrupted (Ctrl+C).\n"
         "\n"
         "usage: megapdf-cli pages <file.pdf> --out <path> [operations]\n"
         "\n"
@@ -114,7 +114,8 @@ void PrintUsage(std::FILE* out) {
         "  --out is written whole to a sibling temporary file, read back, and only then renamed\n"
         "  into place. Exit codes: 0 written; 1 usage; 2 cannot open; 3 password required or\n"
         "  wrong; 4 unsupported security handler; 7 --out could not be written; 8 the document's\n"
-        "  security does not allow the operation; 9 the engine refused it; 130 interrupted.\n");
+        "  security does not allow the operation; 9 the engine refused it; 10 the file is\n"
+        "  incomplete; 130 interrupted.\n");
 }
 
 // The password for <file.pdf>, from --password-file's first line or stdin's (never argv):
@@ -473,6 +474,7 @@ int RunExtract(int argc, char** argv) {
         cleanup();
         if (err == static_cast<unsigned int>(FPDF_ERR_PASSWORD)) return 3;
         if (err == static_cast<unsigned int>(FPDF_ERR_SECURITY)) return 4;
+        if (err == MEGAPDF_OPEN_ERR_INCOMPLETE) return 10;   // #665: a download that stopped early
         return 2;
     }
 
@@ -755,6 +757,7 @@ int RunPages(int argc, char** argv) {
         cleanup();
         if (err == static_cast<unsigned int>(FPDF_ERR_PASSWORD)) return 3;
         if (err == static_cast<unsigned int>(FPDF_ERR_SECURITY)) return 4;
+        if (err == MEGAPDF_OPEN_ERR_INCOMPLETE) return 10;   // #665, as for extract above
         return 2;
     }
     auto fail = [&](int code, const std::string& what) {

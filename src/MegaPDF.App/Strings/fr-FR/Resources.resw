@@ -520,6 +520,10 @@ Enregistrée sous {2}, prête pour l'e-mail.</value>
   <data name="ErrorNotAPdf" xml:space="preserve">
     <value>Ce fichier n'est pas un PDF.</value>
   </data>
+  <data name="ErrorFileIncomplete" xml:space="preserve">
+    <value>Ce fichier semble incomplet. Le téléchargement s'est peut-être arrêté avant la fin.</value>
+    <comment>FR-REVIEW #665 — PdfLoadException MEGAPDF_OPEN_ERR_INCOMPLETE. Deliberately free of ':' ';' '?' '!' so the fr-FR derivation has no non-breaking space to insert</comment>
+  </data>
   <data name="ErrorPasswordProtected" xml:space="preserve">
     <value>Le fichier est protégé par un mot de passe.</value>
   </data>

@@ -529,6 +529,51 @@ def gen_lists(regular, bold):
     return d.finish()
 
 
+def gen_symbol_bullets(regular, bold):
+    """#664: a list whose bullet glyph reads back as an ordinary letter.
+
+    The 257-page manual #664 reports draws all 576 of its bullets with a symbol face whose
+    ToUnicode maps the glyph to U+006C, lowercase L, so every list in it came out as prose.
+    What the engine sees of that is only the code point and the geometry -- it never looks at
+    the glyph -- so this fixture reproduces the same input the short way, by drawing the
+    letter itself. A second font whose ToUnicode lied about its glyphs would give the engine
+    byte-identical text and cost a font program to build.
+
+    No code point rule can resolve this ('l' is a letter, and a roman numeral), and measuring
+    the corpus killed the font-based rules too (see IsBulletCodepoint's comment). What is left
+    is repetition, so the fixture has to pin both sides of it:
+
+      page 1  five items marked "l", at one indent -- markers
+      page 2  ONE line beginning "l", and three beginning "A" at one indent -- not markers,
+              the first for want of repetition and the rest because "A" is a word
+
+    Page 2 is the regression half. A rule that fired on page 2 would turn the first word of
+    any line into a bullet.
+    """
+    d = Doc(regular, bold)
+    body = text_ops(b"F2", 16, 72, 740, "Getting Help")
+    body += text_ops(b"F1", 11, 72, 710, "Have this ready before you call:")
+    for i, item in enumerate(["Your phone number, address and company name.",
+                              "Machine model and serial number.",
+                              "The version of the software you are running.",
+                              "A description of what the machine was doing.",
+                              "Whether the fault repeats."]):
+        # Two spaces, as gen_lists uses, so the marker clears the gap test comfortably.
+        body += text_ops(b"F1", 11, 72, 685 - i * 18, "l  %s" % item)
+    d.add_page(body)
+
+    second = text_ops(b"F2", 16, 72, 740, "Not Markers")
+    # One "l" line and no other: a marker needs the page to repeat it.
+    second += text_ops(b"F1", 11, 72, 710, "l  A lone line like this one is prose, not a list.")
+    second += text_ops(b"F1", 11, 72, 680, "Three lines beginning with a real word follow.")
+    for i, item in enumerate(["bird flew past the window.",
+                              "second one followed it south.",
+                              "third stayed on the wire."]):
+        second += text_ops(b"F1", 11, 72, 655 - i * 18, "A  %s" % item)
+    d.add_page(second)
+    return d.finish()
+
+
 def gen_headings(regular, bold):
     d = Doc(regular, bold)
     body = text_ops(b"F2", 24, 72, 750, "Top Level Heading")
@@ -648,6 +693,7 @@ def main():
         ("columns.pdf", gen_columns),
         ("furniture.pdf", gen_furniture),
         ("lists.pdf", gen_lists),
+        ("symbol-bullets.pdf", gen_symbol_bullets),
         ("headings.pdf", gen_headings),
         ("tabular-headings.pdf", gen_tabular_headings),
         ("reading-order-jump.pdf", gen_reading_order_jump),
