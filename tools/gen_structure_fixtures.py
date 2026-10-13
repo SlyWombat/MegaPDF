@@ -671,6 +671,16 @@ def gen_scan(regular, bold):
     return d.finish()
 
 
+def gen_empty_page(regular, bold):
+    # #671: the counterpart to scan.pdf. A page with no text AND no image on it, so the writers
+    # can be held to telling the two apart: scan.pdf must name its picture, this must not claim
+    # one. Before #671 both produced "[Page 1 has no text layer]" byte for byte, and a caller
+    # could not tell a page it might OCR from a sheet with nothing on it.
+    d = Doc(regular, bold)
+    d.add_page(b"")
+    return d.finish()
+
+
 def gen_mixed(regular, bold):
     d = Doc(regular, bold)
     d.add_page(text_ops(b"F1", 14, 72, 700, "First page has text."))
@@ -699,6 +709,7 @@ def main():
         ("reading-order-jump.pdf", gen_reading_order_jump),
         ("xobject-text.pdf", gen_xobject_text),
         ("scan.pdf", gen_scan),
+        ("empty-page.pdf", gen_empty_page),
         ("mixed.pdf", gen_mixed),
         ("tagged.pdf", gen_tagged),
         ("tagged-wrong.pdf", gen_tagged_wrong),

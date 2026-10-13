@@ -49,10 +49,23 @@ where it does not, or with
 the structure is inferred from the layout of the page.
 .PP
 A page with no text layer (a scan, a photograph of a page) yields the placeholder
-.B [Page N has no text layer]
-in the output and, unless
+.B [Page N has no text layer: 1 image, 600 \(mu 400 px]
+in the output \(em naming what is on the page, or
+.B ": 3 images"
+when there is more than one, or nothing beyond
+.B "no text layer"
+for a page that is genuinely blank \(em and, unless
 .B \-\-quiet
 is given, a note on standard error. MegaPDF does not do OCR.
+.PP
+A picture on a page that also has text is written as
+.B [Image: 600 \(mu 400 px, 10.6 \(mu 7.1 cm]
+on its own line: the image's stored resolution and the size it occupies on the page. A
+figure in a tagged document that carries alt text is written as
+.B [Figure: alt]
+instead. Either way an export says that a picture was there, so an image-heavy document
+never extracts to something indistinguishable from a failure. No image files are written
+beside the output.
 .PP
 A password is never taken from the command line, where every process on the machine
 could read it. It comes from the first line of a file

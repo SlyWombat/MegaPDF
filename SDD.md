@@ -430,7 +430,13 @@ follow in the issues #142 tracks, with no change to this section.
 3. **Nothing is silently dropped.** A page with no characters at all is one `PAGE_IMAGE`
    block; text the heuristic cannot classify (rotated, overlapping) still becomes a trailing
    paragraph on its page, at a lower confidence, rather than vanishing. Furniture is dropped
-   by default and kept on request; nothing else is ever left out by default.
+   by default and kept on request; nothing else is ever left out by default. **A picture is
+   not text, but its absence is not nothing either** (#671): the writers describe a figure
+   they cannot name — `[Image: 600 × 400 px, 10.6 × 7.1 cm]` — and a textless page's note
+   says whether the page carries images or is genuinely blank, because an export a caller
+   cannot distinguish from a failed one is the one way this bar can be met on paper and
+   missed in practice. The structured form is `megapdf_block_image()`; writing the image
+   files themselves stays deferred, as §F8's non-goals below have it.
 4. **Confidence is the core's answer, not a guess left to the consumer.** Every page gets a
    0–100 score a caller can act on — #168 shows its reflow view only above a threshold chosen
    from the corpus census (#354); this amendment does not fix that threshold.

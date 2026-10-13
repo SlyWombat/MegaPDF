@@ -130,6 +130,57 @@ std::string AltTextLine(const U16& alt) {
     return out;
 }
 
+// #671: a length in points as centimetres to one decimal, formatted out of integer tenths
+// rather than through "%.1f". Nothing here calls setlocale, but a host application is free to,
+// and in a comma-decimal locale printf would write "10,6" into an export whose goldens are
+// compared byte for byte. Tenths are tenths everywhere.
+std::string CentimetresOneDecimal(double points) {
+    constexpr double kPointsPerCm = 72.0 / 2.54;   // megapdf_structure.cpp's own constant
+    long tenths = std::lround((points / kPointsPerCm) * 10.0);
+    if (tenths < 0) tenths = 0;
+    return std::to_string(tenths / 10) + "." + std::to_string(tenths % 10);
+}
+
+// #671: what an alt-less FIGURE block becomes. The point is that a caller is told a picture was
+// there and is given enough to act -- pixels and placed size together say whether OCR is worth
+// attempting and how prominent the thing is -- so the export is never silently missing content.
+// Pixels are omitted when PDFium would not report them rather than printed as "0 x 0 px".
+// Deliberately not CommonMark `![alt](path)`: no file is written beside the export, and a broken
+// image link reads worse than a sentence.
+std::string ImageNote(const megapdf_block& b, const megapdf_block_image_info& image) {
+    std::string note = "[Image: ";
+    if (image.pixel_width > 0 && image.pixel_height > 0) {
+        note += std::to_string(image.pixel_width) + " \xC3\x97 " + std::to_string(image.pixel_height) + " px, ";
+    }
+    note += CentimetresOneDecimal(b.bounds.right - b.bounds.left) + " \xC3\x97 " +
+            CentimetresOneDecimal(b.bounds.top - b.bounds.bottom) + " cm]";
+    return note;
+}
+
+// #671: a textless page's note, which now says whether the page was scanned or simply empty --
+// byte-identical output for those two was the whole complaint. No centimetres here: a page
+// image's placed size is the page's own, which the consumer already knows.
+std::string PageImageNote(const megapdf_block& b, const megapdf_block_image_info& image) {
+    std::string note = "[Page " + std::to_string(b.page + 1) + " has no text layer";
+    if (image.count == 1) {
+        note += ": 1 image";
+        if (image.pixel_width > 0 && image.pixel_height > 0) {
+            note += ", " + std::to_string(image.pixel_width) + " \xC3\x97 " + std::to_string(image.pixel_height) +
+                    " px";
+        }
+    } else if (image.count > 1) {
+        note += ": " + std::to_string(image.count) + " images";
+    }
+    note += "]";
+    return note;
+}
+
+megapdf_block_image_info BlockImage(const megapdf_structure* s, size_t index) {
+    megapdf_block_image_info image{};
+    megapdf_block_image(s, index, &image);
+    return image;
+}
+
 // See this file's header comment: recovers a line break only at a span boundary whose vertical
 // centres do not overlap (BuildLines'/megapdf_core.h's own half-the-taller-height rule).
 std::string RenderBlockText(const megapdf_structure* s, size_t index, bool keep_lines) {
@@ -756,15 +807,21 @@ MEGAPDF_API int megapdf_write_text(megapdf_document* document, int first_page, i
                         break;
                     }
                     case MEGAPDF_BLOCK_FIGURE: {
-                        // Alt text comes from a tagged page's /Figure (#358); a heuristic
-                        // page's figure has none and is skipped rather than printed empty.
+                        // Alt text comes from a tagged page's /Figure (#358) and is the best
+                        // thing to say when it exists. #671: a figure without it is no longer
+                        // dropped -- it becomes a note about the picture itself.
                         const std::string alt = AltTextLine(BlockString(s, bi, MEGAPDF_BLOCK_ALT));
-                        if (alt.empty()) { skip = true; break; }
-                        line = "*[Figure: " + EscapePlainMd(alt) + "]*";
+                        if (!alt.empty()) {
+                            line = "*[Figure: " + EscapePlainMd(alt) + "]*";
+                            break;
+                        }
+                        const megapdf_block_image_info image = BlockImage(s, bi);
+                        if (image.count == 0) { skip = true; break; }
+                        line = "*" + ImageNote(b, image) + "*";
                         break;
                     }
                     case MEGAPDF_BLOCK_PAGE_IMAGE:
-                        line = "*[Page " + std::to_string(b.page + 1) + " has no text layer]*";
+                        line = "*" + PageImageNote(b, BlockImage(s, bi)) + "*";
                         break;
                     default:
                         skip = true;
@@ -798,18 +855,22 @@ MEGAPDF_API int megapdf_write_text(megapdf_document* document, int first_page, i
                         break;
                     }
                     case MEGAPDF_BLOCK_FIGURE: {
-                        // Alt text comes from a tagged page's /Figure (#358); a heuristic
-                        // page's figure has none and is skipped rather than printed empty.
-                        // "[Figure: alt]", the same bracketed shape as the PAGE_IMAGE note, so a
-                        // reader (or tools/structure-check's fidelity measure) can tell the
-                        // tree's description of a picture from text that was on the page.
+                        // Alt text comes from a tagged page's /Figure (#358). "[Figure: alt]",
+                        // the same bracketed shape as the PAGE_IMAGE and #671 [Image: ...] notes,
+                        // so a reader (or tools/structure-check's fidelity measure) can tell a
+                        // description of a picture from text that was on the page.
                         const std::string alt = AltTextLine(BlockString(s, bi, MEGAPDF_BLOCK_ALT));
-                        if (alt.empty()) { skip = true; break; }
-                        line = "[Figure: " + alt + "]";
+                        if (!alt.empty()) {
+                            line = "[Figure: " + alt + "]";
+                            break;
+                        }
+                        const megapdf_block_image_info image = BlockImage(s, bi);
+                        if (image.count == 0) { skip = true; break; }
+                        line = ImageNote(b, image);
                         break;
                     }
                     case MEGAPDF_BLOCK_PAGE_IMAGE:
-                        line = "[Page " + std::to_string(b.page + 1) + " has no text layer]";
+                        line = PageImageNote(b, BlockImage(s, bi));
                         break;
                     default:
                         skip = true;

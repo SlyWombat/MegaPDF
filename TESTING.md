@@ -1820,6 +1820,57 @@ issue filed from this run; no regression found. This is the §2.2 release gate a
 actual 2.2.0 release commit, and it is green except for the two conditions #498 and #445
 already carry outside milestone 2.2.
 
+### Fourteenth run, 2026-10-13: #671's image notes, structure + markdown batteries, private corpus, `wip/671-image-notes`
+
+**Scope: not a release gate.** A targeted run for one change — #671, which makes the text and
+Markdown writers describe a picture instead of dropping it. Two batteries over one corpus
+(`/mnt/pdf-test` on GPD-DAVE, the same private corpus `~/pdf-test` names on k3), sampled at
+`--limit 400` of 4,158 documents, not all four corpora in full: the question this run answers
+is narrow and it is a local verification of one PR, not the §2.2 arithmetic. Built in the
+worktree against the committed `libs/pdfium/linux-x64` prebuilt (32 patches, per the configure
+log), `-DCMAKE_BUILD_TYPE=Release`.
+
+**What was at risk, and why a battery was the right instrument.** `tools/structure-check`
+strips the writers' synthesised notes before tokenizing, so that a statement *about* a picture
+is never counted as invented page text. #671 both reworded the `PAGE_IMAGE` note and added an
+`[Image: ...]` line, so the strip rules had to change with it. Measured, with the *pre-change*
+oracle built from `HEAD` against the *post-change* output: `cli_fid_a` rises from 41 to 50
+tokens on `tiny-font-size.pdf` (F1 ≈ 0.90) and from 0 to 11 on `scan.pdf` (F1 = 0). The gate
+really would have failed on essentially every document containing an image, so this is the
+measurement, not the worry.
+
+**Structure battery** — 401 documents, 2,852 pages, 939 tagged, 225 textless, 82s:
+
+| measure | result | gate |
+|---|---|---|
+| aggregate F1 (internal API) | 0.998540 | >= 0.998 — pass |
+| aggregate F1 (through `megapdf-cli`) | 0.998540 | >= 0.998 — pass |
+| order tau median (835 tagged pages) | 0.966 | >= 0.9 — pass |
+| crashes / hangs | 0 / 0 | 0 — pass |
+| CLI bad exit codes | 0 | 0 — pass |
+| pages F1 < 0.9 | 3 | not a gate |
+
+**The two F1 numbers being equal to six decimal places is the result,** not a coincidence worth
+glossing: the internal measure reads `megapdf_block_string()` and never sees a synthesised note,
+while the CLI measure reads the bytes the writer actually produced. Equality means #671's new
+notes contributed exactly zero tokens to the fidelity measure — which is the whole property the
+strip rules exist to maintain, stated as a number rather than as an assertion that the code
+looks right.
+
+**Markdown battery** — 400 documents, 30s: 330 extracted (exit 0), 70 no-text-on-any-page
+(exit 5), 0 crashes, 0 hangs, 0 `cmark` parse failures, 0 `cmark` timeouts, 0 out-of-contract
+exit codes. All gates pass. The 70 exit-5 documents matter beyond the count: `megapdf-cli`
+derives that exit code by scanning its own written output for the `PAGE_IMAGE` note, so before
+the matching fix those 70 would have come back exit 0 with no stderr note at all. Found by
+running the binary — nothing in the test suite or the type system catches it.
+
+**Not run, and why:** the public, Canadian and UN corpora, and the pages and redaction
+batteries. #671 touches only the two writers, the figure/page-image block fields and the
+fidelity oracle's strip rules; the pages and redaction batteries exercise neither, and the
+per-corpus structure/markdown verdicts are the §2.2 release gate's arithmetic rather than this
+change's. A full four-corpus run belongs to the next release gate, where the #498 public-corpus
+condition is also tracked.
+
 ## Reporting
 
 For each issue: what you clicked, what you expected, what happened, and the PDF
