@@ -67,7 +67,21 @@ jobs:
         run: |
           # cmark (#357): the CommonMark oracle for the Markdown writer's round-trip test,
           # Linux-only per design §3 ("A CommonMark round trip on the Linux leg").
-          if [ "$RUNNER_OS" = "Linux" ]; then sudo apt-get install -y -qq ninja-build qpdf poppler-utils cmark; else brew install ninja; fi
+          #
+          # `apt-get update` first, and not for tidiness: the runner image ships an apt index
+          # pinned to the package revisions that existed when the image was built, so as soon
+          # as Ubuntu supersedes one of these, `install` resolves a version the mirror has
+          # already dropped and 404s. That is what happened on 2026-10-13 --
+          # "Failed to fetch .../poppler-utils_24.02.0-1ubuntu9.9_amd64.deb 404 Not Found" --
+          # reddening every PR on a job that had been green since 10-05, with no code change
+          # anywhere near it. An install step with no update before it is a time bomb on a
+          # schedule nobody here controls.
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq ninja-build qpdf poppler-utils cmark
+          else
+            brew install ninja
+          fi
 
       - name: Fetch the pinned PDFium prebuilt
         if: matrix.fetch != ''

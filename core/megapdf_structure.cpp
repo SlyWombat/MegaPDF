@@ -1482,6 +1482,7 @@ struct BlockImpl {
     U16 text;
     U16 marker;
     U16 alt;
+    megapdf_block_image_info image{};   // #671: FIGURE/PAGE_IMAGE only; zero for every other kind
     std::vector<SpanImpl> spans;
     // Bookkeeping for the whole-range passes below; not part of the public surface.
     double heading_size = 0;
@@ -2084,26 +2085,67 @@ bool BuildLeftoverParagraph(const PageWork& pw, int page_index, BlockImpl* out) 
     return true;
 }
 
+// #671: an image object's stored resolution, for a consumer that has to describe a picture it
+// is not going to show. 0x0 when PDFium will not say -- the caller then omits it rather than
+// printing a confident "0 x 0 px".
+void ReadImagePixelSize(FPDF_PAGEOBJECT obj, megapdf_block_image_info* out) {
+    unsigned int w = 0, h = 0;
+    if (obj == nullptr || !FPDFImageObj_GetImagePixelSize(obj, &w, &h)) return;
+    out->pixel_width = static_cast<int>(w);
+    out->pixel_height = static_cast<int>(h);
+}
+
+// True when an image object's placed size meets design §1.2's figure rule. `bounds` is already
+// in the layout frame.
+bool IsFigureSized(const megapdf_rect& bounds) {
+    const double w_cm = (bounds.right - bounds.left) / kPointsPerCm;
+    const double h_cm = (bounds.top - bounds.bottom) / kPointsPerCm;
+    return w_cm * h_cm >= kFigureMinAreaCm2;
+}
+
 // design §1.2 "Figures": image page objects with an area >= 1 cm^2.
 std::vector<BlockImpl> BuildFigures(const megapdf_page* page, int page_index, const PageFrame& frame) {
     std::vector<BlockImpl> figures;
+    FPDF_PAGE raw = PageHandle(page);
     const int count = megapdf_page_object_count(page);
     for (int i = 0; i < count; i++) {
         if (megapdf_object_type(page, i) != 3 /* FPDF_PAGEOBJ_IMAGE */) continue;
         megapdf_rect bounds{};
         if (megapdf_object_bounds(page, i, &bounds) != MEGAPDF_OK) continue;
         bounds = ToLayoutRect(frame, bounds);   // #472: reported turned, laid out in the text's frame
-        const double w_cm = (bounds.right - bounds.left) / kPointsPerCm;
-        const double h_cm = (bounds.top - bounds.bottom) / kPointsPerCm;
-        if (w_cm * h_cm < kFigureMinAreaCm2) continue;
+        if (!IsFigureSized(bounds)) continue;
         BlockImpl b;
         b.info.kind = MEGAPDF_BLOCK_FIGURE;
         b.info.page = page_index;
         b.info.bounds = bounds;
         b.info.object_index = i;
+        b.image.count = 1;
+        ReadImagePixelSize(FPDFPage_GetObject(raw, i), &b.image);
         figures.push_back(std::move(b));
     }
     return figures;
+}
+
+// #671: what a textless page's lone PAGE_IMAGE block says it stands for. A scanned page and a
+// genuinely empty one both reach BuildPageContent's no-text branch and used to produce the same
+// "[Page N has no text layer]" byte for byte, which is the one thing a caller cannot act on.
+// Counts by the same figure size rule, so a page carrying nothing but a hairline rule or a
+// 4 mm icon still reads as empty rather than as a picture.
+megapdf_block_image_info SummarisePageImages(const megapdf_page* page, const PageFrame& frame) {
+    megapdf_block_image_info out{};
+    FPDF_PAGE raw = PageHandle(page);
+    const int count = megapdf_page_object_count(page);
+    int only = -1;
+    for (int i = 0; i < count; i++) {
+        if (megapdf_object_type(page, i) != 3 /* FPDF_PAGEOBJ_IMAGE */) continue;
+        megapdf_rect bounds{};
+        if (megapdf_object_bounds(page, i, &bounds) != MEGAPDF_OK) continue;
+        if (!IsFigureSized(ToLayoutRect(frame, bounds))) continue;
+        only = out.count == 0 ? i : -1;   // a resolution to report only while there is one image
+        out.count++;
+    }
+    if (only >= 0) ReadImagePixelSize(FPDFPage_GetObject(raw, only), &out);
+    return out;
 }
 
 // design §1 item 7: form fields are blocks (kind FIELD), from the existing
@@ -2236,6 +2278,7 @@ PageResult BuildPageContent(const megapdf_page* page, PageWork* pw, int page_ind
         b.info.bounds = megapdf_rect{0, 0, pw->width, pw->height};
         b.info.object_index = -1;
         b.info.confidence = 100;
+        b.image = SummarisePageImages(page, pw->frame);   // #671
         result.blocks.push_back(std::move(b));
         result.confidence = 100;
         return result;
@@ -2680,14 +2723,14 @@ TaggedImages ReadTaggedImages(const megapdf_page* page, int page_index, const Pa
             continue;
         }
         if (marks.artifact) continue;
-        const double w_cm = (bounds.right - bounds.left) / kPointsPerCm;
-        const double h_cm = (bounds.top - bounds.bottom) / kPointsPerCm;
-        if (w_cm * h_cm < kFigureMinAreaCm2) continue;
+        if (!IsFigureSized(bounds)) continue;
         BlockImpl b;
         b.info.kind = MEGAPDF_BLOCK_FIGURE;
         b.info.page = page_index;
         b.info.bounds = bounds;
         b.info.object_index = i;
+        b.image.count = 1;
+        ReadImagePixelSize(obj, &b.image);   // #671
         out.unclaimed.push_back(std::move(b));
     }
     return out;
@@ -2825,6 +2868,13 @@ bool BuildTaggedPage(const megapdf_page* page, PageWork* pw, int page_index, uns
                     b.info.bounds = it->second.second;
                     placed = true;
                     break;
+                }
+                // #671: only a /Figure that really resolved to an image object can be described
+                // as one. A /Figure over vector art, or one wrapping only text, keeps count 0 --
+                // the writer has nothing true to say about it and leaves it out as before.
+                if (placed) {
+                    b.image.count = 1;
+                    ReadImagePixelSize(FPDFPage_GetObject(PageHandle(page), b.info.object_index), &b.image);
                 }
                 const std::vector<int> idx = CharsOfMcids(chars_by_mcid, u.mcids);
                 BlockImpl text;
@@ -3149,6 +3199,12 @@ MEGAPDF_API size_t megapdf_block_string(const megapdf_structure* s, size_t index
         for (size_t i = 0; i < n; i++) out[i] = (*str)[i];
     }
     return str->size();
+}
+
+MEGAPDF_API int megapdf_block_image(const megapdf_structure* s, size_t index, megapdf_block_image_info* out) {
+    if (s == nullptr || out == nullptr || index >= s->blocks.size()) return MEGAPDF_ERR_ARGUMENT;
+    *out = s->blocks[index].image;
+    return MEGAPDF_OK;
 }
 
 MEGAPDF_API size_t megapdf_block_span_count(const megapdf_structure* s, size_t index) {

@@ -724,17 +724,31 @@ int RunCheck(const Options& opt) {
     // an "invented" mismatch against the raw side's correctly-empty token set.
     // #358: likewise a tagged page's "[Figure: alt]" line -- the tree's description of a
     // picture, not text on the page (the writer keeps it on one line, so the whole line goes).
+    // #671: the PAGE_IMAGE placeholder grew an optional ": 1 image, 600 x 400 px" tail, so it is
+    // matched to its closing bracket rather than to one fixed suffix, and an alt-less figure now
+    // writes an "[Image: ...]" line that goes the same way "[Figure: ...]" does. Every one of
+    // these is a statement ABOUT a picture, never text that was on the page: leaving any of them
+    // in costs the whole markdown battery its F1 >= 0.998 gate on every document containing an
+    // image, which is most of them.
     auto strip_page_image_placeholder = [](std::string text) {
         const std::string prefix = "[Page ";
-        const std::string suffix = " has no text layer]";
+        const std::string note = " has no text layer";
         for (size_t at = text.find(prefix); at != std::string::npos; at = text.find(prefix, at)) {
             size_t digits_end = at + prefix.size();
             while (digits_end < text.size() && text[digits_end] >= '0' && text[digits_end] <= '9') digits_end++;
-            if (digits_end == at + prefix.size() || text.compare(digits_end, suffix.size(), suffix) != 0) {
+            const size_t line_end = text.find('\n', at);
+            size_t close = std::string::npos;
+            if (digits_end > at + prefix.size() && text.compare(digits_end, note.size(), note) == 0) {
+                close = text.find(']', digits_end + note.size());
+                if (close != std::string::npos && line_end != std::string::npos && close > line_end) {
+                    close = std::string::npos;
+                }
+            }
+            if (close == std::string::npos) {
                 at += prefix.size();
                 continue;
             }
-            text.erase(at, digits_end + suffix.size() - at);
+            text.erase(at, close + 1 - at);
         }
         std::string kept;
         size_t start = 0;
@@ -743,7 +757,8 @@ int RunCheck(const Options& opt) {
             if (end == std::string::npos) end = text.size();
             const std::string line = text.substr(start, end - start);
             const bool figure = line.size() >= 10 && line.compare(0, 9, "[Figure: ") == 0 && line.back() == ']';
-            if (!figure) {
+            const bool image = line.size() >= 9 && line.compare(0, 8, "[Image: ") == 0 && line.back() == ']';
+            if (!figure && !image) {
                 kept += line;
                 kept += '\n';
             }

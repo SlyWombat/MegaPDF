@@ -262,22 +262,39 @@ struct CliOptions {
     bool quiet = false;
 };
 
-// Finds every "[Page N has no text layer]" placeholder megapdf_write_text() wrote (its own
+// Finds every "[Page N has no text layer...]" placeholder megapdf_write_text() wrote (its own
 // PAGE_IMAGE formatting, megapdf_write_text.cpp) and returns the page numbers, in the order
 // they appear (which is reading order, so already ascending). This is how this file learns
 // which requested pages had no text layer -- see the header comment for why it reads the
 // actual written text rather than asking contract 9 again.
+//
+// #671 added an optional tail to that placeholder ("[Page 4 has no text layer: 1 image,
+// 600 x 400 px]"), so the match runs to the closing bracket instead of requiring one fixed
+// suffix. This is the trap the shape of this file sets: because the exit code is read back out
+// of the written text, a change to the writer's wording silently turns exit 5 into exit 0 and
+// drops every per-page stderr note. Found by running the binary, not by reading it. Anyone
+// touching PageImageNote() must come back here. The bracket is searched for within the
+// placeholder's own line, so a stray "[Page " in the document's text cannot swallow the rest of
+// the output.
 std::vector<int> FindTextlessPagesInOutput(const std::string& text) {
     std::vector<int> out;
     const std::string prefix = "[Page ";
-    const std::string suffix = " has no text layer]";
+    const std::string note = " has no text layer";
     for (size_t at = text.find(prefix); at != std::string::npos;) {
         const size_t digits_start = at + prefix.size();
         size_t digits_end = digits_start;
         while (digits_end < text.size() && text[digits_end] >= '0' && text[digits_end] <= '9') digits_end++;
-        if (digits_end > digits_start && text.compare(digits_end, suffix.size(), suffix) == 0) {
+        size_t close = std::string::npos;
+        if (digits_end > digits_start && text.compare(digits_end, note.size(), note) == 0) {
+            const size_t line_end = text.find('\n', digits_end);
+            close = text.find(']', digits_end + note.size());
+            if (close != std::string::npos && line_end != std::string::npos && close > line_end) {
+                close = std::string::npos;
+            }
+        }
+        if (close != std::string::npos) {
             out.push_back(ParseDigits(text.substr(digits_start, digits_end - digits_start)));
-            at = text.find(prefix, digits_end + suffix.size());
+            at = text.find(prefix, close + 1);
         } else {
             at = text.find(prefix, digits_start);
         }

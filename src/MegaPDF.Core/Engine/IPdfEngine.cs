@@ -181,14 +181,19 @@ public interface IPdfDocument : IDisposable
     /// One-way: this is a text export, not an alternate save format (#386) — see
     /// <see cref="DocumentWriteOptions"/> for what "the app UI would want" means here versus the
     /// CLI's own scripting-flag defaults. Returns the count of pages in the range that had a text
-    /// layer (a page with none becomes a single "[Page N has no text layer]" line).
+    /// layer (a page with none becomes a single "[Page N has no text layer: 1 image, 600 x 400 px]"
+    /// line, which names what is on the page, or says nothing beyond "no text layer" when the page
+    /// really is blank — #671).
     /// </summary>
     int WriteText(Stream target, int firstPage = 0, int? pageCount = null, DocumentWriteOptions? options = null);
 
     /// <summary>
     /// <see cref="WriteText"/>, as CommonMark (#357) — the format #386's Save As/Save a copy
     /// actually needs. Headings, list items and form fields become Markdown syntax; spans render
-    /// as bold/italic/monospace. Same one-way-export caveat as <see cref="WriteText"/>.
+    /// as bold/italic/monospace. A picture is described rather than dropped — "*[Figure: alt]*" in
+    /// a tagged document, "*[Image: 600 x 400 px, 10.6 x 7.1 cm]*" otherwise (#671) — so an
+    /// image-heavy document never exports to something a caller reads as a failure. No image files
+    /// are written beside the output. Same one-way-export caveat as <see cref="WriteText"/>.
     /// </summary>
     int WriteMarkdown(Stream target, int firstPage = 0, int? pageCount = null, DocumentWriteOptions? options = null);
 

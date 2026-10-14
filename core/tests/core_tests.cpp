@@ -6625,6 +6625,8 @@ void test_structure_goldens(const std::string& fixtures, const std::string& sche
         {"reading-order-jump", repo + "/structure/reading-order-jump.pdf", 0, 0, 0},
         {"xobject-text", repo + "/structure/xobject-text.pdf", 0, 0, 0},
         {"scan", repo + "/structure/scan.pdf", 0, 0, 0},
+        // #671: a page with nothing on it at all, next to scan.pdf's all-image page.
+        {"empty-page", repo + "/structure/empty-page.pdf", 0, 0, 0},
         {"mixed", repo + "/structure/mixed.pdf", 0, 0, 0},
         // #358: the tagged path's two fixtures (gen_tagged()/gen_tagged_wrong()'s comments have
         // the shapes), each dumped both ways -- the default load (tree trusted on tagged.pdf,
@@ -7091,6 +7093,7 @@ void test_structure_no_stray_control_characters(const std::string& fixtures, con
         {"reading-order-jump", repo + "/structure/reading-order-jump.pdf", 0},
         {"xobject-text", repo + "/structure/xobject-text.pdf", 0},
         {"scan", repo + "/structure/scan.pdf", 0},
+        {"empty-page", repo + "/structure/empty-page.pdf", 0},   // #671
         {"mixed", repo + "/structure/mixed.pdf", 0},
         {"tagged", repo + "/structure/tagged.pdf", MEGAPDF_STRUCTURE_KEEP_FURNITURE},
         {"tagged-wrong", repo + "/structure/tagged-wrong.pdf", MEGAPDF_STRUCTURE_KEEP_FURNITURE},
@@ -7207,14 +7210,21 @@ void test_structure_tagged(const std::string& repo) {
 
     // The figure: alt text from the tree, the image object found through its marked-content ID.
     bool figure_ok = false;
+    bool figure_image_ok = false;
     for (size_t i = 0; i < n; i++) {
         megapdf_block b{};
         megapdf_block_get(s, i, &b);
         if (b.kind != MEGAPDF_BLOCK_FIGURE) continue;
         figure_ok = b.page == 1 && b.object_index >= 0 &&
                     block_text_ascii(s, i, MEGAPDF_BLOCK_ALT) == "A grey square standing in for a chart";
+        // #671: a tagged /Figure that resolved to a real image object can describe it, even
+        // though this one has /Alt and so will be rendered from that instead.
+        megapdf_block_image_info image{};
+        figure_image_ok = megapdf_block_image(s, i, &image) == MEGAPDF_OK && image.count == 1 &&
+                          image.pixel_width > 0 && image.pixel_height > 0;
     }
     check(figure_ok, "structure tagged: the /Figure is a FIGURE block with its /Alt text and its image object");
+    check(figure_image_ok, "structure tagged: #671 the /Figure's image reports count 1 and a pixel size");
 
     // The link: a span under /Link carries SPAN_LINK, and the paragraph around it is whole.
     const long link_para = find_block(s, 1, MEGAPDF_BLOCK_PARAGRAPH, "See the");
@@ -7698,6 +7708,7 @@ void test_write_text_goldens(const std::string& repo, const std::string& expecte
         {"symbol-bullets", repo + "/structure/symbol-bullets.pdf"},
         {"tabular-headings", repo + "/structure/tabular-headings.pdf"},
         {"xobject-text", repo + "/structure/xobject-text.pdf"}, {"scan", repo + "/structure/scan.pdf"},
+        {"empty-page", repo + "/structure/empty-page.pdf"},   // #671, next to scan.pdf
         {"mixed", repo + "/structure/mixed.pdf"},
         // #358 / #382 (test_structure_goldens' comment on these three).
         {"tagged", repo + "/structure/tagged.pdf"},        {"tagged-wrong", repo + "/structure/tagged-wrong.pdf"},
@@ -7756,12 +7767,114 @@ void test_write_markdown_goldens(const std::string& repo, const std::string& exp
         {"symbol-bullets", repo + "/structure/symbol-bullets.pdf"},
         {"tabular-headings", repo + "/structure/tabular-headings.pdf"},
         {"xobject-text", repo + "/structure/xobject-text.pdf"}, {"scan", repo + "/structure/scan.pdf"},
+        {"empty-page", repo + "/structure/empty-page.pdf"},   // #671, next to scan.pdf
         {"mixed", repo + "/structure/mixed.pdf"},
         // #358 / #382 (test_structure_goldens' comment on these three).
         {"tagged", repo + "/structure/tagged.pdf"},        {"tagged-wrong", repo + "/structure/tagged-wrong.pdf"},
         {"tiny-font-size", repo + "/structure/tiny-font-size.pdf"},
     };
     for (const Case& c : cases) test_write_markdown_golden(c.name, c.path, expected_dir);
+}
+
+// --------------------------------------------------------------------------
+// #671: an export must say that a picture was there. Before this, an alt-less figure was
+// dropped from both writers entirely -- a page reading "as the chart below shows" exported with
+// no chart and no mention of one -- and a scanned page's note was byte-identical to a blank
+// page's, so a caller could not tell "you may want to OCR this" from "there is nothing here".
+// The goldens above pin the exact bytes; this pins the properties, so a future rewording still
+// has to keep saying the things a caller acts on.
+// --------------------------------------------------------------------------
+
+std::string write_one(const std::string& path, int format) {
+    Doc d(path);
+    if (d.doc == nullptr) return std::string();
+    megapdf_write_options opt{};
+    opt.page_break = MEGAPDF_PAGE_BREAK_NONE;
+    TextSink sink;
+    const int rc = megapdf_write_text(d.doc, 0, megapdf_page_count(d.doc), format, &opt, write_to_text_sink, &sink,
+                                      nullptr);
+    return rc < 0 ? std::string() : sink.text;
+}
+
+void test_image_notes(const std::string& repo) {
+    // A figure on a page that also has text: named, with both the stored resolution and the
+    // size it occupies, in both formats. tiny-font-size.pdf is an all-page image under an
+    // invisible OCR text layer, so the page has text AND a figure -- exactly the shape that
+    // used to lose the picture.
+    const std::string md = write_one(repo + "/structure/tiny-font-size.pdf", MEGAPDF_WRITE_MARKDOWN);
+    const std::string txt = write_one(repo + "/structure/tiny-font-size.pdf", MEGAPDF_WRITE_TEXT);
+    check(md.find("*[Image: 2 \xC3\x97 2 px, 16.5 \xC3\x97 10.6 cm]*") != std::string::npos,
+          "#671 figure note: Markdown names the picture, its pixels and its placed size", md);
+    check(txt.find("[Image: 2 \xC3\x97 2 px, 16.5 \xC3\x97 10.6 cm]") != std::string::npos &&
+              txt.find("*[Image") == std::string::npos,
+          "#671 figure note: the text format writes the same note without the emphasis", txt);
+
+    // A textless page says whether it was scanned or simply empty. These two notes differing is
+    // the whole point: they were the same bytes before.
+    const std::string scan = write_one(repo + "/structure/scan.pdf", MEGAPDF_WRITE_TEXT);
+    const std::string empty = write_one(repo + "/structure/empty-page.pdf", MEGAPDF_WRITE_TEXT);
+    check(scan.find("[Page 1 has no text layer: 1 image, 2 \xC3\x97 2 px]") != std::string::npos,
+          "#671 page-image note: an all-image page names the image it has", scan);
+    check(empty.find("[Page 1 has no text layer]") != std::string::npos,
+          "#671 page-image note: a page with nothing on it claims no image", empty);
+    check(scan != empty, "#671 page-image note: a scanned page and a blank page no longer export alike");
+
+    // megapdf_block_image() itself, which is where a platform consumer would read this rather
+    // than by parsing the writer's prose.
+    struct Case {
+        const char* name;
+        std::string path;
+        int kind;
+        int count;
+        bool want_pixels;
+    };
+    const Case cases[] = {
+        {"scan", repo + "/structure/scan.pdf", MEGAPDF_BLOCK_PAGE_IMAGE, 1, true},
+        {"empty-page", repo + "/structure/empty-page.pdf", MEGAPDF_BLOCK_PAGE_IMAGE, 0, false},
+        {"tiny-font-size", repo + "/structure/tiny-font-size.pdf", MEGAPDF_BLOCK_FIGURE, 1, true},
+    };
+    for (const Case& c : cases) {
+        Doc d(c.path);
+        check(d.doc != nullptr, std::string("#671 block_image ") + c.name + ": document opens", c.path);
+        if (d.doc == nullptr) continue;
+        megapdf_structure* s = megapdf_structure_load(d.doc, 0, megapdf_page_count(d.doc), 0, nullptr);
+        check(s != nullptr, std::string("#671 block_image ") + c.name + ": structure loads");
+        if (s == nullptr) continue;
+        bool found = false;
+        const size_t n = megapdf_block_count(s);
+        for (size_t i = 0; i < n && !found; i++) {
+            megapdf_block b{};
+            if (megapdf_block_get(s, i, &b) != MEGAPDF_OK || b.kind != c.kind) continue;
+            found = true;
+            megapdf_block_image_info image{};
+            check(megapdf_block_image(s, i, &image) == MEGAPDF_OK,
+                  std::string("#671 block_image ") + c.name + ": the accessor answers");
+            check(image.count == c.count, std::string("#671 block_image ") + c.name + ": image count",
+                  std::to_string(image.count));
+            check((image.pixel_width > 0 && image.pixel_height > 0) == c.want_pixels,
+                  std::string("#671 block_image ") + c.name + ": a stored resolution exactly when there is one image",
+                  std::to_string(image.pixel_width) + "x" + std::to_string(image.pixel_height));
+        }
+        check(found, std::string("#671 block_image ") + c.name + ": the expected block kind is present");
+        // A kind with no picture in it must answer zeroes rather than leak another block's.
+        for (size_t i = 0; i < n; i++) {
+            megapdf_block b{};
+            if (megapdf_block_get(s, i, &b) != MEGAPDF_OK) continue;
+            if (b.kind == MEGAPDF_BLOCK_FIGURE || b.kind == MEGAPDF_BLOCK_PAGE_IMAGE) continue;
+            megapdf_block_image_info image{};
+            megapdf_block_image(s, i, &image);
+            if (image.count != 0 || image.pixel_width != 0 || image.pixel_height != 0) {
+                check(false, std::string("#671 block_image ") + c.name + ": a non-picture block answers zeroes",
+                      std::to_string(b.kind));
+                break;
+            }
+        }
+        megapdf_structure_free(s);
+    }
+
+    megapdf_block_image_info image{};
+    check(megapdf_block_image(nullptr, 0, &image) == MEGAPDF_ERR_ARGUMENT,
+          "#671 block_image: a NULL handle is MEGAPDF_ERR_ARGUMENT");
 }
 
 // design §2 bar 2 / the issue's own acceptance criterion, restated for the writer's actual
@@ -7968,6 +8081,7 @@ void test_markdown_round_trips(const std::string& repo, const std::string& expec
         {"symbol-bullets", repo + "/structure/symbol-bullets.pdf"},
         {"tabular-headings", repo + "/structure/tabular-headings.pdf"},
         {"xobject-text", repo + "/structure/xobject-text.pdf"}, {"scan", repo + "/structure/scan.pdf"},
+        {"empty-page", repo + "/structure/empty-page.pdf"},   // #671, next to scan.pdf
         {"mixed", repo + "/structure/mixed.pdf"},
         // #358 / #382 (test_structure_goldens' comment on these three).
         {"tagged", repo + "/structure/tagged.pdf"},        {"tagged-wrong", repo + "/structure/tagged-wrong.pdf"},
@@ -8178,6 +8292,24 @@ void test_cli_scan_mixed(const std::string& repo, const std::string& cli_path) {
     CliResult mixed_strict = run_cli(cli_path, {"extract", repo + "/structure/mixed.pdf", "--strict"});
     check(mixed_strict.exit_code == 6, "cli scan/mixed: mixed.pdf exits 6 with --strict",
           std::to_string(mixed_strict.exit_code));
+
+    // #671: this file's exit code and its per-page notes are read back out of the text the
+    // writer produced (see megapdf_cli.cpp's header comment on why), so a change to the wording
+    // of the PAGE_IMAGE placeholder silently turns exit 5 into exit 0 and drops every stderr
+    // note. That is exactly what #671's first cut did, and nothing failed until the binary was
+    // run. The checks above pass for scan.pdf's note; these pin the two tails it can now carry.
+    CliResult empty_page = run_cli(cli_path, {"extract", repo + "/structure/empty-page.pdf"});
+    check(empty_page.exit_code == 5, "cli scan/mixed: #671 a blank page still exits 5",
+          std::to_string(empty_page.exit_code));
+    check(empty_page.err.find("no text layer on 1 of 1 pages") != std::string::npos,
+          "cli scan/mixed: #671 a blank page still prints the per-run stderr note", empty_page.err);
+    check(scan.err.find("page 1: no text layer") != std::string::npos,
+          "cli scan/mixed: #671 an image-naming note still produces the per-page note", scan.err);
+    // mixed.pdf's page 2 is the image-naming form, and it is page 2 of 3: the note has to be
+    // located, and its page number read out of it, for either of these to be right. (scan.pdf
+    // cannot test --strict: every page of it is textless, so exit 5 outranks --strict's 6.)
+    check(mixed.err.find("page 2: no text layer") != std::string::npos,
+          "cli scan/mixed: #671 the page number is still read out of an image-naming note", mixed.err);
 }
 
 // #357: `--format md` is the same thin shell over megapdf_write_text() the txt path already is
@@ -9444,6 +9576,7 @@ int main(int argc, char** argv) {
     test_write_text_goldens(std::string(MEGAPDF_REPO_FIXTURES), argv[4]);
     test_write_text_findability(argv[2]);
     test_write_markdown_goldens(std::string(MEGAPDF_REPO_FIXTURES), argv[4]);
+    test_image_notes(std::string(MEGAPDF_REPO_FIXTURES));
     test_markdown_round_trips(std::string(MEGAPDF_REPO_FIXTURES), argv[4]);
     test_page_tools(argv[1], std::string(MEGAPDF_REPO_FIXTURES), std::string(MEGAPDF_SECURITY_FIXTURES));
     test_rotation_coordinates(argv[1]);

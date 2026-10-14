@@ -1601,6 +1601,27 @@ typedef enum megapdf_block_field {
 } megapdf_block_field;
 
 /**
+ * megapdf_block_image()'s answer: what a block's picture or pictures are, for a consumer that
+ * has to say something about an image it is not going to show (#671).
+ *
+ * This is a separate accessor rather than three more `megapdf_block` fields on purpose. The
+ * struct is passed out by value through megapdf_block_get() into a buffer the caller sized,
+ * and src/MegaPDF.Core/Engine/Core/CoreNative.cs's `Block` is a hand-maintained mirror of it:
+ * growing it writes past the end of a managed struct that was not rebuilt in step. Adding a
+ * call cannot overflow anybody.
+ */
+typedef struct megapdf_block_image_info {
+    int count;          /* images this block stands for: 1 for a FIGURE; for a PAGE_IMAGE, how
+                         * many image objects on the page meet the FIGURE size rule (>= 1 cm^2),
+                         * which may be 0 -- a page that is blank rather than scanned. 0 for
+                         * every other kind. */
+    int pixel_width;    /* the image's stored resolution, not its size on the page; 0 when PDFium
+                         * cannot report it, and 0 for a PAGE_IMAGE whose `count` is not 1 (there
+                         * is then no single image to describe). */
+    int pixel_height;
+} megapdf_block_image_info;
+
+/**
  * Infers document structure over pages [first_page, first_page + page_count), in reading
  * order. Returns NULL for a NULL document, an out-of-range or non-positive range, or when
  * the core cannot allocate. `cancel` may be NULL; a cancelled load returns NULL with
@@ -1626,6 +1647,12 @@ MEGAPDF_API int megapdf_block_get(const megapdf_structure* s, size_t index, mega
 /** UTF-16 code units, no terminator, count-then-fill. 0 for a bad handle, index or field. */
 MEGAPDF_API size_t megapdf_block_string(const megapdf_structure* s, size_t index, megapdf_block_field which,
                                         unsigned short* out, size_t capacity);
+/**
+ * Fills `out` for a FIGURE or PAGE_IMAGE block; zeroes it for any other kind, so a caller can
+ * ask without first checking `kind`. MEGAPDF_OK, or MEGAPDF_ERR_ARGUMENT for a bad handle,
+ * index or NULL `out`.
+ */
+MEGAPDF_API int megapdf_block_image(const megapdf_structure* s, size_t index, megapdf_block_image_info* out);
 
 MEGAPDF_API size_t megapdf_block_span_count(const megapdf_structure* s, size_t index);
 /** MEGAPDF_OK, or MEGAPDF_ERR_ARGUMENT for a bad handle, block index, span index or NULL `out`. */
@@ -1709,8 +1736,8 @@ typedef struct megapdf_write_options {
  * paragraph is joined to the one before it with a space, not a break), a blank line between
  * blocks, headings bare, list items "marker text" indented two spaces per nesting level, fields
  * as "[x] name" / "[ ] name" (a checkbox or radio) or "name: value" (a text field), a page with
- * no text as one "[Page N has no text layer]" line, and U+000C between pages by default
- * (`page_break`).
+ * no text as one "[Page N has no text layer...]" line (below), and U+000C between pages by
+ * default (`page_break`).
  *
  * MEGAPDF_WRITE_MARKDOWN: CommonMark. HEADING → `#`×level + text (level capped at 6); PARAGRAPH/
  * FURNITURE → one unwrapped line, spans rendered as bold (`**`)/italic (`*`)/monospace (code
@@ -1720,8 +1747,9 @@ typedef struct megapdf_write_options {
  * numeric marker, "1. <marker> text" for a lettered or roman marker (CommonMark has no lettered
  * lists), two spaces of indent per nesting level; FIELD → GitHub task-list syntax ("- [x] name" /
  * "- [ ] name") for a checkbox/radio, "**name:** value" for a text field; FIGURE → "*[Figure:
- * alt]*" only when alt text exists (tagged, #358), nothing otherwise; PAGE_IMAGE → "*[Page N has
- * no text layer]*"; TABLE_ROW (tagged only, #358) → a GitHub-flavoured pipe table per tagged
+ * alt]*" when alt text exists (tagged, #358) and "*[Image: ...]*" otherwise (#671, below);
+ * PAGE_IMAGE → "*[Page N has no text layer...]*" (#671, below); TABLE_ROW (tagged only, #358) →
+ * a GitHub-flavoured pipe table per tagged
  * table (consecutive rows joined by `continues`): when every row has the same cell count, the
  * first row is the header when its cells were /TH (MEGAPDF_SPAN_CELL_HEADER) and an empty
  * header row is written otherwise, cells carry their span styling with `|` additionally
@@ -1733,6 +1761,25 @@ typedef struct megapdf_write_options {
  * follow each other on consecutive lines (no blank line between them); a FIGURE with alt text
  * is "[Figure: alt]" on its own line. In both formats the alt text is written as one line:
  * whitespace runs, line breaks included, collapse to a single space.
+ *
+ * #671, both formats: a picture is never silently absent from an export. A FIGURE with no alt
+ * text -- every untagged page's figure, and a tagged /Figure with no /Alt -- is written as
+ * "[Image: 600 x 400 px, 10.6 x 7.1 cm]" (the stored resolution, omitted when PDFium will not
+ * report it, then the size it occupies on the page; multiplication signs are U+00D7). A textless
+ * page's note grows a tail naming what is on it: "[Page 4 has no text layer: 1 image, 600 x 400
+ * px]", or ": 3 images" with no resolution when there is more than one, or nothing beyond "no
+ * text layer" for a page that really is empty -- so a consumer can tell a page worth sending to
+ * OCR from a blank sheet, which byte-identical notes made impossible before. Both counts apply
+ * design §1.2's figure size rule (>= 1 cm^2), so a hairline rule or a small icon still reads as
+ * an empty page. These notes are statements ABOUT a picture, not text that was on the page: a
+ * fidelity measure comparing an export against the page's characters must strip them, as
+ * tools/structure-check does. They are deliberately not CommonMark "![alt](path)" -- no file is
+ * written beside the export, and a broken image link reads worse than a sentence. The structured
+ * form of the same facts is megapdf_block_image().
+ *
+ * These notes are written in English in both formats and are not localised, as
+ * "[Page N has no text layer]" already was. A consumer that shows them to a user localises
+ * there, where it also knows whether to show them at all.
  *
  * `keep_lines` restores line breaks inside a block on a best-effort basis, for both formats:
  * contract 9 does not expose per-line boundaries (a span is a same-style run, which commonly
