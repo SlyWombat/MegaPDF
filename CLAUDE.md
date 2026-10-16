@@ -106,9 +106,16 @@ triggers ignore, so **no CI starts**. Closing and reopening the PR fires `reopen
 Verify a merge honestly: a run whose `event` is `pull_request` **and** whose `head_sha` matches
 the PR's current `headRefOid`.
 
-**Long iOS `build` is usually the GitHub macOS queue** (one run waited 25m56s), not a hang. When
-`MAC_SELF_HOSTED` is `on`, those jobs go to our Mac mini and start in seconds; the compute is a
-dead heat, so what it buys is the queue.
+**Long iOS `build` is usually the GitHub macOS queue** (one run waited 25m56s), not a hang. Our
+Mac mini can take that job and has — two real runs on 2026-10-05, picked up twelve seconds after
+dispatch — but **`MAC_SELF_HOSTED=on` is not the whole switch.** The runner is registered
+`--ephemeral`: it takes exactly one job, removes its own registration and exits. So **zero
+registered runners is the normal idle state**, and turning the variable on with nothing listening
+queues the job against labels nobody is holding — it sits for 24 hours and *then* fails. Register
+first (`tools/mac-runner-configure.sh`, credential on stdin, run from a machine that has `gh`;
+there is deliberately no `gh` on the Mac), then flip the variable, one job at a time. The compute
+is a dead heat, so all of this buys is the queue. State on 2026-10-16: variable `off`, nothing
+registered, last job 2026-10-05. The standing-runner and launchd questions are #614.
 
 ## Localisation
 
