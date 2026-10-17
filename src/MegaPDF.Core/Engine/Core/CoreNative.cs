@@ -851,6 +851,26 @@ internal static class CoreNative
         public int Confidence;
     }
 
+    /// <summary>
+    /// Mirror of <c>megapdf_block_image_info</c> (#677, #679): what a FIGURE or PAGE_IMAGE block's
+    /// picture is. Seven ints, 28 bytes, in header order. It is its own struct, fetched by
+    /// <see cref="megapdf_block_image"/>, so that <see cref="Block"/> never has to grow.
+    /// <b>Any field added to the C struct must be added here in the same commit</b> — this is
+    /// mirrored by hand and the core writes the whole C struct through the pointer, so a managed
+    /// struct left shorter is overflowed, not truncated.
+    /// </summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct BlockImageInfo
+    {
+        public int Count;
+        public int PixelWidth;
+        public int PixelHeight;
+        public int DpiHorizontal;
+        public int DpiVertical;
+        public int BitsPerPixel;
+        public int Colorspace;
+    }
+
     [StructLayout(LayoutKind.Sequential)]
     public struct Span
     {
@@ -883,6 +903,10 @@ internal static class CoreNative
 
     [DllImport(Dll)]
     public static extern int megapdf_block_get(IntPtr structure, nuint index, out Block block);
+
+    /// <summary>Fills <paramref name="info"/> for a FIGURE or PAGE_IMAGE block, zeroes it for any other kind; non-zero for a bad handle, index or NULL out.</summary>
+    [DllImport(Dll)]
+    public static extern int megapdf_block_image(IntPtr structure, nuint index, out BlockImageInfo info);
 
     /// <summary>UTF-16 code units, no terminator, count-then-fill.</summary>
     [DllImport(Dll)]

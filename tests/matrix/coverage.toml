@@ -1469,6 +1469,7 @@ entry = "src/MegaPDF.App/DocumentViewModel.cs::Strings.MarkdownDocumentFilter"
 coverage = "engine"
 tests = [
   "tests/MegaPDF.Core.Tests/DocumentTextExportTests.cs::Markdown",
+  "tests/MegaPDF.Core.Tests/BlockImageBindingTests.cs::BlockImage",
   "tests/MegaPDF.Core.Tests/SaveAsExportTests.cs::Export",
 ]
 manual = "TESTING.md::**Save As → Markdown**"
