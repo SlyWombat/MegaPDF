@@ -101,6 +101,7 @@ jobs:
       # where snapd asks for the transient scope it tracks a snap in.
       - name: Desktop session tools for the check
         run: |
+          sudo apt-get update -qq
           sudo apt-get install -y -qq xvfb dbus dbus-x11 dbus-user-session x11-utils \
             xdotool metacity xdg-desktop-portal xdg-desktop-portal-gtk poppler-utils
 

@@ -72,8 +72,14 @@ jobs:
       # cups-client is what --print-check probes for, and what the app shells out
       # to when someone prints; desktop-file-utils validates the .desktop entry.
       # Neither is on the runner image.
+      #
+      # `update` first: without it this is a time bomb, exactly as #673 saw on
+      # core-tests.yml -- the image's apt index names revisions the mirror has
+      # already dropped.
       - name: Printing and desktop tools
-        run: sudo apt-get install -y -qq cups-client desktop-file-utils xvfb
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq cups-client desktop-file-utils xvfb
 
       # A shell script committed without its executable bit fails with "Permission
       # denied" only on the runner that uses it. The macOS workflow learned this
