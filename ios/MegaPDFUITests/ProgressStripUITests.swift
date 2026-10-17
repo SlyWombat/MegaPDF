@@ -7,12 +7,19 @@ import XCTest
 /// show is the part #412's lesson was about — the view model can be right while the bindings
 /// are not — and, on a phone, whether the button in a strip that thin is actually hittable.
 ///
-/// `-uiTestSlowSearch` holds each page of the scan for ten seconds, because every document
-/// that ships in the bundle is scanned inside the strip's own 0.5 s threshold and there would
-/// otherwise be nothing on screen to look at. Ten rather than three: on a CI runner, which is
-/// three to four times slower than the Mac mini, a three-second hold let the strip go between
-/// `exists` and reading the button's frame — "Failed to get matching snapshot". The scan is
-/// stopped by the test, so the hold costs nothing it does not spend anyway.
+/// `-uiTestSlowSearch` holds each page of the scan until the test presses Stop, because every
+/// document that ships in the bundle is scanned inside the strip's own 0.5 s threshold and there
+/// would otherwise be nothing on screen to look at.
+///
+/// It holds until released and not for a duration, and that took three attempts (#674). The demo
+/// document is ONE page, so a hold of N seconds per page is a total budget of N seconds, inside
+/// which this test makes about eight accessibility round trips before it can tap Stop. Three
+/// seconds lost that race on a CI runner ("Failed to get matching snapshot"); ten seconds was
+/// raised to fix it and lost it again, three runs in four, on hosted runners that are three to
+/// four times slower than the Mac mini. A scan that finishes first is not stopped, so the failure
+/// reads as a missing "Search stopped." or a missing strip, which is the strip correctly gone.
+/// Stop cancelling the search is the release, so there is no number to get wrong; a 120 s ceiling
+/// in the app only keeps a failed assertion from hanging the job.
 final class ProgressStripUITests: XCTestCase {
 
     private var app: XCUIApplication!

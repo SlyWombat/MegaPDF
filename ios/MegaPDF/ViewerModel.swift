@@ -886,8 +886,8 @@ final class ViewerModel: ObservableObject {
         applySlowSearchIfNeeded()
     }
 
-    /// `-uiTestSlowSearch` holds each page of a scan for ten seconds, so a UI test
-    /// can watch the strip report where it has got to and press Stop while it is still running
+    /// `-uiTestSlowSearch` holds each page of a scan until the test presses Stop, so a UI test
+    /// can watch the strip report where it has got to and stop it while it is still running
     /// (#145).
     ///
     /// Every document small enough to ship in the app's bundle is scanned inside the strip's
@@ -898,7 +898,20 @@ final class ViewerModel: ObservableObject {
         guard ProcessInfo.processInfo.arguments.contains("-uiTestSlowSearch") else { return }
         let real = searchPage
         searchPage = { doc, page, term in
-            try? await Task.sleep(nanoseconds: 10_000_000_000)
+            // #674: hold until the test lets go, not for a fixed ten seconds. `demo.pdf` is one
+            // page, so a timed hold is the WHOLE scan's budget, and ProgressStripUITests needs
+            // eight accessibility round trips inside it before it can press Stop. On a hosted
+            // runner those cost more than ten seconds, the scan finishes first, and the test
+            // fails looking for a strip that has correctly gone. Ten seconds was already the
+            // second guess at this number; a sentinel has no number to get wrong.
+            //
+            // Stop cancels `searchTask`, which is this closure's task, so `Task.isCancelled` is
+            // the release signal. The ceiling only stops a failed assertion before `tap()` from
+            // hanging the job -- it is far outside any budget the test needs.
+            for _ in 0..<1200 {                       // 1200 x 100 ms = a 120 s ceiling
+                if Task.isCancelled { break }
+                try? await Task.sleep(nanoseconds: 100_000_000)
+            }
             return await real(doc, page, term)
         }
     }
