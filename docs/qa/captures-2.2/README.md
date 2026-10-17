@@ -26,7 +26,16 @@ unchanged:
 python3 tools/capture-gate/gate.py --store mac  docs/qa/captures-2.2/macos-screenshots --out /tmp/gate
 python3 tools/capture-gate/gate.py --store play docs/qa/captures-2.2/play/phone      --out /tmp/gate
 python3 tools/capture-gate/gate.py --store ios  docs/qa/captures-2.2/ios-screenshots  --out /tmp/gate
+python3 tools/capture-gate/gate.py --store microsoft docs/qa/captures-2.2/microsoft-screenshots --out /tmp/gate
 ```
+
+The Microsoft set arrived here last, after 2.2.0 had shipped: it was the one 2.2
+set the repository never held, because the rig writes to `artifacts/store/screenshots/`
+and that path is gitignored. A post-release cleanup is what surfaced it — the
+images live on the Store right now and the only copy was on one machine's disk.
+Its `<lang>/work/` folders are deliberately **not** here: they are the rig's
+working frames, including poses that are shot every run but are not listing
+slots, and the stray demo PDFs the run opened.
 
 ## What is here
 
@@ -35,6 +44,7 @@ python3 tools/capture-gate/gate.py --store ios  docs/qa/captures-2.2/ios-screens
 | `macos-screenshots/<lang>/` | Mac App Store, 1440x900 | 7, `light-NN-<pose>.png` | `tools/macos-store-captures.sh` | `docs/qa/mac-store-captures.md` |
 | `play/phone/<lang>/` | Google Play phone, 1080x2400 | 8, `android-<pose>.png` | **Android Screenshots** workflow | `docs/qa/android-store-captures.md` |
 | `ios-screenshots/<lang>/listing/` | App Store (iOS), two devices | 9 × 2, `<device>-<pose>.png` | `tools/ios-screenshots.sh` | `docs/app-store-listing.md` § Screenshots |
+| `microsoft-screenshots/<lang>/` | Microsoft Store | 8, `NN-<pose>.png` | `tools/screenshots-windows/Shoot-Set.ps1` | `docs/microsoft-store-listing.md` § Screenshots |
 
 Languages are `en`, `fr-CA` and `fr-FR` throughout. (The Mac rig spells France's
 `fr`, which is what App Store Connect calls that localisation; the folder is
