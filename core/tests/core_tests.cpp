@@ -7854,6 +7854,19 @@ void test_image_notes(const std::string& repo) {
             check((image.pixel_width > 0 && image.pixel_height > 0) == c.want_pixels,
                   std::string("#671 block_image ") + c.name + ": a stored resolution exactly when there is one image",
                   std::to_string(image.pixel_width) + "x" + std::to_string(image.pixel_height));
+            // #677: PDFium's own resolution and depth ride along with the pixel size, and are
+            // unknown (0) exactly when there is no single image to describe.
+            const std::string detail = "dpi " + std::to_string(image.dpi_horizontal) + "x" +
+                                       std::to_string(image.dpi_vertical) + ", " +
+                                       std::to_string(image.bits_per_pixel) + " bpp, colorspace " +
+                                       std::to_string(image.colorspace);
+            check((image.dpi_horizontal > 0 && image.dpi_vertical > 0) == c.want_pixels,
+                  std::string("#677 block_image ") + c.name + ": an effective DPI exactly when there is one image",
+                  detail);
+            check((image.bits_per_pixel > 0) == c.want_pixels,
+                  std::string("#677 block_image ") + c.name + ": a bit depth exactly when there is one image", detail);
+            check(c.want_pixels || (image.colorspace == 0 && image.dpi_horizontal == 0),
+                  std::string("#677 block_image ") + c.name + ": no image, no colour space or DPI", detail);
         }
         check(found, std::string("#671 block_image ") + c.name + ": the expected block kind is present");
         // A kind with no picture in it must answer zeroes rather than leak another block's.
@@ -7863,7 +7876,8 @@ void test_image_notes(const std::string& repo) {
             if (b.kind == MEGAPDF_BLOCK_FIGURE || b.kind == MEGAPDF_BLOCK_PAGE_IMAGE) continue;
             megapdf_block_image_info image{};
             megapdf_block_image(s, i, &image);
-            if (image.count != 0 || image.pixel_width != 0 || image.pixel_height != 0) {
+            if (image.count != 0 || image.pixel_width != 0 || image.pixel_height != 0 || image.dpi_horizontal != 0 ||
+                image.dpi_vertical != 0 || image.bits_per_pixel != 0 || image.colorspace != 0) {
                 check(false, std::string("#671 block_image ") + c.name + ": a non-picture block answers zeroes",
                       std::to_string(b.kind));
                 break;

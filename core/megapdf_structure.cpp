@@ -2088,11 +2088,26 @@ bool BuildLeftoverParagraph(const PageWork& pw, int page_index, BlockImpl* out) 
 // #671: an image object's stored resolution, for a consumer that has to describe a picture it
 // is not going to show. 0x0 when PDFium will not say -- the caller then omits it rather than
 // printing a confident "0 x 0 px".
-void ReadImagePixelSize(FPDF_PAGEOBJECT obj, megapdf_block_image_info* out) {
+//
+// #677: and what PDFium already computes alongside it and we used to throw away -- the effective
+// resolution against the size the image occupies, the bit depth, and the colour space. A 1-bit
+// image is a bilevel document scan, the strongest "OCR will work here" sign there is. All of it is
+// zero when PDFium will not say, which is also what a caller must treat as "unknown".
+void ReadImagePixelSize(FPDF_PAGE page, FPDF_PAGEOBJECT obj, megapdf_block_image_info* out) {
     unsigned int w = 0, h = 0;
     if (obj == nullptr || !FPDFImageObj_GetImagePixelSize(obj, &w, &h)) return;
     out->pixel_width = static_cast<int>(w);
     out->pixel_height = static_cast<int>(h);
+    FPDF_IMAGEOBJ_METADATA meta{};
+    if (!FPDFImageObj_GetImageMetadata(obj, page, &meta)) return;
+    // Rounded to a whole DPI, negatives and NaN to 0: the field is an int and "unknown" is 0. A
+    // positive resolution never rounds DOWN to 0 -- a 2 px image stretched over a page is 0.24 DPI,
+    // which is a real and useless answer, not the same thing as PDFium declining to say.
+    auto whole = [](float dpi) { return dpi > 0.0f ? (std::max)(1, static_cast<int>(std::lround(dpi))) : 0; };
+    out->dpi_horizontal = whole(meta.horizontal_dpi);
+    out->dpi_vertical = whole(meta.vertical_dpi);
+    out->bits_per_pixel = static_cast<int>(meta.bits_per_pixel);
+    out->colorspace = meta.colorspace;
 }
 
 // True when an image object's placed size meets design §1.2's figure rule. `bounds` is already
@@ -2120,7 +2135,7 @@ std::vector<BlockImpl> BuildFigures(const megapdf_page* page, int page_index, co
         b.info.bounds = bounds;
         b.info.object_index = i;
         b.image.count = 1;
-        ReadImagePixelSize(FPDFPage_GetObject(raw, i), &b.image);
+        ReadImagePixelSize(raw, FPDFPage_GetObject(raw, i), &b.image);
         figures.push_back(std::move(b));
     }
     return figures;
@@ -2144,7 +2159,7 @@ megapdf_block_image_info SummarisePageImages(const megapdf_page* page, const Pag
         only = out.count == 0 ? i : -1;   // a resolution to report only while there is one image
         out.count++;
     }
-    if (only >= 0) ReadImagePixelSize(FPDFPage_GetObject(raw, only), &out);
+    if (only >= 0) ReadImagePixelSize(raw, FPDFPage_GetObject(raw, only), &out);
     return out;
 }
 
@@ -2730,7 +2745,7 @@ TaggedImages ReadTaggedImages(const megapdf_page* page, int page_index, const Pa
         b.info.bounds = bounds;
         b.info.object_index = i;
         b.image.count = 1;
-        ReadImagePixelSize(obj, &b.image);   // #671
+        ReadImagePixelSize(raw, obj, &b.image);   // #671
         out.unclaimed.push_back(std::move(b));
     }
     return out;
@@ -2874,7 +2889,7 @@ bool BuildTaggedPage(const megapdf_page* page, PageWork* pw, int page_index, uns
                 // the writer has nothing true to say about it and leaves it out as before.
                 if (placed) {
                     b.image.count = 1;
-                    ReadImagePixelSize(FPDFPage_GetObject(PageHandle(page), b.info.object_index), &b.image);
+                    ReadImagePixelSize(PageHandle(page), FPDFPage_GetObject(PageHandle(page), b.info.object_index), &b.image);
                 }
                 const std::vector<int> idx = CharsOfMcids(chars_by_mcid, u.mcids);
                 BlockImpl text;

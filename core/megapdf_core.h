@@ -1619,6 +1619,19 @@ typedef struct megapdf_block_image_info {
                          * cannot report it, and 0 for a PAGE_IMAGE whose `count` is not 1 (there
                          * is then no single image to describe). */
     int pixel_height;
+    /* #677: PDFium's own effective resolution for the image, against the size it occupies, rounded
+     * to a whole DPI, never rounding a positive value down to 0 -- the number an OCR decision actually turns on, so a caller reads it rather
+     * than dividing pixels by a size. 0 when PDFium cannot report it, and 0 whenever pixel_width
+     * is 0 (a PAGE_IMAGE whose `count` is not 1, or a FIGURE PDFium will not describe). Unknown
+     * is 0, never a guess. */
+    int dpi_horizontal;
+    int dpi_vertical;
+    /* #677: bits per pixel as stored. 1 is a bilevel document scan -- the strongest "OCR will work
+     * here" signal there is -- where 24-bit colour at the same DPI is more likely a photograph.
+     * 0 when unknown. */
+    int bits_per_pixel;
+    /* #677: FPDF_COLORSPACE_* (0 unknown, 1 DeviceGray, 2 DeviceRGB, ...). */
+    int colorspace;
 } megapdf_block_image_info;
 
 /**
