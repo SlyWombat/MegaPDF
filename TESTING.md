@@ -139,6 +139,18 @@ pieces MegaPDF is built on. Check the notices dialog opens and scrolls.
 **Print** — the Print button (or Ctrl+P) opens the normal Windows print dialog with a
 preview; pick a printer and print. What you see, including your edits, is what prints.
 
+**Print on iPhone, iPad and Android (#675)** — More ▸ Print opens the system's own print sheet
+(AirPrint on iOS, the Android print service). By hand, on a device with a printer or a PDF
+"printer" such as Save as PDF: (1) make an edit and do **not** save, print, and check the edit is
+on the output — what prints is the document on screen, not the file on disk; (2) on a five-page
+document choose pages 2–3 and check exactly two sheets come out; (3) open `owner-only.pdf` and
+check Print is dimmed, because its print bit is clear; (4) on an iPad check the sheet appears as a
+popover from the More button and does not crash; (5) on Android, a document that allows printing
+but not copying prints in full, and picking a range says it cannot print part (it needs the copy
+permission to extract the pages); (6) **iOS, unverified:** a document opened with only its user
+password prints from an encrypted copy, which AirPrint may not be able to read — report what you
+see.
+
 **Shrink for email** — the Shrink button saves a *smaller copy* of the current file
 (pictures reduced to email quality; the original is never touched). Try it on a
 photo-heavy or scanned PDF and check the size difference — and that the copy still

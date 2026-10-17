@@ -24,7 +24,9 @@ import kotlinx.coroutines.CompletableDeferred
  * wall standing in the middle of the new rule.
  *
  * Deliberately absent:
- * - **Print** (P-bit 3) — MegaPDF's print goes out to the OS, which asks the document again.
+ * - **Print** (P-bit 3) — MegaPDF's print goes out to the OS (#675, [MegaPdfPrintAdapter]), which asks the
+ *   document again. It is gated on the bit itself, `DocumentCapabilities.canPrint`, with no override: the
+ *   print service is not an operation on the document, so there is nothing to grant past.
  * - **Accessibility** (P-bit 10) — no operation here can honestly claim to be assistive
  *   technology, so there is no correct place to grant its narrower exception.
  * - **Full access** — setting, changing or removing the password is not advisory. Without the

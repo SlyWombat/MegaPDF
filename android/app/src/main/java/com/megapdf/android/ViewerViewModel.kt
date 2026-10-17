@@ -1756,6 +1756,75 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         shareFile = null
     }
 
+    /** What the OS print service is to be handed (#675): a job name and the adapter that writes it. */
+    class PrintRequest(val jobName: String, val adapter: android.print.PrintDocumentAdapter)
+
+    /** One-shot: Print was asked for; cleared by [consumePrintRequest] once the print service has it. */
+    var printRequest: PrintRequest? by mutableStateOf(null)
+        private set
+
+    fun consumePrintRequest() {
+        printRequest = null
+    }
+
+    /**
+     * Print (#675), offered by the same three terms as the desktops' `IsPrintAllowed`: a document is
+     * open, its print bit permits it (or the open has full access), and nothing is running.
+     */
+    val canPrint: Boolean
+        get() = document != null && capabilities.canPrint && !isSaving && !busy.locksDocument
+
+    /**
+     * Hands the open document to the OS print service. The service owns the preview, page range,
+     * copies and printer; [MegaPdfPrintAdapter] writes what it asks for, from the document **as it
+     * is on screen** rather than the file on disk, so there is no unsaved-changes question first
+     * and no stale page on paper.
+     *
+     * Nothing is locked while the preview is up: the system calls the adapter back for as long as
+     * the person fiddles with the settings, and holding the document locked for that would be
+     * worse than the engine's own serialisation, which already makes each write atomic with
+     * respect to edits.
+     */
+    fun requestPrint() {
+        if (!canPrint) return
+        val doc = document ?: return
+        val viewing = uiState as? ViewerUiState.Viewing ?: return
+        val app = getApplication<Application>()
+        val caps = capabilities
+        printRequest = PrintRequest(
+            jobName = viewing.displayName,
+            adapter = MegaPdfPrintAdapter(
+                jobName = viewing.displayName,
+                pageCount = viewing.pageSizes.size,
+                scope = viewModelScope,
+                writeWhole = { out ->
+                    // Only full access can strip security, and only then is a plain copy possible;
+                    // the print service has to be able to read what it is given.
+                    if (caps.isEncrypted && caps.canChangeSecurity) doc.saveWithoutSecurity(out) else doc.save(out)
+                },
+                writePages = { pages, out ->
+                    val temp = File(app.cacheDir, "print-${System.nanoTime()}.pdf")
+                    try {
+                        doc.extractPages(pages, temp.path)
+                        java.io.FileInputStream(temp).use { it.copyTo(out, COPY_BUFFER_BYTES) }
+                    } finally {
+                        withContext(NonCancellable + Dispatchers.IO) { temp.delete() }
+                    }
+                },
+                onFailed = { failure ->
+                    // A document that may be printed but not copied prints in full, not in part: a
+                    // range is a real extraction and needs the copy bit. Said as that, not as a
+                    // generic failure the person would retry in vain.
+                    statusMessage = str(
+                        if (failure is com.megapdf.engine.PdfPagesException &&
+                            failure.refusal == com.megapdf.engine.PageToolRefusal.RESTRICTED
+                        ) R.string.print_pages_restricted else R.string.print_failed,
+                    )
+                },
+            ),
+        )
+    }
+
     /**
      * A document handed in from outside the app (#376): another app's "Open with" chooser,
      * via `ACTION_VIEW`, rather than this app's own SAF picker. Same unsaved-changes guard as

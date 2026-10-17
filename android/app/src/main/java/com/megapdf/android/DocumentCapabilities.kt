@@ -31,6 +31,11 @@ data class DocumentCapabilities(
      * document that may not be copied from may not be split either.
      */
     val canExtractPages: Boolean,
+    /**
+     * Printing (#675): the print permission, which is what the desktops gate Print on
+     * (`DocumentCapabilities.CanPrint`). Full access prints whatever the bits say.
+     */
+    val canPrint: Boolean,
     /** Setting, changing or removing the password: full access only (decision 3). */
     val canChangeSecurity: Boolean,
     val isEncrypted: Boolean,
@@ -141,6 +146,7 @@ data class DocumentCapabilities(
                 // Either bit, the same pair contract 10's own preflight accepts (#174).
                 canAssemblePages = may(PdfPermissions.ASSEMBLE) || modify,
                 canExtractPages = may(PdfPermissions.COPY),
+                canPrint = may(PdfPermissions.PRINT),
                 canChangeSecurity = security.hasFullAccess,
                 isEncrypted = security.isEncrypted,
                 isRestricted = security.isEncrypted && !security.hasFullAccess,

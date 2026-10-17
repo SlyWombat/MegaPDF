@@ -212,6 +212,18 @@ fun MegaPdfApp(viewModel: ViewerViewModel = viewModel(), screenshotState: String
         }
     }
 
+    // Print (#675): once the view model has an adapter ready, hand it to the OS print service,
+    // which owns the preview, the page range and the printer, then clear the request so rotation
+    // or recomposition does not open the print dialog again.
+    val printRequest = viewModel.printRequest
+    LaunchedEffect(printRequest) {
+        if (printRequest != null) {
+            val printManager = context.getSystemService(android.content.Context.PRINT_SERVICE) as android.print.PrintManager
+            printManager.print(printRequest.jobName, printRequest.adapter, null)
+            viewModel.consumePrintRequest()
+        }
+    }
+
     if (settingsOpen) {
         SettingsScreen(
             pageTint = viewModel.pageTint,
@@ -365,6 +377,8 @@ fun MegaPdfApp(viewModel: ViewerViewModel = viewModel(), screenshotState: String
                 onShare = viewModel::shareLastSaved,
                 onSaveAndShare = viewModel::saveAndShare,
                 onShareLastSaved = viewModel::shareLastSaved,
+                canPrint = viewModel.canPrint,
+                onPrint = viewModel::requestPrint,
                 // Redaction (#173). Marks are drawn by the screen because the core never
                 // writes them into the document.
                 redactMode = viewModel.redactMode,

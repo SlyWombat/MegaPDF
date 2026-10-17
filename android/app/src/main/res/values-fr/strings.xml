@@ -71,6 +71,12 @@
     <string name="save_no_permission">Vous n\'avez plus la permission d\'écrire ici. Utilisez «&#160;Enregistrer une copie&#160;».</string>
     <string name="save_failed">Impossible d\'enregistrer. Utilisez «&#160;Enregistrer une copie&#160;».</string>
     <string name="share_failed">Impossible de partager. Réessayez.</string>
+    <!-- FR-REVIEW #675 — new with printing, not yet read by the reviewer. -->
+    <string name="print">Imprimer</string>
+    <!-- FR-REVIEW #675 — new with printing, not yet read by the reviewer. -->
+    <string name="print_failed">Impossible d\'imprimer. Réessayez.</string>
+    <!-- FR-REVIEW #675 — new with printing, not yet read by the reviewer. -->
+    <string name="print_pages_restricted">Ce document permet l\'impression, mais pas celle d\'une partie seulement. Imprimez toutes ses pages.</string>
 
     <!-- Exporter en Markdown (#386, #409) : sa propre ligne du menu, à côté d'Enregistrer une copie —
          un export à sens unique, pas un autre format d'enregistrement. -->

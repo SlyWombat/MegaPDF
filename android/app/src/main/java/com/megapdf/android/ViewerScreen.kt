@@ -291,6 +291,12 @@ fun ViewerScreen(
     /** Discard from the unsaved-changes prompt: shares the last-saved file, not the
      *  pending edits — the open document keeps them, exactly as Cancel would leave it. */
     onShareLastSaved: () -> Unit = onShare,
+    // Print (#675): hands the document to the OS print service. `canPrint` is the view model's
+    // own predicate (open, print bit, nothing running), so the row dims on exactly what the
+    // action refuses on. No unsaved-changes question, unlike Share: what is printed is the
+    // document as it is on screen.
+    canPrint: Boolean = false,
+    onPrint: () -> Unit = {},
     // Reading mode (#507, #513), docs/reading-mode-plan.md §4. A way of looking at the
     // document: nothing
     // below changes it, its history or its file, and the unsaved dot stays as it was.
@@ -851,6 +857,11 @@ fun ViewerScreen(
                                     text = { Text(stringResource(R.string.share)) },
                                     enabled = !isSaving && !documentLocked,
                                     onClick = { menuOpen = false; requestShare() },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.print)) },
+                                    enabled = canPrint,
+                                    onClick = { menuOpen = false; onPrint() },
                                 )
                                 DropdownMenuItem(
                                     text = { Text(stringResource(R.string.security_password_menu)) },

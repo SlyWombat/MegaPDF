@@ -79,6 +79,9 @@
     <string name="save_no_permission">No permission to write here anymore — use Save a copy.</string>
     <string name="save_failed">Couldn\'t save. Use Save a copy.</string>
     <string name="share_failed">Couldn\'t share. Try again.</string>
+    <string name="print">Print</string>
+    <string name="print_failed">Couldn\'t print. Try again.</string>
+    <string name="print_pages_restricted">This document allows printing, but not printing part of it. Print all of its pages.</string>
 
     <!-- Export as Markdown (#386, #409): its own menu row beside Save a copy — a one-way text
          export, not an alternate save format, so the word is Export, never Save. -->

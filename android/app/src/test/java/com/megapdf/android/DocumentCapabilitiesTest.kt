@@ -59,6 +59,7 @@ class DocumentCapabilitiesTest {
     fun `an unprotected document allows everything`() {
         val c = DocumentCapabilities.fromSecurity(PdfSecurity.UNPROTECTED)
         assertTrue(c.canEditContent && c.canSign && c.canFillForms && c.canAddText && c.canChangeSecurity)
+        assertTrue(c.canPrint)
         assertFalse(c.isEncrypted)
         assertFalse(c.isRestricted)
         assertEquals(DocumentCapabilities.FULL, c)
@@ -69,9 +70,24 @@ class DocumentCapabilitiesTest {
     fun `an owner-only document that allows nothing is restricted everywhere`() {
         val c = DocumentCapabilities.fromSecurity(restricted(0))
         assertFalse(c.canEditContent || c.canSign || c.canFillForms || c.canAddText || c.canChangeSecurity)
+        assertFalse("the print bit is clear, so Print must not be offered (#675)", c.canPrint)
         assertTrue(c.isEncrypted)
         assertTrue(c.isRestricted)
         (contentEdits + formEdits).forEach { assertFalse(c.allows(it)) }
+    }
+
+    @Test
+    fun `printing follows the print bit and nothing else, in both directions`() {
+        // #675: the rule the desktops gate Print on (CanPrint: Allows(Print)).
+        assertTrue(DocumentCapabilities.fromSecurity(restricted(PdfPermissions.PRINT)).canPrint)
+        assertFalse(
+            DocumentCapabilities.fromSecurity(
+                restricted(PdfPermissions.MODIFY or PdfPermissions.COPY or PdfPermissions.ANNOTATE or PdfPermissions.FILL_FORMS),
+            ).canPrint,
+        )
+        // Full access prints whatever the bits say, as it does every other tool.
+        val owner = PdfSecurity(isEncrypted = true, revision = 6, permissions = 0, hasFullAccess = true)
+        assertTrue(DocumentCapabilities.fromSecurity(owner).canPrint)
     }
 
     @Test

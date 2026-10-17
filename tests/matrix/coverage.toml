@@ -1723,15 +1723,22 @@ tests = [".github/workflows/ci.yml::The CUPS printing route is sound"]
 note = "the best-covered print of the five: a CI step runs --print-check against CUPS, and check-flatpak.sh probes the portal path. The actual dialog is still by hand."
 manual = "TESTING.md::**Print**"
 [feature.ios]
-presence = "absent"
-coverage = "n/a"
-absence = "gap"
-note = "no UIPrintInteractionController anywhere in ios/MegaPDF. AirPrint is what a phone user would reach for and there is no route to it."
+presence = "present"
+entry = "ios/MegaPDF/ViewerView.swift::viewerPrint"
+coverage = "engine"
+tests = ["ios/MegaPDFTests/DocumentCapabilitiesTests.swift::testPrintingFollowsTheDocumentsPrintBitAndNothingElse"]
+note = "#675: UIPrintInteractionController over a freshly serialised copy. What is covered is the permission rule; the sheet itself (and a document opened with only its user password, which prints from an encrypted copy) is by hand on a device."
+manual = "TESTING.md::**Print**"
 [feature.android]
-presence = "absent"
-coverage = "n/a"
-absence = "gap"
-note = "no PrintManager anywhere in android/app. Same shape as iOS."
+presence = "present"
+entry = "android/app/src/main/java/com/megapdf/android/ViewerScreen.kt::R.string.print"
+coverage = "engine"
+tests = [
+  "android/app/src/test/java/com/megapdf/android/PrintAdapterTest.kt::class",
+  "android/app/src/test/java/com/megapdf/android/DocumentCapabilitiesTest.kt::printing follows the print bit",
+]
+note = "#675: PrintManager over a PrintDocumentAdapter that serialises the live document. What is covered is the page-range mapping and the permission rule; the print dialog itself is by hand."
+manual = "TESTING.md::**Print**"
 
 [[feature]]
 id = "progress-cancel"

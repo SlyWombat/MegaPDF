@@ -17,7 +17,7 @@ Each cell says two things and both are checked against the code:
 | `GAP` | the feature is **missing** where it should exist — the #571 shape |
 | `+m` | a by-hand step in `TESTING.md` / `docs/RELEASING.md` covers it too |
 
-230 pairings: 135 UI, 59 eng, 14 —, 14 n/a, 8 GAP.
+230 pairings: 135 UI, 61 eng, 14 —, 14 n/a, 6 GAP.
 
 This map is about *what is covered*, not whether the covering tests pass — that is the
 other jobs' business — and it does not replace the by-hand pass in `docs/RELEASING.md`
@@ -28,7 +28,7 @@ other jobs' business — and it does not replace the by-hand pass in `docs/RELEA
 This is the part worth reading. A map that only restated what passes would not be
 worth checking in.
 
-### Missing feature — absent where it should exist (8)
+### Missing feature — absent where it should exist (6)
 
 Nothing is failing; nothing is looking. #571 (Linux had an About window with no route to it) and #3 (Android had no whiteout at all) were both this.
 
@@ -38,8 +38,6 @@ Nothing is failing; nothing is looking. #571 (Linux had an About window with no 
 | A withheld permission is said out loud, and the person may continue (`permission-override`) | linux | same as macOS. | #558 |
 | A withheld permission is said out loud, and the person may continue (`permission-override`) | macos | same as Windows — the shared MegaPDF.Core DocumentCapabilities both desktops consume is the half that has to change, so these two land together. | #558 |
 | A withheld permission is said out loud, and the person may continue (`permission-override`) | windows | still refuses. DocumentCapabilities.cs reads the bits and the toolbar greys out what the author withheld; megapdf_security_override() is in the core and unbound in CoreNative.cs. | #558 |
-| Print (`print`) | android | no PrintManager anywhere in android/app. Same shape as iOS. | — |
-| Print (`print`) | ios | no UIPrintInteractionController anywhere in ios/MegaPDF. AirPrint is what a phone user would reach for and there is no route to it. | — |
 | Shrink for email (`shrink`) | android | no shrink on Android either, for the same reason and with the same silence. | — |
 | Shrink for email (`shrink`) | ios | no shrink on iOS. Nothing in the source says it was decided against, and a phone mailing a scan is the case it exists for. | — |
 
@@ -64,7 +62,7 @@ The feature is reachable and no test in CI touches it.
 | Print (`print`) | windows | nothing automated touches printing on Windows: no self-test state, no core test of PdfPrinter, and tools/windows-qa's print flow is manual. | — |
 | A small side indicator of scroll position, including in reading mode (`scroll-position-indicator`) | ios | pre-existing: SwiftUI's default fading scroll indicator, never overridden by `.scrollIndicators(...)` anywhere in the app, so reading mode (which hides only the nav/bottom bars and the tool strip) leaves it exactly as it is outside reading mode. The page list is one continuous ScrollView/LazyVStack over every page, so the indicator is whole-document position. Nothing automated asserts the indicator itself — it is not exposed to the accessibility tree XCUITest reads, the same reason ViewerZoomUITests has to sleep 1.5s for it to fade rather than assert on it directly. | — |
 
-### Engine only — this platform's own path is untested (59)
+### Engine only — this platform's own path is untested (61)
 
 The shared core proves the operation. Nothing proves this platform reaches it correctly, which is where #401 and #412 lived.
 
@@ -118,6 +116,8 @@ The shared core proves the operation. Nothing proves this platform reaches it co
 | Password — set, change, remove, and opening a protected document (`password`) | ios | set-password and wrong-password-then-remove are real UI tests, and both are excluded from CI — the only platform with a UI test for this and it does not run. | — |
 | Password — set, change, remove, and opening a protected document (`password`) | linux | same as macOS. | — |
 | Password — set, change, remove, and opening a protected document (`password`) | macos | the self-test checks a password prompt survives a tab switch but never sets, changes or removes a password through the UI. | — |
+| Print (`print`) | android | #675: PrintManager over a PrintDocumentAdapter that serialises the live document. What is covered is the page-range mapping and the permission rule; the print dialog itself is by hand. | — |
+| Print (`print`) | ios | #675: UIPrintInteractionController over a freshly serialised copy. What is covered is the permission rule; the sheet itself (and a document opened with only its user password, which prints from an encrypted copy) is by hand on a device. | — |
 | Save a copy / Save As (`save-a-copy`) | windows | no self-test state drives Save As; the picker is the OS's. | — |
 | Save (overwrite in place) (`save-in-place`) | ios | FilesEndToEndUITests saves through the real picker and is excluded from CI. | — |
 | Share (`share`) | ios | ShareVerificationUITests drives the real sheet and is excluded from CI for Files-app flakiness. | — |
@@ -192,7 +192,7 @@ The shared core proves the operation. Nothing proves this platform reaches it co
 | **Password — set, change, remove, and opening a protected document** | UI | eng | eng | eng | eng |
 | **A withheld permission is said out loud, and the person may continue** | GAP | GAP | GAP | GAP | UI |
 | **Shrink for email** | UI+m | UI+m | UI+m | GAP | GAP |
-| **Print** | —+m | —+m | UI+m | GAP | GAP |
+| **Print** | —+m | —+m | UI+m | eng+m | eng+m |
 | **Progress and Stop on long operations** | UI | UI | UI | UI | UI |
 
 ### Lifecycle and state
@@ -539,8 +539,8 @@ show*: each one has a working refusal, so no test fails — they are walls that 
 - **Windows** — —+m. coverage: nothing. reachable from `src/MegaPDF.App/MainWindow.xaml::PrintButton`. by hand: `TESTING.md::**Print**`. nothing automated touches printing on Windows: no self-test state, no core test of PdfPrinter, and tools/windows-qa's print flow is manual.
 - **macOS** — —+m. coverage: nothing. reachable from `src/MegaPDF.Avalonia/Views/MainWindow.Toolbar.cs::CommandEntry(Strings.Print`. by hand: `TESTING.md::**Print**`. the self-test checks the command's enablement and nothing else; no print is ever performed in CI.
 - **Linux** — UI+m. coverage: UI/VM. reachable from `src/MegaPDF.Avalonia/Platform/LinuxPrinter.cs::Print`. tests: `.github/workflows/ci.yml::The CUPS printing route is sound`. by hand: `TESTING.md::**Print**`. the best-covered print of the five: a CI step runs --print-check against CUPS, and check-flatpak.sh probes the portal path. The actual dialog is still by hand.
-- **iOS/iPadOS** — GAP. absent (gap). no UIPrintInteractionController anywhere in ios/MegaPDF. AirPrint is what a phone user would reach for and there is no route to it.
-- **Android** — GAP. absent (gap). no PrintManager anywhere in android/app. Same shape as iOS.
+- **iOS/iPadOS** — eng+m. coverage: engine only. reachable from `ios/MegaPDF/ViewerView.swift::viewerPrint`. tests: `ios/MegaPDFTests/DocumentCapabilitiesTests.swift::testPrintingFollowsTheDocumentsPrintBitAndNothingElse`. by hand: `TESTING.md::**Print**`. #675: UIPrintInteractionController over a freshly serialised copy. What is covered is the permission rule; the sheet itself (and a document opened with only its user password, which prints from an encrypted copy) is by hand on a device.
+- **Android** — eng+m. coverage: engine only. reachable from `android/app/src/main/java/com/megapdf/android/ViewerScreen.kt::R.string.print`. tests: `android/app/src/test/java/com/megapdf/android/PrintAdapterTest.kt::class`, `android/app/src/test/java/com/megapdf/android/DocumentCapabilitiesTest.kt::printing follows the print bit`. by hand: `TESTING.md::**Print**`. #675: PrintManager over a PrintDocumentAdapter that serialises the live document. What is covered is the page-range mapping and the permission rule; the print dialog itself is by hand.
 
 ### Progress and Stop on long operations (`progress-cancel`)
 
