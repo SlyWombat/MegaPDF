@@ -1346,6 +1346,23 @@ struct ViewerView: View {
     /// Inline find bar: as-you-type field, "N of M" count, previous/next
     /// (wrapping), and Done to dismiss and clear highlights.
     private var searchBar: some View {
+        VStack(spacing: 0) {
+            searchBarRow
+            // A match read from a scan is the recogniser's guess, not the document's text (#676).
+            if let current = model.currentMatchIndex, current < model.searchMatches.count,
+               model.searchMatches[current].fromScan {
+                Text("Read from a scanned page: the text may contain mistakes.")
+                    .font(.footnote)
+                    .foregroundColor(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 6)
+                    .background(.bar)
+            }
+        }
+    }
+
+    private var searchBarRow: some View {
         HStack(spacing: 12) {
             Image(systemName: "magnifyingglass")
                 .foregroundColor(.secondary)
@@ -1422,6 +1439,12 @@ struct ViewerView: View {
                     context.fill(
                         Path(r),
                         with: .color(isCurrent ? Brand.findMatchCurrent : Brand.findMatch))
+                    // A dashed edge on a hit the recogniser read rather than the document said
+                    // (#676): a shape, not a colour, so it survives Night mode and colour blindness.
+                    if match.fromScan {
+                        context.stroke(Path(r), with: .color(Brand.accent),
+                                       style: StrokeStyle(lineWidth: 1.5, dash: [4, 3]))
+                    }
                     if isCurrent {
                         context.stroke(Path(r), with: .color(Brand.accent), lineWidth: 2)
                     }

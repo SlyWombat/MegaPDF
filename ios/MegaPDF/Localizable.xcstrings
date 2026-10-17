@@ -3018,6 +3018,23 @@
         }
       }
     },
+    "Read from a scanned page: the text may contain mistakes." : {
+      "comment" : "Find bar caption (#676) under the count while the current match was read from a scanned page by the device's recogniser. FR-REVIEW #676 — new with scan search, not yet read by the reviewer.",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lu sur une page numérisée : le texte peut contenir des erreurs."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lu sur une page numérisée : le texte peut contenir des erreurs."
+          }
+        }
+      }
+    },
     "Reading" : {
       "comment" : "#512: the settings sheet's section of reading preferences FR-REVIEW #512 — new with reading preferences, not yet read by the reviewer.",
       "localizations" : {

@@ -559,8 +559,12 @@ note = "same harness as macOS."
 presence = "present"
 entry = "ios/MegaPDF/ViewerView.swift::Find in document"
 coverage = "engine"
-tests = ["ios/MegaPDFTests/SearchTests.swift::class"]
-note = "engine parity against the shared fixtures; no UI test opens the find bar."
+tests = [
+  "ios/MegaPDFTests/SearchTests.swift::class",
+  "ios/MegaPDFTests/OcrTextTests.swift::class",
+  "ios/MegaPDFTests/ScanSearchTests.swift::class",
+]
+note = "engine parity against the shared fixtures; no UI test opens the find bar. #676: Find on a scanned page through Vision, with the cache following page tools."
 [feature.android]
 presence = "present"
 entry = "android/app/src/main/java/com/megapdf/android/ViewerScreen.kt::R.string.close_search"

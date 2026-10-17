@@ -106,6 +106,9 @@ struct PendingText: Identifiable {
 struct SearchMatch: Equatable {
     let pageIndex: Int
     let rects: [PdfRect]
+    /// Read from a scanned page by the device's recogniser (#676), not found in the document's
+    /// own text. Machine-derived and can be wrong, so the page draws it differently.
+    var fromScan = false
 }
 
 /// A staged extract waiting for the export sheet (#174, *Save Pages As…*). The document itself
@@ -574,7 +577,10 @@ final class ViewerModel: ObservableObject {
         } else {
             redactionSummary = Self.describeRedaction(report.counts)
         }
-        // Every page's raster is stale once content has been removed.
+        // Every page's raster is stale once content has been removed, and so is everything read
+        // from one: text a redaction has removed must not stay findable (#676).
+        ocrGeneration += 1
+        ocrCache.removeAll()
         pageImages.removeAll()
         renderedKeys.removeAll()
         if let window = lastWindow {
@@ -819,6 +825,26 @@ final class ViewerModel: ObservableObject {
     var searchPage: @MainActor (PdfDocument, Int, String) async -> [PdfSearchMatch] = { doc, page, term in
         (try? await PdfEngine.shared.search(doc, pageIndex: page, term: term)) ?? []
     }
+
+    /// Whether a page carries a text layer, real or invisible (#676). A scanned page that has
+    /// one is not recognised again: Find already works on it.
+    var pageHasText: @MainActor (PdfDocument, Int) async -> Bool = { doc, page in
+        await PdfEngine.shared.pageHasTextLayer(doc, index: page)
+    }
+
+    /// How one page of a scan is read (#676). A seam, because Vision's answer for a rendered
+    /// page is not something a unit test can assert and a recogniser's own cost is not a thing
+    /// a test should wait for.
+    var recognisePage: @MainActor (PdfDocument, Int) async -> OcrPage? = { doc, page in
+        await PdfEngine.shared.recognise(doc, index: page)
+    }
+
+    /// What the recogniser has read of the open document (#676). In memory only, and gone with
+    /// the document: this is never written to the file or to disk.
+    private(set) var ocrCache = OcrCache()
+    /// Bumped by everything that can make a read in flight wrong -- a page edit, a renumbering,
+    /// a close -- so a recognition that finishes afterwards is used once and not kept.
+    private var ocrGeneration = 0
 
     /// The page at the top of the view, which gets a background page check once it has settled there.
     private var currentPage: Int?
@@ -2068,6 +2094,10 @@ final class ViewerModel: ObservableObject {
         // possibly different from the bytes on disk, so it stays dirty.
         noteDocumentChanged()
         invalidatePage(operation.pageIndex)
+        // A cover, a stamp or a text box changes what the page shows, so what was read from it
+        // is no longer what it says (#676).
+        ocrGeneration += 1
+        ocrCache.remove(page: operation.pageIndex)
     }
 
     /// Every change to the document goes through here: it is unsaved, and a save already running
@@ -2514,6 +2544,10 @@ final class ViewerModel: ObservableObject {
         pageImages = pageImages.shifted(by: shifts)
         renderedKeys = renderedKeys.shifted(by: shifts)
         pageThumbnails = pageThumbnails.shifted(by: shifts)
+        // What was read of a scan follows its page, and a changed page is read again (#676).
+        ocrGeneration += 1
+        ocrCache = ocrCache.shifted(by: shifts)
+        for page in operation.changedPages { ocrCache.remove(page: page) }
         for page in operation.changedPages {
             pageImages.removeValue(forKey: page)
             renderedKeys.removeValue(forKey: page)
@@ -2531,8 +2565,10 @@ final class ViewerModel: ObservableObject {
         // nothing is being searched for.
         if let term = lastSearchTerm, !term.isEmpty, !arrivedPages.isEmpty {
             for page in arrivedPages {
-                let hits = (try? await engine.search(doc, pageIndex: page, term: term)) ?? []
-                matches.append(contentsOf: hits.map { SearchMatch(pageIndex: page, rects: $0.rects) })
+                var hits = ((try? await engine.search(doc, pageIndex: page, term: term)) ?? [])
+                    .map { SearchMatch(pageIndex: page, rects: $0.rects) }
+                if hits.isEmpty { hits = await scannedHits(doc, page: page, term: term) }
+                matches.append(contentsOf: hits)
             }
             // Back into page order, which is the order the flat match list is built in and the
             // order "next match" walks.
@@ -2644,10 +2680,13 @@ final class ViewerModel: ObservableObject {
                 // 1-based: the count is read by a person, and "Page 0 of 5" is not a thing
                 // anyone would say. It is the page being worked on, not the number finished.
                 if let token { busy.report(token, done: index + 1, total: total) }
-                let hits = await searchPage(doc, index, term)
-                matches.append(contentsOf: hits.map {
+                var hits = (await searchPage(doc, index, term)).map {
                     SearchMatch(pageIndex: index, rects: $0.rects)
-                })
+                }
+                // A page with no text of its own that the search found nothing on may be a
+                // scan: read it (once per open document) and look in what was read (#676).
+                if hits.isEmpty { hits = await scannedHits(doc, page: index, term: term) }
+                matches.append(contentsOf: hits)
             }
             if Task.isCancelled {
                 if run.stopped { stoppedSearch(matches) }
@@ -2655,6 +2694,30 @@ final class ViewerModel: ObservableObject {
             }
             if let token { busy.report(token, done: total, total: total) }
             publishSearch(matches)
+        }
+    }
+
+    /// Hits on a page the document's own text has none on, found in what the recogniser reads
+    /// of it (#676). Empty for a page with a text layer, for one that could not be read, and
+    /// for a read that an edit overtook.
+    private func scannedHits(_ doc: PdfDocument, page: Int, term: String) async -> [SearchMatch] {
+        if ocrCache.hasText(page) { return [] }
+        let read: OcrPage
+        if let cached = ocrCache[page] {
+            read = cached
+        } else {
+            let generation = ocrGeneration
+            if await pageHasText(doc, page) {
+                if generation == ocrGeneration, document === doc { ocrCache.noteText(page) }
+                return []
+            }
+            guard let fresh = await recognisePage(doc, page),
+                  generation == ocrGeneration, document === doc else { return [] }
+            ocrCache[page] = fresh
+            read = fresh
+        }
+        return read.matches(of: term).map {
+            SearchMatch(pageIndex: page, rects: $0.rects, fromScan: true)
         }
     }
 
@@ -3465,6 +3528,8 @@ final class ViewerModel: ObservableObject {
         scannedHintShown = false
         signatureCopyNoticeShown = false
         clearSearch()
+        ocrGeneration += 1
+        ocrCache.removeAll()
         pageImages = [:]
         renderedKeys = [:]
         lastWindow = nil
