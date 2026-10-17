@@ -24,6 +24,7 @@ final class DocumentCapabilitiesTests: XCTestCase {
         XCTAssertTrue(caps.canFillForms)
         XCTAssertTrue(caps.canAddText)
         XCTAssertTrue(caps.canChangeSecurity)
+        XCTAssertTrue(caps.canPrint)
         XCTAssertFalse(caps.isRestricted)
     }
 
@@ -37,6 +38,18 @@ final class DocumentCapabilitiesTests: XCTestCase {
         XCTAssertTrue(caps.canAddText)
         XCTAssertTrue(caps.canChangeSecurity)
         XCTAssertFalse(caps.isRestricted)
+    }
+
+    func testPrintingFollowsTheDocumentsPrintBitAndNothingElse() {
+        // #675: the same rule the desktops gate Print on (`CanPrint: Allows(Print)`). Every
+        // other permission is irrelevant to it, in both directions.
+        XCTAssertTrue(restricted(.print).canPrint)
+        XCTAssertFalse(restricted([.modify, .copy, .annotate, .fillForms]).canPrint)
+        XCTAssertFalse(restricted([]).canPrint)
+        // Full access prints whatever the bits say, as it does every other tool.
+        let owner = DocumentCapabilities(security: PdfSecurity(isEncrypted: true, revision: 6,
+                                                               permissions: [], hasFullAccess: true))
+        XCTAssertTrue(owner.canPrint)
     }
 
     func testRestrictedWithNoPermissionsAllowsNothing() {
@@ -135,6 +148,7 @@ final class DocumentCapabilitiesTests: XCTestCase {
         XCTAssertFalse(caps.canSign)
         XCTAssertFalse(caps.canFillForms)
         XCTAssertFalse(caps.canChangeSecurity)
+        XCTAssertFalse(caps.canPrint, "the print bit is clear, so Print must not be offered (#675)")
 
         let owner = "o-restricted"   // tools/gen_security_fixtures.sh
         let unlocked = try await engine.open(bytes, password: owner)
@@ -143,5 +157,6 @@ final class DocumentCapabilitiesTests: XCTestCase {
         XCTAssertFalse(ownerCaps.isRestricted)
         XCTAssertTrue(ownerCaps.canChangeSecurity)
         XCTAssertTrue(ownerCaps.canEditContent)
+        XCTAssertTrue(ownerCaps.canPrint)
     }
 }

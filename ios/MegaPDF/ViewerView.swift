@@ -834,6 +834,16 @@ struct ViewerView: View {
                 }
                     .disabled(!model.canShare)
                     .accessibilityIdentifier("viewerShare")
+                // #675: the system print sheet, from a copy serialised on the spot -- see
+                // `ViewerModel.printDocument`. No unsaved-changes question, because what is
+                // printed is what is on screen and not the file on disk.
+                Button {
+                    Task { await model.printDocument(anchor: moreMenuAnchor) }
+                } label: {
+                    Label("Print", systemImage: "printer")
+                }
+                    .disabled(!model.canPrint)
+                    .accessibilityIdentifier("viewerPrint")
                 Button("Password…", action: model.showPasswordCommand)
                     .disabled(!model.canUsePasswordCommand || model.fileCommandsBlocked)
                 if model.capabilities.isRestricted {
@@ -1862,4 +1872,41 @@ struct ShareSheet: UIViewControllerRepresentable {
     }
 
     func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
+}
+
+/// The system print sheet (#675): `UIPrintInteractionController` over a staged PDF. It owns page
+/// range, copies, duplex and the printer, and nothing here rebuilds any of that.
+///
+/// iPad presents it as a popover and throws without a source, exactly as `ShareSheet` above does,
+/// so it points at the More button's real frame and falls back to the window's top-trailing corner
+/// when asked before the first layout pass.
+enum PrintPresenter {
+    @MainActor
+    static func present(_ url: URL, jobName: String, anchor: CGRect,
+                        completion: @escaping @MainActor (Error?) -> Void) {
+        guard UIPrintInteractionController.canPrint(url) else {
+            completion(CocoaError(.fileReadCorruptFile))
+            return
+        }
+        let info = UIPrintInfo(dictionary: nil)
+        info.outputType = .general
+        info.jobName = jobName
+        let controller = UIPrintInteractionController.shared
+        controller.printInfo = info
+        controller.printingItem = url
+        let finished: UIPrintInteractionController.CompletionHandler = { _, _, error in
+            Task { @MainActor in completion(error) }
+        }
+        let window = UIApplication.shared.connectedScenes
+            .compactMap { ($0 as? UIWindowScene)?.keyWindow }
+            .first
+        if UIDevice.current.userInterfaceIdiom == .pad, let window {
+            let rect = anchor == .zero
+                ? CGRect(x: window.bounds.width - 1, y: 0, width: 1, height: 1)
+                : anchor
+            controller.present(from: rect, in: window, animated: true, completionHandler: finished)
+        } else {
+            controller.present(animated: true, completionHandler: finished)
+        }
+    }
 }

@@ -44,6 +44,9 @@ struct DocumentCapabilities: Equatable {
     let canExtractPages: Bool
     /// Setting, changing or removing the password: only an open with full access (ADR-004 §3).
     let canChangeSecurity: Bool
+    /// Printing (#675): the document's print bit, which is what the desktops gate their Print on
+    /// (`DocumentCapabilities.CanPrint`). Full access prints whatever the bits say.
+    let canPrint: Bool
     /// Protected and opened without full access: the app says so and offers the owner password.
     let isRestricted: Bool
 
@@ -63,6 +66,7 @@ struct DocumentCapabilities: Equatable {
         canAssemblePages = modify || security.allows(.assemble)
         canExtractPages = full || security.allows(.copy)
         canChangeSecurity = full
+        canPrint = full || security.allows(.print)
         isRestricted = security.isEncrypted && !full
     }
 

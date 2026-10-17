@@ -1131,6 +1131,23 @@
         }
       }
     },
+    "Couldn't prepare the document for printing." : {
+      "comment" : "#675: the notice when the print copy could not be written. FR-REVIEW #675 — new with printing, not yet read by the reviewer.",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible de préparer le document pour l'impression."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible de préparer le document pour l'impression."
+          }
+        }
+      }
+    },
     "Couldn't prepare the export." : {
       "comment" : "Markdown export failure (#386), the export-side twin of \"Couldn't prepare the copy.\"",
       "localizations" : {
@@ -2934,6 +2951,23 @@
         }
       }
     },
+    "Preparing to print…" : {
+      "comment" : "#675: the busy strip while the print copy is serialised. FR-REVIEW #675 — new with printing, not yet read by the reviewer.",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Préparation de l'impression…"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Préparation de l'impression…"
+          }
+        }
+      }
+    },
     "Previous match" : {
       "localizations" : {
         "fr" : {
@@ -2963,6 +2997,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Page précédente"
+          }
+        }
+      }
+    },
+    "Print" : {
+      "comment" : "More menu (#675): row label. The system print sheet follows. FR-REVIEW #675 — new with printing, not yet read by the reviewer.",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Imprimer"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Imprimer"
           }
         }
       }
@@ -4063,6 +4114,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "La copie porte la signature numérique de l'original, et celle-ci n'est plus valide."
+          }
+        }
+      }
+    },
+    "The document couldn't be printed." : {
+      "comment" : "#675: the notice when the system print sheet reports a failure. FR-REVIEW #675 — new with printing, not yet read by the reviewer.",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le document n'a pas pu être imprimé."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le document n'a pas pu être imprimé."
           }
         }
       }

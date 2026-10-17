@@ -3238,6 +3238,59 @@ final class ViewerModel: ObservableObject {
         shareURL = url
     }
 
+    // MARK: - print (#675)
+
+    /// Print is offered by the same three terms the desktops use (`IsPrintAllowed`): a document
+    /// is open, its print bit permits it (or the open has full access), and nothing is running.
+    /// Unlike Share there is no need for a file on disk -- the copy printed is serialised fresh.
+    var canPrint: Bool {
+        document != nil && capabilities.canPrint && !busy.isBlocked && !isSaving
+    }
+
+    /// Print (#675): serialises what is on screen to a staged copy and hands it to the system
+    /// print sheet, which owns page range, copies, duplex and the printer.
+    ///
+    /// A fresh copy rather than `sourceURL` is deliberate. Share hands over the file on disk and
+    /// has to ask about unsaved changes first; printing the file on disk would print the page as
+    /// it was before the edits, which is a silent wrong answer on paper. The staged copy is the
+    /// document as the person sees it, so there is nothing to ask. It is removed when the sheet
+    /// finishes, whatever the outcome.
+    ///
+    /// A document opened with only its user password is encrypted in the copy: the core refuses
+    /// to strip security from an open without full access, and `UIPrintInteractionController`
+    /// may not be able to read the result. That case reports through the same failure notice
+    /// rather than printing blank pages; verify it on a device (#675).
+    func printDocument(anchor: CGRect) async {
+        guard canPrint, let doc = document,
+              let token = busy.begin(.preparingToPrint, scope: .document, blocksFileCommands: true) else { return }
+        let name = sourceURL?.lastPathComponent ?? String(localized: "Document")
+        let staged: URL
+        do {
+            staged = try Self.namedStagingURL(for: name)
+            let engine = PdfEngine.shared
+            if capabilities.canChangeSecurity && security.isEncrypted {
+                try await engine.saveWithoutSecurity(doc, to: staged)   // full access: a plain copy prints
+            } else {
+                try await engine.save(doc, to: staged)
+            }
+        } catch {
+            busy.end(token)
+            showNotice(String(localized: "Couldn't prepare the document for printing."))
+            return
+        }
+        busy.end(token)
+        guard document === doc else {
+            try? FileManager.default.removeItem(at: staged.deletingLastPathComponent())
+            return
+        }
+        PrintPresenter.present(staged, jobName: name, anchor: anchor) { [weak self] failure in
+            try? FileManager.default.removeItem(at: staged.deletingLastPathComponent())
+            if failure != nil {
+                self?.showNotice(String(localized: "The document couldn't be printed."))
+            }
+        }
+    }
+
     // MARK: - password command (#131)
 
     /// The Password command saves, so it needs a file to save to and nothing else in flight.

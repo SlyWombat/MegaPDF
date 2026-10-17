@@ -22,6 +22,8 @@ enum BusyLabel: Equatable {
     /// A Markdown export (#386) -- distinct from `.saving`, since it isn't one (see
     /// `ViewerModel.exportMarkdownFile`).
     case exportingText
+    /// Serialising the print copy (#675), before the system print sheet has anything to show.
+    case preparingToPrint
 
     var text: String {
         switch self {
@@ -32,6 +34,7 @@ enum BusyLabel: Equatable {
         case .applying: return String(localized: "Applying…")
         case .searching: return String(localized: "Searching…")
         case .exportingText: return String(localized: "Exporting…")
+        case .preparingToPrint: return String(localized: "Preparing to print…")
         }
     }
 }
