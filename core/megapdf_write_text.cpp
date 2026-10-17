@@ -158,8 +158,16 @@ std::string ImageNote(const megapdf_block& b, const megapdf_block_image_info& im
 }
 
 // #671: a textless page's note, which now says whether the page was scanned or simply empty --
-// byte-identical output for those two was the whole complaint. No centimetres here: a page
-// image's placed size is the page's own, which the consumer already knows.
+// byte-identical output for those two was the whole complaint.
+//
+// #677: a lone image also carries the PAGE's size in centimetres. #671 left it off on the
+// reasoning that the consumer already knows the page size, which holds for an application
+// holding the document and not for whatever reads the exported text -- and the scanned page is
+// exactly the case the note exists for. Pixels over centimetres is the effective resolution, and
+// the figure note already speaks this grammar, so a parser learns one. It is the page's size, not
+// the image's placed rectangle: for a full-page scan they are the same, and the exact DPI PDFium
+// computes is on megapdf_block_image() for a caller that needs it rather than a quotient. Only
+// for count == 1; with several images there is no single image a size could describe.
 std::string PageImageNote(const megapdf_block& b, const megapdf_block_image_info& image) {
     std::string note = "[Page " + std::to_string(b.page + 1) + " has no text layer";
     if (image.count == 1) {
@@ -168,6 +176,8 @@ std::string PageImageNote(const megapdf_block& b, const megapdf_block_image_info
             note += ", " + std::to_string(image.pixel_width) + " \xC3\x97 " + std::to_string(image.pixel_height) +
                     " px";
         }
+        note += ", " + CentimetresOneDecimal(b.bounds.right - b.bounds.left) + " \xC3\x97 " +
+                CentimetresOneDecimal(b.bounds.top - b.bounds.bottom) + " cm";
     } else if (image.count > 1) {
         note += ": " + std::to_string(image.count) + " images";
     }

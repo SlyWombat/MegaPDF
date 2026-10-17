@@ -7813,8 +7813,8 @@ void test_image_notes(const std::string& repo) {
     // the whole point: they were the same bytes before.
     const std::string scan = write_one(repo + "/structure/scan.pdf", MEGAPDF_WRITE_TEXT);
     const std::string empty = write_one(repo + "/structure/empty-page.pdf", MEGAPDF_WRITE_TEXT);
-    check(scan.find("[Page 1 has no text layer: 1 image, 2 \xC3\x97 2 px]") != std::string::npos,
-          "#671 page-image note: an all-image page names the image it has", scan);
+    check(scan.find("[Page 1 has no text layer: 1 image, 2 \xC3\x97 2 px, 21.6 \xC3\x97 27.9 cm]") != std::string::npos,
+          "#671/#677 page-image note: an all-image page names the image it has and the page it fills", scan);
     check(empty.find("[Page 1 has no text layer]") != std::string::npos,
           "#671 page-image note: a page with nothing on it claims no image", empty);
     check(scan != empty, "#671 page-image note: a scanned page and a blank page no longer export alike");

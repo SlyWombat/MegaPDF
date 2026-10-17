@@ -1767,8 +1767,10 @@ typedef struct megapdf_write_options {
  * "[Image: 600 x 400 px, 10.6 x 7.1 cm]" (the stored resolution, omitted when PDFium will not
  * report it, then the size it occupies on the page; multiplication signs are U+00D7). A textless
  * page's note grows a tail naming what is on it: "[Page 4 has no text layer: 1 image, 600 x 400
- * px]", or ": 3 images" with no resolution when there is more than one, or nothing beyond "no
- * text layer" for a page that really is empty -- so a consumer can tell a page worth sending to
+ * px, 21.0 x 29.7 cm]" (#677: with one image, the page's size too, so pixels over centimetres
+ * is the resolution for a reader who has the export and not the PDF), or ": 3 images" with no
+ * resolution or size when there is more than one, or nothing beyond "no text layer" for a page
+ * that really is empty -- so a consumer can tell a page worth sending to
  * OCR from a blank sheet, which byte-identical notes made impossible before. Both counts apply
  * design §1.2's figure size rule (>= 1 cm^2), so a hairline rule or a small icon still reads as
  * an empty page. These notes are statements ABOUT a picture, not text that was on the page: a

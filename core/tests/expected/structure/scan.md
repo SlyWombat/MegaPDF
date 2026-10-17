@@ -1,1 +1,1 @@
-*[Page 1 has no text layer: 1 image, 2 × 2 px]*
+*[Page 1 has no text layer: 1 image, 2 × 2 px, 21.6 × 27.9 cm]*
