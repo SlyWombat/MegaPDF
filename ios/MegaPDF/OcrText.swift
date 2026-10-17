@@ -32,9 +32,14 @@ struct OcrPage: Equatable {
     /// consecutive lines). Its rectangle is the union of the **words** it touches: a highlight
     /// that is a word too wide is honest about what the recogniser told us, where one that
     /// interpolates inside a word would claim a precision nobody measured.
-    func matches(of term: String) -> [PdfSearchMatch] {
+    ///
+    /// `besides` are rectangles the document's own text already matched: a read hit that mostly
+    /// lies on one is the same words seen twice (a text box rendered into the picture being read)
+    /// and is left out.
+    func matches(of term: String, besides found: [PdfRect] = []) -> [PdfSearchMatch] {
         guard !term.isEmpty else { return [] }
-        var found: [PdfSearchMatch] = []
+        var result: [PdfSearchMatch] = []
+        let already = found
         for line in lines {
             var from = line.text.startIndex
             while from < line.text.endIndex,
@@ -45,18 +50,31 @@ struct OcrPage: Equatable {
                 let touched = line.words.filter { $0.range.lowerBound < hi && $0.range.upperBound > lo }
                 if let first = touched.first {
                     let rect = touched.dropFirst().reduce(first.rect) { $0.union($1.rect) }
-                    found.append(PdfSearchMatch(rects: [rect]))
+                    if !already.contains(where: { rect.mostlyLies(on: $0) }) {
+                        result.append(PdfSearchMatch(rects: [rect]))
+                    }
                 }
                 // Past the match, not past one character: "aa" in "aaaa" is two hits, as in the engine.
                 from = hit.upperBound > hit.lowerBound ? hit.upperBound
                     : line.text.index(after: hit.lowerBound)
             }
         }
-        return found
+        return result
     }
 }
 
 extension PdfRect {
+    /// Whether the two overlap by at least half of the smaller one's area. Symmetric on purpose:
+    /// a recognised word box is wider than the glyphs the engine matched inside it, and either
+    /// may be the larger.
+    func mostlyLies(on other: PdfRect) -> Bool {
+        let w = min(right, other.right) - max(left, other.left)
+        let h = min(top, other.top) - max(bottom, other.bottom)
+        let area = min((right - left) * (top - bottom),
+                       (other.right - other.left) * (other.top - other.bottom))
+        return w > 0 && h > 0 && area > 0 && (w * h) / area >= 0.5
+    }
+
     func union(_ other: PdfRect) -> PdfRect {
         PdfRect(left: min(left, other.left), bottom: min(bottom, other.bottom),
                 right: max(right, other.right), top: max(top, other.top))

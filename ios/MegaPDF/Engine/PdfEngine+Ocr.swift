@@ -21,14 +21,20 @@ extension PdfEngine {
     /// Windows' 10,000 px does, but a poster at 150 dpi is a very large bitmap for no gain.
     static let ocrMaxSide = 6_000.0
 
-    /// Whether the page carries any text object at all -- real or an invisible OCR layer. The
-    /// trigger for recognition is "no text layer", never "has an image": a scan that has already
-    /// been through OCR has both, and Find already works on it (#676, design point 2).
+    /// Whether the page carries text of its own -- real or an invisible OCR layer -- **not
+    /// counting boxes the person added in MegaPDF** (#676). The trigger for recognition is "no
+    /// text layer", never "has an image": a scan that has already been through OCR has both, and
+    /// Find already works on it (design point 2). A text box laid over a scan is not a text layer:
+    /// the scan under it still needs reading, and Find searches the box as ordinary text.
     func pageHasTextLayer(_ document: PdfDocument, index: Int) -> Bool {
         (try? withCorePage(document, index: index) { page -> Bool in
             guard let text = megapdf_text_load(page, UInt32(MEGAPDF_TEXT_ALL)) else { return true }
             defer { megapdf_text_free(text) }
-            return megapdf_text_run_count(text) > 0
+            for index in 0..<megapdf_text_run_count(text) {
+                var run = megapdf_text_run()
+                if megapdf_text_run_get(text, index, &run) == MEGAPDF_OK, run.is_text_box == 0 { return true }
+            }
+            return false
         }) ?? true   // when in doubt, leave the page to the engine's own search
     }
 

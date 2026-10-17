@@ -194,4 +194,31 @@ final class ScanSearchTests: XCTestCase {
         XCTAssertGreaterThan(rect.right - rect.left, 100, "wider than a letter, narrower than the page")
         XCTAssertLessThan(rect.right - rect.left, 300)
     }
+
+    /// A scan with a text box laid over it (#676): Find must hit the box **and** the scan, once
+    /// each. The box is not a text layer, so the scan is still read; and the recogniser sees the
+    /// box in the picture it reads, so its copy of the same words must not be shown twice.
+    func testASearchHitsBothTheTextBoxAddedOverAScanAndTheScan() async throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("scan-box-\(UUID().uuidString).pdf")
+        try scannedPage().write(to: url)
+        let model = ViewerModel()
+        model.openPicked(url: url)
+        try await ModelOpening.waitForTheDocument(model)
+        defer { try? FileManager.default.removeItem(at: url); model.close() }
+        let doc = try XCTUnwrap(model.document)
+        try await PdfEngine.shared.addTextBox(doc, pageIndex: 0, text: "Invoice addendum",
+                                              fontSize: 36, x: 72, y: 560)
+
+        let hasText = await PdfEngine.shared.pageHasTextLayer(doc, index: 0)
+        XCTAssertFalse(hasText, "a text box the person added is not a text layer")
+
+        model.search(term: "invoice", debounce: false)
+        try await waitUntil("the search ends") { !model.isSearching && model.busy.strip == nil }
+        let hits = model.searchMatches
+        XCTAssertEqual(hits.count, 2, "the box once and the scan once; got \(hits.map(\.fromScan))")
+        XCTAssertEqual(hits.filter(\.fromScan).count, 1, "only the scan's own hit is marked as read")
+        XCTAssertEqual(hits.filter { !$0.fromScan }.count, 1, "the box is found as ordinary text")
+        XCTAssertEqual(hits.first?.fromScan, true, "reading order: the scan line is higher on the page, the box second")
+    }
 }

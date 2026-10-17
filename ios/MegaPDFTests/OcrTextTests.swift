@@ -50,6 +50,15 @@ final class OcrTextTests: XCTestCase {
         XCTAssertEqual(page.matches(of: "one").count, 2)
     }
 
+    func testAReadHitOnTopOfOneTheDocumentAlreadyFoundIsNotShownTwice() {
+        // The engine matched "due" with a tight glyph box; the recogniser's word box is wider.
+        let tight = PdfRect(left: 52, bottom: 102, right: 78, top: 118)
+        XCTAssertTrue(invoice.matches(of: "due", besides: [tight]).isEmpty)
+        let elsewhere = PdfRect(left: 500, bottom: 500, right: 520, top: 520)
+        XCTAssertEqual(invoice.matches(of: "due", besides: [elsewhere]).count, 1,
+                       "a hit that merely shares the page is kept")
+    }
+
     // MARK: - the cache follows the pages
 
     private func cache() -> OcrCache {

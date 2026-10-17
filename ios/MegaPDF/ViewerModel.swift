@@ -2567,7 +2567,7 @@ final class ViewerModel: ObservableObject {
             for page in arrivedPages {
                 var hits = ((try? await engine.search(doc, pageIndex: page, term: term)) ?? [])
                     .map { SearchMatch(pageIndex: page, rects: $0.rects) }
-                if hits.isEmpty { hits = await scannedHits(doc, page: page, term: term) }
+                hits = withScanHits(hits, await scannedHits(doc, page: page, term: term, besides: hits))
                 matches.append(contentsOf: hits)
             }
             // Back into page order, which is the order the flat match list is built in and the
@@ -2685,7 +2685,7 @@ final class ViewerModel: ObservableObject {
                 }
                 // A page with no text of its own that the search found nothing on may be a
                 // scan: read it (once per open document) and look in what was read (#676).
-                if hits.isEmpty { hits = await scannedHits(doc, page: index, term: term) }
+                hits = withScanHits(hits, await scannedHits(doc, page: index, term: term, besides: hits))
                 matches.append(contentsOf: hits)
             }
             if Task.isCancelled {
@@ -2697,10 +2697,27 @@ final class ViewerModel: ObservableObject {
         }
     }
 
-    /// Hits on a page the document's own text has none on, found in what the recogniser reads
-    /// of it (#676). Empty for a page with a text layer, for one that could not be read, and
-    /// for a read that an edit overtook.
-    private func scannedHits(_ doc: PdfDocument, page: Int, term: String) async -> [SearchMatch] {
+    /// The page's own hits and the ones read from it, in reading order (top of the page first),
+    /// so "next match" walks a page the way a person reads it. A page with no read hits is left
+    /// exactly as the engine ordered it.
+    private func withScanHits(_ own: [SearchMatch], _ read: [SearchMatch]) -> [SearchMatch] {
+        guard !read.isEmpty else { return own }
+        return (own + read).sorted {
+            let a = $0.rects.first, b = $1.rects.first
+            if a?.top != b?.top { return (a?.top ?? 0) > (b?.top ?? 0) }
+            return (a?.left ?? 0) < (b?.left ?? 0)
+        }
+    }
+
+    /// Hits found in what the recogniser reads of a page that has no text layer of its own
+    /// (#676). Empty for a page with a text layer, for one that could not be read, and for a read
+    /// that an edit overtook.
+    ///
+    /// `besides` is what the document's own text already found on the page. A text box added over
+    /// a scan is found there, and the recogniser reads it again off the rendered page, so a read
+    /// hit that lands on one of those is the same words and is dropped, not shown twice.
+    private func scannedHits(_ doc: PdfDocument, page: Int, term: String,
+                             besides: [SearchMatch]) async -> [SearchMatch] {
         if ocrCache.hasText(page) { return [] }
         let read: OcrPage
         if let cached = ocrCache[page] {
@@ -2716,7 +2733,7 @@ final class ViewerModel: ObservableObject {
             ocrCache[page] = fresh
             read = fresh
         }
-        return read.matches(of: term).map {
+        return read.matches(of: term, besides: besides.flatMap(\.rects)).map {
             SearchMatch(pageIndex: page, rects: $0.rects, fromScan: true)
         }
     }
