@@ -20,6 +20,12 @@ import XCTest
 /// reads as a missing "Search stopped." or a missing strip, which is the strip correctly gone.
 /// Stop cancelling the search is the release, so there is no number to get wrong; a 120 s ceiling
 /// in the app only keeps a failed assertion from hanging the job.
+///
+/// The same lesson applies a second time after Stop, which was found only when the first fix
+/// went green-then-red on a hosted run (#674): "Search stopped." is a banner that clears itself
+/// after four seconds, and on a runner that slow one accessibility snapshot can take longer than
+/// that, so the banner came and went between two looks. `-uiTestPinNotices` is the lever every
+/// other suite that asserts on a notice already pulls (`NoticeLifetime`); this one had not.
 final class ProgressStripUITests: XCTestCase {
 
     private var app: XCUIApplication!
@@ -27,7 +33,7 @@ final class ProgressStripUITests: XCTestCase {
     override func setUp() {
         continueAfterFailure = false
         app = XCUIApplication()
-        app.launchArguments = ["-screenshot", "viewer", "-uiTestSlowSearch",
+        app.launchArguments = ["-screenshot", "viewer", "-uiTestSlowSearch", "-uiTestPinNotices",
                                "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
     }
 
