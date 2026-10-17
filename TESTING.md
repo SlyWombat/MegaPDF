@@ -1883,6 +1883,27 @@ per-corpus structure/markdown verdicts are the §2.2 release gate's arithmetic r
 change's. A full four-corpus run belongs to the next release gate, where the #498 public-corpus
 condition is also tracked.
 
+**#677 re-run, 2026-10-17 (#680)** — the same two batteries, same corpus and sample (`--limit 400`,
+`/mnt/pdf-test`), on `main` after #677 added the page size to the scanned-page note and
+`megapdf_block_image()` gained DPI, bit depth and colour space. Built from a scratch build
+directory against the committed `libs/pdfium/linux-x64` prebuilt, `-DCMAKE_BUILD_TYPE=Release`.
+
+| battery | result | gate |
+|---|---|---|
+| structure, 401 documents, 2,852 pages, 83s: aggregate F1 (internal) | 0.998540 | >= 0.998 — pass |
+| structure: aggregate F1 (through `megapdf-cli`) | 0.998540 | >= 0.998 — pass |
+| structure: order tau median (835 tagged pages) | 0.966 | >= 0.9 — pass |
+| structure: crashes / hangs / CLI bad exit codes | 0 / 0 / 0 | 0 — pass |
+| markdown, 400 documents, 32s: extracted / no text (exit 5) | 330 / 70 | — |
+| markdown: crashes / hangs / bad exit codes / `cmark` failures / timeouts | 0 / 0 / 0 / 0 / 0 | 0 — pass |
+
+Every number equals the #671 run above to the last digit, which is the result: appending
+`, 21.6 × 27.9 cm` inside the note's own brackets added no tokens to the fidelity measure and moved
+no document between exit 0 and exit 5. The 120-document sample that gave F1 0.997947 on both sides of
+the change was a sample property, not a regression. Also added: `core_tests.cpp` now asserts
+`bits_per_pixel == 1` on the generated CCITT Group 4 and JBIG2 fixtures (checked live by flipping the
+expected value to 2 and watching the suite fail).
+
 ## Reporting
 
 For each issue: what you clicked, what you expected, what happened, and the PDF

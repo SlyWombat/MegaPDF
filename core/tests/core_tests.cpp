@@ -7796,7 +7796,7 @@ std::string write_one(const std::string& path, int format) {
     return rc < 0 ? std::string() : sink.text;
 }
 
-void test_image_notes(const std::string& repo) {
+void test_image_notes(const std::string& repo, const std::string& generated) {
     // A figure on a page that also has text: named, with both the stored resolution and the
     // size it occupies, in both formats. tiny-font-size.pdf is an all-page image under an
     // invisible OCR text layer, so the page has text AND a figure -- exactly the shape that
@@ -7883,6 +7883,34 @@ void test_image_notes(const std::string& repo) {
                 break;
             }
         }
+        megapdf_structure_free(s);
+    }
+
+    // #680: a bilevel scan reports 1 bit per pixel -- the strongest "OCR will work here" signal the
+    // field exists to carry, and the one value the 8- and 24-bit fixtures above cannot exercise.
+    // Both are generated fixtures (tools/gen_test_fixtures.py), a CCITT Group 4 page and a JBIG2
+    // generic region, each a page that is one image and nothing else.
+    for (const char* name : {"image-ccitt", "image-jbig2"}) {
+        Doc d(generated + "/" + name + ".pdf");
+        check(d.doc != nullptr, std::string("#680 bilevel ") + name + ": document opens");
+        if (d.doc == nullptr) continue;
+        megapdf_structure* s = megapdf_structure_load(d.doc, 0, 1, 0, nullptr);
+        check(s != nullptr, std::string("#680 bilevel ") + name + ": structure loads");
+        if (s == nullptr) continue;
+        bool found = false;
+        for (size_t i = 0, n = megapdf_block_count(s); i < n && !found; i++) {
+            megapdf_block b{};
+            if (megapdf_block_get(s, i, &b) != MEGAPDF_OK ||
+                (b.kind != MEGAPDF_BLOCK_PAGE_IMAGE && b.kind != MEGAPDF_BLOCK_FIGURE))
+                continue;
+            megapdf_block_image_info bilevel{};
+            check(megapdf_block_image(s, i, &bilevel) == MEGAPDF_OK && bilevel.count == 1,
+                  std::string("#680 bilevel ") + name + ": one image", std::to_string(bilevel.count));
+            check(bilevel.bits_per_pixel == 1, std::string("#680 bilevel ") + name + ": stored at 1 bit per pixel",
+                  std::to_string(bilevel.bits_per_pixel));
+            found = true;
+        }
+        check(found, std::string("#680 bilevel ") + name + ": a picture block is present");
         megapdf_structure_free(s);
     }
 
@@ -9590,7 +9618,7 @@ int main(int argc, char** argv) {
     test_write_text_goldens(std::string(MEGAPDF_REPO_FIXTURES), argv[4]);
     test_write_text_findability(argv[2]);
     test_write_markdown_goldens(std::string(MEGAPDF_REPO_FIXTURES), argv[4]);
-    test_image_notes(std::string(MEGAPDF_REPO_FIXTURES));
+    test_image_notes(std::string(MEGAPDF_REPO_FIXTURES), argv[1]);
     test_markdown_round_trips(std::string(MEGAPDF_REPO_FIXTURES), argv[4]);
     test_page_tools(argv[1], std::string(MEGAPDF_REPO_FIXTURES), std::string(MEGAPDF_SECURITY_FIXTURES));
     test_rotation_coordinates(argv[1]);
