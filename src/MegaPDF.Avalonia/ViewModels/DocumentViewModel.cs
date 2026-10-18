@@ -7,6 +7,7 @@ using MegaPDF.Core.Imaging;
 using MegaPDF.Core.Recovery;
 using MegaPDF.Core.Engine.Pdfium;
 using MegaPDF.Core.Services;
+using MegaPDF.Core.Viewing;
 
 namespace MegaPDF.Avalonia.ViewModels;
 
@@ -631,6 +632,7 @@ public sealed partial class DocumentViewModel : ObservableObject, IDisposable
                        IReadOnlyList<(double Width, double Height)> sizes)
     {
         _document = document;
+        _scanSearcher = CreateScanSearcher(document);
         _changesDiscarded = false;
         // Permissions before IsDocumentOpen, so no tool is enabled for a moment it should
         // not be (#131).
@@ -2495,6 +2497,8 @@ public sealed partial class DocumentViewModel : ObservableObject, IDisposable
             DiscardHeldPages();
             _undoStack.Clear();
             RaiseUndoRedo();
+            // Text a redaction removed must not stay findable (#676).
+            _scanSearcher?.Clear();
             if (DocumentPath is { Length: > 0 } path)
                 _journal.MarkSaved(path);
             // Every mark is gone, and so is whatever was selected — a chrome around a mark
@@ -2539,8 +2543,37 @@ public sealed partial class DocumentViewModel : ObservableObject, IDisposable
 
     // --- Find in document (SDD §3.6 / F6) ---
 
-    /// <summary>One hit: which page it is on and the rectangles covering it.</summary>
-    private sealed record Match(int PageIndex, IReadOnlyList<PdfRect> Rects);
+    /// <summary>
+    /// One hit: which page it is on and the rectangles covering it. <paramref name="FromScan"/> is a hit
+    /// the OS recogniser read off a scanned page (#676) rather than one the document's own text holds:
+    /// machine-derived, can be wrong, so the page draws it differently.
+    /// </summary>
+    private sealed record Match(int PageIndex, IReadOnlyList<PdfRect> Rects, bool FromScan = false);
+
+    /// <summary>
+    /// What has been read of the open document's scans (#676). In memory only and gone with the
+    /// document: never written to the file or to disk. Null where there is no recogniser (Linux, and
+    /// a Mac before 10.15), and then Find on a scan behaves exactly as it always has.
+    /// </summary>
+    private ScanSearcher? _scanSearcher;
+
+    /// <summary>How a rendered page is read. Replaceable so a self-test can substitute its own.</summary>
+    internal static Func<IPageRecogniser?> RecogniserFactory { get; set; } = () => SharedRecogniser.Value;
+
+    private static readonly Lazy<IPageRecogniser?> SharedRecogniser = new(() =>
+        OperatingSystem.IsMacOS() ? Platform.MacVisionRecogniser.TryCreate() : null);
+
+    private static ScanSearcher? CreateScanSearcher(IPdfDocument document) =>
+        RecogniserFactory() is { } recogniser
+            ? new ScanSearcher(i => ScanReader.HasOwnText(document, i), i => ScanReader.Read(document, i, recogniser))
+            : null;
+
+    /// <summary>
+    /// Whether the current hit was read from a scanned page (#676): the find bar then says the text
+    /// is the recogniser's guess, and this app does not imply more certainty than it has.
+    /// </summary>
+    public bool ScanNoteVisible =>
+        CurrentMatchIndex >= 0 && CurrentMatchIndex < _matches.Count && _matches[CurrentMatchIndex].FromScan;
 
     private readonly List<Match> _matches = [];
 
@@ -2548,7 +2581,7 @@ public sealed partial class DocumentViewModel : ObservableObject, IDisposable
     private string _searchTerm = "";
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(MatchSummary))]
+    [NotifyPropertyChangedFor(nameof(MatchSummary), nameof(ScanNoteVisible))]
     private int _currentMatchIndex = -1;
 
     [ObservableProperty]
@@ -2614,6 +2647,7 @@ public sealed partial class DocumentViewModel : ObservableObject, IDisposable
                 var token = busy.CancellationToken;
                 try
                 {
+                    var scanner = _scanSearcher;
                     found = await OffUiThread(() =>
                     {
                         var hits = new List<Match>();
@@ -2621,9 +2655,24 @@ public sealed partial class DocumentViewModel : ObservableObject, IDisposable
                         {
                             if (token.IsCancellationRequested)
                                 throw new OperationCanceledException(token);
-                            using var page = document.GetPage(i);
-                            foreach (var hit in page.FindText(term))
-                                hits.Add(new Match(i, hit.Rects));
+                            IReadOnlyList<PdfSearchMatch> own;
+                            using (var page = document.GetPage(i))
+                                own = page.FindText(term);
+                            var onPage = own.Select(h => new Match(i, h.Rects)).ToList();
+                            // A page with no text of its own may be a scan: read it (once per open
+                            // document) and look in what was read (#676). A text box added over a
+                            // scan is found above, as ordinary text, and the scan under it is still read.
+                            if (scanner is not null)
+                            {
+                                var read = scanner.Hits(i, term, own.SelectMany(h => h.Rects).ToList());
+                                if (read.Count > 0)
+                                {
+                                    onPage.AddRange(read.Select(h => new Match(i, h.Rects, FromScan: true)));
+                                    // Top of the page first, so "next match" walks a page the way it is read.
+                                    onPage = [.. onPage.OrderBy(m => m.Rects[0].Y).ThenBy(m => m.Rects[0].X)];
+                                }
+                            }
+                            hits.AddRange(onPage);
                             // After the page, not before it: "Page 1 of N" while page 1 is still
                             // being read would be a bar that finishes before the work does.
                             busy.Report(i + 1, pageCount);
@@ -2651,6 +2700,7 @@ public sealed partial class DocumentViewModel : ObservableObject, IDisposable
         CurrentMatchIndex = -1;
         MatchCount = _matches.Count;
         ApplyHighlights();
+        OnPropertyChanged(nameof(ScanNoteVisible));
 
         if (MatchCount > 0)
             GoToMatch(0);
@@ -2681,6 +2731,7 @@ public sealed partial class DocumentViewModel : ObservableObject, IDisposable
         MatchCount = 0;
         CurrentMatchIndex = -1;
         ApplyHighlights();
+        OnPropertyChanged(nameof(ScanNoteVisible));
     }
 
     private void GoToMatch(int index)
@@ -2697,7 +2748,7 @@ public sealed partial class DocumentViewModel : ObservableObject, IDisposable
     {
         foreach (var page in Pages)
         {
-            var rects = new List<PdfRect>();
+            var rects = new List<(PdfRect Rect, bool FromScan)>();
             var current = -1;
             for (var i = 0; i < _matches.Count; i++)
             {
@@ -2705,7 +2756,7 @@ public sealed partial class DocumentViewModel : ObservableObject, IDisposable
                     continue;
                 if (i == CurrentMatchIndex)
                     current = rects.Count;
-                rects.AddRange(_matches[i].Rects);
+                rects.AddRange(_matches[i].Rects.Select(r => (r, _matches[i].FromScan)));
             }
             page.SetMatches(rects, current);
         }
@@ -3422,6 +3473,8 @@ public sealed partial class DocumentViewModel : ObservableObject, IDisposable
 
     private void RerenderPage(int pageIndex)
     {
+        // A cover, a stamp, a text box or a turn changes what the page shows: what was read from it is stale (#676).
+        _scanSearcher?.PageChanged(pageIndex);
         var page = Pages.FirstOrDefault(p => p.Index == pageIndex);
         // Only if the view has it on screen; an off-screen page re-renders when it
         // scrolls back in, and will pick up the edit then.
@@ -3450,6 +3503,8 @@ public sealed partial class DocumentViewModel : ObservableObject, IDisposable
         Selection = null;
         RaiseUndoRedo();
 
+        _scanSearcher?.Clear();
+        _scanSearcher = null;
         _document?.Dispose();
         _document = null;
         DocumentPath = null;

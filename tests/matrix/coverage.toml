@@ -543,6 +543,8 @@ tests = [
   "src/MegaPDF.Avalonia/Program.cs::CheckMinimumWindow",
   "src/MegaPDF.Avalonia/Program.cs::CheckProgressAndCancel",
   "tests/MegaPDF.Core.Tests/SearchParityTests.cs::Search",
+  "tests/MegaPDF.Core.Tests/ScanSearchTests.cs::class",
+  "src/MegaPDF.Avalonia/ScanSearchCheck.cs::Run",
 ]
 manual = "TESTING.md::**Find**"
 note = "case-insensitivity, no-match and wrap are driven through the view model; the bar's layout and button names in three languages by CheckMinimumWindow."
@@ -554,6 +556,8 @@ tests = [
   "src/MegaPDF.Avalonia/Program.cs::CheckMinimumWindow",
   "src/MegaPDF.Avalonia/Program.cs::CheckProgressAndCancel",
   "tests/MegaPDF.Core.Tests/SearchParityTests.cs::Search",
+  "tests/MegaPDF.Core.Tests/ScanSearchTests.cs::class",
+  "src/MegaPDF.Avalonia/ScanSearchCheck.cs::Run",
 ]
 manual = "TESTING.md::**Find**"
 note = "same harness as macOS."

@@ -272,6 +272,10 @@
   <data name="Done" xml:space="preserve">
     <value>Done</value>
   </data>
+  <data name="FindScanNote" xml:space="preserve">
+    <value>Read from a scanned page: the text may contain mistakes.</value>
+    <comment>Find bar note (#676) under the count while the current match was read from a scanned page by the device's recogniser</comment>
+  </data>
   <data name="NotFound" xml:space="preserve">
     <value>Not found</value>
     <comment>Find summary</comment>

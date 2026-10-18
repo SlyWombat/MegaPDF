@@ -201,10 +201,10 @@ public sealed partial class PageViewModel : ObservableObject, IDisposable
     /// <summary>Search hits on this page, in device-independent pixels.</summary>
     public ObservableCollection<Highlight> Highlights { get; } = [];
 
-    private IReadOnlyList<PdfRect> _matchRects = [];
+    private IReadOnlyList<(PdfRect Rect, bool FromScan)> _matchRects = [];
     private int _currentMatch = -1;
 
-    internal void SetMatches(IReadOnlyList<PdfRect> rects, int currentIndex)
+    internal void SetMatches(IReadOnlyList<(PdfRect Rect, bool FromScan)> rects, int currentIndex)
     {
         _matchRects = rects;
         _currentMatch = currentIndex;
@@ -218,9 +218,9 @@ public sealed partial class PageViewModel : ObservableObject, IDisposable
         var scale = PageBitmap.PointsToPixels * Zoom;
         for (var i = 0; i < _matchRects.Count; i++)
         {
-            var r = _matchRects[i];
+            var (r, fromScan) = _matchRects[i];
             Highlights.Add(new Highlight(
-                r.X * scale, r.Y * scale, r.Width * scale, r.Height * scale, i == _currentMatch));
+                r.X * scale, r.Y * scale, r.Width * scale, r.Height * scale, i == _currentMatch, fromScan));
         }
     }
 
@@ -651,7 +651,7 @@ public sealed record RedactionMarkView(int MarkId, double X, double Y, double Wi
     public global::Avalonia.Thickness Margin => new(X, Y, 0, 0);
 }
 
-public sealed record Highlight(double X, double Y, double Width, double Height, bool IsCurrent)
+public sealed record Highlight(double X, double Y, double Width, double Height, bool IsCurrent, bool FromScan = false)
 {
     /// <summary>
     /// Position expressed as a margin inside a top-left aligned panel, rather than

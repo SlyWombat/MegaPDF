@@ -191,6 +191,9 @@ public static partial class Strings
     /// <summary>Done</summary>
     public static string Done => Get("Done");
 
+    /// <summary>Read from a scanned page: the text may contain mistakes.</summary>
+    public static string FindScanNote => Get("FindScanNote");
+
     /// <summary>Not found</summary>
     public static string NotFound => Get("NotFound");
 

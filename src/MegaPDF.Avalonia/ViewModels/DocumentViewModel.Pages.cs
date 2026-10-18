@@ -512,6 +512,10 @@ public sealed partial class DocumentViewModel
         // The shared, index-keyed piece first: without this a settled page's "already warned
         // about" would land on a different page after a delete and skip a warning that was owed.
         _pageWarnings.Renumber(shifts);
+        // What was read of a scan follows its page, and a turned page is read again (#676).
+        _scanSearcher?.Renumbered(shifts);
+        foreach (var changed in changedPages)
+            _scanSearcher?.PageChanged(changed);
 
         foreach (var shift in shifts)
             ApplyOneShift(document, shift);
@@ -528,7 +532,7 @@ public sealed partial class DocumentViewModel
             foreach (var match in _matches)
             {
                 if (PageShift.Map(shifts, match.PageIndex) is { } now)
-                    kept.Add(new Match(now, match.Rects));
+                    kept.Add(match with { PageIndex = now });
             }
             _matches.Clear();
             _matches.AddRange(kept.OrderBy(m => m.PageIndex));

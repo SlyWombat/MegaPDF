@@ -1908,7 +1908,7 @@ expected value to 2 and watching the suite fail).
 
 Find reads a page that has no text layer of its own, through the OS recogniser, and searches
 what it read. In memory only: never written to the document or to disk, dropped on close.
-iOS (Vision), Android (ML Kit, bundled model) and Windows (`Windows.Media.Ocr`) are built; macOS Avalonia is not.
+iOS (Vision), Android (ML Kit, bundled model), Windows (`Windows.Media.Ocr`) and macOS (Vision, from the Avalonia app) are built. Linux has no recogniser and is unchanged by design: Find on a scan there behaves exactly as it always did, with no dead affordance.
 
 **Phase 0, what it cost** (small, non-random samples of about 30 textless pages from the private
 corpus, the first by sorted path; read the percentiles as indicative). Counts and milliseconds
@@ -1954,6 +1954,19 @@ pixels with no text layer, read by the real recogniser): "fixture" was found 0.3
 the engine's own search finds it on the original; it prints SKIP and passes on a machine with no
 OCR language. 16 checks pass locally. The existing `find`, `progress`, `pages` and `reading`
 states and the whole Core suite (496) still pass.
+
+**macOS** (`MegaPDF.Avalonia`, `--self-test`, section "Find on scanned pages (#676)"): the
+shared logic is the same `MegaPDF.Core` code Windows uses; the recogniser is `MacVisionRecogniser`,
+which calls Vision's `VNRecognizeTextRequest` (accurate, language detected per page) through
+hand-written `objc_msgSend` declarations in the style of `MacPrinter`, so nothing new is shipped. A
+word's box is read through the two corner points of `boundingBoxForRange:error:` rather than its
+`CGRect`, which comes back through `objc_msgSend_stret` on Intel; **the Intel path was not run**
+(the Mac mini is Apple silicon). The self-test has a scripted half that runs anywhere (including
+Linux CI, which has no recogniser) and a genuine-scan half that is skipped where there is none. On
+the Mac mini the whole self-test passes, and a real scan of `demo.pdf` (the fixture written to say
+"rental" three times) gives back 3 hits, as the original does, the first 1.4 pt from where the
+engine finds it on the original; `fixture.pdf` gives 1 hit 3.6 pt away. A window screenshot shows
+the dashed edges on the three hits, "1 of 3" and the note on its own row under the find bar.
 
 **By hand** (not automated; a screenshot of `-screenshot scan-search` on the simulator shows it):
 

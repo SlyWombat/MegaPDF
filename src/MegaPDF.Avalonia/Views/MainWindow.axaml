@@ -560,6 +560,14 @@
       </StackPanel>
     </Border>
 
+    <!-- A hit read from a scanned page is the recogniser's guess, not the document's text (#676).
+         Its own row under the find bar, so the measured find row above is not touched. -->
+    <Border Name="FindScanNoteHost" DockPanel.Dock="Top" Padding="8,2,8,6"
+            IsVisible="{Binding Active.ScanNoteVisible, FallbackValue=False}">
+      <TextBlock Name="FindScanNote" Text="{x:Static loc:Strings.FindScanNote}"
+                 Opacity="0.8" TextWrapping="Wrap" />
+    </Border>
+
     <!-- Status bar. One line, plain words: SDD §2.2 wants the app to say what
          happened without a dialog. -->
     <Border Name="StatusBarHost" DockPanel.Dock="Bottom" Padding="8,8" BorderThickness="0,1,0,0"
@@ -714,6 +722,7 @@
                                  Margin="{Binding Margin}"
                                  HorizontalAlignment="Left" VerticalAlignment="Top"
                                  Classes.current="{Binding IsCurrent}"
+                                 Classes.scan="{Binding FromScan}"
                                  Fill="{DynamicResource BrandFindMatch}">
                         <!-- Hue, not opacity, separates "one of forty hits" from
                              "the hit you are on". Two brand colours read apart at
@@ -722,6 +731,18 @@
                         <Rectangle.Styles>
                           <Style Selector="Rectangle.current">
                             <Setter Property="Fill" Value="{DynamicResource BrandFindMatchCurrent}" />
+                          </Style>
+                          <!-- A hit the recogniser read rather than the document said (#676): a dashed
+                               edge, a shape and not a colour, so it survives dark mode and colour
+                               blindness. White over the current hit's fill, where the brand accent
+                               would not stand out. -->
+                          <Style Selector="Rectangle.scan">
+                            <Setter Property="Stroke" Value="{DynamicResource BrandAccent}" />
+                            <Setter Property="StrokeThickness" Value="1.5" />
+                            <Setter Property="StrokeDashArray" Value="4,3" />
+                          </Style>
+                          <Style Selector="Rectangle.scan.current">
+                            <Setter Property="Stroke" Value="White" />
                           </Style>
                         </Rectangle.Styles>
                       </Rectangle>

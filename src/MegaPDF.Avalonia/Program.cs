@@ -2373,6 +2373,17 @@ internal static class Program
             failures++;
         }
 
+        Console.WriteLine("Find on scanned pages (#676):");
+        try
+        {
+            ScanSearchCheck.Run(dir, () => WatchableDocument(state), Check);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"::error::scan search: {ex.GetType().Name}: {ex.Message}");
+            failures++;
+        }
+
         Console.WriteLine("the busy strip's bar, count and Stop, in a real window (#145):");
         try
         {
