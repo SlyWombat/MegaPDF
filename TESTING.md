@@ -1983,6 +1983,32 @@ the dashed edges on the three hits, "1 of 3" and the note on its own row under t
 search finds those); a highlight is a whole word, not a slice of it; a drawing-only page is read
 (only a uniform blank sheet is skipped); reading is on demand inside Find, not a background pass.
 
+## Phone downloads corpus, first run (2026-10-18)
+
+Dave offered the PDFs on the Pixel 4 XL's Downloads folder for private testing. 58 files; 37 were
+staged read-only as `Phone-Downloads-2026-10-18` in the private corpus (`P:`, `/mnt/pdf-test`), and
+21 were left out and named in that folder's `EXCLUDED-FROM-THIS-CORPUS.tsv` (18 look personal,
+financial or medical from their names and producers, 3 have names that say nothing and were not
+opened). Nothing was read for content: counts and producers only. The folder is **not** part of
+`~/pdf-test` on k3, so no earlier baseline changes. A run copies the 37 to a scratch directory.
+
+Run on kdocker3 at `dde8379` in a throwaway `megapdf:base` container (PDFium at 33 patches),
+`structure-battery.sh --reference --cli`, `markdown-battery.sh`, `pages-battery.sh --jobs 4` and
+`redaction-battery.sh`, then removed. **The batteries' `*.pdf` walk skips one file whose extension is
+`.PDF` (a one-page true scan); it was copied under a lower-case name and run alone, so all 37 were
+covered.**
+
+| battery | 36 files | the 37th (a true scan, no text) |
+|---|---|---|
+| structure | 36 opened, 0 crashed, 0 hung, aggregate F1 **0.999409** (gate 0.998), tau median 0.933 on 228 tagged pages, 717 pages, 81 textless | opened, textless, F1 n/a |
+| markdown | 34 extracted, 2 with no text on any page, 0 cmark failures | no text on any page |
+| pages | 0 crashes, 0 hangs, 0 mismatches, 0 qpdf failures, 0 other refusals; the two encrypted files (owner restrictions, open with no password) came back as the documented "restricted" | 7 of 7 operations ok |
+| redaction | 21 redacted, 15 refused (8 shared-form, 5 image, 1 layout-guard), 0 leaks, 0 changed outside, 0 crashed, 0 hung | redacted, 0 leaks |
+
+Zero crashes and zero hangs in every battery. What this does not show: no battery reads a scanned
+page's recognised text (Find on scans, #676, has its own checks), and these files are one phone's
+Downloads folder, not a sample.
+
 ## Reporting
 
 For each issue: what you clicked, what you expected, what happened, and the PDF
