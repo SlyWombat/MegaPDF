@@ -2005,9 +2005,40 @@ Vision's per-page counts match Tesseract's on every term of the menu, term for t
 recognisers find more "Thule" than Tesseract: I counted at least five by eye in the rendered page, so
 the extra hits are probably real, but I did not match each one to a place. Text set on a diagonal
 ("GREENLAND") is found by none. **The one shortfall is Android on the poster: 24 of 29 "wi-fi".** The
-text there is very small, and Android reads a page at 150 dpi capped at 4096 px on the long side; I did
-not test whether a higher cap finds the missing five. Timing on the Mac mini: one page 0.6 s, seven
+text there is very small, and Android reads a page at 150 dpi capped at 4096 px on the long side (the
+cap turned out not to be the cause: see the follow-up below). Timing on the Mac mini: one page 0.6 s, seven
 pages 3.1 s, three poster pages 2.8 s, including rendering.
+
+**Follow-up the same day: every term on every platform, and the render resolution.** The phone
+figures above were read off the find bar one term per scan; this ran every term. Android: a throwaway
+instrumented test on the Pixel 4 XL running the shipped read path (render, blank check, ML Kit,
+`OcrPage.matches`) at several dpi; at 150 dpi it reproduces the app's own 6, 7 and 24, so it is the
+same path. Windows: a throwaway hook in the `scan-search` self-test state on GPD-DAVE (`Windows.Media.Ocr`,
+the real view model and `SearchAsync`), with `ScanReader.Dpi` made overridable for the run. Neither
+probe was committed.
+
+| scan | term | by eye | Vision 150 | ML Kit 150 / 200 / 300 / 400 | Windows 150 / 200 / 300 |
+|---|---|---:|---:|---:|---:|
+| map | thule | 6 | 6 | 6 / 6 / 6 / 6 | **4** / 6 / 6 |
+| | greenland (diagonal) | 1 | 0 | **1** at every dpi | 0 / 0 / 0 |
+| | bomber, canada | | 2, 1 | 2, 1 at every dpi | 2, 1 at every dpi |
+| menu | hummus, calamari, lentil, chef, shrimp | | 2, 4, 4, 7, 3 | same at every dpi | same, except lentil 3 at 300 |
+| poster | wi-fi | | 29 | **24** / 29 / 29 / 28 | **20** / 29 / 29 |
+| | garager | | 28 | 28 / 28 / 28 / 29 | **18** / 26 / 25 |
+| | camera, account | | 4, 5 | 4, 5 at every dpi | **3, 4** / 4, 5 / 4, 5 |
+
+Three corrections to the paragraph above. **The 4096 px cap was not the cause:** the poster's pages are
+US Letter, which is 1275 x 1650 px at 150 dpi, nowhere near the cap. **The cause is the resolution:**
+at 200 dpi both Android and Windows find every "wi-fi" Vision and Tesseract find, and Windows recovers
+the map's two missing "Thule", while the menu, whose type is larger, is the same at every resolution.
+**Diagonal text is not missed by everyone:** ML Kit finds the one diagonal "GREENLAND" on the map at
+every resolution; Vision, Windows and Tesseract do not. On the map, the six "Thule" Vision and ML Kit
+report are all on the page by eye (title, two labels, three in the caption), so Tesseract's 4 was the
+undercount. The cost of 200 dpi: the whole poster read in 2.9 s at 150 and 3.9 s at 200 on the phone,
+and in 0.96 s and 0.99 s on Windows; the seven-page menu in 4.4 s and 4.6 s on the phone and 1.2 s and
+1.7 s on Windows. A 200 dpi Letter page is a 15 MB bitmap. Whether the shipped 150 should become 200, on
+which platforms, is a decision for #676 and was not made here; Vision at 150 already matched on these
+three, and iOS was not run.
 
 **Known limits.** A phrase split across two recognised lines is not found (the engine's own
 search finds those); a highlight is a whole word, not a slice of it; a drawing-only page is read
