@@ -8,17 +8,19 @@ import Vision
 // Measured before it was designed (#676, phase 0): `.accurate` costs about 0.14 s a page and
 // barely moves with resolution (134 ms at 100 dpi, 154 ms at 300), so there is nothing to gain
 // from rendering large; `.fast` is four to ten times quicker but reads 61-92% of the
-// characters, which for Find is silent missing hits. Hence accurate, at 150 dpi.
+// characters, which for Find is silent missing hits. Hence accurate. At 200 dpi, not 150: real
+// small-print scans showed 150 too coarse for the other platforms' recognisers, and 200 keeps one
+// figure everywhere (Vision found the same at both; Dave, 2026-10-18).
 //
 // Nothing recognised leaves this process, and nothing is written anywhere: the caller keeps
 // the result in memory for as long as the document is open.
 
 extension PdfEngine {
 
-    /// Render resolution for recognition. The knee on the other platforms; flat on Vision.
-    static let ocrDPI = 150.0
+    /// Render resolution for recognition: the same 200 as every other platform (#676).
+    static let ocrDPI = 200.0
     /// Past this many pixels a side the render is scaled down. Vision has no hard ceiling the way
-    /// Windows' 10,000 px does, but a poster at 150 dpi is a very large bitmap for no gain.
+    /// Windows' 10,000 px does, but a poster at 200 dpi is a very large bitmap for no gain.
     static let ocrMaxSide = 6_000.0
 
     /// Whether the page carries text of its own -- real or an invisible OCR layer -- **not

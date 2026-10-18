@@ -1920,7 +1920,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     /**
-     * Renders the page at 150 dpi (the knee measured in #676 phase 0) and reads it. A uniform
+     * Renders the page at 200 dpi (see [OCR_DPI]) and reads it. A uniform
      * blank sheet is read as empty without being sent to the recogniser. Null when the page could
      * not be rendered or read.
      */
@@ -3819,8 +3819,10 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         val DEFAULT_PAGE_SIZE = PageSize(612.0, 792.0)
         const val MAX_SIGNATURE_SOURCE_DIM = 1500  // downscale huge photos before cleanup
         const val SEARCH_DEBOUNCE_MS = 250L  // keep typing from spamming the engine
-        // Find on scanned pages (#676): the knee measured in phase 0, and a cap on a poster so a page is never a bitmap the phone cannot hold.
-        const val OCR_DPI = 150.0
+        // Find on scanned pages (#676): 200 dpi, not phase 0's 150, which missed 5 of 29 hits on a real
+        // small-print scan where 200 found all 29 (Dave, 2026-10-18); and a cap on a poster so a page
+        // is never a bitmap the phone cannot hold.
+        const val OCR_DPI = 200.0
         const val OCR_MAX_SIDE = 4096.0
         const val COPY_BUFFER_BYTES = 1 shl 20  // streaming a document between files (#147)
         // The screenshot search term, document names and typed text are string

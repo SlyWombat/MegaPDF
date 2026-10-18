@@ -24,7 +24,8 @@ interface PageRecogniser {
  * device both ask for, at about 13-16 MB per device (#676, phase 0). Nothing read leaves the
  * process and nothing is written anywhere.
  *
- * Measured on a Pixel 4 XL (2019) at 150 dpi: about 190 ms a page, 193 ms cold.
+ * Measured on a Pixel 4 XL (2019) at 150 dpi: about 190 ms a page, 193 ms cold. At 200 dpi a real
+ * three-page small-print scan took 3.9 s to read, against 2.9 s at 150.
  */
 class MlKitPageRecogniser : PageRecogniser {
 

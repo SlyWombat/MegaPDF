@@ -16,7 +16,9 @@ namespace MegaPDF.App;
 /// Measured in phase 0 (#676, en-GB recogniser, 31 textless pages): cost scales with pixels, 169 ms
 /// a page at 100 dpi to 931 ms at 300, and <see cref="OcrEngine.MaxImageDimension"/> is a hard
 /// 10,000 px that <c>RecognizeAsync</c> throws past (4 of 31 pages at 300 dpi), which is why the
-/// reader caps its render by <see cref="MaxPixelsPerSide"/> and why 150 dpi is the default.
+/// reader caps its render by <see cref="MaxPixelsPerSide"/>. 150 dpi was the default until real scans
+/// showed it too coarse for small print (20 of 29 hits on a poster, all 29 at 200): see
+/// <see cref="ScanReader.Dpi"/>.
 /// </summary>
 internal sealed class WindowsOcrRecogniser : IPageRecogniser
 {

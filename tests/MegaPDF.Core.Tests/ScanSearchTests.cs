@@ -242,7 +242,7 @@ public class ScanSearchTests
     }
 
     [Fact]
-    public void ARenderAtOneFiftyDpiIsWhatTheRecogniserSees()
+    public void ARenderAtTwoHundredDpiIsWhatTheRecogniserSees()
     {
         using var doc = new PdfiumEngine().Open(Fixture("structure", "scan.pdf"));
         var spy = new Spy();
@@ -251,8 +251,8 @@ public class ScanSearchTests
             Assert.NotNull(ScanReader.Read(doc, 0, spy));
             var (w, h, pw, ph) = Assert.Single(spy.Seen);
             Assert.Equal(page.Width, pw);
-            Assert.Equal(pw * 150 / 72, w, 2);
-            Assert.Equal(ph * 150 / 72, h, 2);
+            Assert.Equal(pw * 200 / 72, w, 2);
+            Assert.Equal(ph * 200 / 72, h, 2);
         }
     }
 

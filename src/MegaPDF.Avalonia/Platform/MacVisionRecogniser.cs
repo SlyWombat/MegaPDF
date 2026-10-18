@@ -119,7 +119,7 @@ internal sealed class MacVisionRecogniser : IPageRecogniser
         }
     }
 
-    /// <summary>Vision has no hard ceiling the way Windows' 10,000 px is; a poster at 150 dpi is a very large bitmap for no gain.</summary>
+    /// <summary>Vision has no hard ceiling the way Windows' 10,000 px is; a poster at 200 dpi is a very large bitmap for no gain.</summary>
     public int MaxPixelsPerSide => 6_000;
 
     public OcrPage? Read(RenderedPage image, double pageWidth, double pageHeight)

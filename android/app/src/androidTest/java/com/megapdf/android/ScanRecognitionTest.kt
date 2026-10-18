@@ -19,9 +19,9 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class ScanRecognitionTest {
 
-    /** A 612 x 792 pt page at 150 dpi, with the given lines drawn at 100 pt from the top, 120 pt apart. */
+    /** A 612 x 792 pt page at 200 dpi, the resolution Find reads at, with the given lines drawn at 100 pt from the top, 120 pt apart. */
     private fun page(lines: List<String>, points: Float = 44f): Bitmap {
-        val scale = 150f / 72f
+        val scale = 200f / 72f
         val bitmap = Bitmap.createBitmap((612 * scale).toInt(), (792 * scale).toInt(), Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
         canvas.drawColor(Color.WHITE)

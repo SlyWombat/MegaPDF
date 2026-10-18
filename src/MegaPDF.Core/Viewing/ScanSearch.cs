@@ -158,8 +158,11 @@ public interface IPageRecogniser
 /// <summary>Render a page, decide whether it is worth reading, read it.</summary>
 public static class ScanReader
 {
-    /// <summary>The knee measured in #676's phase 0 on Windows and Android; flat on Vision.</summary>
-    public const double Dpi = 150;
+    /// <summary>
+    /// 200, not phase 0's 150 (#676, Dave 2026-10-18): on a real small-print scan, 150 missed 9 of 29
+    /// hits on Windows and 5 on Android, and 200 found all 29. Vision is flat across both.
+    /// </summary>
+    public const double Dpi = 200;
 
     /// <summary>
     /// Whether the page carries text of its own — real, or an invisible OCR layer — <b>not
