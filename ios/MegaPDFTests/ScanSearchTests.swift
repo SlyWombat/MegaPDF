@@ -221,4 +221,53 @@ final class ScanSearchTests: XCTestCase {
         XCTAssertEqual(hits.filter { !$0.fromScan }.count, 1, "the box is found as ordinary text")
         XCTAssertEqual(hits.first?.fromScan, true, "reading order: the scan line is higher on the page, the box second")
     }
+
+    private func scan(of lines: [String]) -> Data {
+        let page = CGRect(x: 0, y: 0, width: 612, height: 792)
+        let image = UIGraphicsImageRenderer(size: page.size).image { context in
+            UIColor.white.setFill()
+            context.fill(page)
+            let attributes: [NSAttributedString.Key: Any] = [
+                .font: UIFont.systemFont(ofSize: 40), .foregroundColor: UIColor.black]
+            for (index, line) in lines.enumerated() {
+                NSString(string: line).draw(at: CGPoint(x: 60, y: 100 + 120 * index), withAttributes: attributes)
+            }
+        }
+        return UIGraphicsPDFRenderer(bounds: page).pdfData { context in
+            context.beginPage()
+            image.draw(in: page)
+        }
+    }
+
+    /// The app ships in French and its documents are in whatever language their authors wrote.
+    func testVisionReadsAFrenchPageWithItsAccents() async throws {
+        let engine = PdfEngine.shared
+        let doc = try await engine.open(scan(of: ["Facture numéro 4821", "Montant à payer avant échéance"]))
+        defer { Task { await engine.close(doc) } }
+        let recognised = await engine.recognise(doc, index: 0)
+        let read = try XCTUnwrap(recognised)
+        let words = read.lines.map(\.text).joined(separator: " | ")
+        XCTAssertEqual(read.matches(of: "facture").count, 1, "read: \(words)")
+        XCTAssertEqual(read.matches(of: "échéance").count, 1, "accents survive: \(words)")
+        XCTAssertEqual(read.matches(of: "à payer").count, 1, "read: \(words)")
+    }
+
+    func testABlankSheetIsReadAsEmptyWithoutBeingSentToTheRecogniser() async throws {
+        let engine = PdfEngine.shared
+        let doc = try await engine.open(scan(of: []))
+        defer { Task { await engine.close(doc) } }
+        let image = try await engine.render(doc, index: 0, pixelWidth: 600, pixelHeight: 800)
+        XCTAssertTrue(PdfEngine.isBlank(image))
+        let recognised = await engine.recognise(doc, index: 0)
+        let read = try XCTUnwrap(recognised, "a blank page is a read page, not a failure")
+        XCTAssertTrue(read.lines.isEmpty)
+    }
+
+    func testAPageWithTextOnItIsNotBlank() async throws {
+        let engine = PdfEngine.shared
+        let doc = try await engine.open(scan(of: ["Invoice"]))
+        defer { Task { await engine.close(doc) } }
+        let image = try await engine.render(doc, index: 0, pixelWidth: 918, pixelHeight: 1188)
+        XCTAssertFalse(PdfEngine.isBlank(image))
+    }
 }

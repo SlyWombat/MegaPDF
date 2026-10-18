@@ -1904,6 +1904,48 @@ the change was a sample property, not a regression. Also added: `core_tests.cpp`
 `bits_per_pixel == 1` on the generated CCITT Group 4 and JBIG2 fixtures (checked live by flipping the
 expected value to 2 and watching the suite fail).
 
+## Find on scanned pages (#676), 2026-10-17
+
+Find reads a page that has no text layer of its own, through the OS recogniser, and searches
+what it read. In memory only: never written to the document or to disk, dropped on close.
+iOS is built (Vision); Windows, macOS Avalonia and Android are not.
+
+**Phase 0, what it cost** (small, non-random samples of about 30 textless pages from the private
+corpus, the first by sorted path; read the percentiles as indicative). Counts and milliseconds
+only; no file name or recognised text was kept.
+
+| platform | recogniser | recognise p50 per page | notes |
+|---|---|---|---|
+| iOS / macOS (Mac mini M4, load ~5) | Vision `.accurate` | 134 ms at 100 dpi, 154 ms at 300 | flat across dpi; `.fast` reads 61-92% of the characters, so not used; cold 539 ms |
+| Windows (GPD-DAVE) | `Windows.Media.Ocr` | 169 ms at 100 dpi, 931 ms at 300 | scales with pixels; throws past 10,000 px a side (4 of 31 pages at 300 dpi); cold 312-377 ms |
+| Android (Pixel 4 XL, a 2019 phone, load ~3.4) | ML Kit, bundled model | 190 ms at 100-150 dpi, 284 ms at 300 | cold 193 ms; about 13-16 MB per device (an estimate, no release bundle built); a ceiling for current hardware |
+
+Chosen: iOS recognises at 150 dpi, accurate, language detected per page. A 300-page scan is
+about 45 s on the mini. Android is decided to use the bundled model (Dave, 2026-10-17).
+
+**Automated, iOS** (`OcrTextTests`, `ScanSearchTests`): the matcher and the cache following
+moves, deletes and inserts; the model reading a scan once and then searching from the cache; a
+page with a text layer never read; nothing kept after close; a text box added over a scan found
+as ordinary text and the scan found as read text, once each; and the **real Vision recogniser**
+reading drawn pages (English, and French with accents) and a blank sheet skipped. With the cache
+shift removed, the move and delete tests fail; with the duplicate filter removed, the text-box
+test fails.
+
+**By hand** (not automated; a screenshot of `-screenshot scan-search` on the simulator shows it):
+
+- [ ] Open a scanned PDF, Find a word on it: the strip counts pages and Stop works; hits have a
+      dashed edge and the note under the find bar appears while a read hit is current.
+- [ ] Search again: no strip, the result is immediate.
+- [ ] Move or delete a page, search again: the hits are on the pages the words are on.
+- [ ] Add a text box over a scanned page and search a word in both: two hits, not three.
+- [ ] Apply a redaction on a scanned page, search the redacted word: no hit.
+- [ ] A French scan: accented words are found.
+- [ ] Linux and the desktops are unchanged until their phases land.
+
+**Known limits.** A phrase split across two recognised lines is not found (the engine's own
+search finds those); a highlight is a whole word, not a slice of it; a drawing-only page is read
+(only a uniform blank sheet is skipped); reading is on demand inside Find, not a background pass.
+
 ## Reporting
 
 For each issue: what you clicked, what you expected, what happened, and the PDF

@@ -67,7 +67,13 @@ https://github.com/SlyWombat/MegaPDF/blob/main/docs/review/MegaPDF-Test-Form.pdf
 12. **Export as Markdown:** **More** → **Export as Markdown** writes the
     document's text (headings, paragraphs, lists, filled-in values) as a `.md`
     file through the Files picker. One-way: the PDF is not changed. A page with
-    no text layer (a scan) becomes a one-line note; there is no OCR.
+    no text layer (a scan) becomes a one-line note; the export does no OCR.
+13. **Find on a scanned page:** open a PDF that is only pictures of pages, tap
+    the magnifier and type a word. The first search reads the pages with the
+    system's on-device text recognition (Vision), showing "Page N of M" with a
+    Stop button; hits on a read page have a dashed edge and a note under the
+    find bar. Nothing is sent anywhere, and nothing is written to the file or
+    to disk: what was read is kept in memory until the document is closed.
 
 **1. Screen recording**
 Attached: MegaPDF 2.1.1 on an iPhone 17 Pro Max simulator, iOS 26.5: cold

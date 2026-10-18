@@ -46,6 +46,27 @@ enum DemoContent {
     /// under the bar with the counter reading "1 of 3". Search is
     /// case-insensitive, so the lower-case term matches the capitalized ones.
     /// The French page repeats "location" the same three times.
+    /// `-screenshot scan-search` (#676): one page that is only a picture of the agreement's first
+    /// lines, so the search term has to be read off pixels rather than found in a text layer.
+    static func scannedDemoPDF() -> Data {
+        let page = CGRect(x: 0, y: 0, width: 612, height: 792)
+        let lines = ["Equipment Rental Agreement", "This rental agreement is made between",
+                     "the owner and the renter for the rental", "of the equipment listed below."]
+        let image = UIGraphicsImageRenderer(size: page.size).image { context in
+            UIColor.white.setFill()
+            context.fill(page)
+            let attributes: [NSAttributedString.Key: Any] = [
+                .font: UIFont.systemFont(ofSize: 26), .foregroundColor: UIColor.black]
+            for (index, line) in lines.enumerated() {
+                NSString(string: line).draw(at: CGPoint(x: 60, y: 90 + 60 * index), withAttributes: attributes)
+            }
+        }
+        return UIGraphicsPDFRenderer(bounds: page).pdfData { context in
+            context.beginPage()
+            image.draw(in: page)
+        }
+    }
+
     static var searchTerm: String { String(localized: "rental", comment: "screenshot search term; must occur three times on the demo page") }
 
     /// What the Redact capture marks (#173): a line of the demo agreement with something on

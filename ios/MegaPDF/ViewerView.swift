@@ -1441,12 +1441,14 @@ struct ViewerView: View {
                         with: .color(isCurrent ? Brand.findMatchCurrent : Brand.findMatch))
                     // A dashed edge on a hit the recogniser read rather than the document said
                     // (#676): a shape, not a colour, so it survives Night mode and colour blindness.
-                    if match.fromScan {
-                        context.stroke(Path(r), with: .color(Brand.accent),
-                                       style: StrokeStyle(lineWidth: 1.5, dash: [4, 3]))
-                    }
                     if isCurrent {
                         context.stroke(Path(r), with: .color(Brand.accent), lineWidth: 2)
+                    }
+                    // Over the current hit's solid outline the dashes are white, or the outline
+                    // would hide them and the hit would look like the document's own text.
+                    if match.fromScan {
+                        context.stroke(Path(r), with: .color(isCurrent ? .white : Brand.accent),
+                                       style: StrokeStyle(lineWidth: 1.5, dash: [4, 3]))
                     }
                 }
             }

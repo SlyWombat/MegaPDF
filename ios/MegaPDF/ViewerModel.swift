@@ -1062,13 +1062,15 @@ final class ViewerModel: ObservableObject {
             let scenario = DemoContent.recentsScenario()
             unavailableRecentIDs = scenario.unavailable
             state = .home(recents: scenario.entries, error: nil)
-        case "viewer", "sign", "draw", "search", "text", "text-edit", "story", "redact":
+        case "viewer", "sign", "draw", "search", "scan-search", "text", "text-edit", "story", "redact":
             let resource = mode == "story" ? DemoContent.blankDemoResource : DemoContent.demoResource
-            if let url = Bundle.main.url(forResource: resource, withExtension: "pdf"),
-               let bytes = try? Data(contentsOf: url) {
+            // #676: a page that is only a picture of text, which Find has to read to search.
+            let scanned = mode == "scan-search" ? DemoContent.scannedDemoPDF() : nil
+            if let bytes = scanned ?? Bundle.main.url(forResource: resource, withExtension: "pdf")
+                .flatMap({ try? Data(contentsOf: $0) }) {
                 if mode == "sign" { screenshotSheet = .signatures }
                 if mode == "draw" { screenshotSheet = .draw }
-                if mode == "search" { screenshotSearchTerm = DemoContent.searchTerm }
+                if mode == "search" || mode == "scan-search" { screenshotSearchTerm = DemoContent.searchTerm }
                 Task {
                     await open(source: .bytes(bytes), password: nil,
                                displayName: DemoContent.documentName, sourceURL: nil)

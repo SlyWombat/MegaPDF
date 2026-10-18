@@ -50,7 +50,30 @@ extension PdfEngine {
         guard let image = try? render(document, index: index,
                                       pixelWidth: pixelWidth, pixelHeight: pixelHeight)
         else { return nil }
+        // A sheet with nothing on it is read as empty without being sent to the recogniser (about
+        // 0.14 s a page, for nothing). It is still a *read* page, so it is not looked at again.
+        if Self.isBlank(image) { return OcrPage(lines: []) }
         return await Self.runVision(on: image, pageSize: size)
+    }
+
+    /// Whether the rendered page is a uniform sheet: a sampled grid in which almost nothing differs
+    /// from the corner pixel. A few specks of scanner noise stay under the line; a ruled form or a
+    /// drawing goes over it and is read, as is any real scan.
+    nonisolated static func isBlank(_ image: CGImage) -> Bool {
+        guard let data = image.dataProvider?.data, let bytes = CFDataGetBytePtr(data),
+              image.bitsPerPixel == 32 else { return false }
+        let rowBytes = image.bytesPerRow
+        let corner = (Int(bytes[0]), Int(bytes[1]), Int(bytes[2]))
+        var sampled = 0, different = 0
+        for y in Swift.stride(from: 0, to: image.height, by: 4) {
+            for x in Swift.stride(from: 0, to: image.width, by: 4) {
+                let p = bytes + y * rowBytes + x * 4
+                sampled += 1
+                let d = abs(Int(p[0]) - corner.0) + abs(Int(p[1]) - corner.1) + abs(Int(p[2]) - corner.2)
+                if d > 60 { different += 1 }
+            }
+        }
+        return sampled > 0 && Double(different) / Double(sampled) < 0.0002
     }
 
     /// Off the actor and off the main thread: recognition holds a thread for a tenth of a second
@@ -61,6 +84,9 @@ extension PdfEngine {
                 let request = VNRecognizeTextRequest()
                 request.recognitionLevel = .accurate
                 request.usesLanguageCorrection = true
+                // Not assumed English: this app ships in English and French and its documents are
+                // in whatever their authors wrote. Vision picks the language per page.
+                request.automaticallyDetectsLanguage = true
                 let handler = VNImageRequestHandler(cgImage: image, options: [:])
                 do { try handler.perform([request]) } catch {
                     continuation.resume(returning: nil)
