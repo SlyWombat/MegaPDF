@@ -214,7 +214,11 @@ final class ScanSearchTests: XCTestCase {
         XCTAssertFalse(hasText, "a text box the person added is not a text layer")
 
         model.search(term: "invoice", debounce: false)
-        try await waitUntil("the search ends") { !model.isSearching && model.busy.strip == nil }
+        // The real recogniser's first read in a fresh simulator loads Vision's model on the CPU:
+        // measured 8.4 s at 150 dpi and 15-20 s at 200 on the Mac mini (2026-10-18, five fresh
+        // simulators), against 2.3 s once warm at either. CI makes a fresh simulator for every job,
+        // so this wait is sized for the cold read; it is here to catch a hang, not to time the read.
+        try await waitUntil("the search ends", timeout: 60) { !model.isSearching && model.busy.strip == nil }
         let hits = model.searchMatches
         XCTAssertEqual(hits.count, 2, "the box once and the scan once; got \(hits.map(\.fromScan))")
         XCTAssertEqual(hits.filter(\.fromScan).count, 1, "only the scan's own hit is marked as read")
