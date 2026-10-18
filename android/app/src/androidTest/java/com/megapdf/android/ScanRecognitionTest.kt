@@ -20,18 +20,18 @@ import org.junit.runner.RunWith
 class ScanRecognitionTest {
 
     /** A 612 x 792 pt page at 150 dpi, with the given lines drawn at 100 pt from the top, 120 pt apart. */
-    private fun page(lines: List<String>): Bitmap {
+    private fun page(lines: List<String>, points: Float = 44f): Bitmap {
         val scale = 150f / 72f
         val bitmap = Bitmap.createBitmap((612 * scale).toInt(), (792 * scale).toInt(), Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
         canvas.drawColor(Color.WHITE)
-        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.BLACK; textSize = 44f * scale }
-        lines.forEachIndexed { i, line -> canvas.drawText(line, 72f * scale, (100f + 120f * i + 44f) * scale, paint) }
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.BLACK; textSize = points * scale }
+        lines.forEachIndexed { i, line -> canvas.drawText(line, 72f * scale, (100f + 120f * i + points) * scale, paint) }
         return bitmap
     }
 
-    private fun read(lines: List<String>): OcrPage =
-        runBlocking { MlKitPageRecogniser().read(page(lines), 612.0, 792.0) }
+    private fun read(lines: List<String>, points: Float = 44f): OcrPage =
+        runBlocking { MlKitPageRecogniser().read(page(lines, points), 612.0, 792.0) }
 
     @Test
     fun readsADrawnPageAndSaysWhereTheWordIs() {
@@ -49,7 +49,8 @@ class ScanRecognitionTest {
 
     @Test
     fun readsAFrenchPageWithItsAccents() {
-        val read = read(listOf("Facture numéro 4821", "Montant à payer avant échéance"))
+        // 34 pt: at 44 pt this line is wider than the 612 pt page and was cut off at "avant éché".
+        val read = read(listOf("Facture numéro 4821", "Montant à payer avant échéance"), points = 34f)
         val words = read.lines.joinToString(" | ") { it.text }
         assertEquals("read: $words", 1, read.matches("facture").size)
         assertEquals("accents survive: $words", 1, read.matches("échéance").size)
