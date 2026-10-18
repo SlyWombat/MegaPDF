@@ -1979,6 +1979,36 @@ the dashed edges on the three hits, "1 of 3" and the note on its own row under t
 - [ ] A French scan: accented words are found.
 - [ ] Linux and the desktops are unchanged until their phases land.
 
+### Find on three real scans (2026-10-18)
+
+The three true scans in the phone corpus (a one-page map, a seven-page restaurant menu, a
+three-page product poster; no text layer on any page) searched through Find with the real
+recogniser on two platforms, against an independent reference: Tesseract 5.3 at 300 dpi, counted
+the same way (a term inside a word counts). Counts only. The Mac figures come from a throwaway
+runner over the real view model (Vision, accurate level); the phone ran the debug APK from CI for
+`da17941` (ML Kit, bundled model), read off the find bar.
+
+| scan | term | Tesseract | macOS Vision | Android ML Kit |
+|---|---|---:|---:|---:|
+| map, 1 page | thule | 4 | 6 | 6 |
+| | bomber | 2 | 2 | not run |
+| | canada | 1 | 1 | not run |
+| | greenland (letters set on a diagonal) | 0 | 0 | not run |
+| menu, 7 pages | chef | 7 | 7 | 7 |
+| | calamari | 4 | 4 | not run |
+| | hummus, lentil, shrimp | 2, 4, 3 | 2, 4, 3 | not run |
+| poster, 3 pages | wi-fi | 29 | 29 | **24** |
+| | garager | 25 | 28 | not run |
+| | camera, account | 4, 5 | 4, 5 | not run |
+
+Vision's per-page counts match Tesseract's on every term of the menu, term for term. On the map, both
+recognisers find more "Thule" than Tesseract: I counted at least five by eye in the rendered page, so
+the extra hits are probably real, but I did not match each one to a place. Text set on a diagonal
+("GREENLAND") is found by none. **The one shortfall is Android on the poster: 24 of 29 "wi-fi".** The
+text there is very small, and Android reads a page at 150 dpi capped at 4096 px on the long side; I did
+not test whether a higher cap finds the missing five. Timing on the Mac mini: one page 0.6 s, seven
+pages 3.1 s, three poster pages 2.8 s, including rendering.
+
 **Known limits.** A phrase split across two recognised lines is not found (the engine's own
 search finds those); a highlight is a whole word, not a slice of it; a drawing-only page is read
 (only a uniform blank sheet is skipped); reading is on demand inside Find, not a background pass.
