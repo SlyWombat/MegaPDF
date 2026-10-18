@@ -224,6 +224,7 @@
                                             Fill="{x:Bind Fill}"
                                             Stroke="{x:Bind Stroke}"
                                             StrokeThickness="{x:Bind StrokeThickness}"
+                                            StrokeDashArray="{x:Bind Dashes}"
                                             RadiusX="1.5"
                                             RadiusY="1.5" />
                                     </DataTemplate>
@@ -441,6 +442,7 @@
             BorderThickness="1"
             CornerRadius="8"
             PreviewKeyDown="OnFindBarKeyDown">
+            <StackPanel Orientation="Vertical" Spacing="4">
             <StackPanel Orientation="Horizontal" Spacing="{ThemeResource SpaceS}">
                 <TextBox
                     x:Name="FindQuery"
@@ -459,6 +461,16 @@
                 <Button Click="OnFindPreviousClicked" IsEnabled="{x:Bind ViewModel.HasSearchResults, Mode=OneWay}" Content="&#xE70E;" FontFamily="{StaticResource SymbolThemeFontFamily}" FontSize="{ThemeResource TypeCaption}" x:Uid="FindPreviousButton" AutomationProperties.AutomationId="FindPreviousButton" />
                 <Button Click="OnFindNextClicked" IsEnabled="{x:Bind ViewModel.HasSearchResults, Mode=OneWay}" Content="&#xE70D;" FontFamily="{StaticResource SymbolThemeFontFamily}" FontSize="{ThemeResource TypeCaption}" x:Uid="FindNextButton" AutomationProperties.AutomationId="FindNextButton" />
                 <Button Click="OnFindCloseClicked" Content="&#xE711;" FontFamily="{StaticResource SymbolThemeFontFamily}" FontSize="{ThemeResource TypeCaption}" x:Uid="FindCloseButton" AutomationProperties.AutomationId="FindCloseButton" />
+            </StackPanel>
+            <!-- A hit read from a scan is the recogniser's guess, not the document's text (#676). -->
+            <TextBlock
+                x:Uid="FindScanNote"
+                AutomationProperties.AutomationId="FindScanNote"
+                Visibility="{x:Bind ViewModel.ScanNoteVisibility, Mode=OneWay}"
+                FontSize="{ThemeResource TypeCaption}"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                TextWrapping="Wrap"
+                MaxWidth="420" />
             </StackPanel>
         </Border>
 

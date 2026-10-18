@@ -206,6 +206,10 @@
   </data>
 
   <!-- Barre de recherche -->
+  <data name="FindScanNote.Text" xml:space="preserve">
+    <value>Lu sur une page numérisée : le texte peut contenir des erreurs.</value>
+    <comment>FR-REVIEW #676 — new with scan search, not yet read by the reviewer.</comment>
+  </data>
   <data name="FindQuery.PlaceholderText" xml:space="preserve">
     <value>Rechercher</value>
   </data>

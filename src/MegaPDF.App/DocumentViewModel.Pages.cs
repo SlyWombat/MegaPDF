@@ -512,6 +512,10 @@ public partial class DocumentViewModel
         // The shared, index-keyed piece first: without it a settled page's "already warned
         // about" would land on a different page after a delete and skip a warning that was owed.
         _pageWarnings.Renumber(shifts);
+        // What was read of a scan follows its page, and a turned page is read again (#676).
+        _scanSearcher?.Renumbered(shifts);
+        foreach (var changed in changedPages)
+            _scanSearcher?.PageChanged(changed);
 
         // The selection as it was *before* the tiles move, and the pane told to stop reporting its
         // own selection until they have. Taking a selected tile out of the collection makes the
@@ -545,11 +549,11 @@ public partial class DocumentViewModel
             // Search hits: the rectangles are still right for the pages they are on, so the
             // matches travel with their pages rather than being thrown away — a find followed by
             // a delete should not lose the find.
-            var kept = new List<(int PageIndex, IReadOnlyList<PdfRect> Rects)>(_searchMatches.Count);
+            var kept = new List<FoundMatch>(_searchMatches.Count);
             foreach (var match in _searchMatches)
             {
                 if (PageShift.Map(shifts, match.PageIndex) is { } now)
-                    kept.Add((now, match.Rects));
+                    kept.Add(match with { PageIndex = now });
             }
             _searchMatches.Clear();
             _searchMatches.AddRange(kept.OrderBy(m => m.PageIndex));

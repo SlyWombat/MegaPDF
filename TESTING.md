@@ -1908,7 +1908,7 @@ expected value to 2 and watching the suite fail).
 
 Find reads a page that has no text layer of its own, through the OS recogniser, and searches
 what it read. In memory only: never written to the document or to disk, dropped on close.
-iOS (Vision) and Android (ML Kit, bundled model) are built; Windows and macOS Avalonia are not.
+iOS (Vision), Android (ML Kit, bundled model) and Windows (`Windows.Media.Ocr`) are built; macOS Avalonia is not.
 
 **Phase 0, what it cost** (small, non-random samples of about 30 textless pages from the private
 corpus, the first by sorted path; read the percentiles as indicative). Counts and milliseconds
@@ -1938,6 +1938,22 @@ drawn English and French pages is an instrumented test. **Size, measured:** an u
 release APK (four ABIs, R8) is 60.6 MB with ML Kit against 17.3 MB without, +43.3 MB; a per-device
 bundle was not built, so the 13-16 MB per device is still an estimate. Not yet run on a phone with
 the app itself (the Pixel 4 XL needed its USB-debugging authorisation again).
+
+**Windows** (`ScanSearchTests` in Core.Tests; `--screenshot-state scan-search`): the shared
+logic lives in `MegaPDF.Core` (`ScanSearch.cs`) so Avalonia can reuse it, and the recogniser is
+`WindowsOcrRecogniser`, built from the person's profile languages (it answers null, and Find
+behaves as before, when no OCR language is installed). Core tests: 24, including the real engine
+(an image-only page has no text of its own, an image under an invisible OCR layer does, a text box
+added over a scan is not a text layer, the render is 150 dpi and capped by the recogniser's
+10,000 px limit, a blank sheet never reaches the recogniser). That last group found a real defect:
+`GetTextRuns()` does not fill in `TextBoxId`, so boxes were being counted as text until they were
+subtracted by object index. The self-test state drives the real window in two parts: scripted
+(runs anywhere: the searcher built with the document, the cache following a page move, the dashed
+highlight, the note under the find bar) and a **genuine scan** (the fixture's own first page as
+pixels with no text layer, read by the real recogniser): "fixture" was found 0.3 pt from where
+the engine's own search finds it on the original; it prints SKIP and passes on a machine with no
+OCR language. 16 checks pass locally. The existing `find`, `progress`, `pages` and `reading`
+states and the whole Core suite (496) still pass.
 
 **By hand** (not automated; a screenshot of `-screenshot scan-search` on the simulator shows it):
 

@@ -210,6 +210,13 @@ internal static class Screenshot
             case "progress":
                 return await CheckProgressAndCancelAsync(window);
 
+            // #676: Find on scanned pages — the searcher built with the document, the cache
+            // following a page move, the dashed highlight and the note. The recogniser is
+            // scripted for the first part and real for the second, which skips itself on a
+            // machine with no OCR language. The exit code is the test.
+            case "scan-search":
+                return await ScanSearchCheck.RunAsync(window);
+
             // #590: a real AcroForm text field filled in, and a real AcroForm checkbox
             // ticked — not the drawn square `click` already covers (fixture.pdf has no
             // AcroForm fields at all). Needs formtext.pdf and forms.pdf beside the

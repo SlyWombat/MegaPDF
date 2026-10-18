@@ -529,7 +529,9 @@ tests = [
   "tests/MegaPDF.Core.Tests/SearchParityTests.cs::Search",
   "tests/MegaPDF.Core.Tests/SearchCropBoxTests.cs::CropBox",
   "tests/MegaPDF.Core.Tests/MatchScrollTests.cs::MatchScroll",
+  "tests/MegaPDF.Core.Tests/ScanSearchTests.cs::class",
   ".github/workflows/ci.yml::Run-Check \"progress\"",
+  ".github/workflows/ci.yml::Run-Check \"scan-search\"",
 ]
 manual = "TESTING.md::**Find**"
 note = "the progress state stops a long search; the find bar's own counter, wrap and Esc are by hand only. The `find` and `find-zoomed` harness states exist but CI does not run them."

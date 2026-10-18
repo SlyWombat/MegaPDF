@@ -64,8 +64,15 @@ public sealed record PageView(
     public string FailedMessage => Strings.PageRenderFailed;
 }
 
+/// <summary>
+/// One document-wide find hit: the page and the rectangles that cover it. <paramref name="FromScan"/> is a hit
+/// the OS recogniser read off a scanned page (#676) rather than one the document's own text holds:
+/// machine-derived, can be wrong, so the page draws it differently.
+/// </summary>
+internal readonly record struct FoundMatch(int PageIndex, IReadOnlyList<PdfRect> Rects, bool FromScan = false);
+
 /// <summary>One find-match rectangle on a page, in DIPs (zoom baked in at creation).</summary>
-public sealed record SearchHighlight(double X, double Y, double Width, double Height, bool IsCurrent)
+public sealed record SearchHighlight(double X, double Y, double Width, double Height, bool IsCurrent, bool FromScan = false)
 {
     public Thickness Margin => new(X, Y, 0, 0);
 
@@ -77,12 +84,20 @@ public sealed record SearchHighlight(double X, double Y, double Width, double He
     /// </summary>
     public Brush Fill => Brand.Brush(IsCurrent ? "BrandFindMatchCurrentBrush" : "BrandFindMatchBrush");
 
-    /// <summary>The current match is also outlined so it stands out beside its neighbors.</summary>
-    public Brush Stroke => IsCurrent
-        ? Brand.Brush("BrandAccentBrush")
-        : new SolidColorBrush(Microsoft.UI.Colors.Transparent);
+    /// <summary>
+    /// The current match is also outlined so it stands out beside its neighbors. A hit read from a
+    /// scan has a dashed edge (#676): a shape, not a colour, so it survives dark mode and colour
+    /// blindness. Over the current hit's outline the dashes are white, or the outline would hide them.
+    /// </summary>
+    public Brush Stroke => IsCurrent && FromScan
+        ? new SolidColorBrush(Microsoft.UI.Colors.White)
+        : IsCurrent || FromScan
+            ? Brand.Brush("BrandAccentBrush")
+            : new SolidColorBrush(Microsoft.UI.Colors.Transparent);
 
-    public double StrokeThickness => IsCurrent ? 1.5 : 0;
+    public double StrokeThickness => IsCurrent || FromScan ? 1.5 : 0;
+
+    public Microsoft.UI.Xaml.Media.DoubleCollection Dashes => FromScan ? [4, 3] : [];
 }
 
 /// <summary>
@@ -626,6 +641,7 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
         var rememberedView = recentFiles.FindEntry(path);
         DisposeDocument(); // the document this tab held until now (#543) — same path Dispose() uses
         _document = doc;
+        _scanSearcher = CreateScanSearcher(doc);
 
         // Permissions first, so nothing bound to the new path sees the old document's (#131).
         Capabilities = DocumentCapabilities.From(doc.Security);
@@ -742,6 +758,8 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
     /// </summary>
     private void DisposeDocument()
     {
+        _scanSearcher?.Clear();
+        _scanSearcher = null;
         _document?.Dispose();
         _document = null;
         _cappedRenders.Clear();
@@ -1137,6 +1155,8 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
     {
         if (_document is null || pageIndex < 0 || pageIndex >= Pages.Count)
             return;
+        // A cover, a stamp or a text box changes what the page shows: what was read from it is stale (#676).
+        _scanSearcher?.PageChanged(pageIndex);
         _cappedRenders.Remove(pageIndex); // the edit changed what the page looks like
         _keyboardMaps.TryRemove(pageIndex, out _); // and what is on it (#2)
         Pages[pageIndex] = await RenderPageAsync(_document, pageIndex);
@@ -1144,7 +1164,24 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
 
     // --- Find in document (Ctrl+F, issue #26: simple search) ---
 
-    private readonly List<(int PageIndex, IReadOnlyList<PdfRect> Rects)> _searchMatches = [];
+    /// <summary>
+    /// What has been read of the open document's scans (#676). In memory only and gone with the
+    /// document: never written to the file or to disk. Null when this machine has no OCR language
+    /// installed, and then Find on a scan behaves exactly as it always has.
+    /// </summary>
+    private ScanSearcher? _scanSearcher;
+
+    /// <summary>How a rendered page is read. Replaceable so a test or a self-test state can substitute its own.</summary>
+    internal static Func<IPageRecogniser?> RecogniserFactory { get; set; } = () => SharedRecogniser.Value;
+
+    private static readonly Lazy<IPageRecogniser?> SharedRecogniser = new(WindowsOcrRecogniser.TryCreate);
+
+    private static ScanSearcher? CreateScanSearcher(IPdfDocument doc) =>
+        RecogniserFactory() is { } recogniser
+            ? new ScanSearcher(i => ScanReader.HasOwnText(doc, i), i => ScanReader.Read(doc, i, recogniser))
+            : null;
+
+    private readonly List<FoundMatch> _searchMatches = [];
     private string _searchTerm = "";
     private int _searchGeneration;
 
@@ -1154,8 +1191,17 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
 
     /// <summary>1-based position of the current match; 0 when there is none.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(SearchStatus))]
+    [NotifyPropertyChangedFor(nameof(SearchStatus), nameof(ScanNoteVisibility))]
     private int _currentSearchMatch;
+
+    /// <summary>
+    /// The note under the find bar while the current hit was read from a scanned page (#676): the
+    /// text is the recogniser's guess, and this app does not imply more certainty than it has.
+    /// </summary>
+    public Visibility ScanNoteVisibility =>
+        CurrentSearchMatch > 0 && CurrentSearchMatch <= _searchMatches.Count
+        && _searchMatches[CurrentSearchMatch - 1].FromScan
+            ? Visibility.Visible : Visibility.Collapsed;
 
     public bool HasSearchResults => SearchMatchCount > 0;
 
@@ -1201,22 +1247,38 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
         var operation = Busy.Begin(Strings.BusySearching, blocksEditing: false, cancellable: true,
                                    progressFormat: (done, total) => Strings.BusyPageOfPages(done, total));
         var token = operation.CancellationToken;
-        List<(int PageIndex, IReadOnlyList<PdfRect> Rects)>? found;
+        List<FoundMatch>? found;
+        var scanner = _scanSearcher;
         try
         {
             using (operation)
             {
                 found = await Task.Run(() =>
                 {
-                    var list = new List<(int PageIndex, IReadOnlyList<PdfRect> Rects)>();
+                    var list = new List<FoundMatch>();
                     for (var i = 0; i < doc.PageCount; i++)
                     {
                         if (generation != _searchGeneration || openGeneration != _openGeneration)
                             return null;
                         token.ThrowIfCancellationRequested();
-                        using var page = doc.GetPage(i);
-                        foreach (var match in page.FindText(term))
-                            list.Add((i, match.Rects));
+                        IReadOnlyList<PdfSearchMatch> own;
+                        using (var page = doc.GetPage(i))
+                            own = page.FindText(term);
+                        var onPage = own.Select(m => new FoundMatch(i, m.Rects)).ToList();
+                        // A page with no text of its own may be a scan: read it (once per open
+                        // document) and look in what was read (#676). A text box added over a scan is
+                        // found above, as ordinary text, and the scan under it is still read.
+                        if (scanner is not null)
+                        {
+                            var read = scanner.Hits(i, term, own.SelectMany(m => m.Rects).ToList());
+                            if (read.Count > 0)
+                            {
+                                onPage.AddRange(read.Select(m => new FoundMatch(i, m.Rects, FromScan: true)));
+                                // Top of the page first, so "next match" walks a page the way it is read.
+                                onPage = [.. onPage.OrderBy(m => m.Rects[0].Y).ThenBy(m => m.Rects[0].X)];
+                            }
+                        }
+                        list.AddRange(onPage);
                         // After the page, not before it: "page 1 of N" while page 1 is still
                         // being read would be a bar that finishes before the work does.
                         operation.Report(i + 1, doc.PageCount);
@@ -1295,7 +1357,7 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
             foreach (var rect in _searchMatches[m].Rects)
                 highlights.Add(new SearchHighlight(
                     rect.X * toDip, rect.Y * toDip, rect.Width * toDip, rect.Height * toDip,
-                    IsCurrent: m == CurrentSearchMatch - 1));
+                    IsCurrent: m == CurrentSearchMatch - 1, FromScan: _searchMatches[m].FromScan));
         }
         return highlights;
     }
@@ -1303,6 +1365,7 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
     /// <summary>Re-stamps every page slot whose highlights changed (bitmaps are kept).</summary>
     private void ApplySearchHighlights()
     {
+        OnPropertyChanged(nameof(ScanNoteVisibility));
         for (var i = 0; i < Pages.Count; i++)
         {
             var highlights = HighlightsFor(i, ZoomFactor);
@@ -1313,8 +1376,8 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
 
     private void ScrollToCurrentMatch()
     {
-        var (pageIndex, rects) = _searchMatches[CurrentSearchMatch - 1];
-        SearchScrollRequested?.Invoke(ContentTargetFor(pageIndex, rects));
+        var match = _searchMatches[CurrentSearchMatch - 1];
+        SearchScrollRequested?.Invoke(ContentTargetFor(match.PageIndex, match.Rects));
     }
 
     /// <summary>
@@ -2310,6 +2373,8 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
             _undoStack.Clear();
             UndoCommand.NotifyCanExecuteChanged();
             RedoCommand.NotifyCanExecuteChanged();
+            // Text a redaction removed must not stay findable (#676).
+            _scanSearcher?.Clear();
             RefreshRedactionMarks();
             await RefreshPagesAfterRedactionAsync();
             RedactionSummaryText = DescribeRedaction(report.Counts);

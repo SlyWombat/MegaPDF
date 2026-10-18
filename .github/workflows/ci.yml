@@ -708,6 +708,10 @@ jobs:
           # count and Stop in a real window. Builds its own work.pdf and a two-picture PDF from
           # fixture.pdf, so it needs nothing else from the fixtures directory.
           Run-Check "progress" 60
+          # #676: Find on scanned pages. The first half scripts the recogniser and runs anywhere;
+          # the second half reads a genuine scan with Windows.Media.Ocr and prints SKIP, passing,
+          # on a runner with no OCR language installed.
+          Run-Check "scan-search" 90
 
           # #590: the six states that drive what a user actually opens the app for, and that
           # this job did not run until now. Each gives itself a unique scratch directory per
