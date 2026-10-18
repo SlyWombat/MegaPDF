@@ -2040,6 +2040,13 @@ and in 0.96 s and 0.99 s on Windows; the seven-page menu in 4.4 s and 4.6 s on t
 which platforms, is a decision for #676 and was not made here; Vision at 150 already matched on these
 three, and iOS was not run.
 
+**Adopted: 200 dpi on every platform** (Dave, 2026-10-18), in the shared `ScanReader.Dpi` (Windows and
+macOS), Android's `OCR_DPI` and iOS's `ocrDPI`. Checked after the change:
+- **Android app** on the Pixel 4 XL: the find bar reads "1 of 29" for "wi-fi" on the poster, where it read 24.
+- **macOS:** Vision at 200 gives the same as at 150 on the map and menu; on the poster, "wi-fi" 30 and "garager" 29, one more of each than at 150, with the extra hits not checked against the page.
+- **Self-tests and unit tests:** the Mac self-test passes (754 checks, with every fixture generator); Windows `scan-search` passes 16 of 16; Core `ScanSearch` tests pass 24 of 24; Android unit tests and `ScanRecognitionTest` pass on the phone.
+- **iOS** `ScanSearchTests` pass in the simulator. The search-through-the-model test's wait was raised from 15 s to 60 s: a cold first Vision read in a fresh simulator measured 15-20 s at 200 (8.4 s at 150), against 2.3 s warm at either.
+
 **Known limits.** A phrase split across two recognised lines is not found (the engine's own
 search finds those); a highlight is a whole word, not a slice of it; a drawing-only page is read
 (only a uniform blank sheet is skipped); reading is on demand inside Find, not a background pass.
