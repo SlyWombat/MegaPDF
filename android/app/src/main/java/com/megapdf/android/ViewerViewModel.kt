@@ -56,6 +56,11 @@ data class SelectedStamp(
 data class SearchHit(
     val pageIndex: Int,
     val rects: List<com.megapdf.engine.PdfRect>,
+    /**
+     * Read from a scanned page by the device's recogniser (#676), not found in the document's own
+     * text. Machine-derived and can be wrong, so the page draws it differently.
+     */
+    val fromScan: Boolean = false,
 )
 
 /**
@@ -600,6 +605,8 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         redactionMarks = emptyMap()
         selectedRedactionMark = null
         redactionSummary = describeRedaction(report.counts)
+        // Text a redaction removed must not stay findable (#676).
+        scanSearcher.clear()
         renderedPages.clear()
         pageBitmaps.clear()
         lastWindow?.let { (first, last, width) -> updateRenderWindow(first, last, width) }
@@ -1021,6 +1028,8 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         renderedThumbnails.putAll(movedThumbnailKeys)
 
         selectedPages = selectedPages.shiftedBy(shifts).filter { it < sizes.size }.toSet()
+        // What was read of a scan follows its page (#676).
+        scanSearcher.renumbered(shifts)
         searchHits = searchHits.mapNotNull { hit ->
             shifts.mapIndex(hit.pageIndex).takeIf { it >= 0 }?.let { hit.copy(pageIndex = it) }
         }
@@ -1077,6 +1086,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         }
         if (sizes.size != state.pageSizes.size) dirty.markEdited()
         uiState = state.copy(pageSizes = sizes)
+        scanSearcher.clear()
         pageBitmaps.clear()
         renderedPages.clear()
         dropThumbnails()
@@ -1103,6 +1113,8 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         val state = uiState as? ViewerUiState.Viewing ?: return
         val sizes = state.pageSizes.toMutableList()
         for (index in pages) {
+            // A turned page reads differently: what was read from it is stale (#676).
+            scanSearcher.pageChanged(index)
             if (index !in sizes.indices) continue
             val page = doc.openPage(index)
             try {
@@ -1879,6 +1891,67 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
 
     // --- Text search (#26) ---
 
+    /**
+     * How a rendered page is read (#676). Replaceable so a test can substitute its own; the app
+     * uses ML Kit's bundled model.
+     */
+    internal var recogniser: PageRecogniser = MlKitPageRecogniser()
+
+    /**
+     * What has been read of the open document's scans (#676). In memory only, and gone with the
+     * document: never written to the file or to disk.
+     */
+    private val scanSearcher = ScanSearcher(
+        hasOwnText = ::pageHasOwnText,
+        read = ::readPageForOcr,
+    )
+
+    /** Whether the page has text of its own; when in doubt, true, which leaves it to the engine's search. */
+    private suspend fun pageHasOwnText(index: Int): Boolean {
+        val doc = document ?: return true
+        return try {
+            val page = doc.openPage(index)
+            try { page.textLines().isNotEmpty() } finally { page.close() }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            true
+        }
+    }
+
+    /**
+     * Renders the page at 150 dpi (the knee measured in #676 phase 0) and reads it. A uniform
+     * blank sheet is read as empty without being sent to the recogniser. Null when the page could
+     * not be rendered or read.
+     */
+    private suspend fun readPageForOcr(index: Int): OcrPage? {
+        val doc = document ?: return null
+        return try {
+            val page = doc.openPage(index)
+            try {
+                val scale = minOf(OCR_DPI / 72.0, OCR_MAX_SIDE / maxOf(page.widthPoints, page.heightPoints))
+                val (w, h) = PdfEngine.renderSize(page.widthPoints * scale, page.heightPoints * scale)
+                val bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+                try {
+                    page.render(bitmap)
+                    val pixels = IntArray(w * h)
+                    bitmap.getPixels(pixels, 0, w, 0, 0, w, h)
+                    if (OcrBlank.isBlank(pixels, w, h)) OcrPage(emptyList())
+                    else recogniser.read(bitmap, page.widthPoints, page.heightPoints)
+                } finally {
+                    bitmap.recycle()
+                }
+            } finally {
+                page.close()
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w("MegaPDF", "couldn't read page ${index + 1} for Find", e)
+            null
+        }
+    }
+
     /** Current search query; matches update as it changes (small debounce). */
     var searchQuery: String by mutableStateOf("")
         private set
@@ -1951,11 +2024,17 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                 val pageCount = state.pageSizes.size
                 for (pageIndex in state.pageSizes.indices) {
                     val page = doc.openPage(pageIndex)
+                    val own = ArrayList<SearchHit>()
                     try {
-                        page.search(query).forEach { hits += SearchHit(pageIndex, it.rects) }
+                        page.search(query).forEach { own += SearchHit(pageIndex, it.rects) }
                     } finally {
                         page.close()
                     }
+                    // A page with no text of its own may be a scan: read it (once per open
+                    // document) and look in what was read (#676). A text box added over a scan is
+                    // found above, as ordinary text, and the scan under it is still read.
+                    val read = scanSearcher.hits(pageIndex, query, own)
+                    hits += ScanSearcher.inReadingOrder(own, read)
                     // After the page, not before it: "page 1 of N" while page 1 is still being
                     // read would be a count that finishes before the work does.
                     token?.report(pageIndex + 1, pageCount)
@@ -3047,6 +3126,8 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     private fun markEditedAndRerender(pageIndex: Int) {
+        // A cover, a stamp or a text box changes what the page shows (#676).
+        scanSearcher.pageChanged(pageIndex)
         dirty.markEdited()
         renderedPages.remove(pageIndex)
         lastWindow?.let { updateRenderWindow(it.firstVisible, it.lastVisible, it.targetWidthPx) }
@@ -3540,6 +3621,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
     private fun closeCurrent() {
         renderJob?.cancel()
         closeSearch()
+        scanSearcher.clear()
         // Reading mode belongs to the document being looked at, not to the app (#507): the
         // next one starts from the *Open documents in reading mode* setting, whatever this
         // one was being read in.
@@ -3737,6 +3819,9 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         val DEFAULT_PAGE_SIZE = PageSize(612.0, 792.0)
         const val MAX_SIGNATURE_SOURCE_DIM = 1500  // downscale huge photos before cleanup
         const val SEARCH_DEBOUNCE_MS = 250L  // keep typing from spamming the engine
+        // Find on scanned pages (#676): the knee measured in phase 0, and a cap on a poster so a page is never a bitmap the phone cannot hold.
+        const val OCR_DPI = 150.0
+        const val OCR_MAX_SIDE = 4096.0
         const val COPY_BUFFER_BYTES = 1 shl 20  // streaming a document between files (#147)
         // The screenshot search term, document names and typed text are string
         // resources (screenshot_*), so a French run shows French content (#91).

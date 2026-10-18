@@ -569,8 +569,12 @@ note = "engine parity against the shared fixtures; no UI test opens the find bar
 presence = "present"
 entry = "android/app/src/main/java/com/megapdf/android/ViewerScreen.kt::R.string.close_search"
 coverage = "engine"
-tests = ["android/engine/src/androidTest/java/com/megapdf/engine/TextSearchTest.kt::class"]
-note = "engine parity only; no Compose test types in the search field. #98's canary lives in the engine suite, not the UI."
+tests = [
+  "android/engine/src/androidTest/java/com/megapdf/engine/TextSearchTest.kt::class",
+  "android/app/src/test/java/com/megapdf/android/ScanSearchTest.kt::class",
+  "android/app/src/androidTest/java/com/megapdf/android/ScanRecognitionTest.kt::class",
+]
+note = "engine parity only; no Compose test types in the search field. #98's canary lives in the engine suite, not the UI. #676: Find on a scanned page (ML Kit, bundled), the cache following page tools tested on the JVM, the recogniser itself on a device."
 
 [[feature]]
 id = "reading-mode"

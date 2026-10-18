@@ -1908,7 +1908,7 @@ expected value to 2 and watching the suite fail).
 
 Find reads a page that has no text layer of its own, through the OS recogniser, and searches
 what it read. In memory only: never written to the document or to disk, dropped on close.
-iOS is built (Vision); Windows, macOS Avalonia and Android are not.
+iOS (Vision) and Android (ML Kit, bundled model) are built; Windows and macOS Avalonia are not.
 
 **Phase 0, what it cost** (small, non-random samples of about 30 textless pages from the private
 corpus, the first by sorted path; read the percentiles as indicative). Counts and milliseconds
@@ -1930,6 +1930,14 @@ as ordinary text and the scan found as read text, once each; and the **real Visi
 reading drawn pages (English, and French with accents) and a blank sheet skipped. With the cache
 shift removed, the move and delete tests fail; with the duplicate filter removed, the text-box
 test fails.
+
+**Android** (`ScanSearchTest` on the JVM, `ScanRecognitionTest` on a device): the same logic as
+iOS, in a plain `ScanSearcher` class so it is tested on the JVM with the recogniser scripted (18
+tests; with the cache shift removed the move and delete tests fail). The real recogniser reading
+drawn English and French pages is an instrumented test. **Size, measured:** an unsigned universal
+release APK (four ABIs, R8) is 60.6 MB with ML Kit against 17.3 MB without, +43.3 MB; a per-device
+bundle was not built, so the 13-16 MB per device is still an estimate. Not yet run on a phone with
+the app itself (the Pixel 4 XL needed its USB-debugging authorisation again).
 
 **By hand** (not automated; a screenshot of `-screenshot scan-search` on the simulator shows it):
 

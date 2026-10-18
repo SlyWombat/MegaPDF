@@ -246,6 +246,7 @@
     <string name="work_stopped">Stopped.</string>
     <string name="search_stopped">Search stopped.</string>
     <string name="search_failed">Couldn\'t search this document.</string>
+    <string name="search_read_from_scan">Read from a scanned page: the text may contain mistakes.</string>
     <string name="edit_failed">Couldn\'t make that change.</string>
     <string name="signature_move_failed">Couldn\'t move this signature</string>
 

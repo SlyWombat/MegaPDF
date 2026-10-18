@@ -168,6 +168,7 @@ private enum class UnsavedAction { CLOSE, SHARE }
 private val REDACTION_MARK_OUTLINE = Brand.RedactionMarkOutline
 private val MATCH_HIGHLIGHT = Brand.FindMatch
 private val CURRENT_MATCH_HIGHLIGHT = Brand.FindMatchCurrent
+private val SCAN_HIT_EDGE = Brand.Accent
 
 @OptIn(ExperimentalMaterial3Api::class, kotlinx.coroutines.FlowPreview::class)
 @Composable
@@ -791,6 +792,18 @@ fun ViewerScreen(
                         onClose = closeSearch,
                         screenshotMode = screenshotSheet == "search",
                     )
+                    // A hit read from a scan is the recogniser's guess, not the document's text (#676).
+                    if (searchHits.getOrNull(currentHitIndex)?.fromScan == true) {
+                        Text(
+                            stringResource(R.string.search_read_from_scan),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(MaterialTheme.colorScheme.surface)
+                                .padding(horizontal = 16.dp, vertical = 4.dp),
+                        )
+                    }
                 } else if (!readingMode) {
                     TopAppBar(
                         title = {
@@ -1917,17 +1930,30 @@ private fun SearchHighlightOverlay(
             val color =
                 if (hitIndex == currentHitIndex) CURRENT_MATCH_HIGHLIGHT else MATCH_HIGHLIGHT
             for (rect in hit.rects) {
-                drawRect(
-                    color = color,
-                    topLeft = androidx.compose.ui.geometry.Offset(
-                        (rect.left * sx).toFloat(),
-                        ((pageSize.heightPoints - rect.top) * sy).toFloat(),
-                    ),
-                    size = androidx.compose.ui.geometry.Size(
-                        ((rect.right - rect.left) * sx).toFloat(),
-                        ((rect.top - rect.bottom) * sy).toFloat(),
-                    ),
+                val topLeft = androidx.compose.ui.geometry.Offset(
+                    (rect.left * sx).toFloat(),
+                    ((pageSize.heightPoints - rect.top) * sy).toFloat(),
                 )
+                val boxSize = androidx.compose.ui.geometry.Size(
+                    ((rect.right - rect.left) * sx).toFloat(),
+                    ((rect.top - rect.bottom) * sy).toFloat(),
+                )
+                drawRect(color = color, topLeft = topLeft, size = boxSize)
+                // A dashed edge on a hit the recogniser read rather than the document said
+                // (#676): a shape, not a colour, so it survives dark mode and colour blindness.
+                if (hit.fromScan) {
+                    drawRect(
+                        color = if (hitIndex == currentHitIndex) Color.White else SCAN_HIT_EDGE,
+                        topLeft = topLeft,
+                        size = boxSize,
+                        style = androidx.compose.ui.graphics.drawscope.Stroke(
+                            width = 1.5.dp.toPx(),
+                            pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(
+                                floatArrayOf(4.dp.toPx(), 3.dp.toPx()),
+                            ),
+                        ),
+                    )
+                }
             }
         }
     }

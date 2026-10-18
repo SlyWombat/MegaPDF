@@ -77,6 +77,9 @@ dependencies {
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.serialization.json)
+    // Find on scanned pages (#676): the bundled Latin model, so recognition needs no network and
+    // no Play Services (Dave, 2026-10-17). About 13-16 MB per device.
+    implementation(libs.mlkit.text.recognition)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)

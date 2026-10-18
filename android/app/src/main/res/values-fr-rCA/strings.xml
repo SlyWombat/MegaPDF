@@ -233,6 +233,8 @@
     <string name="work_stopped">Arrêté.</string>
     <string name="search_stopped">Recherche arrêtée.</string>
     <string name="search_failed">Impossible de rechercher dans ce document.</string>
+    <!-- FR-REVIEW #676 — new with scan search, not yet read by the reviewer. -->
+    <string name="search_read_from_scan">Lu sur une page numérisée : le texte peut contenir des erreurs.</string>
     <string name="edit_failed">Impossible d\'effectuer cette modification.</string>
     <string name="signature_move_failed">Impossible de déplacer cette signature</string>
     <!-- Toolbar (#173): label. #173 — new French, for francophone review -->
