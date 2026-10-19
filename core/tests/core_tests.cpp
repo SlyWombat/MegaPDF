@@ -7692,8 +7692,9 @@ void test_structure_symbol_bullets(const std::string& repo) {
 // #669: a bullet signature the document has confirmed lends its evidence to pages too short
 // to confirm their own. Pages 1-2 of symbol-bullets-document.pdf carry three markers each (the
 // per-page rule, unchanged); pages 3 and 4 carry two and one in the same face at the same
-// indent and must be LIST_ITEMs; pages 5 and 6 must stay prose -- a lone "l" in an ordinary
-// face, and one in the marker face at an indent the document never uses. The existing
+// indent and must be LIST_ITEMs; page 5 is a lone "l" in an ordinary
+// face (prose), and page 6 one in the marker face at an indent no other page uses (a list item: a
+// nested list on a page of its own, as in the reporter's manual). The existing
 // symbol-bullets.pdf, whose page 2 has a lone "l" in the SAME face as page 1's bullets but only
 // ONE confirming page, is asserted by test_structure_symbol_bullets and must not move.
 void test_structure_symbol_bullets_document(const std::string& repo) {
@@ -7719,8 +7720,8 @@ void test_structure_symbol_bullets_document(const std::string& repo) {
     check(items[4] == 0,
           "structure symbol-bullets-document: a lone 'l' in an ordinary face stays prose however the document bullets (#669)",
           std::to_string(items[4]));
-    check(items[5] == 0,
-          "structure symbol-bullets-document: the marker face at an indent the document never uses stays prose (#669)",
+    check(items[5] == 1,
+          "structure symbol-bullets-document: the marker face at an indent no other page uses is still a list item (#669: the indent is not part of the signature)",
           std::to_string(items[5]));
     check(find_block(s, 3, MEGAPDF_BLOCK_LIST_ITEM, "Check the spindle belt") >= 0,
           "structure symbol-bullets-document: the borrowed item's text excludes the marker");

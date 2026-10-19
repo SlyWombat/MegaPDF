@@ -1739,12 +1739,19 @@ constexpr int kMinRepeatedLetterMarker = 3;
 // repeats on one page, and a manual that draws every bullet with the same symbol face has
 // pages with one or two items -- the 2.2.1 residue, 59 literal "l " items on 33 pages of #664's
 // manual. Those pages carry no evidence of their own, but the document does: the same glyph,
-// in the same named face, at the same indent, already passed the per-page rule elsewhere.
-// The per-page threshold is NOT lowered; a lone letter still needs the document behind it.
+// in the same named symbol face, already passed the per-page rule on other pages. The
+// per-page threshold is NOT lowered; a lone letter still needs the document behind it.
+//
+// The indent is deliberately not part of the signature. The first version of this rule matched
+// it (within an em of a confirming cluster) and measurement showed that was wrong: the
+// reporter's manual has a nested item list on a page of its own, one level deeper than any
+// indent the confirming pages use, and the rule left its two items as prose. What guards the
+// borrow is the code point, the named face, and that face being a different family from the
+// text it leads (MarkerFaceIsDistinct); an indent only ever decided the depth, which the
+// depth clusters already do.
 struct DocumentMarker {
     unsigned int cp = 0;
     std::string font;           // the marker's /BaseFont as the document writes it; never empty
-    std::vector<double> xs;     // the line-left x of each confirming cluster, one per confirming page
 };
 
 // A signature must pass the per-page rule on at least this many different pages before a page
@@ -1755,23 +1762,19 @@ constexpr int kMinConfirmingPages = 2;
 struct ListMarkerContext {
     // The letter code points this page has earned the right to read as markers.
     std::vector<unsigned int> letters;
-    // #669: the document-level signatures, and the x tolerance to match an indent against them.
+    // #669: the document-level signatures.
     const std::vector<DocumentMarker>* document = nullptr;
-    double x_tolerance = 0;
 
     bool AdmitsLetter(unsigned int cp) const {
         return std::find(letters.begin(), letters.end(), cp) != letters.end();
     }
 
-    // #669: cp AND the marker's named face AND the indent all match a confirmed signature. An
+    // #669: cp AND the marker's named face match a signature the document confirmed. An
     // unnamed face never matches -- with nothing to tell it from prose, it has no signature.
-    bool AdmitsDocumentLetter(unsigned int cp, const std::string* font, double x) const {
+    bool AdmitsDocumentLetter(unsigned int cp, const std::string* font) const {
         if (document == nullptr || font == nullptr) return false;
         for (const DocumentMarker& m : *document) {
-            if (m.cp != cp || m.font != *font) continue;
-            for (double mx : m.xs) {
-                if (std::fabs(mx - x) <= x_tolerance) return true;
-            }
+            if (m.cp == cp && m.font == *font) return true;
         }
         return false;
     }
@@ -1852,7 +1855,7 @@ bool LineStartsListItem(const PageWork& pw, const Line& line, const ListMarkerCo
     const std::string* font = marker.chars.empty() ? nullptr : pw.chars[static_cast<size_t>(marker.chars[0])].font;
     const Word& body0 = pw.words[static_cast<size_t>(line.words[1])];
     const std::string* body_font = body0.chars.empty() ? nullptr : pw.chars[static_cast<size_t>(body0.chars[0])].font;
-    return MarkerFaceIsDistinct(font, body_font) && ctx.AdmitsDocumentLetter(cps[0], font, line.l);
+    return MarkerFaceIsDistinct(font, body_font) && ctx.AdmitsDocumentLetter(cps[0], font);
 }
 
 // One letter-valued marker candidate: where it starts and what it was drawn with (#669).
@@ -1901,7 +1904,6 @@ ListMarkerContext ComputeListMarkerContext(const PageWork& pw, const std::vector
     const std::vector<SeenLetterMarker> seen = CollectLetterMarkers(pw, order);
     ListMarkerContext ctx;
     ctx.document = document;
-    ctx.x_tolerance = kListDepthClusterEm * Em(body_size);
     for (size_t i = 0; i < seen.size(); i++) {
         if (ctx.AdmitsLetter(seen[i].cp)) continue;
         // Count this code point's occurrences that share an x-cluster with this one, at the
@@ -1909,7 +1911,7 @@ ListMarkerContext ComputeListMarkerContext(const PageWork& pw, const std::vector
         int in_cluster = 0;
         for (size_t k = 0; k < seen.size(); k++) {
             if (seen[k].cp != seen[i].cp) continue;
-            if (std::fabs(seen[k].x - seen[i].x) <= ctx.x_tolerance) in_cluster++;
+            if (std::fabs(seen[k].x - seen[i].x) <= kListDepthClusterEm * Em(body_size)) in_cluster++;
         }
         if (in_cluster >= kMinRepeatedLetterMarker) ctx.letters.push_back(seen[i].cp);
     }
@@ -1917,7 +1919,7 @@ ListMarkerContext ComputeListMarkerContext(const PageWork& pw, const std::vector
 }
 
 // #669: the signatures the per-page rule confirms, gathered across every page. A page
-// confirms (cp, font, x) when at least kMinRepeatedLetterMarker lines open with that glyph in
+// confirms (cp, font) when at least kMinRepeatedLetterMarker lines open with that glyph in
 // that named face inside one x-cluster -- the per-page rule's own test, with the face added.
 // The signature is then good for kMinConfirmingPages or more such pages.
 std::vector<DocumentMarker> ComputeDocumentMarkers(const std::vector<PageWork>& pages, double body_size) {
@@ -1952,9 +1954,6 @@ std::vector<DocumentMarker> ComputeDocumentMarkers(const std::vector<PageWork>& 
                 out.push_back(std::move(dm));
                 pages_confirming.push_back(0);
             }
-            bool has_x = false;
-            for (double x : out[idx].xs) if (std::fabs(x - seen[i].x) <= tol) { has_x = true; break; }
-            if (!has_x) out[idx].xs.push_back(seen[i].x);
             if (std::find(touched.begin(), touched.end(), idx) == touched.end()) {
                 touched.push_back(idx);
                 pages_confirming[idx]++;
