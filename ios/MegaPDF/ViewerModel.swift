@@ -3339,9 +3339,10 @@ final class ViewerModel: ObservableObject {
     /// finishes, whatever the outcome.
     ///
     /// A document opened with only its user password is encrypted in the copy: the core refuses
-    /// to strip security from an open without full access, and `UIPrintInteractionController`
-    /// may not be able to read the result. That case reports through the same failure notice
-    /// rather than printing blank pages; verify it on a device (#675).
+    /// to strip security from an open without full access. `canPrint` still accepts that copy,
+    /// and the system print sheet asks for the password itself ("Enter the password to unlock
+    /// printing"). The user password unlocks the normal preview, and Cancel returns to the
+    /// document with nothing reported (#675, measured in the simulator on 2026-10-19).
     func printDocument(anchor: CGRect) async {
         guard canPrint, let doc = document,
               let token = busy.begin(.preparingToPrint, scope: .document, blocksFileCommands: true) else { return }
