@@ -427,6 +427,19 @@ class PdfDocument internal constructor(
         out.flush()
     }
 
+    /**
+     * Bakes every annotation and field that would print into its page's content (#682),
+     * following each annotation's Print flag, and leaves no annotations behind. **It changes
+     * this document**, so it is for a throwaway copy that is about to be handed to the print
+     * service, never for the document the person has open; a renderer that draws no
+     * annotations (the system print preview's) then still draws them, as page content.
+     */
+    suspend fun flattenForPrint(): Unit = withContext(engine.dispatcher) {
+        check(!closed) { "document is closed" }
+        val status = PdfiumNative.nativeFlattenForPrint(handle)
+        check(status == 0) { "flatten for print failed ($status)" }
+    }
+
     // ---- The page check started early (#145) -----------------------------------------
 
     /** Guards [checksInFlight], [closing] and [runningFlags]; checks run on other threads. */

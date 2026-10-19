@@ -1719,6 +1719,72 @@ void test_save_flatten_images(const std::string& fixtures) {
         if (again) { Page rp(again, 0); check(rp.page && stamps_of(rp.page).ids.empty(), "flattened save has no stamps on reopen"); }
         megapdf_close(again);
     }
+    // Flatten for print (#682): what would reach paper is baked in, and nothing else.
+    {
+        // Three solid-block stamps on a blank page: Print (F 4), shown on screen only (F 0),
+        // and Hidden (F 2).
+        std::string pdf = "%PDF-1.4\n";
+        std::vector<size_t> offsets;
+        auto add = [&](const std::string& body) { offsets.push_back(pdf.size()); pdf += std::to_string(offsets.size()) + " 0 obj\n" + body + "\nendobj\n"; };
+        const std::string ap = "0.13 0.19 0.56 rg 0 0 90 60 re f";
+        add("<< /Type /Catalog /Pages 2 0 R >>");
+        add("<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+        add("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Annots [4 0 R 5 0 R 6 0 R] >>");
+        add("<< /Type /Annot /Subtype /Stamp /Rect [100 500 190 560] /F 4 /MegaPDF_Id (sig:print) /AP << /N 7 0 R >> >>");
+        add("<< /Type /Annot /Subtype /Stamp /Rect [300 500 390 560] /F 0 /MegaPDF_Id (sig:screen) /AP << /N 7 0 R >> >>");
+        add("<< /Type /Annot /Subtype /Stamp /Rect [100 300 190 360] /F 2 /MegaPDF_Id (sig:hidden) /AP << /N 7 0 R >> >>");
+        add("<< /Type /XObject /Subtype /Form /BBox [0 0 90 60] /Length " + std::to_string(ap.size()) + " >>\nstream\n" + ap + "\nendstream");
+        const size_t xref = pdf.size();
+        pdf += "xref\n0 " + std::to_string(offsets.size() + 1) + "\n0000000000 65535 f \n";
+        for (size_t off : offsets) { char line[32]; std::snprintf(line, sizeof line, "%010zu 00000 n \n", off); pdf += line; }
+        pdf += "trailer\n<< /Size " + std::to_string(offsets.size() + 1) + " /Root 1 0 R >>\nstartxref\n" + std::to_string(xref) + "\n%%EOF\n";
+        const std::vector<unsigned char> bytes(pdf.begin(), pdf.end());
+
+        constexpr int W = 612, H = 792;
+        auto render = [&](megapdf_document* doc) {
+            std::vector<unsigned char> px(static_cast<size_t>(W) * H * 4);
+            Page pg(doc, 0);
+            if (!pg.page || megapdf_render(pg.page, px.data(), W, H, W * 4, MEGAPDF_RENDER_BGRA) != MEGAPDF_OK) px.clear();
+            return px;
+        };
+        // Blue ground-truth test: a block pixel is not white.
+        auto inked = [&](const std::vector<unsigned char>& px, double x, double y) {
+            if (px.empty()) return false;
+            const size_t at = (static_cast<size_t>(H - 1 - static_cast<int>(y)) * W + static_cast<size_t>(x)) * 4;
+            return px[at] < 200;  // B channel of a blue block is 0x8f; white is 0xff
+        };
+        megapdf_document* orig = megapdf_open(bytes.data(), bytes.size(), nullptr);
+        megapdf_document* flat = megapdf_open(bytes.data(), bytes.size(), nullptr);
+        megapdf_document* display = megapdf_open(bytes.data(), bytes.size(), nullptr);
+        if (!orig || !flat || !display) {
+            check(false, "#682 the three-stamp page opens");
+        } else {
+            const auto before = render(orig);
+            check(inked(before, 145, 530) && inked(before, 345, 530) && !inked(before, 145, 330),
+                  "#682 on screen the Print and the F 0 stamp show and the hidden one does not");
+            check(megapdf_flatten_all_for_print(flat) == MEGAPDF_OK, "#682 flatten for print returns OK");
+            const auto after = render(flat);
+            check(inked(after, 145, 530), "#682 the stamp with the Print flag is baked into the page");
+            check(!inked(after, 345, 530), "#682 a stamp without the Print flag is not baked in (it would not print)");
+            check(!inked(after, 145, 330), "#682 a hidden stamp is not baked in");
+            {
+                Page pg(flat, 0);
+                check(pg.page && stamps_of(pg.page).ids.empty(), "#682 no stamp annotations are left after flatten for print");
+            }
+            // The existing function is unchanged: it bakes in what is visible, the F 0 stamp included.
+            check(megapdf_flatten_all(display) == MEGAPDF_OK, "#682 flatten_all still returns OK");
+            const auto shown = render(display);
+            check(inked(shown, 145, 530) && inked(shown, 345, 530) && !inked(shown, 145, 330),
+                  "#682 megapdf_flatten_all still flattens to the screen view");
+            // The document it was not called on keeps its annotations.
+            Page pg(orig, 0);
+            check(pg.page && stamps_of(pg.page).ids.size() == 3, "#682 the unflattened document keeps its three stamps");
+        }
+        megapdf_close(orig);
+        megapdf_close(flat);
+        megapdf_close(display);
+        check(megapdf_flatten_all_for_print(nullptr) == MEGAPDF_ERR_ARGUMENT, "#682 flatten for print rejects null");
+    }
     {
         Doc d(fixtures + "/forms.pdf");
         Page p(d.doc, 0);
