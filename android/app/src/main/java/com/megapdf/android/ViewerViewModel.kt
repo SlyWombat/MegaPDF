@@ -3770,7 +3770,12 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
             .query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
             ?.use { cursor ->
                 val col = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                if (col >= 0 && cursor.moveToFirst()) return cursor.getString(col)
+                // The column existing is not the value existing (#670): a provider may
+                // answer it null or empty, and getString's platform type would throw
+                // here rather than reach the fallback below.
+                if (col >= 0 && cursor.moveToFirst()) {
+                    cursor.getString(col)?.takeIf { it.isNotBlank() }?.let { return it }
+                }
             }
         return uri.lastPathSegment ?: str(R.string.document)
     }

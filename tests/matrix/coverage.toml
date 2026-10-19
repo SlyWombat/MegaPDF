@@ -295,6 +295,7 @@ entry = "android/app/src/main/AndroidManifest.xml::android.intent.action.VIEW"
 coverage = "ui"
 tests = [
   "android/app/src/androidTest/java/com/megapdf/android/OpenWithTest.kt::class",
+  "android/app/src/androidTest/java/com/megapdf/android/DisplayNameTest.kt::class",
   "android/app/src/test/java/com/megapdf/android/ViewIntentTest.kt::class",
 ]
 note = "the strongest coverage of this on any platform: cold start and onNewIntent, file:// and content://, with the unsaved-changes prompt."
