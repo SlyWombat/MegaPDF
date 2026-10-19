@@ -251,9 +251,14 @@
   <releases>
     <!-- 2.3.0's date is the day the entry was written; make-release-tarball.sh
          refuses a top entry older than 30 days or in the future, so re-date it to the
-         tag day if the tag comes later. Its <description> comes from
-         docs/release-notes/2.3/linux.md at the Copy gate, not in this version bump. -->
-    <release version="2.3.0" date="2026-10-19"/>
+         tag day if the tag comes later. The description is
+         docs/release-notes/2.3/linux.md's: no scanned-pages line, since Linux has no
+         text recogniser (#676). -->
+    <release version="2.3.0" date="2026-10-19">
+      <description>
+        <p>Various fixes and improvements.</p>
+      </description>
+    </release>
     <!-- 2.2.1's date is the day the entry was written; make-release-tarball.sh
          refuses a top entry older than 30 days or in the future, so re-date it to the
          tag day if the tag comes later. A Linux-only point release (#664, #665): the

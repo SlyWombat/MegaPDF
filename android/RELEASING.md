@@ -111,15 +111,9 @@ Open a PDF from Files, Google Drive, Gmail or any app that hands one over — Me
 MegaPDF is deliberately simple: it doesn't bury you in toolbars. It opens, it fixes, it saves. Done.
 ```
 
-**Release notes** [500] (489) — 2.2, from `docs/release-notes/2.2/google-play.md`
+**Release notes** [500] (116) — 2.3, from `docs/release-notes/2.3/google-play.md`
 ```
-Reading mode hides everything but the page. Sepia for a long read, Night for a dark room — Night inverts pictures too, on purpose, and says so.
-
-Pages: rotate, delete, reorder, insert a blank page, add another PDF's pages, or save a selection as its own file. Each is one Undo.
-
-Whiteout arrives: cover anything on the page, then move and resize it. Added text takes more than one line.
-
-Where a document's author asked that it not be changed, MegaPDF says so and leaves the choice to you.
+Find now searches scanned pages. MegaPDF reads them on your device, and nothing leaves it. Plus various other fixes.
 ```
 
 ### Français (Canada) — `fr-CA`
@@ -176,15 +170,9 @@ Ouvrez un PDF depuis Fichiers, Google Drive, Gmail ou toute application qui en r
 MegaPDF est volontairement simple : il ne vous noie pas sous les barres d'outils. Il ouvre, il corrige, il enregistre. Terminé.
 ```
 
-**Release notes** [500] (497) — 2.2, from `docs/release-notes/2.2/google-play.md`
+**Release notes** [500] (158) — 2.3, from `docs/release-notes/2.3/google-play.md`
 ```
-Le mode lecture ne laisse que la page. Sépia pour lire longtemps, Nuit pour une pièce sombre — le mode nuit inverse aussi les images, et le dit.
-
-Pages : pivoter, supprimer, réordonner, insérer une page vierge, ajouter celles d'un autre PDF, extraire une sélection. Une annulation suffit.
-
-Le correcteur arrive : masquez une zone, déplacez-la, redimensionnez-la. Le texte ajouté tient sur plus d'une ligne.
-
-Quand l'auteur a demandé qu'un document reste inchangé, MegaPDF le dit et laisse choisir.
+La recherche fonctionne maintenant dans les pages numérisées. MegaPDF les lit sur votre appareil; rien n'est envoyé ailleurs. Et plusieurs autres corrections.
 ```
 
 ### Français (France) — `fr-FR`
@@ -241,15 +229,9 @@ Ouvrez un PDF depuis Fichiers, Google Drive, Gmail ou toute application qui en r
 MegaPDF est volontairement simple : il ne vous noie pas sous les barres d'outils. Il ouvre, il corrige, il enregistre. Terminé.
 ```
 
-**Release notes** [500] (497) — 2.2, from `docs/release-notes/2.2/google-play.md`
+**Release notes** [500] (159) — 2.3, from `docs/release-notes/2.3/google-play.md`
 ```
-Le mode lecture ne laisse que la page. Sépia pour lire longtemps, Nuit pour une pièce sombre — le mode nuit inverse aussi les images, et le dit.
-
-Pages : pivoter, supprimer, réordonner, insérer une page vierge, ajouter celles d'un autre PDF, extraire une sélection. Une annulation suffit.
-
-Le correcteur arrive : masquez une zone, déplacez-la, redimensionnez-la. Le texte ajouté tient sur plus d'une ligne.
-
-Quand l'auteur a demandé qu'un document reste inchangé, MegaPDF le dit et laisse choisir.
+La recherche fonctionne maintenant dans les pages numérisées. MegaPDF les lit sur votre appareil ; rien n'est envoyé ailleurs. Et plusieurs autres corrections.
 ```
 
 <!-- /copy-by-language -->
