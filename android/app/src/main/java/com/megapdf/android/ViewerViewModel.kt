@@ -1819,9 +1819,12 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                     writePrintCopy(engine, doc, false, pages, app.cacheDir, out)
                 },
                 onFailed = { failure ->
-                    // A document that may be printed but not copied prints in full, not in part: a
-                    // range is a real extraction and needs the copy bit. Said as that, not as a
-                    // generic failure the person would retry in vain.
+                    // A range we extract ourselves (writePages) is a real extraction and needs the
+                    // copy bit, so a document that may be printed but not copied refuses it; say
+                    // that, not a generic failure the person would retry in vain. In practice the
+                    // spooler usually asks for the whole document and selects the pages itself:
+                    // on a Pixel 4 XL a range of a copy-denied file printed, and the output kept
+                    // the file's protection, which only writeWhole produces (#675, 2026-10-19).
                     statusMessage = str(
                         if (failure is com.megapdf.engine.PdfPagesException &&
                             failure.refusal == com.megapdf.engine.PageToolRefusal.RESTRICTED
