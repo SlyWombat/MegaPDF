@@ -224,6 +224,20 @@ public class ScanSearchTests
     }
 
     [Fact]
+    public void OnlyAPageWithAPictureAndNoTextNeedsReading()
+    {
+        // #687: the hint's trigger. A scan does; a text page does not; a blank page has nothing to read.
+        using var scan = new PdfiumEngine().Open(Fixture("structure", "scan.pdf"));
+        Assert.True(ScanReader.NeedsReading(scan, 0, ScanReader.PagesWithPictures(scan)));
+        using var text = new PdfiumEngine().Open(Fixture("structure", "headings.pdf"));
+        Assert.False(ScanReader.NeedsReading(text, 0, ScanReader.PagesWithPictures(text)));
+        using var empty = new PdfiumEngine().Open(Fixture("structure", "empty-page.pdf"));
+        Assert.False(ScanReader.NeedsReading(empty, 0, ScanReader.PagesWithPictures(empty)));
+        using var layered = new PdfiumEngine().Open(Fixture("structure", "tiny-font-size.pdf"));
+        Assert.False(ScanReader.NeedsReading(layered, 0, ScanReader.PagesWithPictures(layered)), "an invisible text layer: Find already works on it");
+    }
+
+    [Fact]
     public void AScanWithAnInvisibleTextLayerAlreadyHasTextAndIsNotRead()
     {
         using var doc = new PdfiumEngine().Open(Fixture("structure", "tiny-font-size.pdf"));

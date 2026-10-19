@@ -229,6 +229,14 @@
     <value>Read from a scanned page: the text may contain mistakes.</value>
     <comment>Find bar note (#676) under the count while the current match was read from a scanned page by the device's recogniser</comment>
   </data>
+  <data name="FindNoRecogniserText.Text" xml:space="preserve">
+    <value>Scanned pages can't be searched until Windows has text recognition for your language. Add it in language settings, then restart MegaPDF.</value>
+    <comment>Find bar note (#687) shown when a search met a scanned page and Windows has no text-recognition language installed; the button below opens Settings</comment>
+  </data>
+  <data name="FindNoRecogniserButton.Content" xml:space="preserve">
+    <value>Open language settings</value>
+    <comment>Button (#687) in the find bar note; opens Windows Settings at the language page</comment>
+  </data>
   <data name="FindQuery.PlaceholderText" xml:space="preserve">
     <value>Find</value>
   </data>

@@ -208,6 +208,14 @@
     <value>Lu sur une page numérisée : le texte peut contenir des erreurs.</value>
     <comment>FR-REVIEW #676 — new with scan search, not yet read by the reviewer.</comment>
   </data>
+  <data name="FindNoRecogniserText.Text" xml:space="preserve">
+    <value>Les pages numérisées ne peuvent pas être recherchées tant que Windows n'a pas la reconnaissance de texte pour votre langue. Ajoutez-la dans les paramètres de langue, puis redémarrez MegaPDF.</value>
+    <comment>FR-REVIEW #687 — new with the scan-search hint, not yet read by the reviewer.</comment>
+  </data>
+  <data name="FindNoRecogniserButton.Content" xml:space="preserve">
+    <value>Ouvrir les paramètres de langue</value>
+    <comment>FR-REVIEW #687 — new with the scan-search hint, not yet read by the reviewer.</comment>
+  </data>
   <data name="FindQuery.PlaceholderText" xml:space="preserve">
     <value>Rechercher</value>
   </data>

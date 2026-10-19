@@ -471,6 +471,25 @@
                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                 TextWrapping="Wrap"
                 MaxWidth="420" />
+            <!-- Find skipped a scan because Windows has no text recognition for the person's language (#687). -->
+            <StackPanel
+                x:Name="FindNoRecogniserNote"
+                AutomationProperties.AutomationId="FindNoRecogniserNote"
+                Visibility="{x:Bind ViewModel.NoRecogniserNoteVisibility, Mode=OneWay}"
+                Orientation="Vertical" Spacing="2" MaxWidth="420">
+                <TextBlock
+                    x:Uid="FindNoRecogniserText"
+                    FontSize="{ThemeResource TypeCaption}"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    TextWrapping="Wrap" />
+                <HyperlinkButton
+                    x:Name="FindNoRecogniserButton"
+                    x:Uid="FindNoRecogniserButton"
+                    AutomationProperties.AutomationId="FindNoRecogniserButton"
+                    Padding="0"
+                    FontSize="{ThemeResource TypeCaption}"
+                    Click="OnOpenLanguageSettingsClicked" />
+            </StackPanel>
             </StackPanel>
         </Border>
 

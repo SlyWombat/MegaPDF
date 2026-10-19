@@ -1203,6 +1203,21 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
         && _searchMatches[CurrentSearchMatch - 1].FromScan
             ? Visibility.Visible : Visibility.Collapsed;
 
+    /// <summary>
+    /// Set when the last search met a page that needs reading and this machine has no OCR language
+    /// (#687): Find skipped it, and without this the person cannot tell "no match" from "could not
+    /// read". Cleared with the search.
+    /// </summary>
+    private bool _scansUnreadable;
+
+    public Visibility NoRecogniserNoteVisibility => _scansUnreadable ? Visibility.Visible : Visibility.Collapsed;
+
+    private void SetScansUnreadable(bool value)
+    {
+        _scansUnreadable = value;
+        OnPropertyChanged(nameof(NoRecogniserNoteVisibility));
+    }
+
     public bool HasSearchResults => SearchMatchCount > 0;
 
     /// <summary>The find bar's readout: "N of M", "No results", or blank without a term.</summary>
@@ -1249,6 +1264,7 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
         var token = operation.CancellationToken;
         List<FoundMatch>? found;
         var scanner = _scanSearcher;
+        var unreadable = false;
         try
         {
             using (operation)
@@ -1256,6 +1272,7 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
                 found = await Task.Run(() =>
                 {
                     var list = new List<FoundMatch>();
+                    IReadOnlySet<int>? pictures = null;   // one pass over the document, on the first page that needs it (#687)
                     for (var i = 0; i < doc.PageCount; i++)
                     {
                         if (generation != _searchGeneration || openGeneration != _openGeneration)
@@ -1278,6 +1295,10 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
                                 onPage = [.. onPage.OrderBy(m => m.Rects[0].Y).ThenBy(m => m.Rects[0].X)];
                             }
                         }
+                        // No recogniser: note whether any page was left unread, stopping at the first (#687).
+                        // Only a page with no match of its own is asked, so a text document pays nothing.
+                        else if (!unreadable && own.Count == 0)
+                            unreadable = ScanReader.NeedsReading(doc, i, pictures ??= ScanReader.PagesWithPictures(doc));
                         list.AddRange(onPage);
                         // After the page, not before it: "page 1 of N" while page 1 is still
                         // being read would be a bar that finishes before the work does.
@@ -1306,6 +1327,7 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
         if (found is null || generation != _searchGeneration || openGeneration != _openGeneration)
             return;
 
+        SetScansUnreadable(unreadable);
         _searchMatches.Clear();
         _searchMatches.AddRange(found);
         SearchMatchCount = _searchMatches.Count;
@@ -1337,6 +1359,7 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
     private void ResetSearchState()
     {
         _searchMatches.Clear();
+        SetScansUnreadable(false);
         SearchMatchCount = 0;
         CurrentSearchMatch = 0;
         OnPropertyChanged(nameof(SearchStatus));
