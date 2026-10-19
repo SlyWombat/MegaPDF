@@ -2047,6 +2047,27 @@ macOS), Android's `OCR_DPI` and iOS's `ocrDPI`. Checked after the change:
 - **Self-tests and unit tests:** the Mac self-test passes (754 checks, with every fixture generator); Windows `scan-search` passes 16 of 16; Core `ScanSearch` tests pass 24 of 24; Android unit tests and `ScanRecognitionTest` pass on the phone.
 - **iOS** `ScanSearchTests` pass in the simulator. The search-through-the-model test's wait was raised from 15 s to 60 s: a cold first Vision read in a fresh simulator measured 15-20 s at 200 (8.4 s at 150), against 2.3 s warm at either.
 
+**iOS on the three real scans (2026-10-19).** A throwaway XCTest (not committed) opened each scan
+through the real `ViewerModel` in a fresh iPhone 16 simulator (iOS 26.5) on the Mac mini, at the shipped
+200 dpi with Vision, and counted `searchMatches` for every term above, every hit `fromScan`:
+
+| scan | terms | iOS Vision 200 | macOS Vision 200 |
+|---|---|---|---|
+| map | thule, greenland (diagonal), bomber, canada | 6, 0, 2, 1 | 6, 0, 2, 1 |
+| menu | hummus, calamari, lentil, chef, shrimp | 2, 4, 4, 7, 3 | 2, 4, 4, 7, 3 |
+| poster | wi-fi, garager, camera, account | 30, 28, 4, 5 | 30, 29, 4, 5 |
+
+The same as macOS term for term, except one "garager" fewer on the poster (28, which is what Vision gave
+on the Mac at 150; the extra Mac hit was never checked against the page). As on the Mac, the diagonal
+"GREENLAND" is not read. The first search on each document, which reads every page, took 16.6 s for the
+one-page map (the cold Vision load), 28.2 s for the seven-page menu and 9.0 s for the three-page poster;
+every later search 0.2 s. A simulator on Apple silicon is not a phone: **no iPhone has run this.**
+
+**Hosted wait (2026-10-19).** `testASearchHitsBothTheTextBoxAddedOverAScanAndTheScan` timed out at its 60 s
+wait in hosted run 39265423233; in four passing hosted runs it took 9.5-31.8 s, and in the failing run the
+French Vision test, which has no deadline, took 63.5 s and passed, so the runner was slow, not hung. The
+wait is now 180 s: it guards against a hang, not the read time.
+
 **Known limits.** A phrase split across two recognised lines is not found (the engine's own
 search finds those); a highlight is a whole word, not a slice of it; a drawing-only page is read
 (only a uniform blank sheet is skipped); reading is on demand inside Find, not a background pass.

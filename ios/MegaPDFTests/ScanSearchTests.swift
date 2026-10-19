@@ -216,9 +216,12 @@ final class ScanSearchTests: XCTestCase {
         model.search(term: "invoice", debounce: false)
         // The real recogniser's first read in a fresh simulator loads Vision's model on the CPU:
         // measured 8.4 s at 150 dpi and 15-20 s at 200 on the Mac mini (2026-10-18, five fresh
-        // simulators), against 2.3 s once warm at either. CI makes a fresh simulator for every job,
-        // so this wait is sized for the cold read; it is here to catch a hang, not to time the read.
-        try await waitUntil("the search ends", timeout: 60) { !model.isSearching && model.busy.strip == nil }
+        // simulators), against 2.3 s once warm at either. Hosted runners are slower: this test took
+        // 9.5-31.8 s in the passing runs of 2026-10-19 and timed out at 60 s in run 39265423233, where
+        // the French Vision test, which has no deadline, took 63.5 s and passed. CI makes a fresh
+        // simulator for every job, so this wait is sized for the slowest cold read seen with room to
+        // spare; it is here to catch a hang, not to time the read.
+        try await waitUntil("the search ends", timeout: 180) { !model.isSearching && model.busy.strip == nil }
         let hits = model.searchMatches
         XCTAssertEqual(hits.count, 2, "the box once and the scan once; got \(hits.map(\.fromScan))")
         XCTAssertEqual(hits.filter(\.fromScan).count, 1, "only the scan's own hit is marked as read")
