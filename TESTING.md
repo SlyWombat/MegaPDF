@@ -2077,6 +2077,63 @@ Zero crashes and zero hangs in every battery. What this does not show: no batter
 page's recognised text (Find on scans, #676, has its own checks), and these files are one phone's
 Downloads folder, not a sample.
 
+## Letter bullets confirmed across the document (#669), 2026-10-19
+
+Run on kdocker3 at `bcc8179` plus the change, in a throwaway `megapdf:base` container (PDFium at 33
+patches), `structure-battery.sh --reference --cli` and `markdown-battery.sh` over all four corpora,
+before (`bcc8179`'s own `core/megapdf_structure.cpp`) and after, the two builds run side by side. A
+per-document pass then ran `megapdf-cli extract --format md` from both builds over every `*.pdf` in the
+four corpora and compared list-item counts per document by path hash. Corpus file names are not
+recorded here. Container, build trees, the downloaded manual and all scratch removed afterward.
+
+**The rule.** The per-page threshold of 3 is unchanged. A letter-valued marker that fails it on a page
+is accepted there only if the document has confirmed the same signature elsewhere: the same code
+point, in the same named face, at the same indent (within one em), on at least 2 other pages that
+each pass the per-page test. The marker's face must also be a different typeface *family* from the text
+after it (`FaceFamily` strips the subset tag and style words, so "Arial-BoldMT" beside "ArialMT" is one
+family). Two earlier shapes of the rule were measured and rejected on the corpora: letter-and-face
+alone turned a letter-spaced "S u m m a r y :" into "- u m m a r y :" (thousands of items in one public
+document), and "distinct name" alone turned a tax form's bold line labels ("b", "c", "d") and its
+multiplication "x" into bullets (two further private documents).
+
+**The reported manual** (Tormach PathPilot User Guide for Lathes, UM10751, public; the copy at
+tormach.com is version 1220A, **226 pages, not the 257 the issue counts**, so the counts differ from the
+issue's table and the two are not directly comparable): literal `l ` items 46 on 29 pages before, **1 on
+1 page** after. Its bullets are `Wingdings-Regular` glyph `l`, one signature, confirmed on 111 pages. Page
+22 (one item) is now a list item. The one that remains is page 44, where two items run together on one
+line after a heading; only a line's first word is ever read as a marker, so that is the separate
+inline-items gap the issue names, not this rule.
+
+**Per-document list-item counts, 5,875 documents:**
+
+| corpus | documents | exit codes changed | markdown differs | list-item count changed | items gained | items lost |
+|---|---:|---:|---:|---:|---:|---:|
+| private | 4,158 | 0 | 4 | 3 | 21 | 0 |
+| public | 1,493 | 0 | 2 | 2 | 3 | 0 |
+| Canadian | 134 | 0 | 0 | 0 | 0 | 0 |
+| UN | 90 | 0 | 0 | 0 | 0 | 0 |
+
+Every changed document was read: one public and one private document draw their bullets with a symbol
+face mapped to `l` (a line gained its bullet); one private document is a CV whose bullets are `n` in a
+symbol face (a line was split into a bullet plus its text; this also appears twice because the corpus
+holds the file twice); one public document uses `D` in a symbol face; one private document gains three
+`Wingdings3` arrow items and its other items nest one level deeper as a result (indentation only; the
+depth logic seeing a larger marker set, as #664's own note recorded for 10 documents). No document
+without a symbol-face bullet changed. No document lost an item.
+
+**Gates, identical before and after on every cell:** zero crashes everywhere. Structure F1 (CLI):
+private 0.998997, public 0.976157, Canadian 0.999932, UN 0.999136, tau median 0.951 / 0.978 / 0.994 /
+0.967. Markdown: 0 cmark failures, extracted counts 2,982 / 935 / 134 / 83. The public F1 gate fails
+before and after (#498); the figure is lower than the 0.980019 recorded for the 2.2.0 candidate, and identically so
+before and after this change, so it is a property of the corpus as staged now, not of this change. Two
+public documents (2.1 GB and 1.5 GB) exceed the 120 s bound in both builds; run alone with a 400 s
+bound, the 1.5 GB one finished in 375 s (before) and 372 s (after) and the 2.1 GB one was cut off at
+400 s by both, so they are slow, not changed by this. Two private files exit 10 (an incomplete
+download, #665) in both. none of that moved.
+
+Not verified here: the other four platforms were not run (the change is in the shared core only); the
+UI was not looked at.
+
 ## Reporting
 
 For each issue: what you clicked, what you expected, what happened, and the PDF

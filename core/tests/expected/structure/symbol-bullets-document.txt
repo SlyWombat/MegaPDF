@@ -1,0 +1,35 @@
+Safety
+
+l Wear eye protection.
+
+l Keep the guard closed.
+
+l Never reach past the chuck.
+
+Setup
+
+l Level the machine.
+
+l Check the coolant level.
+
+l Home all axes.
+
+Two Items
+
+l Clean the way covers.
+
+l Oil the lead screw.
+
+One Item
+
+l Check the spindle belt.
+
+Prose One
+
+l A lone line in the ordinary face is prose, not a list.
+
+Prose Two
+
+Some body text sits here to be read.
+
+l Marker face, but not at the indent the document uses.

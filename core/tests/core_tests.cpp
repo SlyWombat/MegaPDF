@@ -6610,6 +6610,8 @@ void test_structure_goldens(const std::string& fixtures, const std::string& sche
         // gen_symbol_bullets()'s comment for the shape; test_structure_symbol_bullets()
         // below asserts the classification itself rather than leaving it to a golden diff.
         {"symbol-bullets", repo + "/structure/symbol-bullets.pdf", 0, 0, 0},
+        // #669: the document-confirmed signature; test_structure_symbol_bullets_document() asserts it.
+        {"symbol-bullets-document", repo + "/structure/symbol-bullets-document.pdf", 0, 0, 0},
         {"headings", repo + "/structure/headings.pdf", 0, 0, 0},
         // #375: two genuine bold-at-body headings bracketing a run of two false-positive
         // "form label" lines and one isolated numeric-like false positive -- see
@@ -7088,6 +7090,7 @@ void test_structure_no_stray_control_characters(const std::string& fixtures, con
         {"furniture", repo + "/structure/furniture.pdf", MEGAPDF_STRUCTURE_KEEP_FURNITURE},
         {"lists", repo + "/structure/lists.pdf", 0},
         {"symbol-bullets", repo + "/structure/symbol-bullets.pdf", 0},
+        {"symbol-bullets-document", repo + "/structure/symbol-bullets-document.pdf", 0},
         {"headings", repo + "/structure/headings.pdf", 0},
         {"tabular-headings", repo + "/structure/tabular-headings.pdf", 0},
         {"reading-order-jump", repo + "/structure/reading-order-jump.pdf", 0},
@@ -7620,6 +7623,44 @@ void test_structure_symbol_bullets(const std::string& repo) {
     megapdf_structure_free(s);
 }
 
+// #669: a bullet signature the document has confirmed lends its evidence to pages too short
+// to confirm their own. Pages 1-2 of symbol-bullets-document.pdf carry three markers each (the
+// per-page rule, unchanged); pages 3 and 4 carry two and one in the same face at the same
+// indent and must be LIST_ITEMs; pages 5 and 6 must stay prose -- a lone "l" in an ordinary
+// face, and one in the marker face at an indent the document never uses. The existing
+// symbol-bullets.pdf, whose page 2 has a lone "l" in the SAME face as page 1's bullets but only
+// ONE confirming page, is asserted by test_structure_symbol_bullets and must not move.
+void test_structure_symbol_bullets_document(const std::string& repo) {
+    Doc d(repo + "/structure/symbol-bullets-document.pdf");
+    if (!d.doc) { check(false, "structure symbol-bullets-document: opens"); return; }
+    megapdf_structure* s = megapdf_structure_load(d.doc, 0, 6, 0, nullptr);
+    check(s != nullptr, "structure symbol-bullets-document: loads");
+    if (s == nullptr) return;
+    int items[6] = {0, 0, 0, 0, 0, 0};
+    const size_t n = megapdf_block_count(s);
+    for (size_t i = 0; i < n; i++) {
+        megapdf_block b{};
+        megapdf_block_get(s, i, &b);
+        if (b.kind == MEGAPDF_BLOCK_LIST_ITEM && b.page >= 0 && b.page < 6) items[b.page]++;
+    }
+    check(items[0] == 3 && items[1] == 3,
+          "structure symbol-bullets-document: the pages that confirm the signature keep their three items (#664 rule unchanged)",
+          std::to_string(items[0]) + "," + std::to_string(items[1]));
+    check(items[2] == 2, "structure symbol-bullets-document: a page of two borrows the document's evidence (#669)",
+          std::to_string(items[2]));
+    check(items[3] == 1, "structure symbol-bullets-document: a page of one borrows the document's evidence (#669)",
+          std::to_string(items[3]));
+    check(items[4] == 0,
+          "structure symbol-bullets-document: a lone 'l' in an ordinary face stays prose however the document bullets (#669)",
+          std::to_string(items[4]));
+    check(items[5] == 0,
+          "structure symbol-bullets-document: the marker face at an indent the document never uses stays prose (#669)",
+          std::to_string(items[5]));
+    check(find_block(s, 3, MEGAPDF_BLOCK_LIST_ITEM, "Check the spindle belt") >= 0,
+          "structure symbol-bullets-document: the borrowed item's text excludes the marker");
+    megapdf_structure_free(s);
+}
+
 // #145's cancellation pattern: a cancel raised before the call returns NULL, with
 // megapdf_last_error() reading back MEGAPDF_ERR_CANCELLED (cast to unsigned — the same
 // extension of that field MEGAPDF_OPEN_ERR_TOO_LARGE already makes for megapdf_open_file()).
@@ -7706,6 +7747,7 @@ void test_write_text_goldens(const std::string& repo, const std::string& expecte
         {"columns", repo + "/structure/columns.pdf"},     {"furniture", repo + "/structure/furniture.pdf"},
         {"lists", repo + "/structure/lists.pdf"},          {"headings", repo + "/structure/headings.pdf"},
         {"symbol-bullets", repo + "/structure/symbol-bullets.pdf"},
+        {"symbol-bullets-document", repo + "/structure/symbol-bullets-document.pdf"},
         {"tabular-headings", repo + "/structure/tabular-headings.pdf"},
         {"xobject-text", repo + "/structure/xobject-text.pdf"}, {"scan", repo + "/structure/scan.pdf"},
         {"empty-page", repo + "/structure/empty-page.pdf"},   // #671, next to scan.pdf
@@ -7765,6 +7807,7 @@ void test_write_markdown_goldens(const std::string& repo, const std::string& exp
         {"columns", repo + "/structure/columns.pdf"},     {"furniture", repo + "/structure/furniture.pdf"},
         {"lists", repo + "/structure/lists.pdf"},          {"headings", repo + "/structure/headings.pdf"},
         {"symbol-bullets", repo + "/structure/symbol-bullets.pdf"},
+        {"symbol-bullets-document", repo + "/structure/symbol-bullets-document.pdf"},
         {"tabular-headings", repo + "/structure/tabular-headings.pdf"},
         {"xobject-text", repo + "/structure/xobject-text.pdf"}, {"scan", repo + "/structure/scan.pdf"},
         {"empty-page", repo + "/structure/empty-page.pdf"},   // #671, next to scan.pdf
@@ -8121,6 +8164,7 @@ void test_markdown_round_trips(const std::string& repo, const std::string& expec
         {"columns", repo + "/structure/columns.pdf"},     {"furniture", repo + "/structure/furniture.pdf"},
         {"lists", repo + "/structure/lists.pdf"},          {"headings", repo + "/structure/headings.pdf"},
         {"symbol-bullets", repo + "/structure/symbol-bullets.pdf"},
+        {"symbol-bullets-document", repo + "/structure/symbol-bullets-document.pdf"},
         {"tabular-headings", repo + "/structure/tabular-headings.pdf"},
         {"xobject-text", repo + "/structure/xobject-text.pdf"}, {"scan", repo + "/structure/scan.pdf"},
         {"empty-page", repo + "/structure/empty-page.pdf"},   // #671, next to scan.pdf
@@ -9607,6 +9651,7 @@ int main(int argc, char** argv) {
     test_structure_furniture(std::string(MEGAPDF_REPO_FIXTURES));
     test_structure_reading_order_jump(std::string(MEGAPDF_REPO_FIXTURES));
     test_structure_symbol_bullets(std::string(MEGAPDF_REPO_FIXTURES));
+    test_structure_symbol_bullets_document(std::string(MEGAPDF_REPO_FIXTURES));
     test_structure_cancel(argv[2]);
     test_structure_rotated_pages(std::string(MEGAPDF_REPO_FIXTURES));
     test_structure_no_stray_control_characters(argv[1], argv[2], std::string(MEGAPDF_REPO_FIXTURES));
