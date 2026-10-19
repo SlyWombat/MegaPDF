@@ -1674,7 +1674,23 @@ public sealed partial class DocumentView : UserControl
 
     private void OnFindNextClicked(object sender, RoutedEventArgs e) => ViewModel.MoveToMatch(1);
 
+    /// <summary>The hint's button (#687), for the self-test: it is there, labelled, and shown only with the note.</summary>
+    internal (bool Exists, bool HasLabel, bool Shown) NoRecogniserButtonState() =>
+        (FindNoRecogniserButton is not null, !string.IsNullOrWhiteSpace(FindNoRecogniserButton?.Content as string),
+         FindNoRecogniserNote.Visibility == Visibility.Visible);
+
     private void OnFindCloseClicked(object sender, RoutedEventArgs e) => CloseFindBar();
+
+    /// <summary>
+    /// Opens Settings at Language (<c>ms-settings:regionlanguage</c>, "Language &amp; region" on 11,
+    /// "Language" on 10), where a language's optional features, text recognition among them, are
+    /// added (#687). Only opens a page: nothing is installed or changed from here.
+    /// </summary>
+    private async void OnOpenLanguageSettingsClicked(object sender, RoutedEventArgs e)
+    {
+        try { await Windows.System.Launcher.LaunchUriAsync(new Uri("ms-settings:regionlanguage")); }
+        catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"couldn't open language settings: {ex.Message}"); }
+    }
 
     /// <summary>Esc closes AND clears (issue #26) — reopening starts fresh.</summary>
     internal void CloseFindBar()

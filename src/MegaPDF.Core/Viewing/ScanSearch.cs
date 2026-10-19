@@ -189,6 +189,30 @@ public static class ScanReader
     }
 
     /// <summary>
+    /// Whether the page would be worth reading if Find had a recogniser (#687): no text of its own
+    /// and at least one picture on it. A structural test on purpose. The sure test for a blank sheet
+    /// is <see cref="Blank.IsBlank"/>, which needs a render of the whole page, too dear to pay on
+    /// every page only to decide whether to show a hint. A page with no text and no picture has
+    /// nothing a recogniser could read; a scan of an empty sheet still has a picture, and gets the
+    /// hint, which is a small overstatement and the right side to err on.
+    /// </summary>
+    public static bool NeedsReading(IPdfDocument document, int index, IReadOnlySet<int> pagesWithPictures) =>
+        pagesWithPictures.Contains(index) && !HasOwnText(document, index);
+
+    /// <summary>The indexes of the pages that carry at least one picture, from one pass over the document.</summary>
+    public static IReadOnlySet<int> PagesWithPictures(IPdfDocument document)
+    {
+        try
+        {
+            return document.GetImages().Select(i => i.PageIndex).ToHashSet();
+        }
+        catch (Exception)
+        {
+            return new HashSet<int>();
+        }
+    }
+
+    /// <summary>
     /// Renders the page at <see cref="Dpi"/> (capped by what the recogniser accepts) and reads it.
     /// A uniform blank sheet is read as empty without being sent to the recogniser. Null when the
     /// page could not be rendered or read.

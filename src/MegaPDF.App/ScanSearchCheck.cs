@@ -59,11 +59,28 @@ internal static class ScanSearchCheck
         var original = DocumentViewModel.RecogniserFactory;
         // For a photograph of the result: leaves the real scan open, with the find bar up, and its
         // scratch directory for the caller to remove once the process has exited. Off by default.
-        var keep = Environment.GetEnvironmentVariable("MEGAPDF_SCAN_SEARCH_KEEP") == "1";
+        var keepMode = Environment.GetEnvironmentVariable("MEGAPDF_SCAN_SEARCH_KEEP");
+        var keep = keepMode is "1" or "norec";
         try
         {
-            await ScriptedAsync(window, scratch, Check);
-            await RealAsync(window, fixturePath, scratch, Check);
+            if (keepMode == "norec")
+            {
+                // For a photograph of the #687 note: the scan, a search that met it, the find bar up.
+                DocumentViewModel.RecogniserFactory = () => null;
+                var shot = Path.Combine(scratch, "scan-shot.pdf");
+                File.WriteAllBytes(shot, ScanPdf([Marked(306, 396)], 612, 792));
+                var tab = await window.Shell.OpenInTabAsync(shot);
+                await Task.Delay(1500);
+                window.Shell.Active?.View?.ShowFindBar();
+                await tab.SearchAsync("invoice");
+                Check("the note is up for the photograph", tab.NoRecogniserNoteVisibility == Visibility.Visible);
+            }
+            else
+            {
+                await ScriptedAsync(window, scratch, Check);
+                await NoRecogniserAsync(window, fixturePath, scratch, Check);
+                await RealAsync(window, fixturePath, scratch, Check);
+            }
         }
         catch (Exception ex)
         {
@@ -126,6 +143,52 @@ internal static class ScanSearchCheck
 
         tab.ClearSearch();
         Check("the note is gone when the search is cleared", tab.ScanNoteVisibility == Visibility.Collapsed);
+    }
+
+    /// <summary>
+    /// #687: with no OCR language, Find on a scan says so and offers Settings. Never with a
+    /// recogniser, never on a document that has text, and gone when the search is cleared.
+    /// </summary>
+    private static async Task NoRecogniserAsync(MainWindow window, string fixturePath, string scratch, Action<string, bool> Check)
+    {
+        DocumentViewModel.RecogniserFactory = () => null;   // Windows with no text-recognition language
+        var scanPath = Path.Combine(scratch, "scan-norec.pdf");
+        File.WriteAllBytes(scanPath, ScanPdf(Enumerable.Range(0, 2).Select(_ => Marked(306, 396)).ToList(), 612, 792));
+        var textPath = Path.Combine(scratch, "text-norec.pdf");
+        File.Copy(fixturePath, textPath, overwrite: true);
+
+        var scan = await window.Shell.OpenInTabAsync(scanPath);
+        await Task.Delay(1500);
+        Check("no recogniser: a scan opened", scan.IsDocumentOpen && scan.Pages.Count == 2);
+        Check("  no note before any search", scan.NoRecogniserNoteVisibility == Visibility.Collapsed);
+        await scan.SearchAsync("anything");
+        Check("  a search on the scan shows the note", scan.NoRecogniserNoteVisibility == Visibility.Visible);
+        Check("  and finds nothing, as before", scan.SearchMatchCount == 0 && scan.ScanNoteVisibility == Visibility.Collapsed);
+        var button = scan.View?.NoRecogniserButtonState();
+        Check("  the Settings button exists and is labelled", button is { Exists: true, HasLabel: true });
+        Check("  and it is shown with the note", button is { Shown: true });
+        scan.ClearSearch();
+        Check("  clearing the search hides the note", scan.NoRecogniserNoteVisibility == Visibility.Collapsed);
+        Check("  and the button with it", scan.View?.NoRecogniserButtonState() is { Shown: false });
+
+        var text = await window.Shell.OpenInTabAsync(textPath);
+        await Task.Delay(1500);
+        Check("no recogniser: a document with text opened", text.IsDocumentOpen);
+        await text.SearchAsync("fixture");
+        Check("  Find finds its text", text.SearchMatchCount >= 1);
+        Check("  and shows no note", text.NoRecogniserNoteVisibility == Visibility.Collapsed);
+        await text.SearchAsync("zzzqqq-not-in-the-fixture");
+        Check("  not even for a term that is not there", text.SearchMatchCount == 0
+              && text.NoRecogniserNoteVisibility == Visibility.Collapsed);
+
+        DocumentViewModel.RecogniserFactory = () => new Scripted();   // a recogniser exists: before the open
+        var recPath = Path.Combine(scratch, "scan-rec.pdf");
+        File.Copy(scanPath, recPath, overwrite: true);   // a second path: the first is already open, and would only be activated
+        var read = await window.Shell.OpenInTabAsync(recPath);
+        await Task.Delay(1500);
+        await read.SearchAsync("scan page");
+        Check("with a recogniser: the scan is read and no note shows",
+              read.SearchMatchCount == 2 && read.NoRecogniserNoteVisibility == Visibility.Collapsed);
     }
 
     private static async Task RealAsync(MainWindow window, string fixturePath, string scratch, Action<string, bool> Check)
