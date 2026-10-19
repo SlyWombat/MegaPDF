@@ -32,4 +32,4 @@ l A lone line in the ordinary face is prose, not a list.
 
 Some body text sits here to be read.
 
-l Marker face, but not at the indent the document uses.
+- Marker face, at an indent the other pages never use.

@@ -2134,6 +2134,49 @@ download, #665) in both. none of that moved.
 Not verified here: the other four platforms were not run (the change is in the shared core only); the
 UI was not looked at.
 
+## Mid-line letter markers (#669, second shape), 2026-10-19
+
+Run on kdocker3 in a throwaway `megapdf:base` container, on top of #689's tree (`3f302ed`), the two
+builds side by side, the same per-document comparison and the same batteries as the #689 section
+above (all four corpora, structure `--reference --cli` and markdown). Counts only. Everything,
+including the downloaded manual, removed afterward.
+
+**The premise was wrong, and what the issue calls a run-on line is not one.** The issue describes
+items "run together on one line" ("l Starting the program at a tool change. l Starting the program
+with ..."). Dumping the words of that page shows two separate lines, each beginning with the
+Wingdings `l` at the same x (93.1 pt). The Markdown joined them
+only because neither line was classed a list item, so the paragraph logic folded the second into
+the first. #689's borrow required the marker's x to match a confirming page's cluster within one em;
+this page's items sit one nesting level deeper than any other page uses (a nested list on a page of
+its own), so they missed. **The indent is not part of the signature after all**, and #689's rule
+stating that it was is the error this corrects.
+
+**What was built and measured, and what was dropped.** A line-splitter, as specified (cut a line at a
+mid-line marker carrying a confirmed signature, face distinct, standing off by the glyph gap), was
+built and run over all four corpora and the manual. It fired on **0** real run-on lines. Its one
+effect in 5,875 documents was a false split in one private document: a bold `X` signature mark mid-line
+("... signature (if applicable) **X** Date ...") became a bullet because that `X` already passes
+the signature test (the face is distinct from the text beside it and the glyph repeats on other pages). A rule with no instances to fix and one wrong effect
+was not shipped. What ships is the indent change.
+
+**The reported manual** (UM10751, version 1220A, 226 pages): literal `l ` items 46 on 29 pages before
+#689, 1 after #689, **0 after this**. Page 44's two items are now two list items.
+
+**Per-document list-item counts against #689's tree, 5,875 documents:** exit codes changed 0, items
+lost 0. One public document changed, +3 items (a symbol-face `b` marker whose items sit at an indent
+the confirming pages do not use, read: three real bullets). The private, Canadian and UN corpora did
+not change at all.
+
+**Gates, identical before and after on every cell, zero crashes:** structure F1 private 0.998997,
+public 0.976157 (fails, #498, unchanged), Canadian 0.999932, UN 0.999136; tau median 0.951 / 0.978 /
+0.994 / 0.967; markdown 0 cmark failures, extracted 2,982 / 935 / 134 / 83. The same two public files
+exceed the markdown battery's 120 s bound and the same two private files exit 10, as in the #689
+section.
+
+Not verified: only Linux; the other four platforms not run. Page 44's items come out at nesting
+level 3 (the page has three indents), rendered with four spaces of indent after a heading and no
+parent item; that is the existing depth logic and was not changed here.
+
 ## Reporting
 
 For each issue: what you clicked, what you expected, what happened, and the PDF

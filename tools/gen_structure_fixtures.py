@@ -592,8 +592,10 @@ def gen_symbol_bullets_document(regular, bold):
       page 4  ONE marker, same face and indent      -- borrow: a list item
       page 5  one line "l  ..." in the body face -- prose: a lone letter in an ordinary face
               is not the signature, however the line is indented
-      page 6  one "l" marker in the bold face at a different indent (x=250) -- prose: the
-              signature includes where it sits
+      page 6  one "l" marker in the marker face at an indent no other page uses (x=250) -- a
+              list item: the indent is not part of the signature (a nested list on a page of
+              its own, as in the reporter's manual, sits at an indent the confirming pages
+              never do). The first version of the rule required it and left such items prose.
     """
     d = Doc(regular, bold)
     # The marker's face needs a family of its own -- "DejaVu Sans Bold" beside "DejaVu Sans" is
@@ -620,7 +622,7 @@ def gen_symbol_bullets_document(regular, bold):
     sixth = text_ops(b"F2", 16, 72, 740, "Prose Two")
     sixth += text_ops(b"F1", 11, 72, 700, "Some body text sits here to be read.")
     sixth += text_ops(b"F2", 11, 250, 660, "l")
-    sixth += text_ops(b"F1", 11, 268, 660, "Marker face, but not at the indent the document uses.")
+    sixth += text_ops(b"F1", 11, 268, 660, "Marker face, at an indent the other pages never use.")
     d.add_page(sixth)
     return d.finish()
 

@@ -32,4 +32,4 @@ Prose Two
 
 Some body text sits here to be read.
 
-l Marker face, but not at the indent the document uses.
+l Marker face, at an indent the other pages never use.
