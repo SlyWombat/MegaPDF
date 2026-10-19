@@ -1296,7 +1296,10 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
                             }
                         }
                         // No recogniser: note whether any page was left unread, stopping at the first (#687).
-                        // Only a page with no match of its own is asked, so a text document pays nothing.
+                        // Asked only on a page with no match, so on a machine without an OCR language a
+                        // search pays one pass over the document's pictures (0.4-0.5 s on 92-151 pages,
+                        // GPD-DAVE), off the UI thread. Pictures first: checking each page for text of
+                        // its own instead cost more on the same documents (0.6-1.3 s).
                         else if (!unreadable && own.Count == 0)
                             unreadable = ScanReader.NeedsReading(doc, i, pictures ??= ScanReader.PagesWithPictures(doc));
                         list.AddRange(onPage);
