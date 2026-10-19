@@ -209,7 +209,7 @@
     <comment>FR-REVIEW #676 — new with scan search, not yet read by the reviewer.</comment>
   </data>
   <data name="FindNoRecogniserText.Text" xml:space="preserve">
-    <value>Les pages numérisées ne peuvent pas être recherchées tant que Windows n'a pas la reconnaissance de texte pour votre langue. Ajoutez-la dans les paramètres de langue, puis redémarrez MegaPDF.</value>
+    <value>Impossible de rechercher dans les pages numérisées tant que Windows n'a pas la reconnaissance de texte pour votre langue. Ajoutez-la dans les paramètres de langue, puis redémarrez MegaPDF.</value>
     <comment>FR-REVIEW #687 — new with the scan-search hint, not yet read by the reviewer.</comment>
   </data>
   <data name="FindNoRecogniserButton.Content" xml:space="preserve">
