@@ -574,6 +574,57 @@ def gen_symbol_bullets(regular, bold):
     return d.finish()
 
 
+def gen_symbol_bullets_document(regular, bold):
+    """#669: a bullet the DOCUMENT has proved, on pages too short to prove it themselves.
+
+    #664's rule trusts a letter-valued marker only where its page repeats it three times at
+    one indent. A manual that draws every bullet with one symbol face has pages with one or
+    two items, and 2.2.1 left their literal "l " in the text. The fix borrows the evidence of
+    the other pages: the same glyph, in the same NAMED face, at the same indent, already
+    passed the per-page rule on at least two pages. The per-page threshold is unchanged.
+
+    The marker is drawn in a face named MegaPDFSymbolBulletFace and the body in the fixture's
+    regular face, two different families, which is what the signature is made of:
+
+      page 1  three "l" markers (bold face, x=72)   -- confirms the signature
+      page 2  three more                            -- confirms it on a second page
+      page 3  TWO markers, same face and indent     -- borrow: list items
+      page 4  ONE marker, same face and indent      -- borrow: a list item
+      page 5  one line "l  ..." in the body face -- prose: a lone letter in an ordinary face
+              is not the signature, however the line is indented
+      page 6  one "l" marker in the bold face at a different indent (x=250) -- prose: the
+              signature includes where it sits
+    """
+    d = Doc(regular, bold)
+    # The marker's face needs a family of its own -- "DejaVu Sans Bold" beside "DejaVu Sans" is
+    # one typeface in two styles, which the rule rightly refuses (a form's bold "b"/"c" line
+    # labels look exactly like that). Same glyph program, a name no body face shares.
+    d.bold = bold.add(d.add, "MegaPDFSymbolBulletFace")
+
+    def bullets(heading, items, x_marker=72, x_body=90, y0=700):
+        body = text_ops(b"F2", 16, 72, 740, heading)
+        for i, item in enumerate(items):
+            body += text_ops(b"F2", 11, x_marker, y0 - i * 18, "l")
+            body += text_ops(b"F1", 11, x_body, y0 - i * 18, item)
+        return body
+
+    d.add_page(bullets("Safety", ["Wear eye protection.", "Keep the guard closed.", "Never reach past the chuck."]))
+    d.add_page(bullets("Setup", ["Level the machine.", "Check the coolant level.", "Home all axes."]))
+    d.add_page(bullets("Two Items", ["Clean the way covers.", "Oil the lead screw."]))
+    d.add_page(bullets("One Item", ["Check the spindle belt."]))
+
+    fifth = text_ops(b"F2", 16, 72, 740, "Prose One")
+    fifth += text_ops(b"F1", 11, 72, 700, "l  A lone line in the ordinary face is prose, not a list.")
+    d.add_page(fifth)
+
+    sixth = text_ops(b"F2", 16, 72, 740, "Prose Two")
+    sixth += text_ops(b"F1", 11, 72, 700, "Some body text sits here to be read.")
+    sixth += text_ops(b"F2", 11, 250, 660, "l")
+    sixth += text_ops(b"F1", 11, 268, 660, "Marker face, but not at the indent the document uses.")
+    d.add_page(sixth)
+    return d.finish()
+
+
 def gen_headings(regular, bold):
     d = Doc(regular, bold)
     body = text_ops(b"F2", 24, 72, 750, "Top Level Heading")
@@ -704,6 +755,7 @@ def main():
         ("furniture.pdf", gen_furniture),
         ("lists.pdf", gen_lists),
         ("symbol-bullets.pdf", gen_symbol_bullets),
+        ("symbol-bullets-document.pdf", gen_symbol_bullets_document),
         ("headings.pdf", gen_headings),
         ("tabular-headings.pdf", gen_tabular_headings),
         ("reading-order-jump.pdf", gen_reading_order_jump),

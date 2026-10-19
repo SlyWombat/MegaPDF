@@ -40,6 +40,7 @@
 #include "fpdfview.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstring>
 #include <map>
@@ -1727,14 +1728,52 @@ double PageMedianPitch(const std::vector<Line>& lines) {
 // whatever the glyph was drawn with. So a letter-valued single-character word counts as a
 // marker only where this page puts at least kMinRepeatedLetterMarker of them in one x-cluster
 // -- which is also why this is page-local state and not a property of the character.
+//
+// #669 added the document as a second witness (see DocumentMarker below) without touching this
+// number: a page that fails the threshold may borrow only from signatures other pages passed it
+// with, and only on the same glyph, face and indent. Lowering the threshold was tried by nobody
+// and is wrong: a lone letter at a line start is ordinary prose far too often.
 constexpr int kMinRepeatedLetterMarker = 3;
+
+// #669: a letter-valued marker the DOCUMENT has confirmed. The per-page rule above needs three
+// repeats on one page, and a manual that draws every bullet with the same symbol face has
+// pages with one or two items -- the 2.2.1 residue, 59 literal "l " items on 33 pages of #664's
+// manual. Those pages carry no evidence of their own, but the document does: the same glyph,
+// in the same named face, at the same indent, already passed the per-page rule elsewhere.
+// The per-page threshold is NOT lowered; a lone letter still needs the document behind it.
+struct DocumentMarker {
+    unsigned int cp = 0;
+    std::string font;           // the marker's /BaseFont as the document writes it; never empty
+    std::vector<double> xs;     // the line-left x of each confirming cluster, one per confirming page
+};
+
+// A signature must pass the per-page rule on at least this many different pages before a page
+// that fails it borrows the result. Two, not one: a single page of three lines proves that page,
+// and "a document does this" needs more than one witness.
+constexpr int kMinConfirmingPages = 2;
 
 struct ListMarkerContext {
     // The letter code points this page has earned the right to read as markers.
     std::vector<unsigned int> letters;
+    // #669: the document-level signatures, and the x tolerance to match an indent against them.
+    const std::vector<DocumentMarker>* document = nullptr;
+    double x_tolerance = 0;
 
     bool AdmitsLetter(unsigned int cp) const {
         return std::find(letters.begin(), letters.end(), cp) != letters.end();
+    }
+
+    // #669: cp AND the marker's named face AND the indent all match a confirmed signature. An
+    // unnamed face never matches -- with nothing to tell it from prose, it has no signature.
+    bool AdmitsDocumentLetter(unsigned int cp, const std::string* font, double x) const {
+        if (document == nullptr || font == nullptr) return false;
+        for (const DocumentMarker& m : *document) {
+            if (m.cp != cp || m.font != *font) continue;
+            for (double mx : m.xs) {
+                if (std::fabs(mx - x) <= x_tolerance) return true;
+            }
+        }
+        return false;
     }
 };
 
@@ -1752,6 +1791,46 @@ bool LineMarkerCandidate(const PageWork& pw, const Line& line, std::vector<unsig
     return true;
 }
 
+// #669: a face's family: the /BaseFont with its subset tag removed, lower-cased, reduced to
+// letters, and stripped of the words that only name a style ("Arial-BoldMT" and "ArialMT" are
+// both "arial"). Two names with one family are one typeface in two styles, not two typefaces.
+std::string FaceFamily(const std::string& name) {
+    std::string out;
+    const size_t plus = name.find('+');
+    for (size_t i = plus == std::string::npos ? 0 : plus + 1; i < name.size(); i++) {
+        const unsigned char c = static_cast<unsigned char>(name[i]);
+        if (std::isalpha(c)) out.push_back(static_cast<char>(std::tolower(c)));
+    }
+    static const char* const kStyleWords[] = {"semibold", "bold", "italic", "oblique", "regular", "roman",
+                                              "black", "heavy", "medium", "light", "condensed", "narrow",
+                                              "mt", "ps"};
+    for (bool changed = true; changed;) {
+        changed = false;
+        for (const char* w : kStyleWords) {
+            const size_t at = out.find(w);
+            if (at != std::string::npos && out.size() > std::strlen(w)) {
+                out.erase(at, std::strlen(w));
+                changed = true;
+            }
+        }
+    }
+    return out;
+}
+
+// #669: the document-level borrow needs the marker drawn in a typeface of its own. Measured on
+// the public and private corpora, a marker in the SAME typeface as the text after it is not a
+// bullet glyph more often than it is: a tax form's multiplication "x" opens lines in the body
+// face on every page of the form, a form's bold line labels "b", "c", "d" are the body family
+// in bold, and a letter-spaced "S u m m a r y" opens lines with one-letter words. A symbol face
+// (Wingdings, Symbol, ZapfDingbats, a producer's own bullet font) is a different family from
+// the text it leads. Documents that draw bullets in the body family keep the per-page rule
+// alone, as before.
+bool MarkerFaceIsDistinct(const std::string* marker, const std::string* body) {
+    if (marker == nullptr || body == nullptr) return false;
+    const std::string m = FaceFamily(*marker);
+    return !m.empty() && m != FaceFamily(*body);
+}
+
 // A line's first word is a marker (design §1.2 "Lists") followed by a gap and more body text
 // on the same line. `ctx` carries the page's repeated letter markers (#664).
 bool LineStartsListItem(const PageWork& pw, const Line& line, const ListMarkerContext& ctx) {
@@ -1766,16 +1845,28 @@ bool LineStartsListItem(const PageWork& pw, const Line& line, const ListMarkerCo
     }
     // A letter-valued marker has already earned its place by repeating down the page, so the
     // strict gap would be asking the same question twice.
-    return cps.size() == 1 && !IsPlausibleSingleLetterWord(cps[0]) && ctx.AdmitsLetter(cps[0]) &&
-           gap_em >= kGlyphMarkerGapEm;
+    if (cps.size() != 1 || IsPlausibleSingleLetterWord(cps[0]) || gap_em < kGlyphMarkerGapEm) return false;
+    if (ctx.AdmitsLetter(cps[0])) return true;
+    // #669: this page is short of evidence; the document may not be.
+    const Word& marker = pw.words[static_cast<size_t>(line.words[0])];
+    const std::string* font = marker.chars.empty() ? nullptr : pw.chars[static_cast<size_t>(marker.chars[0])].font;
+    const Word& body0 = pw.words[static_cast<size_t>(line.words[1])];
+    const std::string* body_font = body0.chars.empty() ? nullptr : pw.chars[static_cast<size_t>(body0.chars[0])].font;
+    return MarkerFaceIsDistinct(font, body_font) && ctx.AdmitsDocumentLetter(cps[0], font, line.l);
 }
 
-// Which letter-valued single-character markers this page repeats at a stable x (#664). Run
-// before classification, on the same reading order the classifier walks, and deliberately
-// ignorant of IsBulletCodepoint: a code point that is already a bullet needs no evidence.
-ListMarkerContext ComputeListMarkerContext(const PageWork& pw, const std::vector<int>& order, double body_size) {
-    struct Seen { unsigned int cp; double x; };
-    std::vector<Seen> seen;
+// One letter-valued marker candidate: where it starts and what it was drawn with (#669).
+struct SeenLetterMarker {
+    unsigned int cp;
+    double x;
+    const std::string* font;   // nullptr when PDFium could not name it
+    const std::string* body_font;   // the face of the word after the marker, likewise
+};
+
+// Every line on the page that opens with a letter-valued single-character word standing off
+// from the text after it. Order does not matter to the callers, which only count.
+std::vector<SeenLetterMarker> CollectLetterMarkers(const PageWork& pw, const std::vector<int>& order) {
+    std::vector<SeenLetterMarker> seen;
     for (int li : order) {
         const Line& line = pw.lines[static_cast<size_t>(li)];
         std::vector<unsigned int> cps;
@@ -1788,9 +1879,29 @@ ListMarkerContext ComputeListMarkerContext(const PageWork& pw, const std::vector
         if (!IsAsciiLetter(cp) && cp != 0x00E0 && cp != 0x00C0) continue;
         if (IsPlausibleSingleLetterWord(cp)) continue;
         if (IsListMarker(cps)) continue;
-        seen.push_back(Seen{cp, line.l});
+        const Word& marker = pw.words[static_cast<size_t>(line.words[0])];
+        const std::string* font = marker.chars.empty() ? nullptr : pw.chars[static_cast<size_t>(marker.chars[0])].font;
+        const Word& body0 = pw.words[static_cast<size_t>(line.words[1])];
+        const std::string* body_font = body0.chars.empty() ? nullptr : pw.chars[static_cast<size_t>(body0.chars[0])].font;
+        seen.push_back(SeenLetterMarker{cp, line.l, font, body_font});
     }
+    return seen;
+}
+
+bool SameFont(const std::string* a, const std::string* b) {
+    if (a == nullptr || b == nullptr) return a == b;
+    return *a == *b;
+}
+
+// Which letter-valued single-character markers this page repeats at a stable x (#664). Run
+// before classification, on the same reading order the classifier walks, and deliberately
+// ignorant of IsBulletCodepoint: a code point that is already a bullet needs no evidence.
+ListMarkerContext ComputeListMarkerContext(const PageWork& pw, const std::vector<int>& order, double body_size,
+                                           const std::vector<DocumentMarker>* document) {
+    const std::vector<SeenLetterMarker> seen = CollectLetterMarkers(pw, order);
     ListMarkerContext ctx;
+    ctx.document = document;
+    ctx.x_tolerance = kListDepthClusterEm * Em(body_size);
     for (size_t i = 0; i < seen.size(); i++) {
         if (ctx.AdmitsLetter(seen[i].cp)) continue;
         // Count this code point's occurrences that share an x-cluster with this one, at the
@@ -1798,11 +1909,63 @@ ListMarkerContext ComputeListMarkerContext(const PageWork& pw, const std::vector
         int in_cluster = 0;
         for (size_t k = 0; k < seen.size(); k++) {
             if (seen[k].cp != seen[i].cp) continue;
-            if (std::fabs(seen[k].x - seen[i].x) <= kListDepthClusterEm * Em(body_size)) in_cluster++;
+            if (std::fabs(seen[k].x - seen[i].x) <= ctx.x_tolerance) in_cluster++;
         }
         if (in_cluster >= kMinRepeatedLetterMarker) ctx.letters.push_back(seen[i].cp);
     }
     return ctx;
+}
+
+// #669: the signatures the per-page rule confirms, gathered across every page. A page
+// confirms (cp, font, x) when at least kMinRepeatedLetterMarker lines open with that glyph in
+// that named face inside one x-cluster -- the per-page rule's own test, with the face added.
+// The signature is then good for kMinConfirmingPages or more such pages.
+std::vector<DocumentMarker> ComputeDocumentMarkers(const std::vector<PageWork>& pages, double body_size) {
+    const double tol = kListDepthClusterEm * Em(body_size);
+    std::vector<DocumentMarker> out;
+    std::vector<int> pages_confirming;   // parallel to `out`
+    for (const PageWork& pw : pages) {
+        if (pw.lines.empty()) continue;
+        std::vector<int> order(pw.lines.size());
+        for (size_t i = 0; i < order.size(); i++) order[i] = static_cast<int>(i);
+        const std::vector<SeenLetterMarker> seen = CollectLetterMarkers(pw, order);
+        std::vector<size_t> touched;   // signatures this page has already counted for
+        for (size_t i = 0; i < seen.size(); i++) {
+            // A marker in the very face of the text beside it is no signature (see
+            // MarkerFaceIsDistinct), and neither is one PDFium cannot name.
+            if (!MarkerFaceIsDistinct(seen[i].font, seen[i].body_font)) continue;
+            int in_cluster = 0;
+            for (size_t k = 0; k < seen.size(); k++) {
+                if (seen[k].cp == seen[i].cp && SameFont(seen[k].font, seen[i].font) &&
+                    MarkerFaceIsDistinct(seen[k].font, seen[k].body_font) &&
+                    std::fabs(seen[k].x - seen[i].x) <= tol) in_cluster++;
+            }
+            if (in_cluster < kMinRepeatedLetterMarker) continue;
+            size_t idx = out.size();
+            for (size_t m = 0; m < out.size(); m++) {
+                if (out[m].cp == seen[i].cp && out[m].font == *seen[i].font) { idx = m; break; }
+            }
+            if (idx == out.size()) {
+                DocumentMarker dm;
+                dm.cp = seen[i].cp;
+                dm.font = *seen[i].font;
+                out.push_back(std::move(dm));
+                pages_confirming.push_back(0);
+            }
+            bool has_x = false;
+            for (double x : out[idx].xs) if (std::fabs(x - seen[i].x) <= tol) { has_x = true; break; }
+            if (!has_x) out[idx].xs.push_back(seen[i].x);
+            if (std::find(touched.begin(), touched.end(), idx) == touched.end()) {
+                touched.push_back(idx);
+                pages_confirming[idx]++;
+            }
+        }
+    }
+    std::vector<DocumentMarker> kept;
+    for (size_t m = 0; m < out.size(); m++) {
+        if (pages_confirming[m] >= kMinConfirmingPages) kept.push_back(std::move(out[m]));
+    }
+    return kept;
 }
 
 std::vector<double> ComputeListDepthClusters(const PageWork& pw, const std::vector<int>& order, double body_size,
@@ -2284,7 +2447,8 @@ struct PageResult {
 // trailing paragraph for rotated/unclassified text, then figures and fields spliced in by
 // position, furniture already removed (or kept, per `flags`) by the caller.
 PageResult BuildPageContent(const megapdf_page* page, PageWork* pw, int page_index, double body_size,
-                            unsigned int flags, const std::vector<BlockImpl>& furniture_blocks) {
+                            unsigned int flags, const std::vector<BlockImpl>& furniture_blocks,
+                            const std::vector<DocumentMarker>* document_markers) {
     PageResult result;
     if (pw->words.empty() && pw->leftover_words.empty()) {
         BlockImpl b;
@@ -2305,7 +2469,7 @@ PageResult BuildPageContent(const megapdf_page* page, PageWork* pw, int page_ind
     const double median_pitch = PageMedianPitch(pw->lines);
     // #664: the page's repeated letter markers first -- the depth clusters and the classifier
     // both have to agree about what counts as a marker, so they read the same context.
-    const ListMarkerContext marker_ctx = ComputeListMarkerContext(*pw, order, body_size);
+    const ListMarkerContext marker_ctx = ComputeListMarkerContext(*pw, order, body_size, document_markers);
     const std::vector<double> list_clusters = ComputeListDepthClusters(*pw, order, body_size, marker_ctx);
 
     std::vector<BlockImpl> content;
@@ -3101,6 +3265,9 @@ std::unique_ptr<megapdf_structure> BuildStructure(megapdf_document* document, in
     }
 
     result->body_size = ComputeBodySize(pages);
+    // #669: the letter-valued bullet signatures the document confirms, for pages too short of
+    // evidence to confirm their own.
+    const std::vector<DocumentMarker> document_markers = ComputeDocumentMarkers(pages, result->body_size);
 
     if (IsCancelled(cancel)) {
         close_all();
@@ -3128,7 +3295,8 @@ std::unique_ptr<megapdf_structure> BuildStructure(megapdf_document* document, in
         if (tagged) {
             source = MEGAPDF_STRUCTURE_SOURCE_TAGGED;
         } else {
-            pr = BuildPageContent(page, &pw, pw.page_index, result->body_size, flags, furniture_blocks[static_cast<size_t>(k)]);
+            pr = BuildPageContent(page, &pw, pw.page_index, result->body_size, flags, furniture_blocks[static_cast<size_t>(k)],
+                                  &document_markers);
             if (tree_present) {
                 pr.confidence = (std::min)(pr.confidence, kTaggedFallbackConfidenceCap);
                 for (auto& b : pr.blocks) b.info.confidence = pr.confidence;
