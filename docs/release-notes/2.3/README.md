@@ -25,8 +25,9 @@ python3 docs/release-notes/2.3/check_copy.py --check  # fail on drift
 
 ## Still to do before release
 
-- **French review.** The Canadian French is new; Fable reviews it before release, and the
-  France block is derived from it.
+- **French review: done, APPROVED by Fable on 2026-10-19** for these notes and every French
+  app string added since 2.2.0 (32 locale-strings, none wrong). Its two phrasing fixes, both
+  app strings, landed in #692. Any later change to the French here needs another review.
 - **The claim must still be true at release.** Find on scans is on `main` for Windows,
   macOS, iOS and Android (#676, read at 200 dpi). Linux is excluded on purpose.
 - **Version strings** in `tools/gen_listing_copy.py` (`NOTES_VERSION`),
