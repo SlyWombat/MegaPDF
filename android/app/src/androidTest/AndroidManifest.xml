@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <!-- A provider that answers _display_name with a value the app must not trust (#670).
+             Exported, unlike a FileProvider: the app reads it from its own uid, and the
+             test APK has another (see Fixtures.dir). -->
+        <provider
+            android:name="com.megapdf.android.NamelessProvider"
+            android:authorities="ca.electricrv.megapdf.test.nameless"
+            android:exported="true" />
+    </application>
+</manifest>
