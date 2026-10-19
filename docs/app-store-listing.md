@@ -104,27 +104,9 @@ MegaPDF is deliberately simple: it doesn't bury you in toolbars. It opens, it fi
 pdf,sign,signature,fill,form,checkbox,esign,editor,search,document,annotate,fill and sign,reader
 ```
 
-**What's new** [4000] (1975) — 2.2, from `docs/release-notes/2.2/app-store.md`
+**What's new** [4000] (116) — 2.3, from `docs/release-notes/2.3/app-store.md`
 ```
-Reading mode
-
-MegaPDF can get out of the way. Reading mode takes the toolbars off the screen and leaves the page. A tap brings a small bar back, and the page number on it opens a box to go anywhere in the document; a tap takes the bar away again. Page colours are in Settings, under Reading: Normal, Sepia for a long read, and Night for a dark room. Night inverts the page, pictures included — that is deliberate, and the setting says so, because a photograph read at night is a photograph in negative. If reading is mostly what you do with a PDF, Open documents in reading mode starts every one of them that way.
-
-Page tools
-
-Tap Pages and the document's pages are in front of you: a sheet on an iPhone, a sidebar beside the page on an iPad. Rotate a page that was scanned sideways, delete one, drag pages into a different order, insert a blank page, add the pages of another PDF, or save the pages you picked as a file of their own. Each of those is one step in the undo history, so one Undo puts the document back the way it was.
-
-A toolbar made for the iPad
-
-On an iPad the everyday tools now sit in a wide row of their own under the navigation bar, each with its title beside its icon instead of an icon you have to guess at, and each tool's picker opens as a popover next to the tool it belongs to. The keyboard commands are there too.
-
-Zoom where you are looking
-
-A pinch now zooms on the point between your fingers rather than the corner of the page, so the line you were reading stays under them.
-
-Before a document's own signature is lost
-
-Some documents arrive carrying a digital signature — the cryptographic kind, which stops verifying the moment the file changes at all. Saving over one of those now says so first and offers to save a copy instead, so the signed original stays intact. That is about a signature already in the document; the signature you draw, type or photograph and place on the page is a picture of your name, and placing one has not changed.
+Find now searches scanned pages. MegaPDF reads them on your device, and nothing leaves it. Plus various other fixes.
 ```
 
 **Screenshot captions** (optional overlay text) — iPhone 6.9", 9 files, in this order
@@ -217,27 +199,9 @@ MegaPDF est volontairement simple : il ne vous noie pas sous les barres d'outil
 pdf,signer,signature,remplir,formulaire,case,cocher,éditeur,recherche,document,annoter,lecture
 ```
 
-**What's new** [4000] (2218) — 2.2, from `docs/release-notes/2.2/app-store.md`
+**What's new** [4000] (158) — 2.3, from `docs/release-notes/2.3/app-store.md`
 ```
-Mode lecture
-
-MegaPDF sait s'effacer. Le mode lecture retire les barres d'outils de l'écran et laisse la page. Une touche ramène une petite barre, et le numéro de page qu'elle porte ouvre un champ où taper la page voulue; une autre touche la fait repartir. Les couleurs de la page sont dans les Réglages, sous Lecture : Normales, Sépia pour une longue lecture et Nuit pour une pièce sombre. Le mode nuit inverse la page, images comprises : c'est voulu, et le réglage le dit, parce qu'une photo lue la nuit est une photo en négatif. Si vous lisez un PDF plus souvent que vous ne le remplissez, Ouvrir les documents en mode lecture les ouvre tous ainsi.
-
-Outils de page
-
-Touchez Pages et les pages du document sont devant vous : une feuille sur l'iPhone, un panneau à côté de la page sur l'iPad. Faites pivoter une page numérisée de travers, supprimez-en une, glissez les pages dans un autre ordre, insérez une page vierge, ajoutez les pages d'un autre PDF, ou enregistrez les pages choisies dans un fichier à part. Chacun de ces gestes est une seule étape de l'historique, et une seule annulation remet le document comme il était.
-
-Une barre d'outils faite pour l'iPad
-
-Sur l'iPad, les outils de tous les jours occupent maintenant une large rangée bien à eux, sous la barre de navigation, chacun avec son titre à côté de son icône plutôt qu'une icône à deviner, et le sélecteur de chaque outil s'ouvre juste à côté de l'outil auquel il appartient. Les raccourcis clavier y sont aussi.
-
-Le zoom là où vous regardez
-
-Un pincement zoome maintenant sur le point entre vos doigts plutôt que sur le coin de la page : la ligne que vous lisiez reste sous vos doigts.
-
-Avant que la signature du document ne soit perdue
-
-Certains documents arrivent avec une signature numérique — la signature cryptographique, adossée à un certificat — qui cesse d'être vérifiable dès que le fichier change. Enregistrer par-dessus un tel document le dit maintenant d'abord et propose d'enregistrer une copie, pour que l'original signé reste intact. Il s'agit d'une signature déjà présente dans le document; la signature que vous dessinez, tapez ou photographiez pour la poser sur la page est une image de votre nom, et rien n'a changé de ce côté.
+La recherche fonctionne maintenant dans les pages numérisées. MegaPDF les lit sur votre appareil; rien n'est envoyé ailleurs. Et plusieurs autres corrections.
 ```
 
 **Screenshot captions** (optional overlay text) — iPhone 6.9", 9 files, in this order
@@ -330,27 +294,9 @@ MegaPDF est volontairement simple : il ne vous noie pas sous les barres d'outil
 pdf,signer,signature,remplir,formulaire,case,cocher,éditeur,recherche,document,annoter,lecture
 ```
 
-**What's new** [4000] (2220) — 2.2, from `docs/release-notes/2.2/app-store.md`
+**What's new** [4000] (159) — 2.3, from `docs/release-notes/2.3/app-store.md`
 ```
-Mode lecture
-
-MegaPDF sait s'effacer. Le mode lecture retire les barres d'outils de l'écran et laisse la page. Une touche ramène une petite barre, et le numéro de page qu'elle porte ouvre un champ où taper la page voulue ; une autre touche la fait repartir. Les couleurs de la page sont dans les Réglages, sous Lecture : Normales, Sépia pour une longue lecture et Nuit pour une pièce sombre. Le mode nuit inverse la page, images comprises : c'est voulu, et le réglage le dit, parce qu'une photo lue la nuit est une photo en négatif. Si vous lisez un PDF plus souvent que vous ne le remplissez, Ouvrir les documents en mode lecture les ouvre tous ainsi.
-
-Outils de page
-
-Touchez Pages et les pages du document sont devant vous : une feuille sur l'iPhone, un panneau à côté de la page sur l'iPad. Faites pivoter une page numérisée de travers, supprimez-en une, glissez les pages dans un autre ordre, insérez une page vierge, ajoutez les pages d'un autre PDF, ou enregistrez les pages choisies dans un fichier à part. Chacun de ces gestes est une seule étape de l'historique, et une seule annulation remet le document comme il était.
-
-Une barre d'outils faite pour l'iPad
-
-Sur l'iPad, les outils de tous les jours occupent maintenant une large rangée bien à eux, sous la barre de navigation, chacun avec son titre à côté de son icône plutôt qu'une icône à deviner, et le sélecteur de chaque outil s'ouvre juste à côté de l'outil auquel il appartient. Les raccourcis clavier y sont aussi.
-
-Le zoom là où vous regardez
-
-Un pincement zoome maintenant sur le point entre vos doigts plutôt que sur le coin de la page : la ligne que vous lisiez reste sous vos doigts.
-
-Avant que la signature du document ne soit perdue
-
-Certains documents arrivent avec une signature numérique — la signature cryptographique, adossée à un certificat — qui cesse d'être vérifiable dès que le fichier change. Enregistrer par-dessus un tel document le dit maintenant d'abord et propose d'enregistrer une copie, pour que l'original signé reste intact. Il s'agit d'une signature déjà présente dans le document ; la signature que vous dessinez, tapez ou photographiez pour la poser sur la page est une image de votre nom, et rien n'a changé de ce côté.
+La recherche fonctionne maintenant dans les pages numérisées. MegaPDF les lit sur votre appareil ; rien n'est envoyé ailleurs. Et plusieurs autres corrections.
 ```
 
 **Screenshot captions** (optional overlay text) — iPhone 6.9", 9 files, in this order
