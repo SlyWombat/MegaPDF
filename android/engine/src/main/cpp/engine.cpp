@@ -341,6 +341,15 @@ Java_com_megapdf_engine_PdfiumNative_nativeSaveWithoutSecurity(JNIEnv* env, jobj
     return status;
 }
 
+// Bakes what would print into page content (#682), on a copy the caller opened from saved
+// bytes: megapdf_flatten_all_for_print() changes the document it is given. Returns the core's
+// status.
+JNIEXPORT jint JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativeFlattenForPrint(JNIEnv*, jobject, jlong handle) {
+    auto* d = reinterpret_cast<Document*>(handle);
+    return megapdf_flatten_all_for_print(d->core);
+}
+
 }  // extern "C"
 
 // --- Checkbox surface (#15). Behavioral reference: PdfiumEngine.cs; the

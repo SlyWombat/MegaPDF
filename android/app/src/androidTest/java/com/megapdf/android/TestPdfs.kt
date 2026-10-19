@@ -209,6 +209,44 @@ object TestPdfs {
     private fun stream(dict: String, body: String): String =
         "<< $dict /Length ${body.length} >>\nstream\n$body\nendstream"
 
+    /**
+     * [pages] pages (#682), each carrying the same three stamp annotations over a blank page, each
+     * a solid blue block from the same appearance stream:
+     *
+     *  * at [PRINT_STAMP], `/F 4` (Print): what a signature or a tick placed in the app is;
+     *  * at [SCREEN_STAMP], `/F 0`: shown on screen, not printed;
+     *  * at [HIDDEN_STAMP], `/F 2` (Hidden): shown nowhere.
+     *
+     * Each carries a `MegaPDF_Id`, so `PdfPage.stamps()` lists it.
+     */
+    fun threeStamps(pages: Int = 1): ByteArray {
+        val objects = ArrayList<String>()
+        val ap = "0.13 0.19 0.56 rg 0 0 90 60 re f"
+        val firstPage = 3
+        // Per page: the page, then its three annotations. The appearance stream comes last.
+        val appearance = firstPage + pages * 4
+        val kids = (0 until pages).joinToString(" ") { "${firstPage + it * 4} 0 R" }
+        objects += "<< /Type /Catalog /Pages 2 0 R >>"
+        objects += "<< /Type /Pages /Kids [$kids] /Count $pages >>"
+        for (index in 0 until pages) {
+            val page = firstPage + index * 4
+            objects += "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] " +
+                "/Annots [${page + 1} 0 R ${page + 2} 0 R ${page + 3} 0 R] >>"
+            fun stamp(rect: String, flags: Int, id: String) =
+                "<< /Type /Annot /Subtype /Stamp /Rect [$rect] /F $flags /MegaPDF_Id ($id) /AP << /N $appearance 0 R >> >>"
+            objects += stamp("100 500 190 560", 4, "sig:print-$index")
+            objects += stamp("300 500 390 560", 0, "sig:screen-$index")
+            objects += stamp("100 300 190 360", 2, "sig:hidden-$index")
+        }
+        objects += "<< /Type /XObject /Subtype /Form /BBox [0 0 90 60] /Length ${ap.length} >>\nstream\n$ap\nendstream"
+        return assemble(objects)
+    }
+
+    /** A point inside each of [threeStamps]'s blocks, in PDF user space (origin bottom left). */
+    val PRINT_STAMP = 145.0 to 530.0
+    val SCREEN_STAMP = 345.0 to 530.0
+    val HIDDEN_STAMP = 145.0 to 330.0
+
     /** The objects, an xref table over their real offsets, and a trailer. */
     private fun assemble(objects: List<String>): ByteArray {
         val out = StringBuilder("%PDF-1.4\n")

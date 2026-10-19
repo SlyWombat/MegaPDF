@@ -57,6 +57,9 @@ internal object PdfiumNative {
     ): Int
     external fun nativeSaveWithoutSecurity(handle: Long, out: OutputStream): Int
 
+    /** megapdf_flatten_all_for_print (#682): the core's status. Changes the document it is given. */
+    external fun nativeFlattenForPrint(handle: Long): Int
+
     /** #558: the person chose to go on past an advisory permission. For this open only. */
     external fun nativeSecurityOverride(handle: Long, allow: Boolean)
 

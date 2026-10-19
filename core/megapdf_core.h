@@ -951,6 +951,20 @@ MEGAPDF_API int megapdf_save_without_security(const megapdf_document* document, 
 /** Commits form edits, then bakes every page's annotations and fields into its content. */
 MEGAPDF_API int megapdf_flatten_all(const megapdf_document* document);
 
+/**
+ * megapdf_flatten_all() for a copy that is about to be printed (#682): the same bake into page
+ * content, but PDFium's FLAT_PRINT rather than FLAT_NORMALDISPLAY. NORMALDISPLAY keeps what is
+ * visible on screen (everything but Hidden); PRINT keeps what would reach paper, the annotations
+ * whose /F Print bit is set. So a no-print note or a hidden stamp is not drawn into the page, and
+ * a stamp that is shown on screen only does not print. Each page is left with no annotations at
+ * all, as megapdf_flatten_all() leaves it; a renderer that ignores annotations (Android's
+ * PdfRenderer, behind the system print preview) then draws exactly what a printer would.
+ *
+ * It changes the document it is given, so call it on a copy opened from saved bytes, never on
+ * the document the person is editing. megapdf_flatten_all() is unchanged.
+ */
+MEGAPDF_API int megapdf_flatten_all_for_print(const megapdf_document* document);
+
 typedef struct megapdf_image_info {
     int page_index;
     int object_index;

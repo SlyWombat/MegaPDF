@@ -1752,8 +1752,10 @@ coverage = "engine"
 tests = [
   "android/app/src/test/java/com/megapdf/android/PrintAdapterTest.kt::class",
   "android/app/src/test/java/com/megapdf/android/DocumentCapabilitiesTest.kt::printing follows the print bit",
+  "android/app/src/androidTest/java/com/megapdf/android/PrintCopyTest.kt::class",
+  "core/tests/core_tests.cpp::test_save_flatten_images",
 ]
-note = "#675: PrintManager over a PrintDocumentAdapter that serialises the live document. What is covered is the page-range mapping and the permission rule; the print dialog itself is by hand."
+note = "#682: the print copy has every printable annotation baked into page content (FLAT_PRINT), nothing that would not print, the open document untouched and no scratch file left, whole, ranged and protected; pixels compared. #675: PrintManager over a PrintDocumentAdapter that serialises the live document. What is covered is the page-range mapping and the permission rule; the print dialog itself is by hand."
 manual = "TESTING.md::**Print**"
 
 [[feature]]

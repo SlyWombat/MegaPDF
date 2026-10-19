@@ -3905,7 +3905,8 @@ MEGAPDF_API int megapdf_save_without_security(const megapdf_document* d, megapdf
     return SaveDocument(d, write, context, FPDF_REMOVE_SECURITY, false, nullptr, nullptr, 0);
 }
 
-MEGAPDF_API int megapdf_flatten_all(const megapdf_document* d) {
+// Both flatten entry points: `flags` is PDFium's FLAT_NORMALDISPLAY or FLAT_PRINT.
+static int FlattenAllPages(const megapdf_document* d, int flags) {
     if (d == nullptr) return MEGAPDF_ERR_ARGUMENT;
     Guard guard(CoreLock());
     if (d->form != nullptr) FORM_ForceToKillFocus(d->form);
@@ -3913,7 +3914,7 @@ MEGAPDF_API int megapdf_flatten_all(const megapdf_document* d) {
     for (int i = 0; i < count; i++) {
         ScopedPage sp(d, i);
         if (sp.page == nullptr) { SetError(FPDF_ERR_UNKNOWN, "a page could not be loaded for flattening"); return MEGAPDF_ERR_PDFIUM; }
-        if (FPDFPage_Flatten(sp.page->page, FLAT_NORMALDISPLAY) == FLATTEN_FAIL) {
+        if (FPDFPage_Flatten(sp.page->page, flags) == FLATTEN_FAIL) {
             SetError(FPDF_ERR_UNKNOWN, "flattening a page failed");
             return MEGAPDF_ERR_PDFIUM;
         }
@@ -3921,6 +3922,10 @@ MEGAPDF_API int megapdf_flatten_all(const megapdf_document* d) {
     }
     return MEGAPDF_OK;
 }
+
+MEGAPDF_API int megapdf_flatten_all(const megapdf_document* d) { return FlattenAllPages(d, FLAT_NORMALDISPLAY); }
+
+MEGAPDF_API int megapdf_flatten_all_for_print(const megapdf_document* d) { return FlattenAllPages(d, FLAT_PRINT); }
 
 MEGAPDF_API megapdf_images* megapdf_images_load(const megapdf_document* d) {
     if (d == nullptr) return nullptr;

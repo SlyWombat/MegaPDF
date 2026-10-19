@@ -1809,19 +1809,14 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                 jobName = viewing.displayName,
                 pageCount = viewing.pageSizes.size,
                 scope = viewModelScope,
+                // Only full access can strip security, and only then is a plain copy possible;
+                // the print service has to be able to read what it is given. Either way the copy
+                // is flattened, so the stamps print (#682); the open document is not touched.
                 writeWhole = { out ->
-                    // Only full access can strip security, and only then is a plain copy possible;
-                    // the print service has to be able to read what it is given.
-                    if (caps.isEncrypted && caps.canChangeSecurity) doc.saveWithoutSecurity(out) else doc.save(out)
+                    writePrintCopy(engine, doc, caps.isEncrypted && caps.canChangeSecurity, null, app.cacheDir, out)
                 },
                 writePages = { pages, out ->
-                    val temp = File(app.cacheDir, "print-${System.nanoTime()}.pdf")
-                    try {
-                        doc.extractPages(pages, temp.path)
-                        java.io.FileInputStream(temp).use { it.copyTo(out, COPY_BUFFER_BYTES) }
-                    } finally {
-                        withContext(NonCancellable + Dispatchers.IO) { temp.delete() }
-                    }
+                    writePrintCopy(engine, doc, false, pages, app.cacheDir, out)
                 },
                 onFailed = { failure ->
                     // A document that may be printed but not copied prints in full, not in part: a
