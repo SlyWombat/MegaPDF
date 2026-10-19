@@ -76,7 +76,7 @@
     <!-- FR-REVIEW #675 — new with printing, not yet read by the reviewer. -->
     <string name="print_failed">Impossible d\'imprimer. Réessayez.</string>
     <!-- FR-REVIEW #675 — new with printing, not yet read by the reviewer. -->
-    <string name="print_pages_restricted">Ce document permet l\'impression, mais pas celle d\'une partie seulement. Imprimez toutes ses pages.</string>
+    <string name="print_pages_restricted">Ce document permet l\'impression, mais seulement en entier. Imprimez toutes ses pages.</string>
 
     <!-- Exporter en Markdown (#386, #409) : sa propre ligne du menu, à côté d'Enregistrer une copie —
          un export à sens unique, pas un autre format d'enregistrement. -->
