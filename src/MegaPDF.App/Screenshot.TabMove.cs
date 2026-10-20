@@ -218,6 +218,39 @@ internal static partial class Screenshot
             try { Directory.Delete(tempDir, recursive: true); } catch { /* best-effort scratch cleanup */ }
         }
 
+        // --- A window made for a drag that ends with no tab is closed, not left empty ---
+        // The cancel path cannot be driven without a real drag (TabView's own events cannot be
+        // raised from here), so this runs the step they call: the window is made, nobody claims
+        // it, and it must close by itself. A window that is claimed is left alone.
+        var savedDelay = MainWindow.AbandonedTearOutWindowAfter;
+        MainWindow.AbandonedTearOutWindowAfter = TimeSpan.FromMilliseconds(800);
+        try
+        {
+            var abandoned = harness.BeginTearOutWindow();
+            abandoned.Activate();
+            Check("a window made for a drag is waiting for its tab", MainWindow.IsAwaitingTearOut(abandoned));
+            var gone = await UntilAsync(() => !App.Windows.Contains(abandoned), 6);
+            Check("  and closes by itself when no tab lands in it", gone);
+            // A window a tab has landed in is kept, whatever the timer does.
+            var copyR = Path.Combine(Path.GetTempPath(), "megapdf-selftest-tab-move-r.pdf");
+            File.Copy(fixturePath, copyR, overwrite: true);
+            var tabR = await harness.Shell.OpenInTabAsync(copyR);
+            var claimed = harness.BeginTearOutWindow();
+            claimed.Activate();
+            MainWindow.MoveDocument(tabR, harness, claimed, int.MaxValue);
+            await Task.Delay(2000);
+            Check("a window the tab landed in stays open", App.Windows.Contains(claimed) && claimed.Shell.Documents.Contains(tabR));
+            MainWindow.MoveDocument(tabR, claimed, harness, int.MaxValue);
+            await UntilAsync(() => !App.Windows.Contains(claimed));
+            tabR.EndJournalSession();
+            harness.Shell.RemoveDocument(tabR);
+            try { File.Delete(copyR); } catch { /* best-effort scratch cleanup */ }
+        }
+        finally
+        {
+            MainWindow.AbandonedTearOutWindowAfter = savedDelay;
+        }
+
         Console.Error.WriteLine($"tab-move: finished, {(ok ? "all passed" : "with failures")}");
         return ok;
     }

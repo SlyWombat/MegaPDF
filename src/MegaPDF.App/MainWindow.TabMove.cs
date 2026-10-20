@@ -29,14 +29,42 @@ public sealed partial class MainWindow
     {
         if (Shell.Documents.Count < 2)
             return;
-        // A drag that was let go over nothing left its window made and empty: the next drag
-        // takes that one rather than making another.
-        var window = TornOutWindows.Values.FirstOrDefault(w => w.Shell.Documents.Count == 0) ?? new MainWindow();
-        TornOutWindows[window.AppWindow.Id] = window;
-        // As large as the window it came from; TabView places it under the pointer.
-        window.AppWindow.Resize(AppWindow.Size);
-        args.NewWindowId = window.AppWindow.Id;
+        args.NewWindowId = BeginTearOutWindow().AppWindow.Id;
     }
+
+    /// <summary>
+    /// How long a window made for a drag waits for its tab before it is taken to be abandoned.
+    /// Measured: TabTearOutRequested follows TabTearOutWindowRequested at once, while the pointer
+    /// is still moving, and Escape does not cancel between them, so this is a net for a drag that
+    /// ends some way TabView does not report, not something a drag normally meets. A field so the
+    /// self-test can shorten it.
+    /// </summary>
+    internal static TimeSpan AbandonedTearOutWindowAfter = TimeSpan.FromSeconds(5);
+
+    /// <summary>
+    /// Makes the window a tear-out will put its tab in, as large as this one (TabView places it
+    /// under the pointer). If no tab has landed in it by <see cref="AbandonedTearOutWindowAfter"/>
+    /// it closes, so a drag that ends without a drop can never leave an empty window on screen.
+    /// </summary>
+    internal MainWindow BeginTearOutWindow()
+    {
+        var window = new MainWindow();
+        TornOutWindows[window.AppWindow.Id] = window;
+        window.AppWindow.Resize(AppWindow.Size);
+        var timer = window.DispatcherQueue.CreateTimer();
+        timer.Interval = AbandonedTearOutWindowAfter;
+        timer.IsRepeating = false;
+        timer.Tick += (_, _) =>
+        {
+            if (TornOutWindows.Remove(window.AppWindow.Id) && window.Shell.Documents.Count == 0)
+                window.CloseEmptied();
+        };
+        timer.Start();
+        return window;
+    }
+
+    /// <summary>Whether a window made for a drag is still waiting for its tab (the self-test).</summary>
+    internal static bool IsAwaitingTearOut(MainWindow window) => TornOutWindows.ContainsKey(window.AppWindow.Id);
 
     /// <summary>The window exists and the tab is over it: move the document across.</summary>
     private void OnTabTearOutRequested(TabView sender, TabViewTabTearOutRequestedEventArgs args)
