@@ -283,6 +283,7 @@ jobs:
             -only-testing:MegaPDFUITests/ViewerBarContrastUITests \
             -only-testing:MegaPDFUITests/RedactionUITests/testSaveIsReachableWithAMarkAndAsksBeforeRemoving \
             -only-testing:MegaPDFUITests/MultilineTextUITests \
+            -only-testing:MegaPDFUITests/FormTextUITests \
             -only-testing:MegaPDFUITests/ProgressStripUITests \
             CODE_SIGNING_ALLOWED=NO
 
@@ -311,6 +312,7 @@ jobs:
             -only-testing:MegaPDFUITests/ReadingModeUITests \
             -only-testing:MegaPDFUITests/PageToolsUITests \
             -only-testing:MegaPDFUITests/SaveACopyExportUITests \
+            -only-testing:MegaPDFUITests/FormTextUITests \
             CODE_SIGNING_ALLOWED=NO
 
       - name: Upload the UI test result bundle

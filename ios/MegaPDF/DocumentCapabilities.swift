@@ -88,7 +88,7 @@ struct DocumentCapabilities: Equatable {
             return canAddText
         case is StampOperation, is MoveStampOperation, is MarkOperation:
             return canSign
-        case is FieldToggleOperation:
+        case is FieldToggleOperation, is FormTextOperation:
             return canFillForms
         case is PageStructureOperation:
             // #174: every page change needs assemble (or modify), which is what contract 10
@@ -110,7 +110,7 @@ struct DocumentCapabilities: Equatable {
         case is TextBoxOperation, is EditTextBoxOperation, is MoveTextBoxOperation,
              is AddTextBoxesOperation,
              is StampOperation, is MoveStampOperation, is MarkOperation,
-             is FieldToggleOperation:
+             is FieldToggleOperation, is FormTextOperation:
             return true
         default:
             return false

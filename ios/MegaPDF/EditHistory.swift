@@ -222,6 +222,35 @@ final class FieldToggleOperation: PdfEditOperation {
     }
 }
 
+/// Typing into an AcroForm text field (#701): old value to new value, one undo step.
+/// Both directions write the whole value through the core, as the desktops do
+/// (`FormTextEditOperation`).
+final class FormTextOperation: PdfEditOperation {
+    let pageIndex: Int
+    private let x: Double
+    private let y: Double
+    private let oldValue: String
+    private let newValue: String
+
+    init(pageIndex: Int, x: Double, y: Double, oldValue: String, newValue: String) {
+        self.pageIndex = pageIndex
+        self.x = x
+        self.y = y
+        self.oldValue = oldValue
+        self.newValue = newValue
+    }
+
+    var name: String { "form text" }
+
+    func apply(_ engine: PdfEngine, _ document: PdfDocument) async throws {
+        try await engine.setFormText(document, pageIndex: pageIndex, x: x, y: y, value: newValue)
+    }
+
+    func revert(_ engine: PdfEngine, _ document: PdfDocument) async throws {
+        try await engine.setFormText(document, pageIndex: pageIndex, x: x, y: y, value: oldValue)
+    }
+}
+
 /// Placing or removing a signature stamp. The pixels are held so an undone
 /// removal can put the same image back under the same id.
 final class StampOperation: PdfEditOperation {

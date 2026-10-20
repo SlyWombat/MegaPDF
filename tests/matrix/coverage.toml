@@ -737,13 +737,16 @@ tests = ["tests/MegaPDF.Core.Tests/AcroFormTests.cs::Field"]
 note = "same as macOS."
 [feature.ios]
 presence = "present"
-entry = "ios/MegaPDF/ViewerModel.swift::formFields"
-coverage = "engine"
+entry = "ios/MegaPDF/ViewerModel.swift::commitFormText"
+coverage = "ui"
 tests = [
+  "ios/MegaPDFTests/FormTextTests.swift::class",
   "ios/MegaPDFTests/CheckboxTests.swift::class",
   "ios/MegaPDFTests/DocumentCapabilitiesTests.swift::class",
+  "ios/MegaPDFUITests/FormTextUITests.swift::class",
+  ".github/workflows/ios-ci.yml::MegaPDFUITests/FormTextUITests",
 ]
-note = "the engine and the gating are tested; DemoFlowUITests fills a field live but is excluded from CI as a video script."
+note = "#701: a tap on a text widget opens FormTextSheet; Done writes through megapdf_form_set_text as one undo step (FormTextOperation), gated on fill-forms. FormTextTests fills formtext.pdf through the model, saves, reopens and undoes; FormTextUITests types into the real sheet. Multi-line, maximum-length and comb behaviour is whatever PDFium does with the written value; the core does not report those flags, so the sheet does not enforce them."
 [feature.android]
 presence = "present"
 entry = "android/app/src/main/java/com/megapdf/android/ViewerViewModel.kt::commitFormText"

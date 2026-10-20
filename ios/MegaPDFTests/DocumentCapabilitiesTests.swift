@@ -114,6 +114,15 @@ final class DocumentCapabilitiesTests: XCTestCase {
         XCTAssertFalse(nothing.allows(toggle) || nothing.allows(mark) || nothing.allows(text))
     }
 
+    func testAFormTextFillNeedsTheFillFormsPermissionLikeACheckbox() {
+        let fill = FormTextOperation(pageIndex: 0, x: 10, y: 10, oldValue: "", newValue: "x")
+        XCTAssertTrue(restricted(.fillForms).allows(fill))
+        XCTAssertTrue(restricted(.annotate).allows(fill))
+        XCTAssertFalse(restricted(.modify).allows(fill), "modify is not fill-forms")
+        XCTAssertFalse(restricted([]).allows(fill))
+        XCTAssertTrue(DocumentCapabilities.isFillingOperation(fill))
+    }
+
     func testEveryTextBoxOperationNeedsCanAddText() {
         let edit = EditTextBoxOperation(pageIndex: 0, id: "text:test",
                                         from: TextBoxStyle(text: "Hi"),

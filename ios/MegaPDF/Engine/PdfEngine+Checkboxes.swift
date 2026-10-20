@@ -11,6 +11,13 @@ struct PdfFormField: Equatable {
     let rect: PdfRect
 }
 
+/// A text widget on a page, with the value it holds now (#701).
+struct PdfFormTextField: Equatable {
+    let name: String
+    let value: String
+    let rect: PdfRect
+}
+
 extension PdfRect {
     func contains(x: Double, y: Double) -> Bool {
         x >= left && x <= right && y >= bottom && y <= top
@@ -46,6 +53,53 @@ extension PdfEngine {
                                   right: f.bounds.right, top: f.bounds.top)))
             }
             return result
+        }
+    }
+
+    /// Text-field widgets on the page with their current values (#701). Kept apart from
+    /// `formFields`, whose callers want buttons only. The core reports the kind, bounds,
+    /// name and value; it does not report multi-line, maximum length or comb flags, so
+    /// those are left to PDFium's own handling when the value is written.
+    func formTextFields(_ document: PdfDocument, pageIndex: Int) throws -> [PdfFormTextField] {
+        try withCorePage(document, index: pageIndex) { page in
+            guard let fields = megapdf_form_fields_load(page) else { return [] }
+            defer { megapdf_form_fields_free(fields) }
+            func string(_ i: Int, _ which: megapdf_field_string) -> String {
+                // Count-then-fill: the first call sizes the buffer.
+                let needed = megapdf_form_field_string(fields, i, which, nil, 0)
+                guard needed > 0 else { return "" }
+                var buffer = [UInt16](repeating: 0, count: needed)
+                let count = buffer.withUnsafeMutableBufferPointer {
+                    megapdf_form_field_string(fields, i, which, $0.baseAddress, $0.count)
+                }
+                return String(decoding: buffer.prefix(count), as: UTF16.self)
+            }
+            var result: [PdfFormTextField] = []
+            for i in 0..<megapdf_form_field_count(fields) {
+                var f = megapdf_form_field()
+                guard megapdf_form_field_get(fields, i, &f) == MEGAPDF_OK,
+                      f.kind == MEGAPDF_FIELD_TEXT.rawValue else { continue }
+                result.append(PdfFormTextField(
+                    name: string(i, MEGAPDF_FIELD_NAME),
+                    value: string(i, MEGAPDF_FIELD_VALUE),
+                    rect: PdfRect(left: f.bounds.left, bottom: f.bounds.bottom,
+                                  right: f.bounds.right, top: f.bounds.top)))
+            }
+            return result
+        }
+    }
+
+    /// Replaces the text of the field under (x, y), crop space, through PDFium's form
+    /// machinery (click, select all, replace, release focus) so `/V` and the appearance
+    /// stay consistent (#701).
+    func setFormText(_ document: PdfDocument, pageIndex: Int, x: Double, y: Double,
+                     value: String) throws {
+        try withCorePage(document, index: pageIndex) { page in
+            let wide = Array(value.utf16) + [0]
+            let status = wide.withUnsafeBufferPointer {
+                megapdf_form_set_text(page, x, y, $0.baseAddress)
+            }
+            guard status == MEGAPDF_OK else { throw PdfError.editFailed }
         }
     }
 
