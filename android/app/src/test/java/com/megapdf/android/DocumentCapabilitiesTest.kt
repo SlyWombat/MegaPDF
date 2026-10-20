@@ -26,6 +26,7 @@ class DocumentCapabilitiesTest {
     private val signature = StampOperation(0, "sig:a", IntArray(1), 1, 1, rect, adding = true)
     private val mark = MarkOperation(0, rect, "mark:a", true)
     private val checkbox = FieldToggleOperation(0, 5.0, 5.0)
+    private val formText = FormTextOperation(0, 5.0, 5.0, "", "Ada")
 
     // Redaction marks (#329). They remove the document's own content when applied, so they
     // follow the modify permission and nothing weaker.
@@ -40,7 +41,7 @@ class DocumentCapabilitiesTest {
 
     /** The edits that only touch the form, which annotate and fill forms buy. */
     private val formEdits: List<PdfEditOperation> =
-        listOf(textBox, editTextBox, moveTextBox, signature, mark, checkbox)
+        listOf(textBox, editTextBox, moveTextBox, signature, mark, checkbox, formText)
 
     @Test
     fun `a mark is not a change to the document`() {

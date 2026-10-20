@@ -68,6 +68,9 @@ internal object PdfiumNative {
     // rects are [l, b, r, t] each, all in PDF points, bottom-left origin.
     external fun nativeFormFieldsPacked(handle: Long): DoubleArray
     external fun nativeClickAt(handle: Long, x: Double, y: Double)
+    /** Current values of the text fields (type 1 in the packed array), in the same order (#701). */
+    external fun nativeFormTextValues(handle: Long): Array<String>
+    external fun nativeFormSetText(handle: Long, x: Double, y: Double, value: String): Boolean
     external fun nativeDetectSquaresPacked(handle: Long): DoubleArray
     external fun nativeAddCheckMark(
         handle: Long, l: Double, b: Double, r: Double, t: Double, id: String,

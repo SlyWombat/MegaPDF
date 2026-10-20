@@ -177,6 +177,11 @@
     <string name="text_add_failed">Couldn\'t add that text</string>
     <string name="text_change_failed">Couldn\'t change that text</string>
 
+    <!-- Filling a form's text field (#701) -->
+    <string name="done">Done</string>
+    <string name="form_text_title">Fill in field</string>
+    <string name="form_text_hint">Type what belongs in this field.</string>
+
     <!-- The document's own text (#114) -->
     <string name="body_text_hint">Change this line. The size and font stay as they are.</string>
     <string name="body_text_substituted">The original font couldn\'t show this text, so a similar standard font was used.</string>

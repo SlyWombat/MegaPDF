@@ -374,9 +374,10 @@ std::vector<jchar> JavaChars(JNIEnv* env, jstring s) {
 
 extern "C" {
 
-// Widget checkbox/radio fields, packed [type, checked, l, b, r, t] per field —
-// read through the core's form environment (#107); the checkbox/radio filter is
-// this platform's choice of what to surface.
+// Widget checkbox, radio and text fields, packed [type, checked, l, b, r, t] per
+// field - read through the core's form environment (#107); the kind filter is this
+// platform's choice of what to surface. Type 1 is a text field (#701), whose current
+// value comes from nativeFormTextValues, in the same order.
 JNIEXPORT jdoubleArray JNICALL
 Java_com_megapdf_engine_PdfiumNative_nativeFormFieldsPacked(JNIEnv* env, jobject,
                                                             jlong handle) {
@@ -387,9 +388,10 @@ Java_com_megapdf_engine_PdfiumNative_nativeFormFieldsPacked(JNIEnv* env, jobject
         for (size_t i = 0; i < count; i++) {
             megapdf_form_field f{};
             if (megapdf_form_field_get(fields, i, &f) != MEGAPDF_OK) continue;
-            if (f.kind != MEGAPDF_FIELD_CHECKBOX && f.kind != MEGAPDF_FIELD_RADIO) continue;
-            // PDFium's FPDF_FORMFIELD_RADIOBUTTON (3) and _CHECKBOX (2), which Kotlin decodes.
-            packed.push_back(f.kind == MEGAPDF_FIELD_RADIO ? 3.0 : 2.0);
+            if (f.kind != MEGAPDF_FIELD_CHECKBOX && f.kind != MEGAPDF_FIELD_RADIO &&
+                f.kind != MEGAPDF_FIELD_TEXT) continue;
+            // PDFium's FPDF_FORMFIELD_RADIOBUTTON (3), _CHECKBOX (2) and _TEXTFIELD (1), which Kotlin decodes.
+            packed.push_back(f.kind == MEGAPDF_FIELD_RADIO ? 3.0 : f.kind == MEGAPDF_FIELD_TEXT ? 1.0 : 2.0);
             packed.push_back(f.is_checked ? 1 : 0);
             packed.push_back(f.bounds.left);
             packed.push_back(f.bounds.bottom);
@@ -403,6 +405,51 @@ Java_com_megapdf_engine_PdfiumNative_nativeFormFieldsPacked(JNIEnv* env, jobject
         env->SetDoubleArrayRegion(out, 0, static_cast<jsize>(packed.size()), packed.data());
     }
     return out;
+}
+
+// The current value of each text field nativeFormFieldsPacked reported (type 1), in
+// the same order (#701). Read from the same snapshot of the form, in the core.
+JNIEXPORT jobjectArray JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativeFormTextValues(JNIEnv* jni, jobject, jlong handle) {
+    auto* p = reinterpret_cast<Page*>(handle);
+    std::vector<std::vector<jchar>> values;
+    if (megapdf_form_fields* fields = megapdf_form_fields_load(p->core)) {
+        const size_t count = megapdf_form_field_count(fields);
+        for (size_t i = 0; i < count; i++) {
+            megapdf_form_field f{};
+            if (megapdf_form_field_get(fields, i, &f) != MEGAPDF_OK) continue;
+            if (f.kind != MEGAPDF_FIELD_TEXT) continue;
+            const size_t n = megapdf_form_field_string(fields, i, MEGAPDF_FIELD_VALUE, nullptr, 0);
+            std::vector<jchar> value(n);
+            if (n > 0) {
+                megapdf_form_field_string(fields, i, MEGAPDF_FIELD_VALUE,
+                                          reinterpret_cast<unsigned short*>(value.data()), n);
+            }
+            values.push_back(std::move(value));
+        }
+        megapdf_form_fields_free(fields);
+    }
+    jclass stringClass = jni->FindClass("java/lang/String");
+    jobjectArray out = jni->NewObjectArray(static_cast<jsize>(values.size()), stringClass, nullptr);
+    for (size_t i = 0; i < values.size(); i++) {
+        jstring s = jni->NewString(values[i].data(), static_cast<jsize>(values[i].size()));
+        jni->SetObjectArrayElement(out, static_cast<jsize>(i), s);
+        jni->DeleteLocalRef(s);
+    }
+    return out;
+}
+
+// Sets the text of the field under (x, y), page coordinates (#701): click to focus,
+// select all, replace, release focus - one implementation, in the core. True when the
+// core accepted the call (it reports no more than that; the caller reads the value back).
+JNIEXPORT jboolean JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativeFormSetText(JNIEnv* jni, jobject, jlong handle,
+                                                       jdouble x, jdouble y, jstring value) {
+    auto* p = reinterpret_cast<Page*>(handle);
+    std::vector<jchar> wide = JavaChars(jni, value);
+    wide.push_back(0);
+    return megapdf_form_set_text(p->core, x, y,
+                                 reinterpret_cast<const unsigned short*>(wide.data())) == MEGAPDF_OK;
 }
 
 // Simulated click in page coordinates (PDF bottom-left origin, crop space) —

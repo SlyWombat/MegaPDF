@@ -150,6 +150,13 @@
     <string name="text_add_failed">Impossible d\'ajouter ce texte</string>
     <string name="text_change_failed">Impossible de modifier ce texte</string>
 
+    <!-- FR-REVIEW #701 - new with form text fields, not yet read by the reviewer. -->
+    <string name="done">Terminé</string>
+    <!-- FR-REVIEW #701 -->
+    <string name="form_text_title">Remplir le champ</string>
+    <!-- FR-REVIEW #701 -->
+    <string name="form_text_hint">Saisissez ce qui va dans ce champ.</string>
+
     <!-- The document's own text (#114) -->
     <string name="body_text_hint">Modifiez cette ligne. La taille et la police restent les mêmes.</string>
     <string name="body_text_substituted">La police d\'origine ne pouvait pas afficher ce texte; une police standard semblable a été utilisée.</string>

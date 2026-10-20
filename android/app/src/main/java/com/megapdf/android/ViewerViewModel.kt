@@ -1218,6 +1218,10 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
     var pendingBodyEdit: PendingBodyEdit? by mutableStateOf(null)
         private set
 
+    /** The form text field the editor is open on (#701). */
+    var pendingFormText: PendingFormText? by mutableStateOf(null)
+        private set
+
     /** A one-line notice over the page that clears itself — not a dialog (#114). */
     var notice: String? by mutableStateOf(null)
         private set
@@ -2451,6 +2455,20 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                 selectedWhiteout = null
 
                 val field = page.formFields().firstOrNull { it.rect.contains(x, y) }
+                if (field != null && field.isText) {
+                    // A form text field (#701): the phone's own editor, prefilled. Asked here for
+                    // what perform asks at the end, so nobody types into a field they are about
+                    // to be refused (the body-text editor does the same, #558).
+                    if (capabilities.isDynamicXfa) {
+                        showDynamicXfaNotice()
+                    } else if (permitted(PermissionClass.EDITING, capabilities.canFillForms) && document === doc) {
+                        pendingFormText = PendingFormText(
+                            pageIndex, field.rect.centerX, field.rect.centerY, field.value,
+                            multiline = isMultilineField(field),
+                        )
+                    }
+                    return@launchEdit
+                }
                 operation = if (field != null) {
                     FieldToggleOperation(pageIndex, field.rect.centerX, field.rect.centerY)
                 } else {
@@ -2546,6 +2564,26 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
 
     fun cancelBodyEdit() {
         pendingBodyEdit = null
+    }
+
+    /**
+     * Commits the form text editor (#701): one undoable edit, [FormTextOperation]. The same
+     * value is a no-op, as on the desktops. A single-line field takes no line breaks.
+     */
+    fun commitFormText(text: String) {
+        val pending = pendingFormText ?: return
+        val doc = document ?: return
+        if (editingBlocked) return
+        pendingFormText = null
+        val value = if (pending.multiline) text else text.replace(Regex("[\\r\\n]+"), " ")
+        if (value == pending.oldValue) return
+        launchEdit(R.string.edit_failed) {
+            perform(FormTextOperation(pending.pageIndex, pending.x, pending.y, pending.oldValue, value), doc)
+        }
+    }
+
+    fun cancelFormText() {
+        pendingFormText = null
     }
 
     /** Shows a notice over the page for a few seconds. */
@@ -3670,6 +3708,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         isPlacingText = false
         pendingTextTap = null
         pendingBodyEdit = null
+        pendingFormText = null
         scannedHintShown = false
         capabilities = DocumentCapabilities.FULL
         unlockPrompt = null
@@ -3837,6 +3876,28 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         const val SCREENSHOT_TEXT_Y = 372.0
     }
 }
+
+/**
+ * A form text field being filled (#701), at the centre of its widget (page points). [multiline]
+ * is a guess, since the core does not report the field's multi-line flag: see [isMultilineField].
+ */
+data class PendingFormText(
+    val pageIndex: Int,
+    val x: Double,
+    val y: Double,
+    val oldValue: String,
+    val multiline: Boolean,
+)
+
+/**
+ * Whether the editor should take line breaks. The core reports a field's kind, value and bounds
+ * but not its multi-line flag, so this reads the widget: a value that already has a break, or a
+ * box tall enough for several lines (30 pt, about two lines of 12 pt text), is multi-line.
+ */
+fun isMultilineField(field: com.megapdf.engine.FormField): Boolean =
+    field.value.any { it == '\n' || it == '\r' } || (field.rect.top - field.rect.bottom) >= MULTILINE_HEIGHT_POINTS
+
+private const val MULTILINE_HEIGHT_POINTS = 30.0
 
 /** A line of the document's own text being retyped (#114). */
 data class PendingBodyEdit(
