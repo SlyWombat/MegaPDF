@@ -1077,6 +1077,10 @@
     <value>Show Previous Tab</value>
     <comment>macOS Window menu: selects the tab to the left, wrapping (⌃⇧Tab) (#348)</comment>
   </data>
+  <data name="MoveTabToNewWindow" xml:space="preserve">
+    <value>Move Tab to New Window</value>
+    <comment>Linux tab context menu: moves this tab, with its unsaved changes and undo history, into a window of its own (#711). Not used on the Mac, where AppKit's own Window-menu item does it</comment>
+  </data>
   <data name="TabAccessibleName" xml:space="preserve">
     <value>{0}, tab</value>
     <comment>Narrator/VoiceOver name for a tab-strip item: the document's name, then what it is (#348)</comment>

@@ -107,8 +107,9 @@ established French for the cryptographic sense.
 | Show Next Tab / Show Previous Tab | Afficher l'onglet suivant / Afficher l'onglet précédent | #348, macOS Window menu |
 | {0}, tab | {0}, onglet | #348, the accessible name of a tab |
 | {0}, unsaved changes, tab | {0}, modifications non enregistrées, onglet | #348, the same with the unsaved dot |
-| Move tab to new window | Déplacer l'onglet dans une nouvelle fenêtre | #711, Windows: the tab's context menu, the keyboard way to drag a tab off the strip |
+| Move tab to new window | Déplacer l'onglet vers une nouvelle fenêtre | #711, Windows: the tab's context menu, the keyboard way to drag a tab off the strip |
 | Tab {0} moved to another window | Onglet {0} déplacé dans une autre fenêtre | #711, Windows: what Narrator says after a tab changes window |
+| Move Tab to New Window | Déplacer l'onglet vers une nouvelle fenêtre | #711, Linux tab context menu; the Mac shows AppKit's own « Placer l'onglet dans une nouvelle fenêtre », never ours |
 | Box to tick / Box, ticked | Case à cocher / Case cochée | #2, Windows: what a screen reader says for a drawn box before and after it is ticked |
 | Don't save | Ne pas enregistrer | |
 | Restore | Restaurer | |
