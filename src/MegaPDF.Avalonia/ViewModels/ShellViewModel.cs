@@ -42,8 +42,14 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     /// real per-user locations. See <see cref="DocumentViewModel"/>'s former
     /// constructor doc for why a test never wants the real ones.
     /// </param>
-    public ShellViewModel(string? stateDirectory = null)
+    /// <param name="oneDocumentPerWindow">
+    /// The Mac's shape (#711): this window holds at most one document, and AppKit's own
+    /// window tabs, not <see cref="Documents"/>, are what put several side by side. See
+    /// <see cref="OneDocumentPerWindow"/>.
+    /// </param>
+    public ShellViewModel(string? stateDirectory = null, bool oneDocumentPerWindow = false)
     {
+        OneDocumentPerWindow = oneDocumentPerWindow;
         if (stateDirectory is null)
         {
             _settings = new AppSettings();
@@ -67,8 +73,10 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     /// library are the same live objects the first window has, not a second copy of
     /// the file each has loaded independently.
     /// </summary>
-    internal ShellViewModel(AppSettings settings, RecentFiles recents, ISignatureLibrary signatures, string? recoveryDirectory)
+    internal ShellViewModel(AppSettings settings, RecentFiles recents, ISignatureLibrary signatures, string? recoveryDirectory,
+                            bool oneDocumentPerWindow = false)
     {
+        OneDocumentPerWindow = oneDocumentPerWindow;
         _settings = settings;
         _recents = recents;
         _signatures = signatures;
@@ -76,6 +84,37 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     }
 
     public AppSettings Settings => _settings;
+
+    /// <summary>
+    /// Another window's shell (#711): the same live settings, recents, signature library
+    /// and recovery directory, and the same shape. What File ▸ New Window, a document the
+    /// Mac opens into a window of its own, and Linux's Move Tab to New Window all build.
+    /// </summary>
+    internal ShellViewModel CreateSibling() => new(_settings, _recents, _signatures, _recoveryDirectory, OneDocumentPerWindow);
+
+    /// <summary>
+    /// The Mac's shape (#711, Dave 2026-10-20: "mac should follow mac conventions"): one
+    /// document per window, and the windows merged into tabs by AppKit — Preview's and
+    /// TextEdit's idiom, with the system's own drag-out, Move Tab to New Window, Merge All
+    /// Windows and Show All Tabs. The in-window tab strip is hidden in this shape, and a
+    /// document opened while this window already holds one goes to a new window instead.
+    ///
+    /// False is the shape #348 built and Linux keeps: several documents in one window,
+    /// as tabs on <see cref="Documents"/>. Fixed for the shell's lifetime.
+    /// </summary>
+    public bool OneDocumentPerWindow { get; }
+
+    /// <summary>Whether a document can be added here without breaking the shape: always, unless this is a full one-document window.</summary>
+    public bool HasRoomForDocument => !OneDocumentPerWindow || Documents.Count == 0;
+
+    /// <summary>Whether the in-window tab strip shows: there is a tab, and this is not the Mac's one-document shape.</summary>
+    public bool ShowsTabStrip => HasDocuments && !OneDocumentPerWindow;
+
+    /// <summary>
+    /// Whether Move Tab to New Window has anything to do (#711): the in-window shape, with
+    /// a second tab to leave behind. With one tab the window already is the new window.
+    /// </summary>
+    public bool CanMoveTabToNewWindow => !OneDocumentPerWindow && Documents.Count > 1;
 
     public RecentFiles RecentFiles => _recents;
 
@@ -269,8 +308,16 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         // re-render (#511).
         document.Tint = _settings.PageTint;
         Active = document;
+        OnDocumentsChanged();
+    }
+
+    private void OnDocumentsChanged()
+    {
         OnPropertyChanged(nameof(HasDocuments));
         OnPropertyChanged(nameof(ShowEmptyState));
+        OnPropertyChanged(nameof(ShowsTabStrip));
+        OnPropertyChanged(nameof(HasRoomForDocument));
+        OnPropertyChanged(nameof(CanMoveTabToNewWindow));
     }
 
     /// <summary>Selects an already-open tab — what activating a match does instead of opening a duplicate.</summary>
@@ -294,8 +341,25 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         if (ReferenceEquals(Active, document))
             Active = Documents.Count == 0 ? null : Documents[Math.Min(index, Documents.Count - 1)];
         document.Dispose();
-        OnPropertyChanged(nameof(HasDocuments));
-        OnPropertyChanged(nameof(ShowEmptyState));
+        OnDocumentsChanged();
+    }
+
+    /// <summary>
+    /// Takes a tab out of this window without closing it (#711): the document, its
+    /// unsaved edits, its undo history, its zoom and its recovery journal session all
+    /// carry on, and the caller adds it to another window's shell. Selection follows to
+    /// the neighbouring tab, as <see cref="CloseTab"/> does. False when it is not here.
+    /// </summary>
+    public bool DetachTab(DocumentViewModel document)
+    {
+        var index = Documents.IndexOf(document);
+        if (index < 0)
+            return false;
+        Documents.RemoveAt(index);
+        if (ReferenceEquals(Active, document))
+            Active = Documents.Count == 0 ? null : Documents[Math.Min(index, Documents.Count - 1)];
+        OnDocumentsChanged();
+        return true;
     }
 
     /// <summary>Moves keyboard focus to the next tab, wrapping (⌃Tab / Ctrl+PgDn).</summary>

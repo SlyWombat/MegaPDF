@@ -38,6 +38,21 @@ unsaved changes in two tabs and you should be asked about each; answer Cancel on
 second and the first must still be there, edits and all. Kill the app with three tabs
 open and the next launch should offer to restore each of them, into its own tab.
 
+**Tabs on the Mac and Linux** (#711) — on the **Mac** every document is a window of its
+own, and macOS decides whether they open as tabs, the way it does for Preview: System
+Settings ▸ Desktop & Dock ▸ **Prefer tabs when opening documents**. Set to **Always**, open
+three PDFs and you get one window with three tabs in the system's own tab bar (there is no
+MegaPDF tab strip); set to **In Full Screen** (the default) or **Never**, you get three
+windows, and **Window ▸ Merge All Windows** makes them tabs. Try it under both settings.
+Drag a tab out of the bar, or choose **Window ▸ Move Tab to New Window**, and it becomes a
+window of its own with its unsaved changes and undo intact; **Window ▸ Merge All Windows**
+puts them back. ⌘W closes the tab you are on, ⇧⌘W closes every tab in the window (asking
+about any with unsaved changes first). Opening a file that is already open selects its tab
+instead of opening it twice. On **Linux** the in-window tab strip stays: right-click a tab
+(or Shift+F10 on it) for **Move Tab to New Window**, or drag the tab well clear of the strip
+and let go. The window it leaves closes if that was its last tab, and a file opened from the
+file manager goes to the window you used last, or to the one that already has it.
+
 **Reading mode** — the View menu, or **Ctrl+H**, takes the toolbars and the side pane
 off the screen and leaves the page. A small floating bar carries the page number and
 the way back; click the page number to jump to one directly. Esc (or the bar's own
