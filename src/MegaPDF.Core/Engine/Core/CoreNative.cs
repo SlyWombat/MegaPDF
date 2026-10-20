@@ -350,6 +350,18 @@ internal static class CoreNative
     [DllImport(Dll)]
     public static extern void megapdf_form_commit(IntPtr document);
 
+    // Flags kept out of FormField, whose layout is mirrored by hand (#712).
+    public const uint FieldFlagReadOnly = 0x1;
+    public const uint FieldFlagMultiline = 0x2;
+    public const uint FieldFlagComb = 0x4;
+    public const uint FieldFlagMasked = 0x8;
+
+    [DllImport(Dll)]
+    public static extern uint megapdf_form_field_flags(IntPtr fields, nuint index);
+
+    [DllImport(Dll)]
+    public static extern int megapdf_form_field_max_length(IntPtr fields, nuint index);
+
     public static string FormFieldString(IntPtr fields, nuint index, int which)
     {
         var n = (int)megapdf_form_field_string(fields, index, which, null, 0);

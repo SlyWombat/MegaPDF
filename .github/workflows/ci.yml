@@ -725,6 +725,11 @@ jobs:
           # widgets fixture.pdf does not have -- the "Generate fixtures" step above already
           # wrote both next to it.
           Run-Check "fill" 60
+          # #709/#712: filling formflow.pdf the way a person does -- a click into the first field,
+          # then Tab, Shift+Tab, Shift+Enter in a multi-line field, Space on a checkbox and Tab across
+          # a page, with every value read back from the saved file. formflow.pdf is beside fixture.pdf
+          # from the same "Generate fixtures" step. 90s: it opens a second tab and scrolls between pages.
+          Run-Check "form-flow" 90
           # `sign` already existed and was never run: the signature library with a seeded
           # card, extended here to also place one on the page, select it, move it and undo.
           Run-Check "sign" 60

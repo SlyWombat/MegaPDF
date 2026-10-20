@@ -183,6 +183,56 @@ public partial class DocumentViewModel
         }
     }
 
+    /// <summary>
+    /// The form field after <paramref name="from"/> in <see cref="FormFieldOrder"/> (#709), or null
+    /// past the last one (before the first, going back) and on a document that forbids filling.
+    /// Read from the engine, not from the rendered maps: Tab reaches a page that was never drawn.
+    /// </summary>
+    public async Task<FormFieldOrder.Stop?> NextFormFieldAsync(int pageIndex, PdfFormField from, bool forward)
+    {
+        if (_document is not { } doc || !Capabilities.CanFillForms)
+            return null;
+        var pageCount = Pages.Count;
+        return await Task.Run(() => FormFieldOrder.Step(pageCount, p =>
+        {
+            using var page = doc.GetPage(p);
+            return page.GetFormFields();
+        }, pageIndex, from, forward));
+    }
+
+    /// <summary>
+    /// Puts keyboard page focus on the checkbox or radio widget <paramref name="field"/> (#709), so the
+    /// ring shows and Space toggles it through the same routing a click gets.
+    /// </summary>
+    public async Task<FocusedRegion?> FocusFormFieldAsync(int pageIndex, PdfFormField field)
+    {
+        await _pageFocusGate.WaitAsync();
+        try
+        {
+            if (_document is not { } doc || pageIndex < 0 || pageIndex >= Pages.Count)
+                return null;
+            var maps = SnapshotKeyboardMaps(doc);
+            var found = await Task.Run(() =>
+            {
+                var regions = maps.RegionsFor(pageIndex);
+                for (var i = 0; i < regions.Count; i++)
+                {
+                    if (regions[i].Kind == PageHitKind.FormCheckbox && regions[i].Bounds.Contains(field.Bounds.Center))
+                        return maps.Focus(new RegionPosition(pageIndex, i));
+                }
+                return null;
+            });
+            if (maps.Generation != _openGeneration)
+                return null;
+            PageFocus = found;
+            return found;
+        }
+        finally
+        {
+            _pageFocusGate.Release();
+        }
+    }
+
     public void ClearPageFocus() => PageFocus = null;
 
     /// <summary>A new document: the old maps and focus describe pages that are gone.</summary>

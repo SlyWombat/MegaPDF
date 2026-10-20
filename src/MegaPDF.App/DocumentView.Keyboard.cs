@@ -1,3 +1,5 @@
+using MegaPDF.Core.Engine;
+using MegaPDF.Core.Viewing;
 using System.Collections.Specialized;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
@@ -25,6 +27,13 @@ public sealed partial class DocumentView
     private FocusNavigationDirection _pagesFocusDirection = FocusNavigationDirection.None;
     private bool _parkingFocus;
 
+    /// <summary>
+    /// Page focus is on a checkbox or radio that Tab reached from a form field (#709): Tab from it
+    /// continues through the form's fields rather than through every region on the page.
+    /// Cleared whenever page focus is.
+    /// </summary>
+    private bool _formTabActive;
+
     /// <summary>MainWindow's hook: whether keyboard focus is currently on a toolbar control.</summary>
     internal Func<bool>? FocusIsInToolbar { get; set; }
 
@@ -36,7 +45,11 @@ public sealed partial class DocumentView
         ViewModel.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName is nameof(DocumentViewModel.PageFocus))
+            {
+                if (ViewModel.PageFocus is null)
+                    _formTabActive = false;
                 UpdateFocusRing();
+            }
         };
         ViewModel.Pages.CollectionChanged += OnPagesChangedForFocus;
         ViewModel.Announced += text => DispatcherQueue.TryEnqueue(() => Announce(text));
@@ -173,13 +186,76 @@ public sealed partial class DocumentView
     /// <summary>Tab or Shift+Tab on the page; past either end, focus moves on to the next control.</summary>
     private async Task StepPageFocusAsync(bool forward)
     {
+        if (_formTabActive && ViewModel.PageFocus is { Kind: PageHitKind.FormCheckbox } onBox)
+        {
+            await StepFormFieldAsync(onBox.PageIndex,
+                new PdfFormField("", FormFieldKind.Checkbox, onBox.Bounds, ""), forward);
+            return;
+        }
         if (await MovePageFocusAsync(forward) == DocumentViewModel.FocusMove.Moved)
             return;
 
+        LeaveDocumentFocus(forward);
+    }
+
+    /// <summary>Tab ran off the document: page focus clears and the next (or previous) control takes it.</summary>
+    private void LeaveDocumentFocus(bool forward)
+    {
         ViewModel.ClearPageFocus();
         var options = new FindNextElementOptions { SearchRoot = XamlRoot.Content };
         if (!FocusManager.TryMoveFocus(forward ? FocusNavigationDirection.Next : FocusNavigationDirection.Previous, options))
             FocusOpenButton?.Invoke();
+    }
+
+    /// <summary>
+    /// Tab or Shift+Tab out of an open form field, or off a checkbox Tab reached (#709): on to the
+    /// next form field in <see cref="FormFieldOrder"/>, skipping the printed labels between them.
+    /// A text field opens for typing with its text selected, a checkbox or radio takes page focus
+    /// (Space toggles it, and Tab moves on), and past the last field the form is left the way the
+    /// page's own Tab leaves it, without wrapping.
+    /// </summary>
+    private async Task StepFormFieldAsync(int pageIndex, PdfFormField from, bool forward)
+    {
+        var stop = await ViewModel.NextFormFieldAsync(pageIndex, from, forward);
+        if (stop is not { } next)
+        {
+            LeaveDocumentFocus(forward);
+            return;
+        }
+
+        ScrollMatchIntoView(ViewModel.ContentTargetFor(next.PageIndex, [next.Field.Bounds]));
+        PageCanvas? canvas = null;
+        // A page far away is not realised until the scroll has landed; give it a moment.
+        for (var attempt = 0; attempt < 40 && canvas is null; attempt++)
+        {
+            canvas = FindPageCanvas(next.PageIndex);
+            if (canvas?.DataContext is not PageView)
+            {
+                canvas = null;
+                await Task.Delay(25);
+            }
+        }
+        if (canvas?.DataContext is not PageView pageView)
+        {
+            LeaveDocumentFocus(forward);
+            return;
+        }
+
+        if (next.Field.Kind == FormFieldKind.Text)
+        {
+            ViewModel.ClearPageFocus();
+            OpenFormFieldEditor(canvas, pageView, next.Field);
+            return;
+        }
+
+        if (await ViewModel.FocusFormFieldAsync(next.PageIndex, next.Field) is not { } focus)
+        {
+            LeaveDocumentFocus(forward);
+            return;
+        }
+        _formTabActive = true;
+        PagesScroll.Focus(FocusState.Keyboard);
+        Announce(focus.AccessibleName);
     }
 
     private async Task<DocumentViewModel.FocusMove> MovePageFocusAsync(bool forward)

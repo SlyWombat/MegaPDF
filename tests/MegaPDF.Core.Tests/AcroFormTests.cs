@@ -132,6 +132,48 @@ public class AcroFormTests : IDisposable
         }
     }
 
+    [Fact]
+    public void GetFormFields_ReportsMultilineAndReadOnly_ForTextFields()
+    {
+        // #712: the core reports a text field's multi-line flag (Ff bit 13) and the rest through an
+        // accessor, and PdfFormField carries it. A plain field and a checkbox report neither.
+        var yesAp = "0 G 2 w 4 4 m 14 14 l S\n";
+        var path = Path.Combine(_dir, $"flags-{Guid.NewGuid():N}.pdf");
+        File.WriteAllBytes(path, SamplePdf.Assemble(
+        [
+            "1 0 obj\n<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [6 0 R 7 0 R 10 0 R 11 0 R] /DA (/Helv 0 Tf 0 g) /DR << /Font << /Helv 5 0 R >> >> >> >>\nendobj\n",
+            "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n",
+            "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> /Annots [6 0 R 7 0 R 10 0 R 11 0 R] >>\nendobj\n",
+            "4 0 obj\n<< /Length 0 >>\nstream\nendstream\nendobj\n",
+            "5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n",
+            "6 0 obj\n<< /Type /Annot /Subtype /Widget /FT /Tx /T (line) /Rect [100 700 300 720] /F 4 /DA (/Helv 12 Tf 0 g) >>\nendobj\n",
+            "7 0 obj\n<< /Type /Annot /Subtype /Widget /FT /Tx /Ff 4096 /MaxLen 80 /T (notes) /Rect [100 560 400 660] /F 4 /DA (/Helv 12 Tf 0 g) >>\nendobj\n",
+            $"8 0 obj\n<< /Type /XObject /Subtype /Form /BBox [0 0 18 18] /Length {yesAp.Length} >>\nstream\n{yesAp}endstream\nendobj\n",
+            "9 0 obj\n<< /Type /XObject /Subtype /Form /BBox [0 0 18 18] /Length 0 >>\nstream\nendstream\nendobj\n",
+            "10 0 obj\n<< /Type /Annot /Subtype /Widget /FT /Tx /Ff 1 /T (locked) /V (fixed) /Rect [100 500 300 520] /F 4 /DA (/Helv 12 Tf 0 g) >>\nendobj\n",
+            "11 0 obj\n<< /Type /Annot /Subtype /Widget /FT /Btn /T (agree) /Rect [100 450 118 468] /F 4 /V /Off /AS /Off /AP << /N << /Yes 8 0 R /Off 9 0 R >> >> >>\nendobj\n",
+        ]));
+        using var doc = _engine.Open(path);
+        using var page = doc.GetPage(0);
+
+        var fields = page.GetFormFields();
+
+        Assert.Equal(new[] { "line", "notes", "locked", "agree" }, fields.Select(f => f.Name));
+        var line = fields.Single(f => f.Name == "line");
+        Assert.False(line.IsMultiline);
+        Assert.False(line.IsReadOnly);
+        var notes = fields.Single(f => f.Name == "notes");
+        Assert.True(notes.IsMultiline);
+        Assert.False(notes.IsReadOnly);
+        Assert.Equal(80, notes.MaxLength);
+        var locked = fields.Single(f => f.Name == "locked");
+        Assert.True(locked.IsReadOnly);
+        Assert.False(locked.IsMultiline);
+        var box = fields.Single(f => f.Name == "agree");
+        Assert.False(box.IsMultiline);
+        Assert.False(box.IsReadOnly);
+    }
+
     private string WriteFormPdf()
     {
         var path = Path.Combine(_dir, $"form-{Guid.NewGuid():N}.pdf");

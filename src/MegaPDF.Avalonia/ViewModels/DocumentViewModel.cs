@@ -1526,6 +1526,59 @@ public sealed partial class DocumentViewModel : ObservableObject, IDisposable
 
     public void ClearPageFocus() => PageFocus = null;
 
+    /// <summary>
+    /// Page focus is on a checkbox or radio that Tab reached from a form field (#709): Tab from it
+    /// continues through the form's fields rather than through every region on the page.
+    /// Cleared whenever page focus is.
+    /// </summary>
+    public bool FormTabActive { get; private set; }
+
+    partial void OnPageFocusChanged(FocusedRegion? value)
+    {
+        if (value is null)
+            FormTabActive = false;
+    }
+
+    /// <summary>
+    /// The form field after <paramref name="from"/> in <see cref="FormFieldOrder"/> (#709), or null
+    /// past the last one (before the first, going back) and on a document that forbids filling.
+    /// Read from the engine, so Tab reaches a page that was never drawn.
+    /// </summary>
+    public FormFieldOrder.Stop? NextFormField(int pageIndex, PdfFormField from, bool forward)
+    {
+        if (_document is not { } doc || !Capabilities.CanFillForms)
+            return null;
+        return FormFieldOrder.Step(Pages.Count, p =>
+        {
+            using var page = doc.GetPage(p);
+            return page.GetFormFields();
+        }, pageIndex, from, forward);
+    }
+
+    /// <summary>The view brings a region into view (#709).</summary>
+    public void RequestFocusScroll(int pageIndex, PdfRect bounds) => FocusScrollRequested?.Invoke(pageIndex, bounds);
+
+    /// <summary>
+    /// Puts keyboard page focus on the checkbox or radio widget <paramref name="field"/> (#709), so the
+    /// ring shows and Space toggles it through the same routing a click gets. False when no region matches.
+    /// </summary>
+    public bool FocusFormField(int pageIndex, PdfFormField field)
+    {
+        var regions = RegionsFor(pageIndex);
+        for (var i = 0; i < regions.Count; i++)
+        {
+            var (bounds, kind) = regions[i];
+            if (kind != PageHitKind.FormCheckbox || !bounds.Contains(field.Bounds.Center))
+                continue;
+            PageFocus = new FocusedRegion(pageIndex, i, bounds, kind);
+            FormTabActive = true;
+            FocusScrollRequested?.Invoke(pageIndex, bounds);
+            Status = PageFocus.Describe(IsCheckedAt(pageIndex, bounds, kind));
+            return true;
+        }
+        return false;
+    }
+
     private IReadOnlyList<(PdfRect Bounds, PageHitKind Kind)> RegionsFor(int pageIndex)
     {
         var page = Pages.FirstOrDefault(p => p.Index == pageIndex);

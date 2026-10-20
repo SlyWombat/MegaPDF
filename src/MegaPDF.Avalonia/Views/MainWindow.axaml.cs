@@ -1068,6 +1068,14 @@ public partial class MainWindow : Window
         set { if (_inlineEditor is { } editor) editor.Text = value; }
     }
 
+    /// <summary>The open in-place editor itself, for the self-test (#709, #712): its size, selection and line-break setting.</summary>
+    internal TextBox? InlineEditorForTest => _inlineEditor;
+
+    /// <summary>The form field the open editor is over, or null, for the self-test (#709).</summary>
+    internal PdfFormField? InlineEditorFieldForTest => _inlineEditorField;
+
+    private PdfFormField? _inlineEditorField;
+
     /// <summary>Whether a whiteout/redaction drag is in progress, for the self-test.</summary>
     internal bool HasBandInProgress => _band is not null;
 
@@ -1099,7 +1107,8 @@ public partial class MainWindow : Window
     private void ShowInlineEditor(
         Control container, Point at, double fontSizePoints, string fontFamily,
         string initialText, double minWidth, Action<string> commit,
-        bool allowMultiline = false, bool showSizePicker = false)
+        bool allowMultiline = false, bool showSizePicker = false,
+        PdfFormField? formField = null, int formPageIndex = 0, double? height = null)
     {
         if (Active is not { } vm || container is not ContentPresenter presenter)
             return;
@@ -1126,6 +1135,15 @@ public partial class MainWindow : Window
             AcceptsReturn = allowMultiline,
             Watermark = allowMultiline ? Strings.TypeThenEnterMultiline : Strings.TypeThenEnter,
         };
+        if (height is { } blockHeight)
+        {
+            // A multi-line form field is a block (#712): as wide as the widget, tall enough for
+            // several lines, wrapping and scrolling inside itself rather than growing past it.
+            editor.Height = blockHeight;
+            editor.Width = Math.Max(140, minWidth);
+            editor.TextWrapping = TextWrapping.Wrap;
+            editor.SetValue(ScrollViewer.VerticalScrollBarVisibilityProperty, ScrollBarVisibility.Auto);
+        }
 
         void Commit()
         {
@@ -1159,6 +1177,16 @@ public partial class MainWindow : Window
                 vm.CancelModes();
                 e.Handled = true;
             }
+            else if (e.Key == Key.Tab && formField is not null)
+            {
+                // #709: in a form field, Tab commits and opens the next form field, however this one
+                // was opened. Before this the editor claimed no Tab at all, so focus went to Avalonia's
+                // default traversal (the toolbar) from a field opened by a click or by Enter alike.
+                var forward = !e.KeyModifiers.HasFlag(KeyModifiers.Shift);
+                Commit();
+                e.Handled = true;
+                StepFormField(formPageIndex, formField, forward);
+            }
         }, RoutingStrategies.Tunnel);
         // Clicking away commits rather than discarding: losing typing to a stray
         // click is the more annoying failure. Except into the font and size pickers
@@ -1180,6 +1208,7 @@ public partial class MainWindow : Window
             overlay.Children.Add(editor);
             _inlineEditor = editor;
             _inlineEditorOwner = vm;
+            _inlineEditorField = formField;
             editor.Focus();
             editor.SelectAll();
             if (showSizePicker)
@@ -1332,15 +1361,80 @@ public partial class MainWindow : Window
             return;
 
         var dip = PageBitmap.PointsToPixels * vm.Zoom;
-        // A widget's height is the box; the text inside it sits a little smaller.
-        var fontSize = Math.Max(6, field.Bounds.Height * 0.7);
+        // A widget's height is the box; the text inside it sits a little smaller. A multi-line
+        // field is a block, many lines tall, and 70 % of that would be huge type: it gets an
+        // ordinary 12 pt and a box as tall as the widget (#712).
+        var fontSize = field.IsMultiline ? 12 : Math.Max(6, field.Bounds.Height * 0.7);
+        var blockHeight = field.IsMultiline
+            ? Math.Max(field.Bounds.Height * dip, fontSize * dip * 1.5 * 4 + 16)
+            : (double?)null;
 
         ShowInlineEditor(
             container,
             new Point(field.Bounds.X * dip, field.Bounds.Y * dip),
             fontSize, "Helvetica, Arial, sans-serif",
             field.Value, field.Bounds.Width * dip,
-            text => vm.SetFieldValue(pageIndex, field, text));
+            text => vm.SetFieldValue(pageIndex, field, text),
+            allowMultiline: field.IsMultiline,
+            formField: field, formPageIndex: pageIndex, height: blockHeight);
+    }
+
+    /// <summary>
+    /// Tab or Shift+Tab out of an open form field, or off a checkbox Tab reached (#709): on to the
+    /// next form field in <see cref="FormFieldOrder"/>, skipping the printed labels between them.
+    /// A text field opens for typing with its text selected, a checkbox or radio takes page focus
+    /// (Space toggles it, and Tab moves on), and past the last field the form is left the way Escape
+    /// leaves it (page focus cleared, keyboard focus handed to the toolbar). Unlike the page's own
+    /// Tab, which wraps, this does not.
+    /// </summary>
+    private async void StepFormField(int pageIndex, PdfFormField from, bool forward)
+    {
+        if (Active is not { } vm)
+            return;
+        // The field just left is still being written, off the UI thread, and one change applies at a
+        // time (#145): a second one started now would be dropped. Wait for it, so a quick Tab, type, Tab
+        // loses nothing, and the next field is read after the first one's value is in.
+        for (var waited = 0; waited < 500 && !vm.IsIdle; waited++)
+            await Task.Delay(10);
+        if (!ReferenceEquals(Active, vm))
+            return; // the tab changed meanwhile
+        if (vm.NextFormField(pageIndex, from, forward) is not { } next)
+        {
+            vm.ClearPageFocus();
+            OpenButton.Focus();
+            return;
+        }
+
+        if (next.Field.Kind == FormFieldKind.Text)
+        {
+            vm.ClearPageFocus();
+            vm.RequestFocusScroll(next.PageIndex, next.Field.Bounds);
+            await OpenFieldEditorWhenRealisedAsync(next.PageIndex, next.Field);
+            return;
+        }
+
+        if (!vm.FocusFormField(next.PageIndex, next.Field))
+        {
+            vm.ClearPageFocus();
+            OpenButton.Focus();
+            return;
+        }
+        // The ring is the focus; keyboard focus leaves the toolbar so Space reaches the page (#169).
+        FocusManager?.ClearFocus();
+    }
+
+    /// <summary>A page far from the one on screen has no container until the scroll has landed.</summary>
+    private async Task OpenFieldEditorWhenRealisedAsync(int pageIndex, PdfFormField field)
+    {
+        for (var attempt = 0; attempt < 40; attempt++)
+        {
+            if (ContainerFor(pageIndex) is not null)
+            {
+                ShowFieldEditor(pageIndex, field);
+                return;
+            }
+            await Task.Delay(25);
+        }
     }
 
     private Control? ContainerFor(int pageIndex)
@@ -1371,6 +1465,7 @@ public partial class MainWindow : Window
         // IsEditingTextBox reads true (see CheckTabTransitionSafety).
         var owner = _inlineEditorOwner;
         _inlineEditorOwner = null;
+        _inlineEditorField = null;
         _editorFollowsPickers = false;
         (editor.Parent as Panel)?.Children.Remove(editor);
         if (owner is { } vm)

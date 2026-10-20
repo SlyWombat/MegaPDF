@@ -1171,10 +1171,15 @@ internal sealed class PdfiumPage : IPdfPage
                     CoreNative.FieldRadio => FormFieldKind.RadioButton,
                     _ => FormFieldKind.Other,
                 };
+                var flags = CoreNative.megapdf_form_field_flags(fields, (nuint)i);
                 result.Add(new PdfFormField(
                     CoreNative.FormFieldString(fields, (nuint)i, CoreNative.FieldName), kind,
                     CropToView(f.Bounds.Left, f.Bounds.Bottom, f.Bounds.Right, f.Bounds.Top),
-                    CoreNative.FormFieldString(fields, (nuint)i, CoreNative.FieldValue), f.IsChecked != 0));
+                    CoreNative.FormFieldString(fields, (nuint)i, CoreNative.FieldValue), f.IsChecked != 0,
+                    IsMultiline: (flags & CoreNative.FieldFlagMultiline) != 0,
+                    IsReadOnly: (flags & CoreNative.FieldFlagReadOnly) != 0,
+                    IsComb: (flags & CoreNative.FieldFlagComb) != 0,
+                    MaxLength: CoreNative.megapdf_form_field_max_length(fields, (nuint)i)));
             }
             return result;
         }

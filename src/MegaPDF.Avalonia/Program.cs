@@ -2062,6 +2062,17 @@ internal static class Program
         // gesture is cleanly cancelled against the document it actually belongs to,
         // never silently committed or applied to whichever tab is active by the
         // time it resolves.
+        Console.WriteLine("filling a form from the keyboard (#709, #712):");
+        try
+        {
+            CheckFormFlow(dir, state, Check);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"::error::form flow: {ex.GetType().Name}: {ex.Message}");
+            failures++;
+        }
+
         Console.WriteLine("switching tabs mid-gesture (#348):");
         try
         {
@@ -6163,6 +6174,196 @@ internal static class Program
     /// the document it actually belongs to — never silently committed, and never leaked
     /// into whichever tab happens to be active by the time it would have resolved.
     /// </summary>
+    /// <summary>
+    /// #709 and #712 in a real MainWindow, headless, with real pointer and key events: a click opens the
+    /// first field of formflow.pdf, text is typed, Tab commits and opens the next form field (stepping
+    /// over the printed labels), Shift+Enter breaks a line in the multi-line field, Tab reaches a checkbox
+    /// and Space ticks it, Tab crosses to page two, and Tab off the last field leaves the form. The
+    /// values are read back from the saved file. Before the fix the editor claimed no Tab at all.
+    /// </summary>
+    private static void CheckFormFlow(string dir, string state, Action<string, bool> check)
+    {
+        EnsureHeadlessPlatform();
+        static void Pump() => MenuProbe.Pump();
+        var source = Path.Combine(dir, "formflow.pdf");
+        if (!File.Exists(source))
+        {
+            check("formflow.pdf is beside fixture.pdf", false);
+            return;
+        }
+
+        using var shell = new ShellViewModel(state);
+        var window = new Views.MainWindow { DataContext = shell, Width = 1280, Height = 900 };
+        window.SkipRecoveryOffer = true;
+        window.Show();
+        Pump();
+        var scratch = Path.Combine(Path.GetTempPath(), $"megapdf-selftest-formflow-{Guid.NewGuid():N}.pdf");
+        File.Copy(source, scratch, overwrite: true);
+        try
+        {
+            window.OpenFromSystem(scratch);
+            PumpUntil(() => shell.Documents.Count == 1 && shell.Documents.All(d => d.IsDocumentOpen), TimeSpan.FromSeconds(5));
+            var vm = shell.Active!;
+            vm.SetZoomCommand.Execute(1.0);
+            PumpUntil(() => vm.IsIdle, TimeSpan.FromSeconds(5));
+            Pump();
+
+            void Press(Key key, RawInputModifiers mods = RawInputModifiers.None, string? text = null)
+            {
+                var physical = key switch { Key.Tab => PhysicalKey.Tab, Key.Space => PhysicalKey.Space, Key.Enter => PhysicalKey.Enter, _ => PhysicalKey.Escape };
+                global::Avalonia.Headless.HeadlessWindowExtensions.KeyPress(window, key, mods, physical, text);
+                global::Avalonia.Headless.HeadlessWindowExtensions.KeyRelease(window, key, mods, physical, text);
+                Pump();
+                PumpUntil(() => vm.IsIdle, TimeSpan.FromSeconds(5));
+                Pump();
+            }
+            void Type(string text)
+            {
+                global::Avalonia.Headless.HeadlessWindowExtensions.KeyTextInput(window, text);
+                Pump();
+            }
+            string Open() => window.InlineEditorFieldForTest?.Name ?? "(none)";
+            // Layout and the realising of a scrolled-to page run on the render tick, which only Pump
+            // forces; PumpUntil alone would wait on a page that is never laid out.
+            static void PumpUntilRendered(Func<bool> done, TimeSpan timeout)
+            {
+                var deadline = DateTime.UtcNow + timeout;
+                while (!done() && DateTime.UtcNow < deadline)
+                {
+                    Pump();
+                    Thread.Sleep(5);
+                }
+            }
+            // A Tab commits, then steps once the commit has landed (the edit applies off the UI thread),
+            // so what it leads to is waited for, never read on the very next line.
+            bool Await(Func<bool> condition)
+            {
+                PumpUntilRendered(condition, TimeSpan.FromSeconds(5));
+                return condition();
+            }
+            bool WaitForEditor(string name)
+            {
+                PumpUntilRendered(() => window.HasOpenInlineEditor && Open() == name, TimeSpan.FromSeconds(5));
+                return window.HasOpenInlineEditor && Open() == name;
+            }
+
+            // A real pointer click on the first field: (250, 82) in page space.
+            var dip = global::MegaPDF.Avalonia.Rendering.PageBitmap.PointsToPixels * vm.Zoom;
+            Point? ClickPoint(double x, double y) =>
+                window.PageList.ContainerFromIndex(0) is global::Avalonia.Controls.Control first
+                && global::Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(first)
+                       .OfType<global::Avalonia.Controls.Border>().FirstOrDefault(b => b.Name == "PageSurface") is { } surface
+                    ? surface.TranslatePoint(new Point(x * dip, y * dip), window)
+                    : null;
+            if (ClickPoint(250, 82) is not { } at)
+            {
+                check("the first page is realised for the click", false);
+                return;
+            }
+            global::Avalonia.Headless.HeadlessWindowExtensions.MouseDown(window, at, MouseButton.Left);
+            global::Avalonia.Headless.HeadlessWindowExtensions.MouseUp(window, at, MouseButton.Left);
+            Pump();
+            check("clicking the first field opens its editor", WaitForEditor("first"));
+            check("a single-line field takes no line break", window.InlineEditorForTest is { AcceptsReturn: false });
+            Type("Ada");
+            check("typing lands in the editor", window.InlineEditorForTest?.Text == "Ada");
+
+            // Shift+Enter in a single-line field must not put a break in it: it commits (as Enter does).
+            // Checked last, on its own field, so the flow below is undisturbed; see "second" below.
+
+            Press(global::Avalonia.Input.Key.Tab);
+            check("Tab opened the next form field, stepping over the printed label 'Last name:'", WaitForEditor("last"));
+            check("  and the first value was committed", vm.HitTest(0, new PdfPoint(250, 82)).Field is { Value: "Ada" });
+            check("  with its text selected, so typing replaces it",
+                  window.InlineEditorForTest is { } e1 && e1.SelectionStart != e1.SelectionEnd || window.InlineEditorForTest?.Text == "");
+
+            Press(global::Avalonia.Input.Key.Tab, RawInputModifiers.Shift);
+            check("Shift+Tab goes back to the field before, text selected",
+                  WaitForEditor("first") && window.InlineEditorForTest is { Text: "Ada" } e2 && e2.SelectionEnd - e2.SelectionStart == 3);
+            Press(global::Avalonia.Input.Key.Tab);
+            check("Tab again is on the second field", WaitForEditor("last"));
+            Type("Lovelace");
+
+            Press(global::Avalonia.Input.Key.Tab);
+            check("Tab opened the multi-line field", WaitForEditor("notes"));
+            check("  which takes line breaks", window.InlineEditorForTest is { AcceptsReturn: true });
+            check("  and whose editor is as tall as the 80 pt widget, not one line",
+                  window.InlineEditorForTest is { } e3 && e3.Height >= 80 * dip - 0.5);
+            check("  at an ordinary type size, not 70 % of the box", window.InlineEditorForTest is { } e4 && e4.FontSize <= 16 * dip);
+            Type("line one");
+            Press(global::Avalonia.Input.Key.Enter, RawInputModifiers.Shift);
+            check("Shift+Enter inserts a break and keeps the editor open",
+                  window.HasOpenInlineEditor && window.InlineEditorForTest?.Text == "line one\n");
+            Type("line two");
+
+            Press(global::Avalonia.Input.Key.Tab);
+            check("Tab onto the checkbox closes the editor and gives the box focus",
+                  Await(() => !window.HasOpenInlineEditor && vm.PageFocus is { Kind: PageHitKind.FormCheckbox }));
+            check("  the box is not ticked yet", vm.HitTest(0, new PdfPoint(157.5, 284.5)).Field is { IsChecked: false });
+            Press(global::Avalonia.Input.Key.Space, text: " ");
+            check("Space ticks it", Await(() => vm.HitTest(0, new PdfPoint(157.5, 284.5)).Field is { IsChecked: true }));
+            check("  and focus is still on it", vm.PageFocus is { Kind: PageHitKind.FormCheckbox });
+
+            Press(global::Avalonia.Input.Key.Tab);
+            check("Tab from the checkbox crosses to the second page's field", WaitForEditor("second"));
+            Type("Page two");
+            // Enter commits a single-line field and does not move on; Shift+Enter is the same in one.
+            Press(global::Avalonia.Input.Key.Enter, RawInputModifiers.Shift);
+            check("Shift+Enter in a single-line field commits it rather than breaking the line",
+                  Await(() => !window.HasOpenInlineEditor && vm.HitTest(1, new PdfPoint(250, 82)).Field is { Value: "Page two" }));
+
+            // Past the last field, Tab leaves the form: reopen the last field by keyboard, then Tab.
+            vm.HandlePageClick(1, new PdfPoint(250, 82));
+            check("the last field opens again", WaitForEditor("second"));
+            Press(global::Avalonia.Input.Key.Tab);
+            check("Tab past the last field leaves the form, without wrapping",
+                  Await(() => !window.HasOpenInlineEditor && vm.PageFocus is null && vm.IsIdle));
+            Thread.Sleep(200); // the step that found nothing is async too: let it finish before looking again
+            Pump();
+            check("  and does not wrap round to the first field", !window.HasOpenInlineEditor);
+
+            vm.HandlePageClick(0, new PdfPoint(250, 82));
+            WaitForEditor("first");
+            window.InlineEditorForTest!.Text = "NOT KEPT";
+            Press(global::Avalonia.Input.Key.Escape);
+            check("Escape cancels the open field",
+                  Await(() => !window.HasOpenInlineEditor) && vm.HitTest(0, new PdfPoint(250, 82)).Field is { Value: "Ada" });
+
+            PumpUntilRendered(() => vm.IsIdle, TimeSpan.FromSeconds(5));
+            var saved = Path.Combine(Path.GetTempPath(), $"megapdf-selftest-formflow-saved-{Guid.NewGuid():N}.pdf");
+            try
+            {
+                using (var file = File.Create(saved))
+                    vm.SaveTo(file);
+                using var engine = new PdfiumEngine();
+                using var reopened = engine.Open(saved);
+                PdfFormField? Field(int page, string name)
+                {
+                    using var p = reopened.GetPage(page);
+                    return p.GetFormFields().FirstOrDefault(f => f.Name == name);
+                }
+                check("saved: first = Ada", Field(0, "first") is { Value: "Ada" });
+                check("saved: last = Lovelace", Field(0, "last") is { Value: "Lovelace" });
+                var notes = Field(0, "notes")?.Value ?? "";
+                Console.WriteLine("  notes /V code units: " + string.Join(" ", notes.Select(c => ((int)c).ToString("X2"))));
+                check("saved: notes keeps both lines and the break between them",
+                      notes.StartsWith("line one", StringComparison.Ordinal) && notes.EndsWith("line two", StringComparison.Ordinal)
+                      && notes.IndexOfAny(['\r', '\n']) > 0);
+                check("saved: the checkbox is ticked", Field(0, "agree") is { IsChecked: true });
+                check("saved: second = Page two", Field(1, "second") is { Value: "Page two" });
+            }
+            finally
+            {
+                if (File.Exists(saved)) File.Delete(saved);
+            }
+        }
+        finally
+        {
+            window.Close();
+            if (File.Exists(scratch)) File.Delete(scratch);
+        }
+    }
+
     private static void CheckTabTransitionSafety(string dir, string state, Action<string, bool> check)
     {
         EnsureHeadlessPlatform();

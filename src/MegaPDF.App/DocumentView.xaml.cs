@@ -65,6 +65,8 @@ public sealed partial class DocumentView : UserControl
 
     private TextBox? _activeEditor;
     private Func<Task>? _activeEditorCommit;
+    private Func<VirtualKey, bool, Func<Task>?>? _activeEditorKeyAction;
+    private PdfFormField? _activeFormField;
 
     /// <summary>MainWindow's hook: a size chip on the open editor was picked (#4) — keeps the
     /// toolbar's own SizePicker showing the same value, the way <see cref="ApplyPickedStyleToOpenEditor"/>
@@ -343,13 +345,8 @@ public sealed partial class DocumentView : UserControl
                 break;
 
             case PageHitKind.FormTextField:
-            {
-                var field = hit.Field!;
-                ShowInlineEditor(pageGrid, field.Bounds, field.Value, fontSizePoints: 12,
-                    style: null,
-                    (newText, _) => ViewModel.ApplyFormTextAsync(pageView.Index, field, newText));
+                OpenFormFieldEditor(pageGrid, pageView, hit.Field!);
                 break;
-            }
 
             case PageHitKind.None when !pageView.Regions.Any(r => r.Kind == PageHitKind.TextRun):
                 // A page with no text at all is a scan/photo — say so instead of
@@ -391,6 +388,19 @@ public sealed partial class DocumentView : UserControl
             }
         }
     }
+
+    /// <summary>
+    /// Opens the inline editor over a form text field, however the field was reached: a click,
+    /// Enter on a keyboard-focused region, or Tab from the field before it (#709). A field the
+    /// PDF marks multi-line takes Shift+Enter for a break and Enter to commit, and its editor is
+    /// as tall as the widget (#712); a single-line field is unchanged.
+    /// </summary>
+    private void OpenFormFieldEditor(Grid pageGrid, PageView pageView, PdfFormField field) =>
+        ShowInlineEditor(pageGrid, field.Bounds, field.Value, fontSizePoints: 12,
+            style: null,
+            (newText, _) => ViewModel.ApplyFormTextAsync(pageView.Index, field, newText),
+            allowMultiline: field.IsMultiline,
+            formField: field, formPageIndex: pageView.Index);
 
     /// <summary>
     /// Double-click on an added text box reopens the inline editor to change its
@@ -456,7 +466,8 @@ public sealed partial class DocumentView : UserControl
     private void ShowInlineEditor(Grid pageGrid, PdfRect bounds, string initialText,
                                   double fontSizePoints, TextStyleChoice? style,
                                   Func<string, TextStyleChoice?, Task> commit,
-                                  bool allowMultiline = false)
+                                  bool allowMultiline = false,
+                                  PdfFormField? formField = null, int formPageIndex = 0)
     {
         var toDip = 96.0 / 72 * ViewModel.ZoomFactor;
         var editor = new TextBox
@@ -475,6 +486,17 @@ public sealed partial class DocumentView : UserControl
             // is ours to mark as misspelled.
             IsSpellCheckEnabled = false,
         };
+
+        if (formField is { IsMultiline: true })
+        {
+            // A multi-line field is a block (#712): as wide as the widget, at least as tall, and never
+            // shorter than four lines of the editor's own text, wrapping and scrolling inside itself
+            // rather than growing past the widget and covering the fields below.
+            editor.TextWrapping = TextWrapping.Wrap;
+            editor.Width = Math.Max(bounds.Width * toDip + 28, 140);
+            editor.Height = Math.Max(bounds.Height * toDip + 16, editor.FontSize * 1.5 * 4 + 16);
+            ScrollViewer.SetVerticalScrollBarVisibility(editor, ScrollBarVisibility.Auto);
+        }
 
         TextStyleChoice? ChosenStyle() => style is null ? null : new TextStyleChoice(
             _lastPickedFontSize ?? style.FontSize, _lastPickedFontName ?? style.FontName);
@@ -500,42 +522,68 @@ public sealed partial class DocumentView : UserControl
         // commits and moves on to the next region — filling a form is type, Tab, type.
         // Not for added text boxes: there Tab goes to the face and size pickers on the
         // toolbar (#144), and the edit stays open while they are used.
-        editor.PreviewKeyDown += async (_, args) =>
+        //
+        // The decision is KeyAction, apart from the routed event, so the self-test can press a key
+        // through the very same code (WinUI cannot synthesize a key press into a TextBox — the
+        // honest limit PressEditorKeyForTest documents). It does the synchronous half itself, so the
+        // key is claimed before any await, and hands back the rest; null means "not mine".
+        Func<Task>? KeyAction(VirtualKey key, bool shift)
         {
-            if (allowMultiline && args.Key == VirtualKey.Enter && IsShiftDown())
+            if (allowMultiline && key == VirtualKey.Enter && shift)
             {
-                args.Handled = true;
                 var caret = editor.SelectionStart;
                 editor.Text = editor.Text.Insert(caret, "\n");
                 editor.SelectionStart = caret + 1;
                 editor.SelectionLength = 0;
+                return () => Task.CompletedTask;
             }
-            else if (args.Key == VirtualKey.Enter)
+            if (key == VirtualKey.Enter)
             {
-                args.Handled = true;
                 var committing = CommitAsync(); // closes the editor before its first await
                 ReturnFocusToPage();
-                await committing;
+                return () => committing;
             }
-            else if (args.Key == VirtualKey.Escape)
+            if (key == VirtualKey.Escape)
             {
-                args.Handled = true;
                 CloseEditor(pageGrid, editor);
                 ReturnFocusToPage();
+                return () => Task.CompletedTask;
             }
-            else if (args.Key == VirtualKey.Tab && style is not null && !IsShiftDown() && RequestPickerFocus())
+            if (key == VirtualKey.Tab && formField is not null)
             {
-                args.Handled = true;
+                // #709: in a form field, Tab commits and opens the next form field, however this one
+                // was opened. It used to need keyboard page focus (set only by Tab *from the page*),
+                // so a click into a field left Tab to WinUI's own order, which is the toolbar.
+                var forward = !shift;
+                var committing = CommitAsync(); // closes the editor before its first await
+                PagesScroll.Focus(FocusState.Programmatic); // not the toolbar, while the edit lands
+                return async () =>
+                {
+                    await committing;
+                    await StepFormFieldAsync(formPageIndex, formField, forward);
+                };
             }
-            else if (args.Key == VirtualKey.Tab && style is null && ViewModel.PageFocus is not null)
+            if (key == VirtualKey.Tab && style is not null && !shift && RequestPickerFocus())
+                return () => Task.CompletedTask;
+            if (key == VirtualKey.Tab && style is null && ViewModel.PageFocus is not null)
             {
-                args.Handled = true;
-                var forward = !IsShiftDown();
+                var forward = !shift;
                 var committing = CommitAsync();
                 ReturnFocusToPage();
-                await committing;
-                await StepPageFocusAsync(forward);
+                return async () =>
+                {
+                    await committing;
+                    await StepPageFocusAsync(forward);
+                };
             }
+            return null;
+        }
+        editor.PreviewKeyDown += async (_, args) =>
+        {
+            if (KeyAction(args.Key, IsShiftDown()) is not { } rest)
+                return;
+            args.Handled = true;
+            await rest();
         };
         // Focus moving into the toolbar's pickers, or the list one has open, must not
         // commit and tear the editor down (#144) — MainWindow decides that (it owns the
@@ -560,6 +608,8 @@ public sealed partial class DocumentView : UserControl
         pageGrid.Children.Add(editor);
         _activeEditor = editor;
         _activeEditorCommit = CommitAsync;
+        _activeEditorKeyAction = KeyAction;
+        _activeFormField = formField;
         editor.Focus(FocusState.Programmatic);
         editor.SelectAll();
 
@@ -736,6 +786,8 @@ public sealed partial class DocumentView : UserControl
         {
             _activeEditor = null;
             _activeEditorCommit = null;
+            _activeEditorKeyAction = null;
+            _activeFormField = null;
             RemoveSizeChips(pageGrid);
             if (_styleEditorOpen)
             {
@@ -1861,6 +1913,20 @@ public sealed partial class DocumentView : UserControl
         set { if (_activeEditor is { } editor) editor.Text = value ?? ""; }
     }
 
+    /// <summary>The form field the open editor is over, or null (self-test, #709).</summary>
+    internal PdfFormField? ActiveFormFieldForTest => _activeFormField;
+
+    /// <summary>Whether the open editor takes line breaks, its text selection and its height in DIPs (self-test, #712).</summary>
+    internal bool ActiveEditorAcceptsReturnForTest => _activeEditor?.AcceptsReturn == true;
+    internal int ActiveEditorSelectionLengthForTest => _activeEditor?.SelectionLength ?? -1;
+    internal double ActiveEditorHeightForTest => _activeEditor is { } e ? (double.IsNaN(e.Height) ? e.ActualHeight : e.Height) : -1;
+
+    /// <summary>Space on a keyboard-focused region, without a key press (self-test, #709).</summary>
+    internal Task ActivateFocusedRegionForTest() => ActivatePageFocusAsync();
+
+    /// <summary>Tab or Shift+Tab on the page itself, without a key press (self-test, #709).</summary>
+    internal Task StepPageFocusForTest(bool forward) => StepPageFocusAsync(forward);
+
     /// <summary>Whether an inline editor is open at all, for the self-test.</summary>
     internal bool HasActiveEditorForTest => _activeEditor is not null;
 
@@ -1874,6 +1940,21 @@ public sealed partial class DocumentView : UserControl
         if (_activeSizeChipPick is not { } pick)
             return false;
         await pick(size);
+        return true;
+    }
+
+    /// <summary>
+    /// Presses <paramref name="key"/> in the open inline editor, for the self-test (#709, #712): the same
+    /// decision the editor's PreviewKeyDown makes (Enter commits, Shift+Enter breaks a line, Tab steps to
+    /// the next form field), run to completion. WinUI cannot synthesize a key press into a TextBox, so
+    /// what this does not exercise is the routed event reaching that handler; everything the handler
+    /// decides is covered. False when no editor is open or the key is not one it claims.
+    /// </summary>
+    internal async Task<bool> PressEditorKeyForTest(VirtualKey key, bool shift = false)
+    {
+        if (_activeEditorKeyAction?.Invoke(key, shift) is not { } rest)
+            return false;
+        await rest();
         return true;
     }
 
