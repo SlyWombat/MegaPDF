@@ -7906,6 +7906,45 @@ std::string write_one(const std::string& path, int format) {
     return rc < 0 ? std::string() : sink.text;
 }
 
+// #696: a JPEG 2000 picture is described without being decoded. PDFium answers
+// FPDFImageObj_GetImageMetadata's depth and colour space for JPEG 2000 by decoding the whole image,
+// and asking for every page's scan made a 1,710-page JPEG 2000 document export 27x slower (14 s
+// before #677, 382 s after). The structure pass now reads the pixel size and computes the DPI
+// itself, and leaves the depth and colour space unknown for this codec.
+void test_image_jpx_not_decoded(const std::string& repo) {
+    const std::string path = repo + "/structure/scan-jpx.pdf";
+    Doc d(path);
+    check(d.doc != nullptr, "#696 JPEG 2000 scan: document opens", path);
+    if (d.doc == nullptr) return;
+    megapdf_structure* s = megapdf_structure_load(d.doc, 0, megapdf_page_count(d.doc), 0, nullptr);
+    check(s != nullptr, "#696 JPEG 2000 scan: structure loads");
+    if (s == nullptr) return;
+    bool found = false;
+    for (size_t i = 0; i < megapdf_block_count(s) && !found; i++) {
+        megapdf_block b{};
+        if (megapdf_block_get(s, i, &b) != MEGAPDF_OK || b.kind != MEGAPDF_BLOCK_PAGE_IMAGE) continue;
+        found = true;
+        megapdf_block_image_info image{};
+        megapdf_block_image(s, i, &image);
+        const std::string detail = std::to_string(image.pixel_width) + "x" + std::to_string(image.pixel_height) +
+                                   " px, dpi " + std::to_string(image.dpi_horizontal) + "x" +
+                                   std::to_string(image.dpi_vertical) + ", " + std::to_string(image.bits_per_pixel) +
+                                   " bpp, colorspace " + std::to_string(image.colorspace);
+        check(image.count == 1 && image.pixel_width == 16 && image.pixel_height == 16,
+              "#696 JPEG 2000 scan: one image, its stored size read from the dictionary", detail);
+        // 16 px over 468 pt is 2.46 DPI, over 648 pt 1.78: both round to 2, PDFium's own formula.
+        check(image.dpi_horizontal == 2 && image.dpi_vertical == 2,
+              "#696 JPEG 2000 scan: the effective DPI is computed, not decoded for", detail);
+        check(image.bits_per_pixel == 0 && image.colorspace == 0,
+              "#696 JPEG 2000 scan: depth and colour space stay unknown rather than decode the image", detail);
+    }
+    check(found, "#696 JPEG 2000 scan: the page is a PAGE_IMAGE block");
+    const std::string txt = write_one(path, MEGAPDF_WRITE_TEXT);
+    check(txt.find("[Page 1 has no text layer: 1 image, 16 \xC3\x97 16 px, 21.6 \xC3\x97 27.9 cm]") != std::string::npos,
+          "#696 JPEG 2000 scan: the page note is the same shape as for any other scan", txt);
+    megapdf_structure_free(s);
+}
+
 void test_image_notes(const std::string& repo, const std::string& generated) {
     // A figure on a page that also has text: named, with both the stored resolution and the
     // size it occupies, in both formats. tiny-font-size.pdf is an all-page image under an
@@ -9731,6 +9770,7 @@ int main(int argc, char** argv) {
     test_write_text_findability(argv[2]);
     test_write_markdown_goldens(std::string(MEGAPDF_REPO_FIXTURES), argv[4]);
     test_image_notes(std::string(MEGAPDF_REPO_FIXTURES), argv[1]);
+    test_image_jpx_not_decoded(std::string(MEGAPDF_REPO_FIXTURES));
     test_markdown_round_trips(std::string(MEGAPDF_REPO_FIXTURES), argv[4]);
     test_page_tools(argv[1], std::string(MEGAPDF_REPO_FIXTURES), std::string(MEGAPDF_SECURITY_FIXTURES));
     test_rotation_coordinates(argv[1]);

@@ -196,7 +196,7 @@ while IFS= read -r pdf; do
             continue
         fi
         case "$cli_rc" in
-            0|2|3|4|5) ;;
+            0|2|3|4|5|10) ;;   # 10: an incomplete file (#665), refused by design
             *)
                 cli_bad_exit=$((cli_bad_exit + 1))
                 echo "$id cli-bad-exit rc=$cli_rc" >>"$LOG"
@@ -338,7 +338,7 @@ order_gates=0
         if [ -n "$CLI" ]; then
             echo "--- #355: measure 1 through the real megapdf-cli binary ---"
             echo "cli aggregate F1:      $cli_agg_f1 (gate: >= 0.998, same as the internal-API measure above)"
-            echo "cli bad exit codes:    $cli_bad_exit (gate: must be 0 -- valid codes here are 0/2/3/4/5, never 1/6/7/130)"
+            echo "cli bad exit codes:    $cli_bad_exit (gate: must be 0 -- valid codes here are 0/2/3/4/5/10, never 1/6/7/130)"
         fi
     fi
     # #609: what the count above is a count of. Last in the summary rather than first
