@@ -2667,8 +2667,6 @@ internal static class Screenshot
         Check("clicking the first field opens its editor",
               await view.ActivatePageForTest(0, first) && view.HasActiveEditorForTest && Open() == "first");
         Check("a single-line field takes no line break", !view.ActiveEditorAcceptsReturnForTest);
-        Check("Shift+Enter in it is not claimed, so it cannot put a break in a one-line value",
-              !await view.PressEditorKeyForTest(Windows.System.VirtualKey.Enter, shift: true));
         view.ActiveEditorTextForTest = "Ada";
 
         // --- Tab from a CLICKED field: the next form field, not the label, not the toolbar ---
@@ -2719,11 +2717,17 @@ internal static class Screenshot
         Check("Tab from the checkbox crosses to the second page's field",
               view.HasActiveEditorForTest && Open() == "second");
         view.ActiveEditorTextForTest = "Page two";
+        // Shift+Enter in a single-line field commits it, as Enter does: it puts no break in a one-line value.
+        await view.PressEditorKeyForTest(Windows.System.VirtualKey.Enter, shift: true);
+        await Settle();
+        Check("Shift+Enter in a single-line field commits it rather than breaking the line",
+              !view.HasActiveEditorForTest && tab.HitTestPage(1, first).Field is { Value: "Page two" });
+        await view.ActivatePageForTest(1, first);
+        Check("the last field opens again", view.HasActiveEditorForTest && Open() == "second");
         await view.PressEditorKeyForTest(Windows.System.VirtualKey.Tab);
         await Settle();
-        Check("Tab past the last field commits it and leaves the form without wrapping",
+        Check("Tab past the last field leaves the form without wrapping",
               !view.HasActiveEditorForTest && tab.PageFocus is null);
-        Check("  and the second page's value was committed", tab.HitTestPage(1, first).Field is { Value: "Page two" });
 
         // --- Escape still cancels ---
         await view.ActivatePageForTest(0, first);

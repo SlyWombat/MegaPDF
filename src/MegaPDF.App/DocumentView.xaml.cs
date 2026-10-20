@@ -1910,7 +1910,16 @@ public sealed partial class DocumentView : UserControl
     internal string? ActiveEditorTextForTest
     {
         get => _activeEditor?.Text;
-        set { if (_activeEditor is { } editor) editor.Text = value ?? ""; }
+        set
+        {
+            if (_activeEditor is not { } editor)
+                return;
+            editor.Text = value ?? "";
+            // Typed text leaves the caret at its end; a programmatic Text leaves it at the start,
+            // where a Shift+Enter would put the break before everything typed (#712).
+            editor.SelectionStart = editor.Text.Length;
+            editor.SelectionLength = 0;
+        }
     }
 
     /// <summary>The form field the open editor is over, or null (self-test, #709).</summary>
