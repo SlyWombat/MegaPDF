@@ -250,10 +250,61 @@ internal static class Screenshot
             case "about":
                 return await CheckAboutAsync(window);
 
+            // #696: the toolbar of the one tab opened at launch, before anything else has
+            // touched Active. Needs a document; the exit code is the test.
+            case "launch-toolbar":
+                return CheckLaunchToolbar(window, vm);
+
             default:
                 Console.Error.WriteLine($"unknown --screenshot-state '{state}'");
                 return false;
         }
+    }
+
+    /// <summary>
+    /// The toolbar of the tab the launch opened (#696), checked before anything else changes
+    /// <c>Shell.Active</c>. That tab became Active before its document opened, and the
+    /// <c>Shell.*</c> proxies the toolbar binds to (#617) were raised only when Active changed,
+    /// so every editing button stayed at its not-yet-open value, disabled, on a document opened
+    /// from Explorer, until a tab switch. 2.2.0 shipped that way. Every other state opens more
+    /// tabs or reselects one before it looks, which is why none of them saw it: this one must
+    /// stay the first thing that touches the window.
+    ///
+    /// Each button must match its own tab's verdict, and the verdict must be "allowed", or the
+    /// match would hold just as well with everything wrongly off.
+    /// </summary>
+    private static bool CheckLaunchToolbar(MainWindow window, DocumentViewModel vm)
+    {
+        var passed = 0;
+        var failed = 0;
+        void Check(string what, bool ok)
+        {
+            Console.Error.WriteLine($"{(ok ? "PASS" : "FAIL")}: {what}");
+            if (ok)
+                passed++;
+            else
+                failed++;
+        }
+
+        Check("the launch opened exactly one tab", window.Shell.Documents.Count == 1);
+        Check("and it is open", vm.IsDocumentOpen);
+        Check("the document allows signing, adding text, editing and printing",
+              vm.IsSigningAllowed && vm.IsTextBoxAllowed && vm.IsEditingAllowed && vm.IsPrintAllowed);
+
+        var states = window.DocumentCommandEnabledStatesForTest();
+        foreach (var (button, expected) in new[]
+                 {
+                     ("SignaturesToolbarButton", vm.IsSigningAllowed),
+                     ("AddTextButton", vm.IsTextBoxAllowed),
+                     ("WhiteoutButton", vm.IsEditingAllowed),
+                     ("RedactButton", vm.IsEditingAllowed),
+                     ("PrintButton", vm.IsPrintAllowed),
+                     ("FindButton", vm.IsDocumentOpen),
+                 })
+            Check($"{button} is {(expected ? "enabled" : "disabled")}, as its tab says", states[button] == expected);
+
+        Console.Error.WriteLine($"launch-toolbar: {passed} passed, {failed} failed ({passed + failed} checks)");
+        return failed == 0;
     }
 
     /// <summary>
@@ -868,6 +919,14 @@ internal static class Screenshot
             var tabC = await window.Shell.OpenInTabAsync(copyC);
             var docC = tabC.CurrentDocument;
             Check("a third tab also gets its own document", docC is not null && !ReferenceEquals(docC, tabA.CurrentDocument));
+            // #696: this tab was added after one was closed, so TabView gave it the closed tab's
+            // container and filled its content area before rebinding that container. It showed
+            // the closed tab's view, never loaded its own, and drew nothing: 2.2.0 shipped that way.
+            await Task.Delay(TimeSpan.FromSeconds(1));
+            Check("a tab opened after a close shows its own view, not the closed tab's (#696)",
+                  ReferenceEquals(window.TabContentForTest, tabC.TabContent));
+            Check("  and that view has loaded and attached to its document",
+                  tabC.View is not null && ReferenceEquals(tabC.View, tabC.TabContent));
             if (docC is not null)
             {
                 await tabC.OpenDocumentAsync(copyD); // a different file into the same tab: a replacement, not a close

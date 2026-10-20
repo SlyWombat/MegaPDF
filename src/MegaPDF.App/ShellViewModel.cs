@@ -185,6 +185,18 @@ public sealed partial class ShellViewModel : ObservableObject
         public event EventHandler? CanExecuteChanged { add { } remove { } }
     }
 
+    /// <summary>
+    /// The active tab's properties this shell re-exposes under the same name, and so must re-raise
+    /// when the tab raises them (#696). The commands are not here: each is the tab's own instance
+    /// and raises its own CanExecuteChanged.
+    /// </summary>
+    private static readonly HashSet<string> ForwardedFromActive =
+    [
+        nameof(WindowTitle), nameof(SaveButtonLabel), nameof(ZoomLabel),
+        nameof(IsDocumentOpen), nameof(IsSigningAllowed), nameof(IsTextBoxAllowed),
+        nameof(IsEditingAllowed), nameof(IsPrintAllowed), nameof(HasRedactionMarks),
+    ];
+
     /// <summary>A fresh, not-yet-opened document — what a new tab starts as. Becomes the active tab.</summary>
     public DocumentViewModel AddDocument()
     {
@@ -198,10 +210,17 @@ public sealed partial class ShellViewModel : ObservableObject
         // anything changed, so the toolbar can be a stale step behind Busy for the rest of
         // this tab's life (#427).
         doc.WatchBusyState();
+        // The Shell.* proxies (#617) are raised when Active changes, and MainWindow.xaml binds
+        // to them rather than through Active, so the active tab's own change has to be passed
+        // on here or the toolbar keeps the value it had when the tab became Active. A tab is
+        // made Active before its document has opened, so without this every editing button
+        // stayed disabled on a document launched from Explorer or redirected into a running
+        // window, until a tab switch raised Active again (#696; it shipped in 2.2.0, and
+        // #427's OpenSettled nudge raises Active itself, which none of these depend on).
         doc.PropertyChanged += (_, e) =>
         {
-            if (e.PropertyName is nameof(DocumentViewModel.WindowTitle) && doc == Active)
-                OnPropertyChanged(nameof(WindowTitle));
+            if (doc == Active && e.PropertyName is { } name && ForwardedFromActive.Contains(name))
+                OnPropertyChanged(name);
         };
         doc.RecentFilesChanged += (_, _) => LoadRecentDocuments();
         // A brand-new tab's DocumentView is not realized (Loaded has not run) at the instant
