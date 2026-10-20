@@ -2054,6 +2054,30 @@ the same nine #445 refusals). The exit 10 reading of 2 on private is a correct r
 scripts' stale exit lists score as a failure (delta 1). Raw summaries are gitignored under
 `tests/Private/stress/release-2.3.0-kdocker3/` on GPD-DAVE.
 
+#### The re-run after the fix, 2026-10-20: structure and markdown, all four corpora, `main` at 80dfb5d
+
+**Both findings above are fixed, and the gate is green.**
+
+- **The slowdown:** #704 makes the structure pass describe JPEG 2000 and JBIG2 images without `FPDFImageObj_GetImageMetadata`. The DPI is now computed from the pixel size and the bounding rect, PDFium's own formula. For these two codecs, bit depth and colour space stay unknown, except JBIG2, which is always 1 bit.
+- **The exit 10 pair:** the three batteries now count #665's exit 10 as a file that does not open.
+
+**Build:** `80dfb5d`, the 2.3.0 release commit. It merges #700, #702, #703 and #704; only #704 touches `core/`. It was built in `megapdf:base` on kdocker3 with the same pinned PDFium, and `megapdf-cli --version` printed `megapdf-cli 2.3.0`.
+
+**The two JPEG 2000 documents:** both exported as Markdown with exit 0, in **29 s for the pair**. 2.2.0 took 14 s + 15 s, and 8838a6c took 382 s + 462 s. Only the pair's total was recorded: the per-file timer needed `bc`, which the image does not have.
+
+| corpus | F1 (internal = CLI) | τ median | opened | CLI bad exits | markdown extracted | crashes / hangs / bad exits / cmark failures / cmark timeouts |
+|---|---:|---:|---:|---:|---:|---|
+| private | 0.998997 | 0.951 | 4,084 | 0 | 2,982 | 0 / 0 / 0 / 0 / 0 |
+| public | 0.980019 | 0.978 | 1,480 | 0 | 937 | 0 / 0 / 0 / 0 / 0 |
+| Canadian | 0.999932 | 0.994 | 134 | 0 | 134 | 0 / 0 / 0 / 0 / 0 |
+| UN | 0.999136 | 0.967 | 90 | 0 | 83 | 0 / 0 / 0 / 0 / 0 |
+
+- **Matches 2.2.0:** every figure is identical to the thirteenth run, the 2.2.0 gate.
+- **Public:** its F1 of 0.980019 is #498, unmoved.
+- **Durations:** the whole public markdown battery took 192 s, and private took 104 s.
+- **Not re-run:** the pages battery. No page-tools code changed, and its two exit-10 "crashed before the page count" documents are the incomplete pair, which the script now counts as did-not-open.
+- **No raw logs kept:** a failed copy was followed in the same command by the workspace cleanup, so these re-run logs were not kept. The figures here were read from them before deletion.
+
 ## Find on scanned pages (#676), 2026-10-17
 
 Find reads a page that has no text layer of its own, through the OS recogniser, and searches
