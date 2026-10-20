@@ -353,6 +353,18 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
     /// active tab's pages area (the find bar, the page scroller, the focus/picker hooks)
     /// without walking the TabView's visual tree.
     /// </summary>
+    /// <summary>
+    /// This tab's page view, made once, the first time a tab container shows it (#696). The
+    /// TabView's item template shows this rather than declaring a DocumentView of its own:
+    /// TabView reuses a closed tab's container for the next tab it adds, and a view declared in
+    /// the template went with the container, wired once (on Loaded) to the closed document, so
+    /// every document opened after a tab was closed drew nothing. 2.2.0 shipped that way. Owned
+    /// by its document, the view is never rebound, which is what <see cref="DocumentView"/>
+    /// assumes.
+    /// </summary>
+    public DocumentView TabContent => _tabContent ??= new DocumentView { ViewModel = this };
+    private DocumentView? _tabContent;
+
     internal DocumentView? View
     {
         get => _view;

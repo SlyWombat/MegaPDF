@@ -183,6 +183,42 @@ public sealed partial class MainWindow : Window
         // pointer-driven tab switch (not through the binding) still re-syncs the pickers —
         // in practice the binding covers it, but belt-and-braces costs nothing here.
         OnActiveDocumentChanged();
+        DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, ShowActiveTabContent);
+    }
+
+    /// <summary>
+    /// Puts the active document's own view in the TabView's content area, if the TabView left
+    /// another there (#696). After a tab is closed, TabView reuses that tab's container for the
+    /// next tab it adds and fills its content area from the container at the moment of the
+    /// selection, before the container has been rebound to the new document; it never looks
+    /// again, so the new tab showed the closed tab's view and drew nothing (2.2.0 shipped that
+    /// way). Measured on GPD-DAVE: every document opened after any close, 5 of 5, from
+    /// Explorer or the redirect. The document owns its view (<see cref="DocumentViewModel.TabContent"/>),
+    /// so the right one is known without asking the container.
+    /// </summary>
+    private void ShowActiveTabContent()
+    {
+        if (Shell.Active is not { } doc || FindTabContentPresenter(DocumentsTabView) is not { } presenter)
+            return;
+        if (!ReferenceEquals(presenter.Content, doc.TabContent))
+            presenter.Content = doc.TabContent;
+    }
+
+    /// <summary>What the TabView's content area is showing, for the close-tabs self-test (#696).</summary>
+    internal object? TabContentForTest => FindTabContentPresenter(DocumentsTabView)?.Content;
+
+    private static ContentPresenter? FindTabContentPresenter(DependencyObject root)
+    {
+        var count = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(root);
+        for (var i = 0; i < count; i++)
+        {
+            var child = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(root, i);
+            if (child is ContentPresenter { Name: "TabContentPresenter" } presenter)
+                return presenter;
+            if (FindTabContentPresenter(child) is { } found)
+                return found;
+        }
+        return null;
     }
 
     private async void OnTabCloseRequested(TabView sender, TabViewTabCloseRequestedEventArgs args)

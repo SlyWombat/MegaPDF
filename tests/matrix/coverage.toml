@@ -259,9 +259,12 @@ the desktops it also means landing in the window that is already running."""
 presence = "present"
 entry = "src/MegaPDF.App/App.Activation.cs::OnActivatedFromAnotherInstance"
 coverage = "engine"
-tests = ["tests/MegaPDF.Core.Tests/LaunchedDocumentTests.cs::Launched"]
+tests = [
+  "tests/MegaPDF.Core.Tests/LaunchedDocumentTests.cs::Launched",
+  ".github/workflows/ci.yml::Run-Check \"launch-toolbar\"",
+]
 manual = "TESTING.md::File Explorer while MegaPDF is running lands in the window you already have"
-note = "only the don't-reopen-what-is-already-open rule is tested; the redirect race has a by-hand script (tools/windows-qa/redirect-toolbar-check.ps1, #427) that CI does not run."
+note = "the don't-reopen-what-is-already-open rule is tested, and `launch-toolbar` checks that a tab made Active before its document opened ends with its editing buttons enabled (#696, which shipped broken in 2.2.0). It opens through Shell.OpenInTabAsync, not a real Explorer activation; the redirect race keeps its by-hand script (tools/windows-qa/redirect-toolbar-check.ps1, #427), which CI does not run."
 [feature.macos]
 presence = "present"
 entry = "src/MegaPDF.Avalonia/Platform/SingleInstance.cs::Listen"

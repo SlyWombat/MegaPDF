@@ -690,6 +690,10 @@ jobs:
           # to open $fixture for it). No page to render, so it is the cheapest check in
           # this job; 45s is still generous.
           Run-Check "empty" 45
+          # `launch-toolbar` (#696): the toolbar of the tab the launch opened, before any
+          # other state's extra tabs or reselection could refresh it. 2.2.0 shipped with every
+          # editing button disabled on a document opened from Explorer, and no state saw it.
+          Run-Check "launch-toolbar" 45
           # `pages` (#174) gets 120s where the others get 60: it is 107 checks
           # over eleven documents, it opens a second tab and reopens a document
           # into it a dozen times, and every reopen waits for the first page to

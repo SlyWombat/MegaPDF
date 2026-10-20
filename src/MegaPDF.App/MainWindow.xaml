@@ -491,8 +491,12 @@
              what lets a background tab's scroll position, inline editor and selection survive
              a switch away and back without this window saving or restoring any of it. -->
         <Grid Grid.Row="2">
+            <!-- VerticalAlignment is stated because TabView's own default is Top: it then sized
+                 itself to its selected content and, with a view that had not drawn a page, shrank
+                 to the tab strip plus 208 px (#696, measured). -->
             <TabView
                 x:Name="DocumentsTabView"
+                VerticalAlignment="Stretch"
                 TabItemsSource="{x:Bind Shell.Documents}"
                 SelectedItem="{x:Bind Shell.Active, Mode=TwoWay}"
                 CanReorderTabs="True"
@@ -502,14 +506,16 @@
                 SelectionChanged="OnDocumentsTabViewSelectionChanged">
                 <TabView.TabItemTemplate>
                     <DataTemplate x:DataType="local:DocumentViewModel">
+                        <!-- Content is the document's own view, not one this template makes
+                             (#696): TabView reuses a closed tab's container for the next tab,
+                             and a DocumentView declared here went with it, wired once to the
+                             closed document, so every document opened after a close drew
+                             nothing. -->
                         <TabViewItem
                             Header="{x:Bind TabTitle, Mode=OneWay}"
                             IsClosable="True"
-                            AutomationProperties.Name="{x:Bind TabAccessibleName, Mode=OneWay}">
-                            <TabViewItem.Content>
-                                <local:DocumentView ViewModel="{x:Bind}" />
-                            </TabViewItem.Content>
-                        </TabViewItem>
+                            AutomationProperties.Name="{x:Bind TabAccessibleName, Mode=OneWay}"
+                            Content="{x:Bind TabContent}" />
                     </DataTemplate>
                 </TabView.TabItemTemplate>
             </TabView>
