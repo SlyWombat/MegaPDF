@@ -1904,6 +1904,180 @@ the change was a sample property, not a regression. Also added: `core_tests.cpp`
 `bits_per_pixel == 1` on the generated CCITT Group 4 and JBIG2 fixtures (checked live by flipping the
 expected value to 2 and watching the suite fail).
 
+### Fifteenth run, 2026-10-19: the §2.2 release gate for 2.3.0, all three batteries, all four corpora, `wip/release-2.3.0` at 8838a6c
+
+**Result: not green. One real regression, found by this gate, and it is a show-stopper
+candidate for Dave's call: the markdown and text writers got 27 to 31 times slower on two very
+large public-corpus documents, and both now exceed the batteries' 120 s hang bound.** Everything
+else matches the thirteenth run or moves by a named change. Checklist issue #696, PR #697.
+
+The commit under test is `8838a6cdf1f6eac0f876b8e1863c175751a69b45` ("2.3.0 copy"), fetched from
+GitHub; `megapdf-cli --version` in the built tree reports `megapdf-cli 2.3.0`. Run on kdocker3
+(see the thirteenth run for why not kdocker2), built fresh in a throwaway `megapdf:base`
+container with `tools/fetch-pdfium-linux.sh` (the same pinned `pdfium-7934-megapdf-2b3b415e86b1`,
+33 patches per the configure log, so **the PDFium binary is the thirteenth run's**) and the
+thirteenth run's cmake line, targets `megapdf_cli megapdf_structure_check`. The four corpora were
+mounted read-only. Disk counts are 4,158 / 1,493 / 134 / 90, identical to the thirteenth run.
+
+**Unlike 2.2.0, the core changed.** `git diff --stat 983fcdf 8838a6c -- core libs tools/stress`
+is 21 files, +1,361/-56, all under `core/` (`libs/` and `tools/stress/` are untouched). The
+commits touching core: aef9df4 (#664 symbol-font and repeated-letter bullets, #665 a cut-off
+download is exit 10, not exit 2), f1c7c73 (2.2.1 version), 44e77b0 (#671 image notes in the
+text and Markdown writers), 25c74e3 (#677 part 1, page size in the scanned-page note),
+584cdd2 (#677 part 2, `megapdf_block_image()` reports DPI, bit depth, colour space), 3f302ed and
+c5dff89 (#669, letter-bullet residue), fe41c50 (2.3.0 version). Two commits in the range
+(3f93d8f #680, 3b408b8 #682) touch only tests and Android. The battery scripts are unchanged, so
+the gates below are the thirteenth run's gates.
+
+**Zero crashes in every battery on every corpus** (the two private documents the pages and
+structure scripts count as bad exits are #665's new exit 10, explained below). **Hangs: zero except
+the two public documents below.** Documents visited, 5,875, as before.
+
+| corpus | on disk | visited | opened (structure/markdown) | the rest |
+|---|---:|---:|---:|---|
+| private | 4,158 | 4,158 | 4,084 | 12 encrypted, 62 unreadable (2 of them now exit 10, see below) |
+| public | 1,493 | 1,493 | 1,478 (**1,480 in the thirteenth run**) | 5 encrypted, 8 unreadable, **2 hung** |
+| Canadian | 134 | 134 | 134 | — |
+| UN | 90 | 90 | 90 | — |
+
+**Structure** (F1 >= 0.998, tau >= 0.9):
+
+| corpus | token F1, internal | token F1, CLI | tau median | CLI bad exits | vs 13th | |
+|---|---:|---:|---:|---:|---|---|
+| private | **0.998997** | 0.998997 | 0.951 | **2** | F1, tau identical | F1/tau pass; bad-exit gate reads 2, see exit 10 |
+| public | **0.976157** | 0.976157 | 0.978 | 0 | 13th: 0.980019 | **fail: the 0.980019 #498 figure plus 2 hangs, see below** |
+| Canadian | **0.999932** | 0.999932 | 0.994 | 0 | identical | pass |
+| UN | **0.999136** | 0.999136 | 0.967 | 0 | identical | pass |
+
+**Markdown** (0 crashes, 0 other bad exits except as noted, 0 cmark failures, 0 cmark timeouts):
+
+| corpus | visited | extracted | textless (exit 5) | password-gated | hangs | other bad exit | cmark failures/timeouts |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| private | 4,158 | 2,982 | 1,102 | 12 | 0 | **2** | 0/0 |
+| public | 1,493 | 935 (13th: 937) | 543 | 5 | **2** | 0 | 0/0 |
+| Canadian | 134 | 134 | 0 | 0 | 0 | 0 | 0/0 |
+| UN | 90 | 83 | 7 | 0 | 0 | 0 | 0/0 |
+
+**Pages** (0 qpdf failures, 0 count mismatches, 0 write failures on any corpus, 0 hangs):
+
+| corpus | crashes/hangs | QPDF FAILED | COUNT MISMATCH | WRITE FAILED | REFUSED, other | |
+|---|---:|---:|---:|---:|---:|---|
+| private | 2/0 (see exit 10) | 0 | 0 | 0 | 0 | the 2 are #665 |
+| public | 0/0 | 0 | 0 | 0 | **9** | the known #445, unmoved (rotate 2, move 1, extract 2, importself 2, importpair 2: the thirteenth run's own split) |
+| Canadian | 0/0 | 0 | 0 | 0 | 0 | pass |
+| UN | 0/0 | 0 | 0 | 0 | 0 | pass |
+
+Field-`/Parent` refusals are the thirteenth run's, to the document: importself private 37,
+public 230, Canadian 5, UN 0; importpair private 0, public 0, Canadian 4, UN 0. Public's opened
+count is 1,486 (4 protected, 3 did not open, 5 flagged `input already damaged`), as before.
+Private: 12 protected, 60 did not open (62 in the thirteenth run; the other 2 are the exit 10
+pair).
+
+#### Deltas against the thirteenth run, each with its cause
+
+1. **Two private documents exit 10 (structure CLI bad exits 2, markdown other bad exit 2, pages
+   "crashed or hung before the page count was known: 2").** Explained by #665 (aef9df4).
+   Verified directly, not inferred: both are truncated downloads (header `%PDF-`, no `%%EOF` in
+   the last 4 KiB; sizes 4,194,304 and 19,710 bytes), and `megapdf-cli extract` on each prints
+   "the file looks incomplete: ... it may be a download that stopped early" and exits 10. They
+   were two of the 62 unreadable documents in every earlier run, exit 2. **This is the new
+   behaviour working, but the batteries' own valid-exit lists ("0/2/3/4/5, never 1/6/7/130" in
+   the structure and markdown scripts, the pages script's crash classifier) predate exit 10, so
+   the three scripts score a correct result as a gate failure.** Nothing was changed here; the
+   scripts need exit 10 accepted as a "cannot open" code before the next gate, or this reads red
+   every time.
+2. **Public structure F1 0.976157 against 0.980019, opened 1,478 against 1,480, 2 hangs.**
+   This is the regression below, not an accuracy change. Re-run with the hang bound lifted to
+   1,500 s (`TIMEOUT=1500`, same binary, public only, 3,941 s): 1,480 opened, 0 hung, **F1
+   0.980019 internal and CLI, exactly the thirteenth run and #498**, tau median 0.978, 0 bad
+   exits. So the F1 shift is entirely the two documents missing from the aggregate.
+3. **Public markdown extracted 935 against 937:** the same two documents, same cause.
+4. **Everything else is identical to the thirteenth run to the last digit:** private F1
+   0.998997 / tau 0.951, Canadian 0.999932 / 0.994, UN 0.999136 / 0.967, markdown private
+   2,982 / 1,102 / 12, Canadian 134 / 0, UN 83 / 7, public textless 543, every pages cell. That
+   the symbol-bullet recognition (#664/#669; aef9df4 reports 130 private documents gaining 1,688
+   list items) moved no F1 digit is consistent with it re-classifying blocks rather than adding
+   or removing tokens, and that #671/#677's notes moved no textless count is the property the
+   fourteenth run measured (a page carrying only a picture note still exits 5). Neither is an
+   unexplained change; both are expected no-moves.
+
+#### The regression: a 27x to 31x slowdown on very large documents, not an intended change
+
+The two documents (hashes `a20c1b39c91c`, 1,566,046,588 bytes, 1,710 pages; `6cc48f6729ac`,
+2,066,415,812 bytes, 2,006 pages; both public corpus) time out in the structure CLI measure and
+the markdown battery at the 120 s bound. Timed directly with `megapdf-cli extract <file> --format
+md --quiet`, an otherwise idle host, one run each:
+
+| build | `a20c1b39c91c` | `6cc48f6729ac` |
+|---|---:|---:|
+| 2.2.0 (983fcdf) | 14 s | 15 s |
+| 2.3.0 (8838a6c) | 382 s (text format also 382 s) | 462 s (text 459 s) |
+
+Both finish with exit 0 and correct output (the lifted-bound structure run measures them at 225
+and 232 ms/page and the thirteenth run's F1), so this is slow, not hung or wrong. Bisected on
+the first document, 100 s cap, one run per commit, each built in the same container image:
+
+| commit | result |
+|---|---|
+| aef9df4 (#664/#665) | 13 s |
+| 44e77b0 (#671) | 14 s |
+| 25c74e3 (#677 part 1) | 13 s |
+| **584cdd2 (#677 part 2)** | **cut off at 100 s** |
+| 3f302ed, c5dff89 | cut off at 100 s |
+
+**The commit that introduced it is 584cdd2, "#677 part 2: `megapdf_block_image()` reports PDFium's
+DPI, bit depth and colour space".** Its message says "No written output changes", which is true
+of the output; it does not say the call is free. The diff adds a call to
+`FPDFImageObj_GetImageMetadata(obj, page, &meta)` per image. The likely mechanism, **an inference
+from the call and not measured**, is that PDFium loads or decodes the image to answer it, which on
+documents of 1.5 to 2 GB made of large scans costs minutes over the document. Nothing here
+profiled it. The 120 s bound is the batteries' own; whether 6 to 8 minutes to extract a 2 GB
+document is acceptable for 2.3.0, or whether the metadata should be fetched lazily or only for the
+page-image note, is Dave's decision. Not fixed in this run.
+
+#### Not run
+
+The redaction battery (not part of the thirteenth run's set). The markdown battery with the hang
+bound lifted (only structure was re-run that way, so the two documents' Markdown output was
+timed and exit-checked but not passed through `cmark` here). The bisect timed the first document
+only, one run per commit; the second document was timed on the two endpoints only.
+
+**Coverage arithmetic** is the thirteenth run's: 1,493 reachable + 1 staged-but-unreached + 283
+stated exclusion + 0 unexplained = 1,777 manifest rows, printed identically by all three
+summaries.
+
+**Gates:** F1 >= 0.998 (private/Canadian/UN pass; public 0.976157 as run, 0.980019 with the bound
+lifted, #498); tau >= 0.9 (all pass); zero crashes (pass); zero hangs (**fail: 2, public, the
+regression above**); zero cmark failures/timeouts (pass); zero qpdf failures, count mismatches
+and write failures (pass); zero out-of-contract refusals (private/Canadian/UN pass; public has
+the same nine #445 refusals). The exit 10 reading of 2 on private is a correct result that the
+scripts' stale exit lists score as a failure (delta 1). Raw summaries are gitignored under
+`tests/Private/stress/release-2.3.0-kdocker3/` on GPD-DAVE.
+
+#### The re-run after the fix, 2026-10-20: structure and markdown, all four corpora, `main` at 80dfb5d
+
+**Both findings above are fixed, and the gate is green.**
+
+- **The slowdown:** #704 makes the structure pass describe JPEG 2000 and JBIG2 images without `FPDFImageObj_GetImageMetadata`. The DPI is now computed from the pixel size and the bounding rect, PDFium's own formula. For these two codecs, bit depth and colour space stay unknown, except JBIG2, which is always 1 bit.
+- **The exit 10 pair:** the three batteries now count #665's exit 10 as a file that does not open.
+
+**Build:** `80dfb5d`, the 2.3.0 release commit. It merges #700, #702, #703 and #704; only #704 touches `core/`. It was built in `megapdf:base` on kdocker3 with the same pinned PDFium, and `megapdf-cli --version` printed `megapdf-cli 2.3.0`.
+
+**The two JPEG 2000 documents:** both exported as Markdown with exit 0, in **29 s for the pair**. 2.2.0 took 14 s + 15 s, and 8838a6c took 382 s + 462 s. Only the pair's total was recorded: the per-file timer needed `bc`, which the image does not have.
+
+| corpus | F1 (internal = CLI) | τ median | opened | CLI bad exits | markdown extracted | crashes / hangs / bad exits / cmark failures / cmark timeouts |
+|---|---:|---:|---:|---:|---:|---|
+| private | 0.998997 | 0.951 | 4,084 | 0 | 2,982 | 0 / 0 / 0 / 0 / 0 |
+| public | 0.980019 | 0.978 | 1,480 | 0 | 937 | 0 / 0 / 0 / 0 / 0 |
+| Canadian | 0.999932 | 0.994 | 134 | 0 | 134 | 0 / 0 / 0 / 0 / 0 |
+| UN | 0.999136 | 0.967 | 90 | 0 | 83 | 0 / 0 / 0 / 0 / 0 |
+
+- **Matches 2.2.0:** every figure is identical to the thirteenth run, the 2.2.0 gate.
+- **Public:** its F1 of 0.980019 is #498, unmoved.
+- **Durations:** the whole public markdown battery took 192 s, and private took 104 s.
+- **Not re-run:** the pages battery. No page-tools code changed, and its two exit-10 "crashed before the page count" documents are the incomplete pair, which the script now counts as did-not-open.
+- **No raw logs kept:** a failed copy was followed in the same command by the workspace cleanup, so these re-run logs were not kept. The figures here were read from them before deletion.
+
 ## Find on scanned pages (#676), 2026-10-17
 
 Find reads a page that has no text layer of its own, through the OS recogniser, and searches
