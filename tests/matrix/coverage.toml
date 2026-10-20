@@ -314,9 +314,11 @@ coverage = "ui"
 tests = [
   ".github/workflows/ci.yml::Run-Check \"close-tabs\"",
   ".github/workflows/ci.yml::Run-Check \"reading\"",
+  ".github/workflows/ci.yml::Run-Check \"tab-move\"",
+  "src/MegaPDF.App/Screenshot.TabMove.cs::CheckTabMoveAsync",
 ]
 manual = "TESTING.md::**Tabs**"
-note = "close-tabs asserts the documents are really disposed; reading opens a second tab. Per-tab undo/find/zoom isolation is checked by hand only."
+note = "close-tabs asserts the documents are really disposed; reading opens a second tab; tab-move (#711) moves a tab with an unsaved edit to a window of its own and back and checks both windows draw, the edit and its undo survive, and the toolbar is live. The drag itself is by hand: a WinUI process cannot synthesise one. Per-tab undo/find/zoom isolation is checked by hand only."
 [feature.macos]
 presence = "present"
 entry = "src/MegaPDF.Avalonia/Views/MainWindow.axaml::TabStrip"

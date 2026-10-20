@@ -787,6 +787,9 @@ public static partial class Strings
     /// <summary>{0}, unsaved changes, tab</summary>
     public static string TabAccessibleNameUnsaved(object? arg0) => string.Format(CultureInfo.CurrentCulture, Get("TabAccessibleNameUnsaved"), arg0);
 
+    /// <summary>Tab {0} moved to another window</summary>
+    public static string TabMoved(object? arg0) => string.Format(CultureInfo.CurrentCulture, Get("TabMoved"), arg0);
+
     /// <summary>Reading mode</summary>
     public static string ReadingMode => Get("ReadingMode");
 

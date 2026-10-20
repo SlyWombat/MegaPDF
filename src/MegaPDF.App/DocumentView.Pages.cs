@@ -27,11 +27,14 @@ public sealed partial class DocumentView
         PageTiles.ContextFlyout = BuildPageContextMenu();
         // A rotation leaves the tiles it turned without a raster, and the grid will not realise a
         // container it already has — so the pane redraws the tiles it is showing itself.
-        ViewModel.ThumbnailsInvalidated += (_, _) => DispatcherQueue.TryEnqueue(RedrawRealisedTiles);
+        var vm = ViewModel;
+        EventHandler onThumbs = (_, _) => DispatcherQueue.TryEnqueue(RedrawRealisedTiles);
+        vm.ThumbnailsInvalidated += onThumbs;
+        _unhook.Add(() => vm.ThumbnailsInvalidated -= onThumbs);
         // The selection is the view model's, not the grid's: a page operation renumbers it (the
         // page you dragged stays selected, a page you deleted stops being), and the grid has to
         // be told. Two-way, with a guard, because each direction can raise the other.
-        ViewModel.PropertyChanged += (_, e) =>
+        System.ComponentModel.PropertyChangedEventHandler onSelection = (_, e) =>
         {
             if (e.PropertyName != nameof(DocumentViewModel.SelectedPageIndices))
                 return;
@@ -45,6 +48,8 @@ public sealed partial class DocumentView
             else
                 DispatcherQueue.TryEnqueue(PullTileSelectionFromViewModel);
         };
+        vm.PropertyChanged += onSelection;
+        _unhook.Add(() => vm.PropertyChanged -= onSelection);
     }
 
     /// <summary>

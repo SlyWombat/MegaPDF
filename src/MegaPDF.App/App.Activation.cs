@@ -24,6 +24,13 @@ public partial class App
     private static readonly List<MainWindow> _windows = [];
     private static MainWindow? _mostRecentlyActiveWindow;
 
+    /// <summary>Every live window, oldest first (#711: the window a tab is dragged onto is found here).</summary>
+    internal static IReadOnlyList<MainWindow> Windows => _windows;
+
+    /// <summary>The window whose strip holds <paramref name="doc"/>, or null if none does.</summary>
+    internal static MainWindow? WindowHolding(DocumentViewModel doc) =>
+        _windows.FirstOrDefault(w => w.Shell.Documents.Contains(doc));
+
     /// <summary>Called once from each <see cref="MainWindow"/>'s constructor.</summary>
     internal static void RegisterWindow(MainWindow window)
     {
@@ -117,6 +124,11 @@ public partial class App
         // Windows will not let a redirected launch steal the foreground outright, and that is
         // the correct, Notepad-like behaviour (plan §6 item 11) — window.Activate() plus the
         // tab strip's own selection is enough; SetForegroundWindow-style tricks are not used.
+        // A window the person minimised is brought back: with several windows, "the one that
+        // holds this file" can be any of them (#711), and Activate alone leaves a minimised
+        // one on the taskbar.
+        if (owner.AppWindow.Presenter is Microsoft.UI.Windowing.OverlappedPresenter { State: Microsoft.UI.Windowing.OverlappedPresenterState.Minimized } presenter)
+            presenter.Restore();
         owner.Activate();
     }
 
