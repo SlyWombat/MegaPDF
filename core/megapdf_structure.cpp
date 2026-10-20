@@ -2255,19 +2255,55 @@ bool BuildLeftoverParagraph(const PageWork& pw, int page_index, BlockImpl* out) 
 // resolution against the size the image occupies, the bit depth, and the colour space. A 1-bit
 // image is a bilevel document scan, the strongest "OCR will work here" sign there is. All of it is
 // zero when PDFium will not say, which is also what a caller must treat as "unknown".
+// How an image is stored, as far as describing it is concerned (#696). PDFium answers
+// FPDFImageObj_GetImageMetadata's bit depth and colour space for JPEG 2000 and JBIG2 by decoding
+// the whole image: a 1,710-page JPEG 2000 scan took 382 s to export as Markdown, against 14 s
+// before #677, nearly all of it decoding pictures nobody was going to see. The filter names come
+// from the image's own dictionary, which costs nothing.
+enum class ImageCodec { Other, Jpx, Jbig2 };
+
+ImageCodec CodecOf(FPDF_PAGEOBJECT obj) {
+    const int filters = FPDFImageObj_GetImageFilterCount(obj);
+    for (int k = 0; k < filters; k++) {
+        char name[32] = {};
+        const unsigned long n = FPDFImageObj_GetImageFilter(obj, k, name, sizeof name);
+        if (n == 0 || n > sizeof name) continue;
+        if (std::strcmp(name, "JPXDecode") == 0) return ImageCodec::Jpx;
+        if (std::strcmp(name, "JBIG2Decode") == 0) return ImageCodec::Jbig2;
+    }
+    return ImageCodec::Other;
+}
+
 void ReadImagePixelSize(FPDF_PAGE page, FPDF_PAGEOBJECT obj, megapdf_block_image_info* out) {
     unsigned int w = 0, h = 0;
     if (obj == nullptr || !FPDFImageObj_GetImagePixelSize(obj, &w, &h)) return;
     out->pixel_width = static_cast<int>(w);
     out->pixel_height = static_cast<int>(h);
-    FPDF_IMAGEOBJ_METADATA meta{};
-    if (!FPDFImageObj_GetImageMetadata(obj, page, &meta)) return;
     // Rounded to a whole DPI, negatives and NaN to 0: the field is an int and "unknown" is 0. A
     // positive resolution never rounds DOWN to 0 -- a 2 px image stretched over a page is 0.24 DPI,
     // which is a real and useless answer, not the same thing as PDFium declining to say.
     auto whole = [](float dpi) { return dpi > 0.0f ? (std::max)(1, static_cast<int>(std::lround(dpi))) : 0; };
-    out->dpi_horizontal = whole(meta.horizontal_dpi);
-    out->dpi_vertical = whole(meta.vertical_dpi);
+    // The effective resolution is PDFium's own formula (pixels over the object's bounding rect,
+    // in inches), computed here so it does not cost a decode (#696).
+    float l = 0, b = 0, r = 0, t = 0;
+    if (FPDFPageObj_GetBounds(obj, &l, &b, &r, &t) && r > l && t > b) {
+        out->dpi_horizontal = whole(static_cast<float>(w) / (r - l) * 72.0f);
+        out->dpi_vertical = whole(static_cast<float>(h) / (t - b) * 72.0f);
+    }
+    switch (CodecOf(obj)) {
+    case ImageCodec::Jbig2:
+        // Bilevel by definition (ISO 32000-1 7.4.7: BitsPerComponent 1), which is the one fact
+        // #677 wanted the depth for. The colour space stays unknown.
+        out->bits_per_pixel = 1;
+        return;
+    case ImageCodec::Jpx:
+        // The depth is in the codestream: unknown (0) rather than decoded to find out.
+        return;
+    case ImageCodec::Other:
+        break;
+    }
+    FPDF_IMAGEOBJ_METADATA meta{};
+    if (!FPDFImageObj_GetImageMetadata(obj, page, &meta)) return;
     out->bits_per_pixel = static_cast<int>(meta.bits_per_pixel);
     out->colorspace = meta.colorspace;
 }

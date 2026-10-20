@@ -1642,9 +1642,11 @@ typedef struct megapdf_block_image_info {
     int dpi_vertical;
     /* #677: bits per pixel as stored. 1 is a bilevel document scan -- the strongest "OCR will work
      * here" signal there is -- where 24-bit colour at the same DPI is more likely a photograph.
-     * 0 when unknown. */
+     * 0 when unknown, which includes every JPEG 2000 image: PDFium would have to decode it to say
+     * (#696). A JBIG2 image is always 1. */
     int bits_per_pixel;
-    /* #677: FPDF_COLORSPACE_* (0 unknown, 1 DeviceGray, 2 DeviceRGB, ...). */
+    /* #677: FPDF_COLORSPACE_* (0 unknown, 1 DeviceGray, 2 DeviceRGB, ...). Unknown (0) for JPEG
+     * 2000 and JBIG2 images, for the reason above (#696). */
     int colorspace;
 } megapdf_block_image_info;
 

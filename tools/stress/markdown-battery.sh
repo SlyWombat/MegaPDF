@@ -88,7 +88,7 @@ while IFS= read -r pdf; do
     case "$rc" in
         0) extracted=$((extracted + 1)) ;;
         5) textless_only=$((textless_only + 1)) ;;
-        2) : ;;  # cannot open (format error or otherwise) — not this tool's concern
+        2|10) : ;;  # cannot open (format error, or 10: an incomplete file, #665) — not this tool's concern
         3|4) encrypted=$((encrypted + 1)) ;;
         *)
             if [ "$rc" -ge 128 ]; then
@@ -130,7 +130,7 @@ elapsed=$(( $(date +%s) - started ))
     echo "password-gated (3/4):    $encrypted"
     echo "crashed:                 $crashed (gate: must be 0)"
     echo "hung (> ${TIMEOUT}s):    $hung (gate: must be 0)"
-    echo "other bad exit code:     $bad_exit (gate: must be 0 -- valid codes here are 0/2/3/4/5, never 1/6/7/130)"
+    echo "other bad exit code:     $bad_exit (gate: must be 0 -- valid codes here are 0/2/3/4/5/10, never 1/6/7/130)"
     echo "cmark parse failures:    $cmark_fail (gate: must be 0)"
     echo "cmark timed out (> ${TIMEOUT}s): $cmark_hung (gate: must be 0; #442 -- bounded so a hang cannot stall the whole battery)"
     # #609: what the count above is a count of. Last in the summary rather than first

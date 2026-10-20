@@ -724,6 +724,33 @@ def gen_scan(regular, bold):
     return d.finish()
 
 
+# #696: a 16 x 16 grey JPEG 2000 image (made once with Pillow's OpenJPEG encoder, lossless), so
+# the fixture needs no encoder to regenerate. PDFium answers FPDFImageObj_GetImageMetadata's
+# depth and colour space for JPEG 2000 by decoding the whole image, which made a 1,710-page JPEG
+# 2000 scan export 27x slower; the structure pass must not ask.
+JPX_16x16 = bytes.fromhex(
+    "0000000c6a5020200d0a870a00000014667479706a703220000000006a7032200000002d6a7032680000001669686472"
+    "00000010000000100001070700000000000f636f6c7201000000000011000001256a703263ff4fff5100290000000000"
+    "10000000100000000000000000000000100000001000000000000000000001070101ff52000c00000001000404040001"
+    "ff5c00104040484850484850484850484850ff640025000143726561746564206279204f70656e4a5045472076657273"
+    "696f6e20322e352e34ff90000a0000000000a70001ff93c1f202057fc0f90140f90143ed03017f003f05ff7fc1f38583"
+    "e7090fb4140de2e5ff7f0c03f62f067e0c557fc3ea0d87d4191f80782453226282d5fdb2fe6ddb347f243234cf9717fe"
+    "9eda0cead71222e724430583479bc3ff1e81f5e3c3ea0f87d4233f31301228c294e256387e8f9b5263599b7f1228bf54"
+    "d939b9a72709e22a43e56eff7f621ff7c554dcdf2673bd1750e20697d5e5ff7fffd9"
+)
+
+
+def gen_scan_jpx(regular, bold):
+    # #696: scan.pdf's shape with the picture stored as JPEG 2000, the format real scanners write.
+    d = Doc(regular, bold)
+    image = d.add(stream(
+        b"/Type /XObject /Subtype /Image /Width 16 /Height 16 /ColorSpace /DeviceGray /BitsPerComponent 8 "
+        b"/Filter /JPXDecode",
+        JPX_16x16))
+    d.add_page(b"q 468 0 0 648 72 72 cm /Im1 Do Q\n", extra_resources=b" /XObject << /Im1 %d 0 R >>" % image)
+    return d.finish()
+
+
 def gen_empty_page(regular, bold):
     # #671: the counterpart to scan.pdf. A page with no text AND no image on it, so the writers
     # can be held to telling the two apart: scan.pdf must name its picture, this must not claim
@@ -754,6 +781,7 @@ def main():
           % (regular.glyph_count, bold.glyph_count))
     generators = (
         ("columns.pdf", gen_columns),
+        ("scan-jpx.pdf", gen_scan_jpx),
         ("furniture.pdf", gen_furniture),
         ("lists.pdf", gen_lists),
         ("symbol-bullets.pdf", gen_symbol_bullets),

@@ -189,7 +189,7 @@ one_op() {   # <pdf> <id> <op> <expected-pages> <input-check: clean|damaged> <cl
         0) ;;
         124) echo hung; rm -f "$out"; return ;;
         1) echo usage-error; rm -f "$out"; return ;;   # #445: a usage error, not a crash
-        2) echo open-failed; return ;;
+        2|10) echo open-failed; return ;;   # 10: the file is incomplete (#665), which does not open by design
         3) echo protected; return ;;
         4) echo unsupported-security; return ;;
         7) echo write-failed; rm -f "$out"; return ;;
