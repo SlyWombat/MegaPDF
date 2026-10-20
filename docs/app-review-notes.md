@@ -39,6 +39,8 @@ Any PDF works. The form in the attached recording is at
 https://github.com/SlyWombat/MegaPDF/blob/main/docs/review/MegaPDF-Test-Form.pdf
 1. Home → **Open PDF** → the Files picker → choose a PDF.
 2. **Check a box:** tap a checkbox or an empty printed square; tap again to clear.
+   **Fill a form field:** tap a form's own text box; a sheet opens with its
+   current value, type and tap **Done**. Undo restores the previous value.
 3. **Sign:** **Sign** → **Draw** (finger or Apple Pencil) or **Photo** (a photo of
    a signature; the background is removed) → tap the saved signature → tap the
    page to place it; drag to move, handles to resize.
@@ -49,37 +51,31 @@ https://github.com/SlyWombat/MegaPDF/blob/main/docs/review/MegaPDF-Test-Form.pdf
 6. **Search:** the magnifier → type a word; arrows step through matches.
 7. **Save:** **Save** writes back to the original file ("Saved" confirms);
    **Save a copy** (under **More**) writes a new file through the Files picker.
-8. **Redact:** **More** (⋯) → **Redact** → drag across what must come
-   out. Tap a mark to select it, then move, reshape or remove it with its ×
-   (**Clear all marks** is under **More**); Undo puts it back. **Save** then
-   confirms that redaction permanently removes the content, offers **Overwrite
+8. **Redact:** **More** (⋯) → **Redact** → drag across what must come out; tap
+   a mark to move, reshape or remove it. **Save** confirms, offers **Overwrite
    the original** or **Save as a copy**, and says what was removed. The content
    is taken out of the file, not covered.
 9. **Protect:** **More** → **Password…** sets, changes or removes a document
    password. A protected PDF asks for it when opened.
-10. **Open with:** the app is a registered PDF viewer. In Files, long-press a
-    PDF → **Share** → **MegaPDF**; in Mail, tap a PDF attachment → share →
-    MegaPDF. If another document with unsaved changes is open, an alert asks
-    Save / Discard / Cancel first.
-11. **Share:** **More** → **Share** opens the system share sheet with the
-    current file. With unsaved changes, an alert offers **Save**, **Share
-    without saving** (the last saved file is shared) or **Cancel**.
-12. **Export as Markdown:** **More** → **Export as Markdown** writes the
-    document's text (headings, paragraphs, lists, filled-in values) as a `.md`
-    file through the Files picker. One-way: the PDF is not changed. A page with
-    no text layer (a scan) becomes a one-line note; the export does no OCR.
-13. **Find on a scanned page:** open a PDF that is only pictures of pages, tap
-    the magnifier and type a word. The first search reads the pages with the
-    system's on-device text recognition (Vision), showing "Page N of M" with a
-    Stop button; hits on a read page have a dashed edge and a note under the
-    find bar. Nothing is sent anywhere, and nothing is written to the file or
-    to disk: what was read is kept in memory until the document is closed.
+10. **Open with:** in Files, long-press a PDF → **Share** → **MegaPDF** (or from
+    a Mail attachment). With unsaved changes open, an alert asks Save / Discard
+    / Cancel first.
+11. **Share:** **More** → **Share** opens the system share sheet. With unsaved
+    changes, an alert offers **Save**, **Share without saving** or **Cancel**.
+12. **Export as Markdown:** **More** → **Export as Markdown** writes the text as
+    a `.md` file through the Files picker; the PDF is not changed.
+13. **Find on a scanned page:** in a PDF that is only pictures of pages, search
+    for a word. The pages are read on the device (Vision), with progress and
+    Stop; hits from a scan have a dashed edge and a note. Nothing is sent
+    anywhere or written to disk.
+14. **Print:** **More** → **Print** opens the system print sheet with the
+    document as it is on screen, signatures and ticks included.
 
 **1. Screen recording**
 Attached: MegaPDF 2.1.1 on an iPhone 17 Pro Max simulator, iOS 26.5: cold
 launch, open the form from Files, tick and clear boxes, draw and place a
-signature, search, save, reopen from Recents, the Photos picker. Steps 8 to 12
-are not in it; they need only an open PDF (step 10 a PDF in Files or Mail).
+signature, search, save, reopen from Recents, the Photos picker. The other
+steps need only an open PDF.
 
 **2. Devices and OS versions tested**
 iPhone 17 Pro Max and iPad Pro 13-inch (M5) simulators on iOS 26.5.
@@ -98,11 +94,9 @@ Not applicable: a general-purpose document utility working on the user's own
 files.
 
 **Permissions and privacy**
-No permissions are requested and no permission dialogs appear. Signing from a
-photo uses SwiftUI's PhotosPicker, which runs out of process and returns only
-the chosen image. Share uses the system share sheet; Export as Markdown and Open
-with go through the Files picker and the document types declared in Info.plist.
-No data is collected; privacy policy: https://electricrv.ca/megapdf/privacy/
+No permissions are requested. Signing from a photo uses PhotosPicker, which runs
+out of process and returns only the chosen image. No data is collected; privacy
+policy: https://electricrv.ca/megapdf/privacy/
 
 ---
 
