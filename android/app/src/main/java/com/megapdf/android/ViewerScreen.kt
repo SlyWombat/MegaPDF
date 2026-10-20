@@ -185,6 +185,7 @@ fun ViewerScreen(
     canRedo: Boolean,
     pendingTextTap: PendingTextTap?,
     pendingBodyEdit: PendingBodyEdit? = null,
+    pendingFormText: PendingFormText? = null,
     notice: String? = null,
     searchQuery: String,
     searchHits: List<SearchHit>,
@@ -210,6 +211,8 @@ fun ViewerScreen(
     onCancelTextPlacement: () -> Unit,
     onCommitBodyEdit: (String) -> Unit = {},
     onCancelBodyEdit: () -> Unit = {},
+    onCommitFormText: (String) -> Unit = {},
+    onCancelFormText: () -> Unit = {},
     onCommitStampRect: (com.megapdf.engine.PdfRect) -> Unit,
     onRemoveStamp: () -> Unit,
     onCommitTextBoxRect: (com.megapdf.engine.PdfRect) -> Unit,
@@ -551,6 +554,46 @@ fun ViewerScreen(
             },
             dismissButton = {
                 TextButton(onClick = onCancelBodyEdit) { Text(stringResource(R.string.cancel)) }
+            },
+        )
+    }
+
+    if (pendingFormText != null) {
+        // A form text field (#701): its current value, the keyboard up, Done writes it. A dialog
+        // like the body-text editor beside it, kept short so the page stays in view above.
+        var typed by remember(pendingFormText) { mutableStateOf(pendingFormText.oldValue) }
+        val focus = remember { FocusRequester() }
+        AlertDialog(
+            modifier = Modifier.imePadding(),
+            onDismissRequest = onCancelFormText,
+            title = { Text(stringResource(R.string.form_text_title)) },
+            text = {
+                DialogBody(spacing = 12) {
+                    Text(stringResource(R.string.form_text_hint))
+                    // Inside the dialog's own content: its window composes after this screen, so a
+                    // request made out here finds no field to focus and throws.
+                    LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+                    OutlinedTextField(
+                        value = typed,
+                        onValueChange = { typed = it },
+                        modifier = Modifier.fillMaxWidth().focusRequester(focus),
+                        singleLine = !pendingFormText.multiline,
+                        maxLines = if (pendingFormText.multiline) 6 else 1,
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                            imeAction = if (pendingFormText.multiline) androidx.compose.ui.text.input.ImeAction.Default
+                            else androidx.compose.ui.text.input.ImeAction.Done),
+                        keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+                            onDone = { if (!editingBlocked) onCommitFormText(typed) }),
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { onCommitFormText(typed) }, enabled = !editingBlocked) {
+                    Text(stringResource(R.string.done))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = onCancelFormText) { Text(stringResource(R.string.cancel)) }
             },
         )
     }

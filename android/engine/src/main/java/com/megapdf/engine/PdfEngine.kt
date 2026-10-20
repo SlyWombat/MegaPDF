@@ -621,17 +621,33 @@ class PdfPage internal constructor(
         check(PdfiumNative.nativeRenderPage(handle, bitmap, tint.renderFlag)) { "render failed" }
     }
 
-    /** Checkbox and radio widgets on this page. */
+    /** Checkbox, radio and text widgets on this page (text fields since #701). */
     suspend fun formFields(): List<FormField> = withContext(engine.dispatcher) {
         check(!closed) { "page is closed" }
         val packed = PdfiumNative.nativeFormFieldsPacked(handle)
+        val values = PdfiumNative.nativeFormTextValues(handle)
+        var nextValue = 0
         (packed.indices step 6).map { i ->
+            val isText = packed[i] == 1.0  // FPDF_FORMFIELD_TEXTFIELD
             FormField(
                 isRadio = packed[i] == 3.0,  // FPDF_FORMFIELD_RADIOBUTTON
                 isChecked = packed[i + 1] != 0.0,
                 rect = PdfRect(packed[i + 2], packed[i + 3], packed[i + 4], packed[i + 5]),
+                isText = isText,
+                value = if (isText) values.getOrNull(nextValue++).orEmpty() else "",
             )
         }
+    }
+
+    /**
+     * Sets the text of the field under ([x], [y]) (page coordinates, bottom-left origin) through
+     * PDFium's form machinery (#701): the same call the desktops fill a field with. Returns
+     * whether the core accepted it; it cannot say whether a field was there, so a caller that
+     * needs to know reads [formFields] back.
+     */
+    suspend fun setFormText(x: Double, y: Double, value: String): Boolean = withContext(engine.dispatcher) {
+        check(!closed) { "page is closed" }
+        PdfiumNative.nativeFormSetText(handle, x, y, value)
     }
 
     /**
@@ -1095,7 +1111,14 @@ data class PdfRect(val left: Double, val bottom: Double, val right: Double, val 
 }
 
 /** A checkbox or radio-button widget on a page. */
-data class FormField(val isRadio: Boolean, val isChecked: Boolean, val rect: PdfRect)
+data class FormField(
+    val isRadio: Boolean,
+    val isChecked: Boolean,
+    val rect: PdfRect,
+    /** A text field (#701); [value] is what it holds. Checkboxes and radios are neither. */
+    val isText: Boolean = false,
+    val value: String = "",
+)
 
 /** A MegaPDF-placed stamp annotation (`mark:` check mark or `sig:` signature). */
 data class Stamp(val annotIndex: Int, val id: String, val rect: PdfRect)

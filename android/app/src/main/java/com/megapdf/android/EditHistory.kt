@@ -217,6 +217,34 @@ class FieldToggleOperation(
     override suspend fun revert(doc: EditTarget) = apply(doc)
 }
 
+/**
+ * Filling an AcroForm text field (#701): [oldValue] to [newValue], one undo step. Revert writes the
+ * old value back through the same call, so undo restores exactly what the field held.
+ *
+ * A field the form refuses (a read-only one) leaves its value as it was; that is read back here and
+ * thrown, so the history never records an edit that changed nothing.
+ */
+class FormTextOperation(
+    override val pageIndex: Int,
+    private val x: Double,
+    private val y: Double,
+    val oldValue: String,
+    val newValue: String,
+) : PdfEditOperation {
+
+    override val name: String get() = "fill field"
+
+    override suspend fun apply(doc: EditTarget) = doc.onPage(pageIndex) {
+        it.setFormText(x, y, newValue)
+        if (newValue != oldValue) {
+            val now = it.formFields().firstOrNull { f -> f.isText && f.rect.contains(x, y) }?.value
+            check(now != oldValue) { "the field did not take the new value" }
+        }
+    }
+
+    override suspend fun revert(doc: EditTarget) = doc.onPage(pageIndex) { it.setFormText(x, y, oldValue); Unit }
+}
+
 /** Placing or removing a signature stamp; the pixels let an undone removal return. */
 class StampOperation(
     override val pageIndex: Int,

@@ -77,7 +77,7 @@ data class DocumentCapabilities(
         -> canEditContent
         is TextBoxOperation, is EditTextBoxOperation, is MoveTextBoxOperation, is AddTextBoxesOperation -> canAddText
         is StampOperation, is MoveStampOperation, is MarkOperation -> canSign
-        is FieldToggleOperation -> canFillForms
+        is FieldToggleOperation, is FormTextOperation -> canFillForms
         // The page tools (#174). Extract is not here: it changes nothing and is not an operation.
         is RotatePagesOperation, is DeletePagesOperation, is MovePageOperation,
         is InsertBlankPageOperation, is ImportPagesOperation,
@@ -105,7 +105,7 @@ data class DocumentCapabilities(
         is RedactMarkOperation, is MoveRedactionMarkOperation, is ClearRedactionMarksOperation,
         is TextBoxOperation, is AddTextBoxesOperation, is EditTextBoxOperation, is MoveTextBoxOperation,
         is StampOperation, is MoveStampOperation, is MarkOperation,
-        is FieldToggleOperation,
+        is FieldToggleOperation, is FormTextOperation,
         is WhiteoutAddOperation, is WhiteoutRemoveOperation, is MoveWhiteoutOperation,
         -> PermissionClass.EDITING
         is RotatePagesOperation, is DeletePagesOperation, is MovePageOperation,
@@ -123,7 +123,7 @@ data class DocumentCapabilities(
     fun isFillingOperation(operation: PdfEditOperation): Boolean = when (operation) {
         is TextBoxOperation, is EditTextBoxOperation, is MoveTextBoxOperation, is AddTextBoxesOperation,
         is StampOperation, is MoveStampOperation, is MarkOperation,
-        is FieldToggleOperation,
+        is FieldToggleOperation, is FormTextOperation,
         -> true
         else -> false
     }
