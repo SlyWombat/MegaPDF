@@ -27,17 +27,14 @@ internal static class MacWindowTabs
     /// <summary>What every document window shares, so AppKit merges them and nothing else.</summary>
     internal const string TabbingIdentifier = "com.megapdf.document";
 
-    /// <summary><c>NSWindowTabbingModeAutomatic</c>: join a tab group or not as the system's
-    /// "Prefer tabs when opening documents" setting says — File ▸ New Window's mode.</summary>
+    /// <summary>
+    /// <c>NSWindowTabbingModeAutomatic</c>: join the front window's tabs or not as the person's
+    /// System Settings ▸ Desktop &amp; Dock ▸ "Prefer tabs when opening documents" says — the
+    /// mode Preview and TextEdit use. Every MegaPDF window has it (#711). An earlier pass used
+    /// <c>NSWindowTabbingModePreferred</c> for documents, which tabs them whatever the setting
+    /// says; that was the brief's wording and not the Mac's convention.
+    /// </summary>
     internal const long TabbingModeAutomatic = 0;
-
-    /// <summary><c>NSWindowTabbingModePreferred</c>: always join the front window's tab group,
-    /// whatever that setting says — a document's mode, because a document opened from
-    /// Finder, Open With or File ▸ Open becomes a tab of the front window (#711).</summary>
-    internal const long TabbingModePreferred = 1;
-
-    /// <summary><c>NSWindowAbove</c>, for <c>addTabbedWindow:ordered:</c>.</summary>
-    private const long OrderedAbove = 1;
 
     [DllImport(Objc, EntryPoint = "objc_msgSend")]
     private static extern IntPtr MsgSend(IntPtr receiver, IntPtr selector);
@@ -59,9 +56,6 @@ internal static class MacWindowTabs
 
     [DllImport(Objc, EntryPoint = "objc_msgSend")]
     private static extern void MsgSend_Void_Ptr(IntPtr receiver, IntPtr selector, IntPtr arg);
-
-    [DllImport(Objc, EntryPoint = "objc_msgSend")]
-    private static extern void MsgSend_Void_Ptr_Long(IntPtr receiver, IntPtr selector, IntPtr arg, long arg2);
 
     [DllImport(Objc)]
     private static extern IntPtr objc_getClass([MarshalAs(UnmanagedType.LPUTF8Str)] string name);
@@ -100,13 +94,13 @@ internal static class MacWindowTabs
     /// orders it in, from the mode and identifier it has at that moment. False when there
     /// is no native window to set it on.
     /// </summary>
-    internal static bool Enable(Window window, bool preferred)
+    internal static bool Enable(Window window)
     {
         var ns = NativeWindow(window);
         if (ns == IntPtr.Zero)
             return false;
         MsgSend_Void_Ptr(ns, Sel("setTabbingIdentifier:"), NSString(TabbingIdentifier));
-        MsgSend_Void_Long(ns, Sel("setTabbingMode:"), preferred ? TabbingModePreferred : TabbingModeAutomatic);
+        MsgSend_Void_Long(ns, Sel("setTabbingMode:"), TabbingModeAutomatic);
         return true;
     }
 
@@ -131,21 +125,6 @@ internal static class MacWindowTabs
         var ns = NativeWindow(window);
         var tab = ns == IntPtr.Zero ? IntPtr.Zero : MsgSend(ns, Sel("tab"));
         return tab == IntPtr.Zero ? null : ManagedString(MsgSend(tab, Sel("title")));
-    }
-
-    /// <summary>
-    /// Puts <paramref name="window"/> into <paramref name="front"/>'s tab group, as the tab
-    /// after it — what opening a document from the front window does. The new tab is not
-    /// selected by this; the caller activates it.
-    /// </summary>
-    internal static bool AddTab(Window front, Window window)
-    {
-        var host = NativeWindow(front);
-        var guest = NativeWindow(window);
-        if (host == IntPtr.Zero || guest == IntPtr.Zero || host == guest)
-            return false;
-        MsgSend_Void_Ptr_Long(host, Sel("addTabbedWindow:ordered:"), guest, OrderedAbove);
-        return true;
     }
 
     /// <summary>The <c>NSWindow</c>s in <paramref name="window"/>'s tab group, itself included; empty when it has none.</summary>
@@ -212,6 +191,18 @@ internal static class MacWindowTabs
         var cls = objc_getClass("NSApplication");
         return cls == IntPtr.Zero ? IntPtr.Zero : MsgSend(cls, Sel("sharedApplication"));
     }
+
+    /// <summary><c>NSWindowUserTabbingPreference</c>: the "Prefer tabs when opening documents" setting.</summary>
+    internal enum TabbingPreference
+    {
+        Manual = 0,
+        Always = 1,
+        InFullScreen = 2,
+    }
+
+    /// <summary>The person's "Prefer tabs when opening documents" setting, as AppKit reads it (<c>+[NSWindow userTabbingPreference]</c>).</summary>
+    internal static TabbingPreference UserTabbingPreference() =>
+        (TabbingPreference)MsgSend_RetLong(objc_getClass("NSWindow"), Sel("userTabbingPreference"));
 
     /// <summary>Whether MegaPDF is the active application — the one whose menu bar is on screen.</summary>
     internal static bool IsAppActive()

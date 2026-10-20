@@ -208,7 +208,7 @@ internal static class MacWindowTabsCheck
             }
 
 
-            // (a) Three documents handed over the person's way: each its own window, one tab group.
+            // (a) Three documents handed over the person's way: each its own window.
             App.RouteExternalPaths(first, pdfs);
             var opened = await WaitFor(() => MainWindow.OpenWindows.Count(w => w.Active is { IsDocumentOpen: true }) == 3,
                                        TimeSpan.FromSeconds(15));
@@ -230,9 +230,39 @@ internal static class MacWindowTabsCheck
             var a = WindowOf(pdfs[0]);
             var b = WindowOf(pdfs[1]);
             var c = WindowOf(pdfs[2]);
-            Check("  merged by AppKit into one window of three tabs",
-                  MacWindowTabs.TabbedWindows(a).Count == 3 && MacWindowTabs.AreTabbedTogether(a, b) && MacWindowTabs.AreTabbedTogether(a, c));
-            Check("  the last one handed over is the selected tab, and active", MacWindowTabs.SelectedTab(a) == MacWindowTabs.NativeWindow(c) && c.IsActive);
+            // Whether they arrive as tabs is the person's choice (#711): System Settings ▸
+            // Desktop & Dock ▸ "Prefer tabs when opening documents", which this check reads
+            // rather than assumes, so it can be run under each setting.
+            var preference = MacWindowTabs.UserTabbingPreference();
+            Log($"Prefer tabs when opening documents: {preference}");
+            if (preference == MacWindowTabs.TabbingPreference.Always)
+            {
+                Check("  merged by AppKit into one window of three tabs, as the setting asks",
+                      MacWindowTabs.TabbedWindows(a).Count == 3 && MacWindowTabs.AreTabbedTogether(a, b) && MacWindowTabs.AreTabbedTogether(a, c));
+                Check("  the last one handed over is the selected tab, and active", MacWindowTabs.SelectedTab(a) == MacWindowTabs.NativeWindow(c) && c.IsActive);
+            }
+            else
+            {
+                Check("  three separate windows, none forced into a tab against the setting",
+                      windows.All(w => MacWindowTabs.TabbedWindows(w).Count <= 1)
+                      && !MacWindowTabs.AreTabbedTogether(a, b) && !MacWindowTabs.AreTabbedTogether(b, c) && !MacWindowTabs.AreTabbedTogether(a, c));
+                Check("  the last one handed over is the active window", c.IsActive && MacWindowTabs.IsKey(c));
+                Check("  and each draws in its own window", Capture(a, outDir, "0-separate-a") > 20 && Capture(c, outDir, "0-separate-c") > 20);
+                first = MainWindow.MostRecentlyActive!;
+                first.OpenFromSystem(pdfs[0]);
+                await Task.Delay(800);
+                Check("  opening one already open brings its own window forward, and opens nothing",
+                      MainWindow.OpenWindows.Count == 3 && a.IsActive && MacWindowTabs.IsKey(a));
+                // The rest of the check is about tabs; Window ▸ Merge All Windows makes them,
+                // under any setting, as a person would.
+                MacWindowTabs.Perform(c, "mergeAllWindows:");
+                await Task.Delay(1000);
+                c.ShowDocument(c.Active!);
+                await Task.Delay(800);
+                Describe("after Merge All Windows", MainWindow.OpenWindows);
+                Check("Merge All Windows makes the three separate windows one window of three tabs",
+                      MacWindowTabs.TabbedWindows(a).Count == 3 && MacWindowTabs.AreTabbedTogether(a, b) && MacWindowTabs.AreTabbedTogether(a, c));
+            }
             Check("  no in-window tab strip", windows.All(w => !w.DocumentTabStrip.IsVisible));
             Check("  each tab is titled with its document's name alone",
                   windows.All(w => MacWindowTabs.TabTitle(w) == w.Active?.TabTitle));

@@ -17,7 +17,8 @@ namespace MegaPDF.Avalonia.Views;
 /// <list type="bullet">
 /// <item><b>The Mac</b> follows the Mac (Dave, 2026-10-20). One window per document
 /// (<see cref="ShellViewModel.OneDocumentPerWindow"/>), merged into tabs by AppKit as
-/// Preview's and TextEdit's are, with the system's own tab bar, drag-out, Window ▸ Move Tab
+/// Preview's and TextEdit's are — when the person's System Settings "Prefer tabs when opening
+/// documents" says so, and whenever they merge them by hand — with the system's own tab bar, drag-out, Window ▸ Move Tab
 /// to New Window, Merge All Windows and Show All Tabs — in the system's own words, in every
 /// language. The in-window tab strip is hidden. All this file adds is the plumbing:
 /// <see cref="Platform.MacWindowTabs"/>, and opening a second document into a new window
@@ -31,7 +32,8 @@ namespace MegaPDF.Avalonia.Views;
 /// With more than one window, an external open (Finder, Open With, the Linux single-instance
 /// socket, a drop, File ▸ Open, a recent) needs a rule. A document already open anywhere
 /// activates its window and tab rather than opening twice; anything else goes to the most
-/// recently active window — which, on the Mac, means a new tab of it.
+/// recently active window — which, on the Mac, means a new window beside it, made a tab of it
+/// by AppKit when the person prefers tabs.
 /// </summary>
 public partial class MainWindow
 {
@@ -146,18 +148,19 @@ public partial class MainWindow
     private bool _nativeTabs;
 
     /// <summary>
-    /// Makes this window one AppKit merges with the others (#711). Before the window is first
-    /// shown: AppKit decides as it orders a window in. <paramref name="preferred"/> for a
-    /// document window — it always joins the front window's tabs — and not for File ▸ New
-    /// Window, which follows the system's "Prefer tabs when opening documents" setting, as
-    /// TextEdit's does. A no-op off the Mac, on the headless platform, and for a shell of
-    /// the in-window shape.
+    /// Makes this window one AppKit can merge with the others (#711). Before the window is
+    /// first shown: AppKit decides as it orders a window in. Whether it does is the person's
+    /// choice, not MegaPDF's — System Settings ▸ Desktop &amp; Dock ▸ "Prefer tabs when opening
+    /// documents" (Always, In Full Screen, Never), which Preview and TextEdit follow and so
+    /// does this. Either way the windows can be merged later with Window ▸ Merge All Windows
+    /// or by dragging one onto another's tab bar. A no-op off the Mac, on the headless
+    /// platform, and for a shell of the in-window shape.
     /// </summary>
-    internal void EnableNativeTabs(bool preferred)
+    internal void EnableNativeTabs()
     {
         if (!UsesNativeWindowTabs || !OperatingSystem.IsMacOS() || Shell?.OneDocumentPerWindow != true)
             return;
-        _nativeTabs = Platform.MacWindowTabs.Enable(this, preferred);
+        _nativeTabs = Platform.MacWindowTabs.Enable(this);
     }
 
     /// <summary>Whether AppKit has this window in a tab group with another — what ⌘W's title says.</summary>
@@ -182,8 +185,10 @@ public partial class MainWindow
 
     /// <summary>
     /// Where a document about to be opened from this window goes: here, while this window has
-    /// room for it, or — the Mac, with a document already in this window — a new window, shown
-    /// as a tab of this one. The new window is shown and active when this returns.
+    /// room for it, or — the Mac, with a document already in this window — a new window of its
+    /// own, which AppKit makes a tab of the front window or not as the person's "Prefer tabs"
+    /// setting says. Never forced into a tab against that setting. The new window is shown,
+    /// and asked to come forward, when this returns.
     /// </summary>
     internal MainWindow HostForNewDocument()
     {
@@ -197,17 +202,11 @@ public partial class MainWindow
             SkipRecoveryOffer = true,
             _madeForDocument = true,
         };
-        window.EnableNativeTabs(preferred: true);
+        window.EnableNativeTabs();
         // Listed before it is shown, not when it opens: a second hand-over of the same file
         // can arrive in between (#398), and must find the document already on its way here.
         window.MarkMostRecentlyActive();
         window.Show();
-        // Preferred joins the key window's group as it is ordered in. When MegaPDF is not
-        // the active app — a Finder double-click — there may be no key window to join, so
-        // it is put beside this one by hand.
-        if (window._nativeTabs && _nativeTabs && OperatingSystem.IsMacOS()
-            && !Platform.MacWindowTabs.AreTabbedTogether(this, window))
-            Platform.MacWindowTabs.AddTab(this, window);
         window.BringToFront();
         return window;
     }

@@ -39,8 +39,11 @@ second and the first must still be there, edits and all. Kill the app with three
 open and the next launch should offer to restore each of them, into its own tab.
 
 **Tabs on the Mac and Linux** (#711) — on the **Mac** every document is a window of its
-own, and macOS puts them together as tabs, the way Preview does: open three PDFs and you
-get one window with three tabs in the system's own tab bar (there is no MegaPDF tab strip).
+own, and macOS decides whether they open as tabs, the way it does for Preview: System
+Settings ▸ Desktop & Dock ▸ **Prefer tabs when opening documents**. Set to **Always**, open
+three PDFs and you get one window with three tabs in the system's own tab bar (there is no
+MegaPDF tab strip); set to **In Full Screen** (the default) or **Never**, you get three
+windows, and **Window ▸ Merge All Windows** makes them tabs. Try it under both settings.
 Drag a tab out of the bar, or choose **Window ▸ Move Tab to New Window**, and it becomes a
 window of its own with its unsaved changes and undo intact; **Window ▸ Merge All Windows**
 puts them back. ⌘W closes the tab you are on, ⇧⌘W closes every tab in the window (asking

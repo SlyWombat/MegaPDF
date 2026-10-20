@@ -1524,7 +1524,8 @@ public partial class MainWindow : Window
             case RecoveryWindow.Decision.Restore:
                 // A crashed session restores into a brand new tab (#348 §5.3), not into
                 // whichever document happened to be active — there may be none yet. On the
-                // Mac a second restored document is a second window, tabbed by AppKit (#711).
+                // Mac a second restored document is a second window, tabbed by AppKit or not as
+                // the person's "Prefer tabs" setting says (#711).
                 var host = HostForNewDocument();
                 var document = await host.Shell!.RestoreSessionAsync(session);
                 document.DpiScale = host.RenderScaling;
@@ -2321,9 +2322,9 @@ public partial class MainWindow : Window
         if (Shell is not { } shell)
             return;
         var window = new MainWindow { DataContext = shell.CreateSibling() };
-        // A window asked for as a window: a separate one, unless the person has told the
-        // system to prefer tabs (#711) — TextEdit's ⌘N.
-        window.EnableNativeTabs(preferred: false);
+        // A separate window, or a tab, as the person's "Prefer tabs" setting says (#711) —
+        // TextEdit's ⌘N.
+        window.EnableNativeTabs();
         window.Show();
     }
 
@@ -2440,7 +2441,7 @@ public partial class MainWindow : Window
     private async Task OpenIntoNewTabAsync(ShellViewModel shell, IStorageFile file, string path)
     {
         // The Mac's one-document windows (#711): a second document goes to a new window,
-        // tabbed beside this one by AppKit.
+        // which AppKit tabs beside this one if the person prefers tabs.
         if (HostForNewDocument() is var host && !ReferenceEquals(host, this))
         {
             await host.OpenIntoNewTabAsync(host.Shell!, file, path);

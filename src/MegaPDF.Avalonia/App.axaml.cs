@@ -1379,7 +1379,7 @@ public partial class App : Application
                 : new ShellViewModel(oneDocumentPerWindow: oneDocumentPerWindow);
             var viewModel = shell.CreateDocument();
             var window = new MainWindow { DataContext = shell };
-            window.EnableNativeTabs(preferred: true);
+            window.EnableNativeTabs();
             desktop.MainWindow = window;
 
             // Computed once, reused below for the recovery offer, the command-line
@@ -1461,8 +1461,9 @@ public partial class App : Application
                 activatable.Activated += (_, e) =>
                 {
                     // The window used last, once there is more than one (#711): the first
-                    // window may be closed by now, and with native tabs a document goes in as
-                    // a tab of the front window. Before any window has opened, the first.
+                    // window may be closed by now, and on the Mac a new document goes beside
+                    // the front window (as a tab of it if the person prefers tabs). Before any
+                    // window has opened, the first.
                     if (e is FileActivatedEventArgs { Files: var items })
                         foreach (var file in items.OfType<IStorageFile>())
                             (MainWindow.MostRecentlyActive ?? window).OpenFromSystem(file);
