@@ -91,6 +91,17 @@ struct PendingBodyEdit: Identifiable {
     let line: PdfTextLine
 }
 
+/// A form text field being filled in (#701). (`x`, `y`) is the widget's centre, which is
+/// where the core clicks to focus it.
+struct PendingFormText: Identifiable {
+    let id = UUID()
+    let pageIndex: Int
+    let x: Double
+    let y: Double
+    let name: String
+    let original: String
+}
+
 struct PendingText: Identifiable {
     let id = UUID()
     let pageIndex: Int
@@ -162,6 +173,8 @@ final class ViewerModel: ObservableObject {
     /// The line the body-text editor is open on, and what its field holds (#113).
     @Published var pendingBodyEdit: PendingBodyEdit?
     @Published var bodyDraft = ""
+    @Published var pendingFormText: PendingFormText?
+    @Published var formTextDraft = ""
     /// A one-line notice over the page that clears itself — not an alert.
     @Published private(set) var notice: String?
     /// #139: a text-box change waiting for Continue or Cancel, on a page PDFium's rewrite would alter.
@@ -1635,6 +1648,23 @@ final class ViewerModel: ObservableObject {
                 // Whichever edit the tap lands on, it goes through the history so
                 // it can be taken back (#34).
                 var operation: PdfEditOperation?
+                // A form text field opens the editor rather than toggling (#701).
+                if let textField = try await engine.formTextFields(doc, pageIndex: index)
+                    .last(where: { $0.rect.contains(x: x, y: y) }) {
+                    if isDynamicXfa {
+                        showDynamicXfaNotice()
+                        return
+                    }
+                    guard permits(caps.canFillForms) else { return }
+                    guard document === doc else { return }
+                    formTextDraft = textField.value
+                    pendingFormText = PendingFormText(pageIndex: index,
+                                                      x: textField.rect.centerX,
+                                                      y: textField.rect.centerY,
+                                                      name: textField.name,
+                                                      original: textField.value)
+                    return
+                }
                 let fields = try await engine.formFields(doc, pageIndex: index)
                 if let field = fields.first(where: { $0.rect.contains(x: x, y: y) }) {
                     operation = FieldToggleOperation(pageIndex: index,
@@ -1744,6 +1774,34 @@ final class ViewerModel: ObservableObject {
                 statusMessage = String(localized: "Couldn't change that text.")
             }
         }
+    }
+
+    // MARK: - form text fields (#701)
+
+    /// Commits the form-field editor: an unchanged value is a no-op, anything else is one
+    /// undoable edit.
+    func commitFormText(_ text: String) {
+        guard let pending = pendingFormText, let doc = document else { return }
+        guard !busy.isBlocked else { return }
+        pendingFormText = nil
+        formTextDraft = ""
+        guard permits(capabilities.canFillForms) else { return }
+        guard text != pending.original else { return }
+        guard let token = busy.begin(.applying, scope: .page(pending.pageIndex, nil)) else { return }
+        Task {
+            defer { busy.end(token) }
+            do {
+                try await perform(FormTextOperation(pageIndex: pending.pageIndex, x: pending.x, y: pending.y,
+                                                    oldValue: pending.original, newValue: text), doc: doc)
+            } catch {
+                statusMessage = String(localized: "Couldn't change the document.")
+            }
+        }
+    }
+
+    func cancelFormText() {
+        pendingFormText = nil
+        formTextDraft = ""
     }
 
     func cancelBodyEdit() {
@@ -3545,6 +3603,7 @@ final class ViewerModel: ObservableObject {
     private func closeCurrent() {
         renderTask?.cancel()
         pendingBodyEdit = nil
+        pendingFormText = nil
         scannedHintShown = false
         signatureCopyNoticeShown = false
         clearSearch()

@@ -1738,6 +1738,23 @@
         }
       }
     },
+    "Form field" : {
+      "comment" : "#701: title of the editor opened by tapping a PDF form's text field. FR-REVIEW #701 — new with form text fields, not yet read by the reviewer.",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Champ de formulaire"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Champ de formulaire"
+          }
+        }
+      }
+    },
     "From photo" : {
       "localizations" : {
         "fr" : {

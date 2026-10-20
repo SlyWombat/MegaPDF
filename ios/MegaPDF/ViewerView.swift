@@ -683,6 +683,15 @@ struct ViewerView: View {
                     onCancel: model.cancelBodyEdit
                 )
             }
+            // A form's own text field (#701): one field, the same sheet on iPhone and iPad.
+            .sheet(item: $model.pendingFormText) { pending in
+                FormTextSheet(
+                    text: $model.formTextDraft,
+                    fieldName: pending.name,
+                    onDone: { model.commitFormText(model.formTextDraft) },
+                    onCancel: model.cancelFormText
+                )
+            }
             // Unlocking a restricted document; setting, changing or removing its password (#131).
             .sheet(item: $model.securitySheet) { mode in
                 DocumentSecuritySheet(

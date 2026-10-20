@@ -17,7 +17,7 @@ Each cell says two things and both are checked against the code:
 | `GAP` | the feature is **missing** where it should exist — the #571 shape |
 | `+m` | a by-hand step in `TESTING.md` / `docs/RELEASING.md` covers it too |
 
-230 pairings: 135 UI, 61 eng, 14 —, 14 n/a, 6 GAP.
+230 pairings: 136 UI, 60 eng, 14 —, 14 n/a, 6 GAP.
 
 This map is about *what is covered*, not whether the covering tests pass — that is the
 other jobs' business — and it does not replace the by-hand pass in `docs/RELEASING.md`
@@ -62,7 +62,7 @@ The feature is reachable and no test in CI touches it.
 | Print (`print`) | windows | nothing automated touches printing on Windows: no self-test state, no core test of PdfPrinter, and tools/windows-qa's print flow is manual. | — |
 | A small side indicator of scroll position, including in reading mode (`scroll-position-indicator`) | ios | pre-existing: SwiftUI's default fading scroll indicator, never overridden by `.scrollIndicators(...)` anywhere in the app, so reading mode (which hides only the nav/bottom bars and the tool strip) leaves it exactly as it is outside reading mode. The page list is one continuous ScrollView/LazyVStack over every page, so the indicator is whole-document position. Nothing automated asserts the indicator itself — it is not exposed to the accessibility tree XCUITest reads, the same reason ViewerZoomUITests has to sleep 1.5s for it to fade rather than assert on it directly. | — |
 
-### Engine only — this platform's own path is untested (61)
+### Engine only — this platform's own path is untested (60)
 
 The shared core proves the operation. Nothing proves this platform reaches it correctly, which is where #401 and #412 lived.
 
@@ -81,7 +81,6 @@ The shared core proves the operation. Nothing proves this platform reaches it co
 | Edit the document's own text (`body-text-edit`) | android | engine only — iOS has a live UI test for the same feature (#113/#114) and Android does not. | — |
 | Edit the document's own text (`body-text-edit`) | windows | the engine side is the best-tested part of the app; no Windows self-test state retypes a line in the UI. | — |
 | Checkboxes, real and drawn (`checkboxes`) | ios | no mark-style setting on iOS and no UI test taps a box. | — |
-| Form text fields (`form-fields`) | ios | the engine and the gating are tested; DemoFlowUITests fills a field live but is excluded from CI as a video script. | — |
 | Make a signature (draw, type, photo) and the library (`signature-capture`) | android | no instrumented test opens the signatures sheet at all. | — |
 | Make a signature (draw, type, photo) and the library (`signature-capture`) | ios | cleanup and store only; the capture sheets are driven by DemoFlowUITests, which is excluded from CI. | — |
 | Make a signature (draw, type, photo) and the library (`signature-capture`) | linux | same as macOS. | — |
@@ -157,7 +156,7 @@ The shared core proves the operation. Nothing proves this platform reaches it co
 
 | feature | Windows | macOS | Linux | iOS/iPadOS | Android |
 |---|---|---|---|---|---|
-| **Form text fields** | UI+m | UI | UI | eng | UI |
+| **Form text fields** | UI+m | UI | UI | UI | UI |
 | **Checkboxes, real and drawn** | UI+m | UI | UI | eng | UI |
 | **Make a signature (draw, type, photo) and the library** | UI+m | eng+m | eng+m | eng | eng |
 | **Place, move, resize and remove a signature** | UI+m | UI | UI | eng | eng |
@@ -342,7 +341,7 @@ others are the proof that nothing was needed.
 - **Windows** — UI+m. coverage: UI/VM. reachable from `src/MegaPDF.App/DocumentView.xaml.cs::OnPageTapped`. tests: `.github/workflows/ci.yml::Run-Check "fill"`, `tests/MegaPDF.Core.Tests/AcroFormTests.cs::Field`. by hand: `TESTING.md::**Form fields**`. #590: `fill` opens formtext.pdf's real AcroForm text widget (fixture.pdf has none), types into it and checks the value survives save and reopen. `click` ticks fixture.pdf's drawn square, not a form field — the row's old note crediting it for this was wrong (#590).
 - **macOS** — UI. coverage: UI/VM. reachable from `src/MegaPDF.Avalonia/ViewModels/DocumentViewModel.cs::HandlePageClick`. tests: `tests/MegaPDF.Core.Tests/AcroFormTests.cs::Field`. the self-test's fill-check-sign block drives the view model's hit test and round-trips the value through PDFium.
 - **Linux** — UI. coverage: UI/VM. reachable from `src/MegaPDF.Avalonia/ViewModels/DocumentViewModel.cs::HandlePageClick`. tests: `tests/MegaPDF.Core.Tests/AcroFormTests.cs::Field`. same as macOS.
-- **iOS/iPadOS** — eng. coverage: engine only. reachable from `ios/MegaPDF/ViewerModel.swift::formFields`. tests: `ios/MegaPDFTests/CheckboxTests.swift::class`, `ios/MegaPDFTests/DocumentCapabilitiesTests.swift::class`. the engine and the gating are tested; DemoFlowUITests fills a field live but is excluded from CI as a video script.
+- **iOS/iPadOS** — UI. coverage: UI/VM. reachable from `ios/MegaPDF/ViewerModel.swift::commitFormText`. tests: `ios/MegaPDFTests/FormTextTests.swift::class`, `ios/MegaPDFTests/CheckboxTests.swift::class`, `ios/MegaPDFTests/DocumentCapabilitiesTests.swift::class`, `ios/MegaPDFUITests/FormTextUITests.swift::class`, `.github/workflows/ios-ci.yml::MegaPDFUITests/FormTextUITests`. #701: a tap on a text widget opens FormTextSheet; Done writes through megapdf_form_set_text as one undo step (FormTextOperation), gated on fill-forms. FormTextTests fills formtext.pdf through the model, saves, reopens and undoes; FormTextUITests types into the real sheet. Multi-line, maximum-length and comb behaviour is whatever PDFium does with the written value; the core does not report those flags, so the sheet does not enforce them.
 - **Android** — UI. coverage: UI/VM. reachable from `android/app/src/main/java/com/megapdf/android/ViewerViewModel.kt::commitFormText`. tests: `android/app/src/androidTest/java/com/megapdf/android/FormTextTest.kt::class`, `android/app/src/test/java/com/megapdf/android/FormTextFieldTest.kt::class`, `android/app/src/test/java/com/megapdf/android/DocumentCapabilitiesTest.kt::class`. #701: a tap on a text widget opens a Compose dialog on its value; Done is one FormTextOperation (megapdf_form_set_text), gated on fill-forms. FormTextTest fills formtext.pdf through the real screen, saves, reopens and reads the value back, undoes, and ticks forms.pdf's checkbox. Multi-line is a heuristic (the core reports no flag) and max length / comb are not applied by the editor.
 
 ### Checkboxes, real and drawn (`checkboxes`)
