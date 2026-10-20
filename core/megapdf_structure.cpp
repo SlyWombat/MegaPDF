@@ -1305,8 +1305,23 @@ struct XyCutter {
     // of its column width"), which the design does not otherwise define outside a column
     // layout. Indexed by the same line index as `lines`; -1 until a leaf assigns it.
     std::vector<double> column_width;
+    // #710: which leaf region each line ended up in (0-based, in the order the leaves were
+    // emitted), parallel to `lines`. Contract 11's hit test picks a region before a line, so a
+    // point past the end of a short line stays on that line rather than jumping to a longer
+    // one below it, and a point in a column's margin stays in that column. Reading order does
+    // not use it; it is recorded where a leaf is emitted, so OrderLines' row-by-row fallback,
+    // which re-sorts every line, leaves it describing the geometry the cut found.
+    std::vector<int> leaf_of;
+    int leaves = 0;
 
-    explicit XyCutter(const std::vector<Line>& l) : lines(l), column_width(l.size(), -1) {}
+    explicit XyCutter(const std::vector<Line>& l) : lines(l), column_width(l.size(), -1), leaf_of(l.size(), -1) {}
+
+    void EmitLeaf(std::vector<int>* idx) {
+        SortLeaf(idx);
+        order.insert(order.end(), idx->begin(), idx->end());
+        for (int i : *idx) leaf_of[static_cast<size_t>(i)] = leaves;
+        leaves++;
+    }
 
     void SortLeaf(std::vector<int>* idx) {
         std::stable_sort(idx->begin(), idx->end(), [&](int a, int b) {
@@ -1392,8 +1407,7 @@ struct XyCutter {
 
     void Cut(std::vector<int> idx, int depth) {
         if (idx.size() <= 1 || depth > kMaxCutDepth) {
-            SortLeaf(&idx);
-            order.insert(order.end(), idx.begin(), idx.end());
+            EmitLeaf(&idx);
             return;
         }
         double sum_size = 0;
@@ -1410,8 +1424,7 @@ struct XyCutter {
         const bool has_h = horiz.first > 0;
         const bool has_v = vert.first > 0;
         if (!has_h && !has_v) {
-            SortLeaf(&idx);
-            order.insert(order.end(), idx.begin(), idx.end());
+            EmitLeaf(&idx);
             return;
         }
         // "cut on the larger gap first".
@@ -1423,8 +1436,7 @@ struct XyCutter {
                 ((l.l + l.r) / 2.0 < vert.second ? left : right).push_back(i);
             }
             if (left.empty() || right.empty()) {   // degenerate: treat as a leaf instead of looping
-                SortLeaf(&idx);
-                order.insert(order.end(), idx.begin(), idx.end());
+                EmitLeaf(&idx);
                 return;
             }
             Cut(std::move(left), depth + 1);
@@ -1436,8 +1448,7 @@ struct XyCutter {
                 (((l.t + l.b) / 2.0) > horiz.second ? top : bottom).push_back(i);
             }
             if (top.empty() || bottom.empty()) {
-                SortLeaf(&idx);
-                order.insert(order.end(), idx.begin(), idx.end());
+                EmitLeaf(&idx);
                 return;
             }
             Cut(std::move(top), depth + 1);
@@ -1450,9 +1461,14 @@ struct XyCutter {
 // (design §1.2: "A page that needs more than three vertical cuts ... is read row by row ...
 // with the confidence penalty"). `column_width` comes back parallel to `lines`: the width of
 // the leaf region each line ended up in (see XyCutter::SortLeaf).
-std::vector<int> OrderLines(const std::vector<Line>& lines, bool* too_many_columns, std::vector<double>* column_width) {
+//
+// `leaf_of` (#710, may be NULL) comes back parallel to `lines` too: the leaf region of the cut
+// each line belongs to (XyCutter::leaf_of), for contract 11's hit test.
+std::vector<int> OrderLines(const std::vector<Line>& lines, bool* too_many_columns, std::vector<double>* column_width,
+                            std::vector<int>* leaf_of = nullptr) {
     *too_many_columns = false;
     column_width->assign(lines.size(), 0.0);
+    if (leaf_of != nullptr) leaf_of->assign(lines.size(), 0);
     if (lines.empty()) return {};
     std::vector<int> all(lines.size());
     for (size_t i = 0; i < lines.size(); i++) all[i] = static_cast<int>(i);
@@ -1465,6 +1481,7 @@ std::vector<int> OrderLines(const std::vector<Line>& lines, bool* too_many_colum
         result = all;
     }
     *column_width = cutter.column_width;
+    if (leaf_of != nullptr) *leaf_of = cutter.leaf_of;
     return result;
 }
 
@@ -3465,3 +3482,150 @@ MEGAPDF_API size_t megapdf_block_span_font(const megapdf_structure* s, size_t in
 }
 
 }  // extern "C"
+
+// ---------------------------------------------------------------------------
+// Contract 11, text selection (#710). The layout a selection walks, built from exactly the
+// characters, words, lines and XY-cut reading order the heuristic path above builds blocks from,
+// so a copy and a Markdown export can never disagree about what order a page reads in. What this
+// deliberately does NOT take from contract 9: furniture removal (a running header is on the page
+// and can be selected), hyphen-joining (a copy keeps what is drawn, see megapdf_core.h), and the
+// tagged path (a selection is a gesture over what is seen, and the geometry is what is seen).
+// megapdf_select.cpp owns the queries; see megapdf_core_internal.h for the shapes.
+// ---------------------------------------------------------------------------
+
+namespace megapdf_internal {
+
+namespace {
+
+// A ligature arrives from PDFium as several characters sharing one glyph's box: "fi" drawn as
+// U+FB01 reads back as 'f' 'i' with identical boxes (measured on selection.pdf, both for a
+// ToUnicode that maps the glyph to two characters and for one that maps it to U+FB02 itself --
+// PDFium decomposes the presentation form). A caret between the two needs somewhere to be, so
+// the box is split evenly along the advance, as a browser places a caret inside a ligature.
+constexpr double kSameBoxTolerance = 0.01;   // points
+
+bool SameBox(const SelectionChar& a, const SelectionChar& c) {
+    return std::fabs(a.l - c.l) <= kSameBoxTolerance && std::fabs(a.r - c.r) <= kSameBoxTolerance &&
+           std::fabs(a.b - c.b) <= kSameBoxTolerance && std::fabs(a.t - c.t) <= kSameBoxTolerance;
+}
+
+void SplitLigatures(std::vector<SelectionChar>* chars) {
+    size_t i = 0;
+    while (i < chars->size()) {
+        size_t j = i + 1;
+        while (j < chars->size() && (*chars)[j].word == (*chars)[i].word && SameBox((*chars)[i], (*chars)[j])) j++;
+        const size_t n = j - i;
+        if (n > 1) {
+            const double l = (*chars)[i].l;
+            const double step = ((*chars)[i].r - l) / static_cast<double>(n);
+            for (size_t k = 0; k < n; k++) {
+                (*chars)[i + k].l = l + step * static_cast<double>(k);
+                (*chars)[i + k].r = l + step * static_cast<double>(k + 1);
+            }
+        }
+        i = j;
+    }
+}
+
+}  // namespace
+
+bool BuildSelectionLayout(const megapdf_page* page, SelectionLayout* out) {
+    try {
+        PageWork pw;
+        ReadChars(page, &pw);
+        std::vector<int> normal_idx, rotated_idx;
+        normal_idx.reserve(pw.chars.size());
+        for (size_t ci = 0; ci < pw.chars.size(); ci++) {
+            (pw.chars[ci].rotated ? rotated_idx : normal_idx).push_back(static_cast<int>(ci));
+        }
+        pw.words = BuildWords(pw.chars, normal_idx);
+        pw.leftover_words = BuildWords(pw.chars, rotated_idx);
+        pw.lines = BuildLines(pw.words);
+
+        bool too_many_columns = false;
+        std::vector<double> column_width;
+        std::vector<int> leaf_of;
+        const std::vector<int> order = OrderLines(pw.lines, &too_many_columns, &column_width, &leaf_of);
+
+        out->chars.clear();
+        out->lines.clear();
+        out->chars.reserve(pw.chars.size());
+        out->turns = pw.frame.turns;
+        out->frame_w = pw.frame.w;
+        out->frame_h = pw.frame.h;
+        int regions = 0;
+        for (int leaf : leaf_of) regions = (std::max)(regions, leaf + 1);
+
+        int word_number = 0;
+        auto append_line = [&](const std::vector<Word>& words, const Line& line, int region) {
+            SelectionLine sl;
+            sl.first = static_cast<int>(out->chars.size());
+            sl.region = region;
+            const int line_number = static_cast<int>(out->lines.size());
+            bool any = false;
+            for (int wi : line.words) {
+                for (int ci : words[static_cast<size_t>(wi)].chars) {
+                    const Char& c = pw.chars[static_cast<size_t>(ci)];
+                    SelectionChar sc;
+                    sc.cp = c.unicode;
+                    sc.l = (std::min)(c.loose_l, c.loose_r);
+                    sc.r = (std::max)(c.loose_l, c.loose_r);
+                    sc.b = (std::min)(c.loose_b, c.loose_t);
+                    sc.t = (std::max)(c.loose_b, c.loose_t);
+                    sc.word = word_number;
+                    sc.line = line_number;
+                    if (!any) { sl.l = sc.l; sl.b = sc.b; sl.r = sc.r; sl.t = sc.t; any = true; }
+                    else {
+                        sl.l = (std::min)(sl.l, sc.l); sl.b = (std::min)(sl.b, sc.b);
+                        sl.r = (std::max)(sl.r, sc.r); sl.t = (std::max)(sl.t, sc.t);
+                    }
+                    out->chars.push_back(sc);
+                }
+                word_number++;
+            }
+            sl.end = static_cast<int>(out->chars.size());
+            if (sl.end > sl.first) out->lines.push_back(sl);
+        };
+
+        for (int li : order) {
+            const int leaf = static_cast<size_t>(li) < leaf_of.size() ? leaf_of[static_cast<size_t>(li)] : 0;
+            append_line(pw.words, pw.lines[static_cast<size_t>(li)], (std::max)(0, leaf));
+        }
+
+        // Rotated text last, top to bottom, each line its own region -- the same place and order
+        // contract 9's trailing paragraph gives it (BuildLeftoverParagraph).
+        if (!pw.leftover_words.empty()) {
+            std::vector<Line> leftover_lines = BuildLines(pw.leftover_words);
+            std::stable_sort(leftover_lines.begin(), leftover_lines.end(), [](const Line& a, const Line& b) {
+                if (a.t != b.t) return a.t > b.t;
+                return a.l < b.l;
+            });
+            for (const Line& line : leftover_lines) append_line(pw.leftover_words, line, regions++);
+        }
+        out->regions = (std::max)(regions, out->lines.empty() ? 0 : 1);
+        SplitLigatures(&out->chars);
+        return true;
+    } catch (const std::bad_alloc&) {
+        return false;
+    }
+}
+
+megapdf_rect SelectionToCrop(const SelectionLayout& layout, const megapdf_rect& r) {
+    if (layout.turns == 0) return r;
+    PageFrame f;
+    f.turns = layout.turns;
+    f.w = layout.frame_w;
+    f.h = layout.frame_h;
+    return ToReportedRect(f, r);
+}
+
+void CropToSelection(const SelectionLayout& layout, double x, double y, double* out_x, double* out_y) {
+    if (layout.turns == 0) { *out_x = x; *out_y = y; return; }
+    PageFrame f;
+    f.turns = layout.turns;
+    f.w = layout.frame_w;
+    f.h = layout.frame_h;
+    UnturnPoint(f, x, y, out_x, out_y);
+}
+
+}  // namespace megapdf_internal

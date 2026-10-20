@@ -375,6 +375,14 @@ public interface IPdfPage : IDisposable
     /// <summary>Text runs assembled into visual lines (same baseline, no column-wide gaps).</summary>
     IReadOnlyList<PdfTextLine> GetTextLines();
 
+    /// <summary>
+    /// The page's text for selecting and copying (#710, contract 11): a snapshot to keep while
+    /// the page is shown and query on every pointer move. Dispose it, and load a new one, after
+    /// any change to the page. Throws <see cref="ObjectDisposedException"/> once the document has
+    /// closed.
+    /// </summary>
+    PdfSelectableText LoadSelectableText();
+
     IReadOnlyList<PdfFormField> GetFormFields();
 
     /// <summary>

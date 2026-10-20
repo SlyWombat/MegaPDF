@@ -17,7 +17,7 @@ Each cell says two things and both are checked against the code:
 | `GAP` | the feature is **missing** where it should exist — the #571 shape |
 | `+m` | a by-hand step in `TESTING.md` / `docs/RELEASING.md` covers it too |
 
-230 pairings: 136 UI, 60 eng, 14 —, 14 n/a, 6 GAP.
+235 pairings: 136 UI, 60 eng, 14 —, 14 n/a, 11 GAP.
 
 This map is about *what is covered*, not whether the covering tests pass — that is the
 other jobs' business — and it does not replace the by-hand pass in `docs/RELEASING.md`
@@ -28,7 +28,7 @@ other jobs' business — and it does not replace the by-hand pass in `docs/RELEA
 This is the part worth reading. A map that only restated what passes would not be
 worth checking in.
 
-### Missing feature — absent where it should exist (6)
+### Missing feature — absent where it should exist (11)
 
 Nothing is failing; nothing is looking. #571 (Linux had an About window with no route to it) and #3 (Android had no whiteout at all) were both this.
 
@@ -40,6 +40,11 @@ Nothing is failing; nothing is looking. #571 (Linux had an About window with no 
 | A withheld permission is said out loud, and the person may continue (`permission-override`) | windows | still refuses. DocumentCapabilities.cs reads the bits and the toolbar greys out what the author withheld; megapdf_security_override() is in the core and unbound in CoreNative.cs. | #558 |
 | Shrink for email (`shrink`) | android | no shrink on Android either, for the same reason and with the same silence. | — |
 | Shrink for email (`shrink`) | ios | no shrink on iOS. Nothing in the source says it was decided against, and a phone mailing a scan is the case it exists for. | — |
+| Select text and copy it (`select-copy`) | android | megapdf_select.cpp is in the engine's CMake build; the JNI binding and the long-press UI are not yet built. | #710 |
+| Select text and copy it (`select-copy`) | ios | the core's megapdf_selectable_* calls compile into the app; the Swift binding and the long-press UI are not yet built. | #710 |
+| Select text and copy it (`select-copy`) | linux | same as macOS. | #710 |
+| Select text and copy it (`select-copy`) | macos | as Windows: MegaPDF.Core's PdfSelectableText and PdfTextSelection are ready, the Avalonia UI and its headless check are not. | #710 |
+| Select text and copy it (`select-copy`) | windows | the core (contract 11) and the shared .NET binding are in, tested by core_tests.cpp's test_selection_* and TextSelectionTests.cs; the press-and-drag UI and its self-test state are not yet built. | #710 |
 
 ### Present, nothing automated (14)
 
@@ -148,6 +153,7 @@ The shared core proves the operation. Nothing proves this platform reaches it co
 | **A small side indicator of scroll position, including in reading mode** | UI | UI | UI | — | eng |
 | **Zoom (buttons, keyboard, wheel, pinch) and fit** | UI | UI | UI | UI | UI |
 | **Find in document** | eng+m | UI+m | UI+m | eng | eng |
+| **Select text and copy it** | GAP | GAP | GAP | GAP | GAP |
 | **Reading mode** | UI | UI | UI | UI | UI |
 | **Page colours (normal / sepia / night)** | UI | UI | UI | eng | UI |
 | **Page thumbnails pane** | UI | UI | UI | UI | UI |
@@ -311,6 +317,14 @@ others are the proof that nothing was needed.
 - **Linux** — UI+m. coverage: UI/VM. reachable from `src/MegaPDF.Avalonia/Views/MainWindow.FindBar.cs::WireFindBar`. tests: `src/MegaPDF.Avalonia/Program.cs::CheckMinimumWindow`, `src/MegaPDF.Avalonia/Program.cs::CheckProgressAndCancel`, `tests/MegaPDF.Core.Tests/SearchParityTests.cs::Search`, `tests/MegaPDF.Core.Tests/ScanSearchTests.cs::class`, `src/MegaPDF.Avalonia/ScanSearchCheck.cs::Run`. by hand: `TESTING.md::**Find**`. same harness as macOS.
 - **iOS/iPadOS** — eng. coverage: engine only. reachable from `ios/MegaPDF/ViewerView.swift::Find in document`. tests: `ios/MegaPDFTests/SearchTests.swift::class`, `ios/MegaPDFTests/OcrTextTests.swift::class`, `ios/MegaPDFTests/ScanSearchTests.swift::class`. engine parity against the shared fixtures; no UI test opens the find bar. #676: Find on a scanned page through Vision, with the cache following page tools.
 - **Android** — eng. coverage: engine only. reachable from `android/app/src/main/java/com/megapdf/android/ViewerScreen.kt::R.string.close_search`. tests: `android/engine/src/androidTest/java/com/megapdf/engine/TextSearchTest.kt::class`, `android/app/src/test/java/com/megapdf/android/ScanSearchTest.kt::class`, `android/app/src/androidTest/java/com/megapdf/android/ScanRecognitionTest.kt::class`. engine parity only; no Compose test types in the search field. #98's canary lives in the engine suite, not the UI. #676: Find on a scanned page (ML Kit, bundled), the cache following page tools tested on the JVM, the recogniser itself on a device.
+
+### Select text and copy it (`select-copy`)
+
+- **Windows** — GAP. absent (gap). the core (contract 11) and the shared .NET binding are in, tested by core_tests.cpp's test_selection_* and TextSelectionTests.cs; the press-and-drag UI and its self-test state are not yet built. #710.
+- **macOS** — GAP. absent (gap). as Windows: MegaPDF.Core's PdfSelectableText and PdfTextSelection are ready, the Avalonia UI and its headless check are not. #710.
+- **Linux** — GAP. absent (gap). same as macOS. #710.
+- **iOS/iPadOS** — GAP. absent (gap). the core's megapdf_selectable_* calls compile into the app; the Swift binding and the long-press UI are not yet built. #710.
+- **Android** — GAP. absent (gap). megapdf_select.cpp is in the engine's CMake build; the JNI binding and the long-press UI are not yet built. #710.
 
 ### Reading mode (`reading-mode`)
 
@@ -696,6 +710,7 @@ These are the exceptions, each with its reason.
 
 | artefact | why not |
 |---|---|
+| `tests/MegaPDF.Core.Tests/TextSelectionTests.cs` | #710's binding tests, landed ahead of any platform's UI: every select-copy cell is still absent, and an absent cell cannot cite a test. The first desktop cell to turn present cites this file and removes this exemption. |
 | `ios/MegaPDFUITests/DocumentOpening.swift` | the shared wait for a document to open (#599), not a test: it holds no assertion of its own and the eleven suites that call it are each on the map |
 | `ios/MegaPDFTests/ModelOpening.swift` | the same wait for the unit suites (#599), replacing nine identical private copies; a harness, not a test |
 | `android/app/src/androidTest/java/com/megapdf/android/TestPdfs.kt` | fixture builder for the instrumented suite, not a test |

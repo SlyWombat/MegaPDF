@@ -15,6 +15,7 @@
 #include "fpdfview.h"
 
 #include <mutex>
+#include <vector>
 
 namespace megapdf_internal {
 
@@ -51,6 +52,50 @@ void SetLastError(unsigned long code, const char* message);
 
 // The #145 cancel-flag pattern: 1 when `cancel` is non-NULL and has been raised.
 bool IsCancelled(const megapdf_cancel* cancel);
+
+// The dead-handle contract (#551) for a file outside megapdf_core.cpp: whether `page`'s document
+// has closed, and the error a call refusing such a page reports (megapdf_last_error() ==
+// MEGAPDF_LAST_ERR_CLOSED). Same one place deciding it as every entry point in that file.
+bool PageClosed(const megapdf_page* page);
+void ReportClosedPage();
+
+// ---------------------------------------------------------------------------
+// Contract 11, text selection (#710): a page's characters laid out by contract 9's own rules,
+// built in megapdf_structure.cpp (which owns those rules) and queried by megapdf_select.cpp.
+//
+// Everything is in the page's LAYOUT FRAME (contract 9's #472 PageFrame): crop space with the
+// turn its text reads in taken back out, so the text advances along +x. For almost every page
+// that is crop space itself (turns == 0). SelectionToCrop/CropToSelection convert.
+// ---------------------------------------------------------------------------
+
+struct SelectionChar {
+    unsigned int cp = 0;              // what the copy emits (a PDFium-masked hyphen already U+002D)
+    double l = 0, b = 0, r = 0, t = 0;  // the glyph's advance box (FPDFText_GetLooseCharBox); a
+                                        // ligature's box is split evenly among its characters
+    int word = 0;                     // words are numbered in reading order across the page
+    int line = 0;                     // index into SelectionLayout::lines
+};
+
+struct SelectionLine {
+    double l = 0, b = 0, r = 0, t = 0;  // the union of its characters' boxes
+    int first = 0;                      // its characters are chars[first, end)
+    int end = 0;
+    int region = 0;                     // the XY-cut leaf it belongs to
+};
+
+struct SelectionLayout {
+    std::vector<SelectionChar> chars;   // reading order
+    std::vector<SelectionLine> lines;   // reading order
+    int regions = 0;
+    int turns = 0;                      // the layout frame: quarter turns undone, 0-3
+    double frame_w = 0, frame_h = 0;    // the page's size in that frame
+};
+
+// Reads `page` into `out`. The caller holds Lock() and has checked the page is alive. False only
+// when the core could not allocate; a page with no text is a true return with no characters.
+bool BuildSelectionLayout(const megapdf_page* page, SelectionLayout* out);
+megapdf_rect SelectionToCrop(const SelectionLayout& layout, const megapdf_rect& r);
+void CropToSelection(const SelectionLayout& layout, double x, double y, double* out_x, double* out_y);
 
 }  // namespace megapdf_internal
 

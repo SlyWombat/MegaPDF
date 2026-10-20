@@ -19,6 +19,7 @@ namespace MegaPDF.Core.Services;
 /// | CanPrint | print | printing |
 /// | CanAssemblePages | assemble or modify | rotate, delete, reorder, insert, combine |
 /// | CanExtractPages | copy | save selected pages as a new file |
+/// | CanCopyText | copy | Copy of selected text (#710); selecting itself is never gated |
 ///
 /// A form that allows filling lets people fill in everything it offers: its fields,
 /// check marks on printed boxes, signatures and text boxes. Changing the document
@@ -43,7 +44,8 @@ public sealed record DocumentCapabilities(
     bool CanChangeSecurity,
     bool IsRestricted,
     bool CanAssemblePages,
-    bool CanExtractPages)
+    bool CanExtractPages,
+    bool CanCopyText)
 {
     /// <summary>An unprotected document: every tool, nothing to unlock.</summary>
     public static DocumentCapabilities Unprotected { get; } = From(PdfSecurity.Unprotected);
@@ -70,7 +72,10 @@ public sealed record DocumentCapabilities(
             // Either bit (#174): ISO 32000-2 Table 22's "assemble the document" is P-bit 11,
             // and a document that grants modify grants the stronger right already.
             CanAssemblePages: Allows(PdfPermissions.Assemble) || modify,
-            CanExtractPages: Allows(PdfPermissions.Copy));
+            CanExtractPages: Allows(PdfPermissions.Copy),
+            // #710: the copy bit, the core's MEGAPDF_PERMIT_COPY. A document that forbids it still
+            // selects and highlights; only the Copy command is disabled.
+            CanCopyText: Allows(PdfPermissions.Copy));
     }
 
     /// <summary>

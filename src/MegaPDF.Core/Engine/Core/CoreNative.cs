@@ -249,6 +249,64 @@ internal static class CoreNative
     public static extern nuint megapdf_search_page(IntPtr page,
         [MarshalAs(UnmanagedType.LPWStr)] string term, [Out] double[]? outDoubles, nuint capacity);
 
+    // Contract 11: text selection (#710) --------------------------------------
+    //
+    // The snapshot is a SafeHandle so that a query in flight on one thread keeps it alive while
+    // another disposes it: the marshaller holds a reference for the length of each call, and the
+    // native free runs once the last one returns. The queries take no core lock (the snapshot
+    // holds no PDFium state), so that is the only race there is.
+
+    /// <summary>megapdf_selectable_caret_at's tolerance for "no limit": a page with text always answers.</summary>
+    public const double SelectAnywhere = -1.0;
+
+    /// <summary>megapdf_last_error() when a call refused a page whose document has closed (#551).</summary>
+    public const uint LastErrClosed = 101;
+
+    [DllImport(Dll)]
+    public static extern SelectableHandle megapdf_selectable_load(IntPtr page);
+
+    [DllImport(Dll)]
+    public static extern void megapdf_selectable_free(IntPtr selectable);
+
+    [DllImport(Dll)]
+    public static extern int megapdf_selectable_length(SelectableHandle selectable);
+
+    [DllImport(Dll)]
+    public static extern int megapdf_selectable_caret_at(SelectableHandle selectable, double x, double y, double tolerance);
+
+    [DllImport(Dll)]
+    public static extern int megapdf_selectable_char_at(SelectableHandle selectable, double x, double y, double tolerance);
+
+    [DllImport(Dll)]
+    public static extern int megapdf_selectable_word_at(SelectableHandle selectable, double x, double y, double tolerance,
+        out int start, out int end);
+
+    [DllImport(Dll)]
+    public static extern int megapdf_selectable_line_at(SelectableHandle selectable, double x, double y, double tolerance,
+        out int start, out int end);
+
+    /// <summary>UTF-16 code units, no terminator, count-then-fill.</summary>
+    [DllImport(Dll)]
+    public static extern nuint megapdf_selectable_text(SelectableHandle selectable, int start, int end,
+        [Out] ushort[]? outUnits, nuint capacity);
+
+    /// <summary>Crop-space rects, one per line touched; count-then-fill.</summary>
+    [DllImport(Dll)]
+    public static extern nuint megapdf_selectable_rects(SelectableHandle selectable, int start, int end,
+        [Out] Rect[]? outRects, nuint capacity);
+
+    /// <summary>A megapdf_selectable*, freed with megapdf_selectable_free.</summary>
+    internal sealed class SelectableHandle : Microsoft.Win32.SafeHandles.SafeHandleZeroOrMinusOneIsInvalid
+    {
+        public SelectableHandle() : base(ownsHandle: true) { }
+
+        protected override bool ReleaseHandle()
+        {
+            megapdf_selectable_free(handle);
+            return true;
+        }
+    }
+
     // Contract 2: text runs and visual lines (#106) --------------------------
 
     /// <summary>One text object with visible text; bounds in crop space.</summary>
@@ -646,6 +704,13 @@ internal static class CoreNative
 
     [DllImport(Dll)]
     public static extern int megapdf_security_info(IntPtr document, out megapdf_security security);
+
+    /// <summary>
+    /// The MEGAPDF_PERMIT_* bits this open acts on (#710): the file's own, every advisory bit after
+    /// megapdf_security_override, or all of them for full access. 0 for a null document.
+    /// </summary>
+    [DllImport(Dll)]
+    public static extern uint megapdf_permissions_in_effect(IntPtr document);
 
     /// <summary>A copy under new AES-256 security. MEGAPDF_ERR_RESTRICTED (-6) without full access.</summary>
     [DllImport(Dll)]
