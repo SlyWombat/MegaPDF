@@ -1059,6 +1059,10 @@
     <value>Afficher l'onglet précédent</value>
     <comment>FR-REVIEW #348 — new, francophone review pending: the standard macOS French wording for this Window menu item (⌃⇧Tab) (#348)</comment>
   </data>
+  <data name="MoveTabToNewWindow" xml:space="preserve">
+    <value>Déplacer l'onglet vers une nouvelle fenêtre</value>
+    <comment>FR-REVIEW #711 — new, francophone review pending: Linux tab context menu, moves this tab into a window of its own; the wording Edge and the GNOME browsers use for the same command. Not shown on the Mac, where AppKit's own item (« Placer l'onglet dans une nouvelle fenêtre ») appears instead</comment>
+  </data>
   <data name="TabAccessibleName" xml:space="preserve">
     <value>{0}, onglet</value>
     <comment>FR-REVIEW #348 — new, francophone review pending. Narrator/VoiceOver name for a tab-strip item: the document's name, then what it is (#348)</comment>
