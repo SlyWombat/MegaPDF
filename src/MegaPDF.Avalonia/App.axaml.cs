@@ -132,6 +132,23 @@ public partial class App : Application
                 ScreenshotDialog = window.ShowSignedSaveDialogForScreenshot(viewModel.IsSignedCertification);
                 return true;
 
+            // The question before a save or a password change takes away the undo history
+            // (#633), rendered beside the window to <out>-dialog.png. The flatten wording; the
+            // password one differs only in the body and the action's word.
+            case "undo-loss":
+                if (window is null)
+                {
+                    Console.Error.WriteLine("::error::--screenshot-state undo-loss has no window to open the dialog on.");
+                    return false;
+                }
+                if (!viewModel.IsDocumentOpen)
+                {
+                    Console.Error.WriteLine("::error::--screenshot-state undo-loss needs a document.");
+                    return false;
+                }
+                ScreenshotDialog = window.ShowUndoLossDialogForScreenshot(UndoLossReason.Flatten);
+                return true;
+
             // Search hits: cyan for every match, brand blue for the one you are on.
             //
             // The term follows the capture language, like everything else the demo puts

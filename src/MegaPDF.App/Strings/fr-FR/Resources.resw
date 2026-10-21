@@ -1374,4 +1374,16 @@
     <value>L'auteur de ce document a demandé que rien n'en soit copié.</value>
     <comment>FR-REVIEW #710 — new with text selection, not yet read by the reviewer. #710: why Copy is unavailable on a document without the copy permission; #558's extraction-class wording. Selecting still works</comment>
   </data>
+  <data name="UndoLossTitle" xml:space="preserve">
+    <value>Vos modifications ne pourront plus être annulées ensuite</value>
+    <comment>FR-REVIEW #633 — new, not yet read by the reviewer. #633: the title of the question put before a save or a password change takes away the undo history. Shared by both reasons</comment>
+  </data>
+  <data name="UndoLossFlattenBody" xml:space="preserve">
+    <value>L'option «&#160;Rendre les marques et signatures permanentes à l'enregistrement&#160;» est activée&#160;: cet enregistrement intègre donc vos modifications à la page. MegaPDF ne vous le redemandera pas tant que ce document est ouvert.</value>
+    <comment>FR-REVIEW #633 — new, not yet read by the reviewer. #633: the body when the reason is a save with the flatten setting on; asked once per open document (the #558 rule). Names the Windows setting, FlattenToggle.Header</comment>
+  </data>
+  <data name="UndoLossPasswordBody" xml:space="preserve">
+    <value>Définir, changer ou retirer un mot de passe enregistre le document et le rouvre. Ensuite, vous ne pourrez plus annuler ce que vous avez fait jusqu'ici.</value>
+    <comment>FR-REVIEW #633 — new, not yet read by the reviewer. #633: the body when the reason is the Password command, which writes the file and reopens it (ADR-004 section 6); asked every time. The French uses the verb, never the bare noun Annuler (also Cancel)</comment>
+  </data>
 </root>

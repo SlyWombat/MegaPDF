@@ -11,6 +11,9 @@ using MegaPDF.Core.Viewing;
 
 namespace MegaPDF.Avalonia.ViewModels;
 
+/// <summary>Why a step is about to clear the undo history (#633).</summary>
+public enum UndoLossReason { Flatten, PasswordChange }
+
 /// <summary>
 /// A stored signature and its preview. You pick a signature by how it looks, so the
 /// list needs the image, not just the name.
@@ -465,6 +468,11 @@ public sealed partial class DocumentViewModel : ObservableObject, IDisposable
 
     public bool CanUndo => _undoStack.CanUndo;
     public bool CanRedo => _undoStack.CanRedo;
+
+    /// <summary>#633: the flatten question was answered Save for this open document. Reset when it closes.</summary>
+    public bool UndoLossAcknowledged { get; private set; }
+
+    public void AcknowledgeUndoLoss() => UndoLossAcknowledged = true;
 
     partial void OnZoomChanged(double value)
     {
@@ -3555,6 +3563,7 @@ public sealed partial class DocumentViewModel : ObservableObject, IDisposable
 
         DiscardHeldPages();
         _undoStack.Clear();
+        UndoLossAcknowledged = false;   // #633: a reopened document asks again
         _pageWarnings.Reset();
         _searchGeneration++;
         SelectedPageIndices = [];

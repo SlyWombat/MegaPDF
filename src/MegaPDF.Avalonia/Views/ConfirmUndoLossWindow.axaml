@@ -1,0 +1,20 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:MegaPDF.Avalonia"
+        x:Class="MegaPDF.Avalonia.Views.ConfirmUndoLossWindow"
+        Title="{x:Static loc:Strings.UndoLossTitle}"
+        Width="440" SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False">
+  <!-- #633: the alert before a save or a password change clears the undo history. Owner-modal
+       and centred: Avalonia 11.2 has no NSWindow sheet, so this is the app's standing
+       substitute (UnsavedChangesWindow). The action is the default; Escape cancels. -->
+  <StackPanel Margin="24" Spacing="{DynamicResource SpaceM}">
+    <TextBlock Name="PromptText" Text="{x:Static loc:Strings.UndoLossTitle}" FontWeight="SemiBold" TextWrapping="Wrap" />
+    <TextBlock Name="BodyText" TextWrapping="Wrap" Opacity="0.8" />
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="{DynamicResource SpaceS}">
+      <Button Name="CancelButton" Content="{x:Static loc:Strings.Cancel}" IsCancel="True" />
+      <Button Name="ContinueButton" Classes="accent" IsDefault="True" />
+    </StackPanel>
+  </StackPanel>
+</Window>

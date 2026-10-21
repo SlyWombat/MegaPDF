@@ -1414,4 +1414,16 @@
     <value>The author of this document asked that nothing be copied out of it.</value>
     <comment>#710: why Copy is unavailable on a document without the copy permission; #558's extraction-class wording. Selecting still works</comment>
   </data>
+  <data name="UndoLossTitle" xml:space="preserve">
+    <value>Your changes can't be undone after this</value>
+    <comment>#633: the title of the question put before a save or a password change takes away the undo history. Shared by both reasons</comment>
+  </data>
+  <data name="UndoLossFlattenBody" xml:space="preserve">
+    <value>“Make marks &amp; signatures permanent when saving” is on, so this save makes your changes part of the page. MegaPDF won't ask again while this document is open.</value>
+    <comment>#633: the body when the reason is a save with the flatten setting on; asked once per open document (the #558 rule). Names the Windows setting, FlattenToggle.Header</comment>
+  </data>
+  <data name="UndoLossPasswordBody" xml:space="preserve">
+    <value>Setting, changing or removing a password saves the document and opens it again. After that, what you've done so far can't be undone.</value>
+    <comment>#633: the body when the reason is the Password command, which writes the file and reopens it (ADR-004 section 6); asked every time. The French uses the verb, never the bare noun Annuler (also Cancel)</comment>
+  </data>
 </root>

@@ -1249,4 +1249,13 @@ public static partial class Strings
 
     /// <summary>The author of this document asked that nothing be copied out of it.</summary>
     public static string CopyWithheld => Get("CopyWithheld");
+
+    /// <summary>Your changes can't be undone after this</summary>
+    public static string UndoLossTitle => Get("UndoLossTitle");
+
+    /// <summary>“Flatten when saving” is on, so this save bakes your changes into the page. MegaPDF won't ask again while this document is open.</summary>
+    public static string UndoLossFlattenBody => Get("UndoLossFlattenBody");
+
+    /// <summary>Setting, changing or removing a password saves the document and opens it again. After that, what you've done so far can't be undone.</summary>
+    public static string UndoLossPasswordBody => Get("UndoLossPasswordBody");
 }

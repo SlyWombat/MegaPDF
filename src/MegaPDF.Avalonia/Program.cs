@@ -2489,6 +2489,17 @@ internal static class Program
             failures++;
         }
 
+        Console.WriteLine("the undo-history question, in a real window (#633):");
+        try
+        {
+            CheckUndoLossQuestion(dir, state, Check);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"::error::undo-history question: {ex.GetType().Name}: {ex.Message}");
+            failures++;
+        }
+
         Console.WriteLine(failures == 0 ? "self-test: PASS" : $"::error::self-test: {failures} check(s) failed");
         return failures == 0 ? 0 : 1;
     }
@@ -4380,6 +4391,180 @@ internal static class Program
             window.Close();
             MenuProbe.Pump();
             vm.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// #633, the question before a save or a password change takes away the undo history,
+    /// in a real window on the headless platform. A password change clears the history
+    /// whether or not Flatten when saving is on, because it writes the file and reopens it;
+    /// a save clears it only with that setting on, and asks once per open document so Ctrl+S
+    /// is not a dialog every time. Cancel leaves everything as it was.
+    ///
+    /// A headless window has no <c>IStorageFile</c>, so a Save stops at <c>NowhereToSave</c>
+    /// and the Password command at its <c>OpenedFile</c> check. Both questions are put before
+    /// those checks, which is what makes them testable here; that the flatten clears the
+    /// history is proved elsewhere in this file (the "Flatten on save bakes it in" check).
+    /// </summary>
+    private static void CheckUndoLossQuestion(string dir, string state, Action<string, bool> check)
+    {
+        EnsureHeadlessPlatform();
+
+        // A copy, so nothing in dir is touched whatever a check does to it.
+        var copy = Path.Combine(Path.GetTempPath(), $"megapdf-selftest-undoloss-{Guid.NewGuid():N}.pdf");
+        File.Copy(Path.Combine(dir, "fixture.pdf"), copy, overwrite: true);
+        // The drawn checkbox the other checks in this file click: one click, one undoable edit.
+        var tick = new PdfPoint(78, 186);
+
+        (ShellViewModel Shell, DocumentViewModel Vm, Views.MainWindow Window) Open(string path)
+        {
+            var shell = new ShellViewModel(state);
+            var vm = shell.CreateDocument();
+            vm.Open(path);
+            shell.AddTab(vm);
+            var window = new Views.MainWindow { DataContext = shell, Width = 1280, Height = 800 };
+            window.SkipRecoveryOffer = true;
+            window.Show();
+            MenuProbe.Pump();
+            return (shell, vm, window);
+        }
+
+        void Edit(DocumentViewModel vm)
+        {
+            vm.HandlePageClick(0, tick);
+            PumpUntil(() => vm.IsDirty && !vm.Busy.IsBusy, TimeSpan.FromSeconds(5));
+        }
+
+        void Done(ShellViewModel shell, Views.MainWindow window)
+        {
+            window.SkipCloseConfirmation();
+            window.Close();
+            MenuProbe.Pump();
+            shell.Dispose();
+        }
+
+        try
+        {
+            // 1. An edit, with Flatten when saving on: there is history to lose.
+            {
+                var (shell, vm, window) = Open(copy);
+                var flattenAtStart = vm.FlattenOnSave;
+                try
+                {
+                    vm.FlattenOnSave = true;
+                    Edit(vm);
+                    check("there is something to undo, and the document is changed", vm.CanUndo && vm.IsDirty);
+
+                    // 2. Save puts the question, and Cancel stops there.
+                    UndoLossReason? asked = null;
+                    window.AnswerUndoLossForTest = r => { asked = r; return false; };
+                    vm.SaveCommand.Execute(null);
+                    PumpUntil(() => window.UndoLossAsked > 0, TimeSpan.FromSeconds(5));
+                    MenuProbe.Pump();
+                    check($"Save with flatten on and an edit puts the question ({window.UndoLossAsked} time(s))",
+                          window.UndoLossAsked == 1);
+                    check("  for the flatten reason", asked == UndoLossReason.Flatten);
+                    check("  Cancel keeps the undo history and the unsaved change", vm.CanUndo && vm.IsDirty);
+                    check("  and stops at the question, not after it", vm.Status != Strings.NowhereToSave);
+
+                    // 3. The real window's words, and its buttons.
+                    var flatten = new Views.ConfirmUndoLossWindow();
+                    flatten.SetReason(UndoLossReason.Flatten);
+                    check("the window's title is the undo-history title",
+                          flatten.PromptText.Text == Strings.UndoLossTitle && flatten.Title == Strings.UndoLossTitle);
+                    check("  its body, for a save, is the flatten wording", flatten.BodyText.Text == Strings.UndoLossFlattenBody);
+                    check("  its action reads Save", Equals(flatten.ContinueButton.Content, Strings.Save));
+                    check("  the action is the default button, not Cancel", flatten.ContinueButton.IsDefault && !flatten.CancelButton.IsDefault);
+                    check("  Cancel is the Escape button", flatten.CancelButton.IsCancel);
+                    check("  Save comes with Cancel only: there is no Don't-ask-again tick",
+                          !global::Avalonia.LogicalTree.LogicalExtensions.GetLogicalDescendants(flatten).OfType<global::Avalonia.Controls.CheckBox>().Any());
+                    var password = new Views.ConfirmUndoLossWindow();
+                    password.SetReason(UndoLossReason.PasswordChange);
+                    check("  its body, for a password, is the password wording", password.BodyText.Text == Strings.UndoLossPasswordBody);
+                    check("  its action reads Continue", Equals(password.ContinueButton.Content, Strings.Continue));
+                    // #602: nothing here may read as the document being encrypted, or as a
+                    // signature (the word the app also uses for the picture someone places).
+                    var everything = $"{Strings.UndoLossTitle} {Strings.UndoLossFlattenBody} {Strings.UndoLossPasswordBody} {Strings.Save} {Strings.Continue}";
+                    var forbidden = new[] { "encrypt", "signed", "digital" };
+                    var found = forbidden.Where(w => everything.Contains(w, StringComparison.OrdinalIgnoreCase)).ToList();
+                    check($"  and nothing in it can be read as encryption or a digital signature ({(found.Count == 0 ? "no such word" : string.Join(", ", found))})",
+                          found.Count == 0);
+
+                    // 4. Save, answered Save: asked, remembered for this document.
+                    window.AnswerUndoLossForTest = _ => true;
+                    vm.SaveCommand.Execute(null);
+                    PumpUntil(() => window.UndoLossAsked > 1, TimeSpan.FromSeconds(5));
+                    MenuProbe.Pump();
+                    check($"answering Save: the question was put again ({window.UndoLossAsked} in all)", window.UndoLossAsked == 2);
+                    check("  and is remembered for this document", vm.UndoLossAcknowledged);
+
+                    // 5. Once per open document.
+                    Edit(vm);
+                    vm.SaveCommand.Execute(null);
+                    MenuProbe.Pump();
+                    PumpFor(TimeSpan.FromMilliseconds(300));
+                    check($"the next Save, after a fresh edit, does not ask ({window.UndoLossAsked} in all)", window.UndoLossAsked == 2);
+
+                    // 6. Flatten off never asks.
+                    vm.FlattenOnSave = false;
+                    Edit(vm);
+                    vm.SaveCommand.Execute(null);
+                    MenuProbe.Pump();
+                    PumpFor(TimeSpan.FromMilliseconds(300));
+                    check($"with flatten off, Save does not ask ({window.UndoLossAsked} in all)", window.UndoLossAsked == 2);
+
+                    // 7. The Password command asks flatten or no flatten, and Cancel opens no dialog.
+                    Edit(vm);
+                    asked = null;
+                    window.AnswerUndoLossForTest = r => { asked = r; return false; };
+                    var changing = window.ChangeSecurityAsync();
+                    PumpUntil(() => changing.IsCompleted, TimeSpan.FromSeconds(5));
+                    MenuProbe.Pump();
+                    check($"the Password command asks, with flatten off ({window.UndoLossAsked} in all)", window.UndoLossAsked == 3);
+                    check("  for the password reason", asked == UndoLossReason.PasswordChange);
+                    check("  Cancel opens no password window", window.OwnedWindows.Count == 0);
+                    check("  and keeps the undo history", vm.CanUndo);
+
+                    // 8. A reopen resets the once-per-document rule.
+                    vm.Open(copy);
+                    check("a reopened document has not been asked about", !vm.UndoLossAcknowledged);
+                }
+                finally
+                {
+                    vm.FlattenOnSave = flattenAtStart;
+                    Done(shell, window);
+                }
+            }
+
+            // 9. Closing does not ask a second question: the history goes with the document.
+            {
+                var (shell, vm, window) = Open(copy);
+                var flattenAtStart = vm.FlattenOnSave;
+                try
+                {
+                    vm.FlattenOnSave = true;
+                    Edit(vm);
+                    window.AnswerUndoLossForTest = _ => true;
+                    window.AnswerUnsavedChangesForTest = () => Views.UnsavedChangesWindow.Decision.Save;
+                    // The route window close, Ctrl+W/Cmd+W and Quit all share, so this holds on
+                    // both desktops without a keyboard shortcut that differs between them. A
+                    // headless Save then stops at NowhereToSave, so closing is refused: false.
+                    var closing = window.ConfirmCloseForQuitAsync();
+                    PumpUntil(() => closing.IsCompleted, TimeSpan.FromSeconds(5));
+                    MenuProbe.Pump();
+                    check($"closing a changed document asks Save changes ({window.UnsavedChangesAsked} time(s))", window.UnsavedChangesAsked == 1);
+                    check($"  and answering Save does not put the undo question as well ({window.UndoLossAsked} asked)", window.UndoLossAsked == 0);
+                }
+                finally
+                {
+                    vm.FlattenOnSave = flattenAtStart;
+                    Done(shell, window);
+                }
+            }
+        }
+        finally
+        {
+            try { File.Delete(copy); } catch { /* best-effort scratch cleanup */ }
         }
     }
 

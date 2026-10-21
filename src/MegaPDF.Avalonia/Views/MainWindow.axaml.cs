@@ -1034,7 +1034,10 @@ public partial class MainWindow : Window
         switch (choice)
         {
             case UnsavedChangesWindow.Decision.Save:
-                return await SaveAsync() && !vm.IsDirty;
+                // #633: the document is going, and its history with it, so this save does not ask.
+                _savingFromSaveChangesPrompt = true;
+                try { return await SaveAsync() && !vm.IsDirty; }
+                finally { _savingFromSaveChangesPrompt = false; }
             case UnsavedChangesWindow.Decision.DontSave:
                 vm.DiscardChanges();
                 return true;
@@ -2770,6 +2773,57 @@ public partial class MainWindow : Window
     internal int SignedSaveAsked { get; private set; }
 
     /// <summary>
+    /// For the self-test (#633): answers the undo-history question instead of putting the
+    /// window up, the same substitution <see cref="AnswerSignedSaveForTest"/> is.
+    /// </summary>
+    internal Func<UndoLossReason, bool>? AnswerUndoLossForTest { get; set; }
+
+    /// <summary>How many times the undo-history question has been put. For the self-test.</summary>
+    internal int UndoLossAsked { get; private set; }
+
+    /// <summary>#633: this save answers "Save changes?" before the document goes (close, replace, unlock) — the history goes too, so nothing is asked.</summary>
+    private bool _savingFromSaveChangesPrompt;
+
+    /// <summary>
+    /// #633: before a step that clears the undo history, says so. True to go on. Asks only when
+    /// there is something to undo; for the flatten reason, only while Flatten when saving is on
+    /// and only once per open document. Asked here, not in the view model: a dialog inside
+    /// <c>SaveCoreAsync</c> would run under <c>RunSynchronously</c> with no synchronisation
+    /// context and deadlock the UI thread, and Save a copy removes the signature before it.
+    /// </summary>
+    private async Task<bool> ConfirmUndoLossAsync(DocumentViewModel vm, UndoLossReason reason)
+    {
+        if (!vm.CanUndo || _savingFromSaveChangesPrompt)
+            return true;
+        if (reason == UndoLossReason.Flatten && (!vm.FlattenOnSave || vm.UndoLossAcknowledged))
+            return true;
+
+        UndoLossAsked++;
+        bool goOn;
+        if (AnswerUndoLossForTest is { } answer)
+            goOn = answer(reason);
+        else
+        {
+            var dialog = new ConfirmUndoLossWindow();
+            dialog.SetReason(reason);
+            await dialog.ShowDialog(this);
+            goOn = dialog.Confirmed;
+        }
+        if (goOn && reason == UndoLossReason.Flatten)
+            vm.AcknowledgeUndoLoss();
+        return goOn;
+    }
+
+    /// <summary>For the `undo-loss` screenshot state: the question, beside the window, not modal.</summary>
+    internal Window ShowUndoLossDialogForScreenshot(UndoLossReason reason)
+    {
+        var dialog = new ConfirmUndoLossWindow();
+        dialog.SetReason(reason);
+        dialog.Show(this);
+        return dialog;
+    }
+
+    /// <summary>
     /// What the signed-save question says, as the dialog would say it (#576), including the
     /// tick's label and the state it is offered in — a default is part of what is being
     /// asked, so a check that never read it could not notice the default changing.
@@ -2872,6 +2926,11 @@ public partial class MainWindow : Window
         if (!await ConfirmAndApplyRedactionsAsync(alreadySavingACopy: false))
             return false;
 
+        // #633: after every other confirmation, immediately before the write. Before the
+        // OpenedFile check, so a headless window (which has no IStorageFile) can reach it.
+        if (!await ConfirmUndoLossAsync(vm, UndoLossReason.Flatten))
+            return false;
+
         if (OpenedFile is not { } file)
         {
             // Should not happen — but a Save that does nothing at all is the worst
@@ -2971,6 +3030,12 @@ public partial class MainWindow : Window
             return;
         }
 
+        // #633: after the picker (a Markdown export, above, never flattens and is never asked)
+        // and before RemoveDigitalSignatures below, so a Cancel does not take the signature
+        // out for nothing.
+        if (!await ConfirmUndoLossAsync(vm, UndoLossReason.Flatten))
+            return;
+
         try
         {
             // One call, so the journal is marked against the file the bytes went to
@@ -3041,7 +3106,7 @@ public partial class MainWindow : Window
     /// never opens (and so never truncates) the user's file. The saved file is then
     /// reopened with the new password.
     /// </summary>
-    private async Task ChangeSecurityAsync()
+    internal async Task ChangeSecurityAsync()
     {
         if (Active is not { IsDocumentOpen: true, IsIdle: true } vm)
             return;
@@ -3052,6 +3117,11 @@ public partial class MainWindow : Window
             await UnlockAsync();
             return;
         }
+
+        // #633: every branch below writes and reopens the document, which clears the undo
+        // history. Before the OpenedFile check, so a headless window can reach it.
+        if (!await ConfirmUndoLossAsync(vm, UndoLossReason.PasswordChange))
+            return;
 
         if (OpenedFile is null)
         {
