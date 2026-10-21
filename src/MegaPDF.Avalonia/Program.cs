@@ -2102,6 +2102,40 @@ internal static class Program
             failures++;
         }
 
+        // --- A tab moved into a window of its own (#711, Linux's shape) ---
+        //
+        // Move Tab to New Window and a drag off the strip: the same document object goes,
+        // with its edit, its undo, its zoom, its scroll position and its file handle; both
+        // windows go on drawing; external opens with two windows go where they should; and
+        // the window left behind closes once its last tab has gone.
+        Console.WriteLine("a tab moved into a window of its own (#711):");
+        try
+        {
+            CheckMoveTabToNewWindow(dir, state, Check);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"::error::move tab to new window: {ex.GetType().Name}: {ex.Message}");
+            failures++;
+        }
+
+        // --- One document per window, the Mac's shape (#711) ---
+        //
+        // The shell the Mac now builds: a second document goes to a window of its own (which
+        // AppKit then tabs — that half needs a real Mac, --window-tabs-check), the in-window
+        // strip never shows, and closing, quitting and crash recovery all work window by
+        // window. Headless here, so it runs on every desktop's CI.
+        Console.WriteLine("one document per window, the Mac's shape (#711):");
+        try
+        {
+            CheckOneDocumentPerWindow(dir, state, Check);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"::error::one document per window: {ex.GetType().Name}: {ex.Message}");
+            failures++;
+        }
+
         // --- The window at its declared minimum (#237) ---
         //
         // 480×360 is a size the app offers, so it is a size the app has to draw. It
@@ -6880,6 +6914,343 @@ internal static class Program
         check("  the other tab was left alone throughout", tabA.IsDocumentOpen && SamePath(tabA.DocumentPath, fixtureA));
 
         static void Pump() => MenuProbe.Pump();
+    }
+
+    /// <summary>
+    /// Move Tab to New Window, and a drag off the strip, on Linux's in-window shape (#711).
+    ///
+    /// What "moved" has to mean, each asserted rather than assumed: the same
+    /// <see cref="DocumentViewModel"/> object in the new window, so the unsaved edit, the undo
+    /// history, the zoom and the open find bar are its own and not copies; the file handle
+    /// Save writes through, and the scroll position, carried across by the window (they are
+    /// the window's bookkeeping, not the document's); both windows realising and rasterising
+    /// their own document's pages afterwards; and the window left behind closing once its
+    /// last tab has gone.
+    ///
+    /// Then the routing #711 adds once there are two windows: a document open in one window
+    /// is brought forward there rather than opened again in the other, and a new one goes to
+    /// the window used last.
+    /// </summary>
+    private static void CheckMoveTabToNewWindow(string dir, string state, Action<string, bool> check)
+    {
+        EnsureHeadlessPlatform();
+
+        var fixtureA = Path.Combine(dir, "fixture.pdf");
+        var fixtureB = Path.Combine(dir, "forms.pdf");
+        var fixtureC = Path.Combine(dir, "stamped.pdf");
+        var fixtureD = Path.Combine(dir, "demo.pdf");
+        var tick = new PdfPoint(78, 186);
+        var made = new List<Views.MainWindow>();
+
+        using var shell = new ShellViewModel(state);
+        var window = new Views.MainWindow { DataContext = shell, Width = 1280, Height = 800 };
+        window.SkipRecoveryOffer = true;
+        window.Show();
+        made.Add(window);
+        PumpUntil(() => window.LaunchSequence.IsCompleted, TimeSpan.FromSeconds(5));
+
+        try
+        {
+            window.OpenFromSystem(fixtureA);
+            window.OpenFromSystem(fixtureB);
+            PumpUntil(() => shell.Documents.Count == 2 && shell.Documents.All(d => d.IsDocumentOpen), TimeSpan.FromSeconds(10));
+            var tabA = shell.Documents.FirstOrDefault(d => SamePath(d.DocumentPath, fixtureA));
+            var tabB = shell.Documents.FirstOrDefault(d => SamePath(d.DocumentPath, fixtureB));
+            check("two tabs open in one window", tabA is not null && tabB is not null);
+            if (tabA is null || tabB is null)
+                return;
+
+            check("Move Tab to New Window is offered with two tabs", shell.CanMoveTabToNewWindow);
+            check("  and each tab has it on its own context menu (what Shift+F10 opens)",
+                  window.TabContextMenuForTest(shell.Documents.IndexOf(tabA)) is { } menu
+                  && menu.Items.OfType<MenuItem>().Any(i => Equals(i.Header, Strings.MoveTabToNewWindow)));
+
+            // The state that has to survive: an unsaved edit with its undo step, a zoom, a
+            // scroll position and an open find bar.
+            shell.ActivateTab(tabA);
+            MenuProbe.Pump();
+            tabA.HandlePageClick(0, tick);
+            PumpUntil(() => tabA.IsDirty && tabA.IsIdle, TimeSpan.FromSeconds(5));
+            tabA.SetZoomCommand.Execute(2.0);
+            MenuProbe.Pump();
+            window.PageScroller.Offset = new Vector(0, 300);
+            MenuProbe.Pump();
+            var scrolled = window.PageScroller.Offset;
+            tabA.IsFindOpen = true;
+            MenuProbe.Pump();
+            check($"tab A is edited, zoomed and scrolled before the move (offset {scrolled.Y:F0})",
+                  tabA.IsDirty && tabA.CanUndo && Math.Abs(tabA.Zoom - 2.0) < 0.001 && scrolled.Y > 0);
+            check("  and it has its own file handle for Save", window.HasFileHandleForTest(tabA));
+
+            var moved = window.MoveTabToNewWindow(tabA);
+            if (moved is not null)
+                made.Add(moved);
+            PumpUntil(() => moved is { IsVisible: true } && moved.Active is not null, TimeSpan.FromSeconds(5));
+            check("Move Tab to New Window opens a new window", moved is { IsVisible: true } && !ReferenceEquals(moved, window));
+            if (moved is null)
+                return;
+            check("  holding the same document object, active there", ReferenceEquals(moved.Active, tabA)
+                  && moved.Shell is { Documents.Count: 1 });
+            check("  and gone from the window it left, which keeps tab B", !shell.Documents.Contains(tabA)
+                  && shell.Documents.Count == 1 && ReferenceEquals(shell.Active, tabB) && window.IsVisible);
+            check("the unsaved edit and its undo step came with it", tabA.IsDirty && tabA.CanUndo && tabA.IsDocumentOpen);
+            check($"  so did the zoom ({tabA.Zoom * 100:F0}%) and the open find bar",
+                  Math.Abs(tabA.Zoom - 2.0) < 0.001 && tabA.IsFindOpen);
+            check("  and the file handle Save writes through, which the old window let go of",
+                  moved.HasFileHandleForTest(tabA) && !window.HasFileHandleForTest(tabA));
+            PumpUntil(() => Math.Abs(moved.PageScroller.Offset.Y - scrolled.Y) < 1, TimeSpan.FromSeconds(5));
+            check($"  and the scroll position ({moved.PageScroller.Offset.Y:F0} of {scrolled.Y:F0})",
+                  Math.Abs(moved.PageScroller.Offset.Y - scrolled.Y) < 1);
+            check("the new window is the most recently active", ReferenceEquals(Views.MainWindow.MostRecentlyActive, moved));
+            check("  and its shell shares the first one's settings (one app, two windows)",
+                  ReferenceEquals(moved.Shell!.Settings, shell.Settings));
+
+            // Both windows draw: each realises its own document's pages and rasterises them.
+            PumpUntil(() => Drawn(moved, tabA) && Drawn(window, tabB), TimeSpan.FromSeconds(10));
+            check("the new window draws its document's pages", Drawn(moved, tabA));
+            check("  and the old window draws the tab it kept", Drawn(window, tabB));
+
+            tabA.UndoCommand.Execute(null);
+            PumpUntil(() => !tabA.CanUndo && tabA.IsIdle, TimeSpan.FromSeconds(5));
+            check("undo in the new window undoes the edit made in the old one", !tabA.CanUndo);
+            tabA.RedoCommand.Execute(null);
+            PumpUntil(() => tabA.IsDirty && tabA.IsIdle, TimeSpan.FromSeconds(5));
+
+            // Two windows: an open of a document already open in the other brings that one
+            // forward; a new one goes to the window used last.
+            window.OpenFromSystem(fixtureA);
+            PumpUntil(() => ReferenceEquals(Views.MainWindow.MostRecentlyActive, moved), TimeSpan.FromSeconds(5));
+            check("opening, from the old window, the document now in the new one brings the new one forward",
+                  shell.Documents.Count == 1 && moved.Shell!.Documents.Count == 1 && ReferenceEquals(moved.Active, tabA));
+            window.Activate();
+            MenuProbe.Pump();
+            App.RouteExternalPaths(Views.MainWindow.MostRecentlyActive ?? window, [fixtureC]);
+            PumpUntil(() => shell.Documents.Count == 2 && shell.Documents.All(d => d.IsDocumentOpen), TimeSpan.FromSeconds(10));
+            check("an external open of a new document goes to the window used last",
+                  shell.Documents.Any(d => SamePath(d.DocumentPath, fixtureC)) && moved.Shell!.Documents.Count == 1);
+            moved.Activate();
+            MenuProbe.Pump();
+            App.RouteExternalPaths(Views.MainWindow.MostRecentlyActive ?? moved, [fixtureD]);
+            PumpUntil(() => moved.Shell!.Documents.Count == 2 && moved.Shell.Documents.All(d => d.IsDocumentOpen), TimeSpan.FromSeconds(10));
+            check("  and to the other once that one is used",
+                  moved.Shell!.Documents.Any(d => SamePath(d.DocumentPath, fixtureD)) && shell.Documents.Count == 2);
+
+            // A drag off the strip: press on tab D, carry it well clear, let go.
+            var tabD = moved.Shell.Documents.First(d => SamePath(d.DocumentPath, fixtureD));
+            var before = Views.MainWindow.OpenWindows.Count;
+            if (TabCentre(moved, tabD) is { } centre)
+            {
+                // Back over the strip before letting go: nothing happens.
+                HeadlessWindowExtensions.MouseDown(moved, centre, MouseButton.Left);
+                HeadlessWindowExtensions.MouseMove(moved, new Point(centre.X, centre.Y + 200));
+                HeadlessWindowExtensions.MouseMove(moved, centre);
+                HeadlessWindowExtensions.MouseUp(moved, centre, MouseButton.Left);
+                MenuProbe.Pump();
+                check("a drag carried back onto the strip before letting go moves nothing",
+                      Views.MainWindow.OpenWindows.Count == before && moved.Shell.Documents.Contains(tabD));
+
+                var away = new Point(centre.X + 60, centre.Y + 200);
+                HeadlessWindowExtensions.MouseDown(moved, centre, MouseButton.Left);
+                HeadlessWindowExtensions.MouseMove(moved, new Point(centre.X, centre.Y + 20));
+                HeadlessWindowExtensions.MouseMove(moved, away);
+                HeadlessWindowExtensions.MouseUp(moved, away, MouseButton.Left);
+                PumpUntil(() => Views.MainWindow.OpenWindows.Count == before + 1, TimeSpan.FromSeconds(5));
+                var dropped = Views.MainWindow.OpenWindows.FirstOrDefault(w => ReferenceEquals(w.Active, tabD));
+                if (dropped is not null && !made.Contains(dropped))
+                    made.Add(dropped);
+                check("dragging a tab well clear of the strip and letting go moves it to a window of its own",
+                      dropped is not null && !ReferenceEquals(dropped, moved) && !moved.Shell.Documents.Contains(tabD)
+                      && ReferenceEquals(moved.Active, tabA));
+            }
+            else
+            {
+                check("tab D's strip item is found for a real drag", false);
+            }
+
+            // The window left behind closes with its last tab.
+            var tabC = shell.Documents.First(d => SamePath(d.DocumentPath, fixtureC));
+            if (window.MoveTabToNewWindow(tabB) is { } third)
+                made.Add(third);
+            MenuProbe.Pump();
+            check("with one tab left, Move Tab to New Window is no longer offered", !shell.CanMoveTabToNewWindow);
+            var last = window.MoveTabToNewWindow(tabC);
+            if (last is not null)
+                made.Add(last);
+            PumpUntil(() => !window.IsVisible, TimeSpan.FromSeconds(5));
+            check("moving the last tab out closes the window it left",
+                  !window.IsVisible && !Views.MainWindow.OpenWindows.Contains(window));
+            check("  without closing the document it moved", last is { IsVisible: true } && ReferenceEquals(last.Active, tabC)
+                  && tabC.IsDocumentOpen);
+        }
+        finally
+        {
+            foreach (var w in made)
+            {
+                w.SkipCloseConfirmation();
+                w.Close();
+            }
+            MenuProbe.Pump();
+        }
+
+        // Its pages are realised in this window's page list and have a raster.
+        static bool Drawn(Views.MainWindow w, DocumentViewModel document)
+        {
+            var pages = w.PageList.GetRealizedContainers().Select(c => c.DataContext).OfType<PageViewModel>().ToList();
+            return pages.Count > 0 && pages.All(p => document.Pages.Contains(p)) && pages.Any(p => p.Image is not null);
+        }
+
+        static Point? TabCentre(Views.MainWindow w, DocumentViewModel document) =>
+            w.DocumentTabStrip.ContainerFromIndex(w.Shell!.Documents.IndexOf(document)) is Control item
+                ? item.TranslatePoint(new Point(item.Bounds.Width / 2, item.Bounds.Height / 2), w)
+                : null;
+    }
+
+    /// <summary>
+    /// The Mac's shell shape (#711): one document per window, headless. AppKit merging the
+    /// windows into tabs needs a real Mac and is <c>--window-tabs-check</c>'s; everything
+    /// MegaPDF decides for itself is here, so it runs in every desktop's CI: where a second
+    /// document goes, that the strip never shows and the in-window tab commands stand aside,
+    /// that a document already open is brought forward rather than opened again, that each
+    /// window asks about its own unsaved changes, that quitting asks across all of them, and
+    /// that two crashed documents come back as two windows.
+    /// </summary>
+    private static void CheckOneDocumentPerWindow(string dir, string state, Action<string, bool> check)
+    {
+        EnsureHeadlessPlatform();
+
+        var fixtureA = Path.Combine(dir, "fixture.pdf");
+        var fixtureB = Path.Combine(dir, "forms.pdf");
+        var tick = new PdfPoint(78, 186);
+        var made = new List<Views.MainWindow>();
+
+        var shell = new ShellViewModel(state, oneDocumentPerWindow: true);
+        var window = new Views.MainWindow { DataContext = shell, Width = 1280, Height = 800 };
+        window.SkipRecoveryOffer = true;
+        window.Show();
+        made.Add(window);
+        PumpUntil(() => window.LaunchSequence.IsCompleted, TimeSpan.FromSeconds(5));
+
+        Views.MainWindow? Holding(string path) =>
+            Views.MainWindow.OpenWindows.FirstOrDefault(w => ReferenceEquals(w.Shell?.Settings, shell.Settings)
+                                                             && w.Shell!.Documents.Any(d => SamePath(d.DocumentPath, path)));
+
+        try
+        {
+            window.OpenFromSystem(fixtureA);
+            PumpUntil(() => shell.Documents.Count == 1 && shell.Documents[0].IsDocumentOpen, TimeSpan.FromSeconds(10));
+            check("the first document opens into the empty window", shell.Documents.Count == 1 && Holding(fixtureA) == window);
+            check("  with no in-window tab strip", !shell.ShowsTabStrip && !window.DocumentTabStrip.IsVisible);
+            check("  and Move Tab to New Window does not apply (AppKit's own does it)",
+                  !shell.CanMoveTabToNewWindow && window.MoveTabToNewWindow(shell.Documents[0]) is null);
+            check("the menu bar leaves Show Next/Previous Tab to AppKit",
+                  window.MenuBarItem("ShowNextTab") is null && window.MenuBarItem("ShowPreviousTab") is null);
+            check($"  and ⌘W reads Close, not Close Tab, on a window with no tabs beside it (\"{window.MenuBarItem("Close")?.Header}\")",
+                  window.MenuBarItem("Close")?.Header == Strings.Close);
+
+            window.OpenFromSystem(fixtureB);
+            PumpUntil(() => Holding(fixtureB) is { Active.IsDocumentOpen: true }, TimeSpan.FromSeconds(10));
+            var second = Holding(fixtureB);
+            if (second is not null)
+                made.Add(second);
+            check("a second document opens into a window of its own, not a second tab",
+                  second is not null && !ReferenceEquals(second, window) && shell.Documents.Count == 1
+                  && second.Shell is { Documents.Count: 1, OneDocumentPerWindow: true });
+            if (second is null)
+                return;
+            check("  which is the most recently active, sharing the first one's settings",
+                  ReferenceEquals(Views.MainWindow.MostRecentlyActive, second)
+                  && ReferenceEquals(second.Shell!.Settings, shell.Settings));
+
+            // A document already open is brought forward wherever it is asked for from.
+            second.OpenFromSystem(fixtureA);
+            PumpUntil(() => ReferenceEquals(Views.MainWindow.MostRecentlyActive, window), TimeSpan.FromSeconds(5));
+            check("opening a document already open brings its window forward and opens nothing",
+                  ReferenceEquals(Views.MainWindow.MostRecentlyActive, window)
+                  && Views.MainWindow.OpenWindows.Count(w => ReferenceEquals(w.Shell?.Settings, shell.Settings)) == 2);
+
+            // Each window asks about its own document.
+            var docA = shell.Documents[0];
+            var docB = second.Shell!.Documents[0];
+            docA.HandlePageClick(0, tick);
+            PumpUntil(() => docA.IsDirty && docA.IsIdle, TimeSpan.FromSeconds(5));
+            window.AnswerUnsavedChangesForTest = () => Views.UnsavedChangesWindow.Decision.Cancel;
+            window.Close();
+            PumpUntil(() => window.UnsavedChangesAsked == 1, TimeSpan.FromSeconds(5));
+            MenuProbe.Pump();
+            check("closing a window with unsaved changes asks about its document, and Cancel keeps it",
+                  window.UnsavedChangesAsked == 1 && window.IsVisible && docA.IsDirty);
+            check("  without asking the other window anything", second.UnsavedChangesAsked == 0 && second.IsVisible);
+
+            // Quit asks every window; a Don't Save on the dirty one lets it through.
+            window.AnswerUnsavedChangesForTest = () => Views.UnsavedChangesWindow.Decision.DontSave;
+            var quit = App.ConfirmAllWindowsForQuitAsync([window, second]);
+            PumpUntil(() => quit.IsCompleted, TimeSpan.FromSeconds(10));
+            check("quitting asks across every window, and goes ahead once each has answered",
+                  quit.IsCompletedSuccessfully && quit.Result && window.UnsavedChangesAsked == 2);
+            window.UndoCloseConfirmation();
+            second.UndoCloseConfirmation();
+
+            // ⌘W on a one-document window closes the window.
+            _ = second.CloseActiveTabOrWindowAsync();
+            PumpUntil(() => !second.IsVisible, TimeSpan.FromSeconds(5));
+            check("⌘W closes the window, which is the tab", !second.IsVisible && !docB.IsDocumentOpen);
+        }
+        finally
+        {
+            foreach (var w in made)
+            {
+                w.SkipCloseConfirmation();
+                w.Close();
+            }
+            MenuProbe.Pump();
+            shell.Dispose();
+        }
+
+        // Crash recovery: two crashed documents come back as two windows.
+        Views.MainWindow.ResetRecoveryOfferForTest();
+        var crashState = Path.Combine(Path.GetTempPath(), $"megapdf-selftest-onedoc-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(crashState);
+        var restored = new List<Views.MainWindow>();
+        try
+        {
+            var crashedA = Path.Combine(crashState, "first.pdf");
+            var crashedB = Path.Combine(crashState, "second.pdf");
+            File.Copy(fixtureB, crashedA);
+            File.Copy(fixtureB, crashedB);
+            foreach (var crashed in new[] { crashedA, crashedB })
+            {
+                using var journal = new Core.Recovery.RecoveryJournal(Path.Combine(crashState, "Recovery"));
+                journal.BeginSession(crashed);
+                journal.Record(new Core.Recovery.CheckToggleEntry(0, "agree"));
+            }
+
+            using var crashShell = new ShellViewModel(crashState, oneDocumentPerWindow: true);
+            var first = new Views.MainWindow { DataContext = crashShell, Width = 1280, Height = 800 };
+            first.AnswerRecoveryForTest = _ => Views.RecoveryWindow.Decision.Restore;
+            restored.Add(first);
+            first.Show();
+            PumpUntil(() => first.LaunchSequence.IsCompleted, TimeSpan.FromSeconds(30));
+            PumpUntil(() => Views.MainWindow.OpenWindows.Count(w => ReferenceEquals(w.Shell?.Settings, crashShell.Settings)
+                                                                     && w.Active is { IsDocumentOpen: true }) == 2,
+                      TimeSpan.FromSeconds(10));
+            var windows = Views.MainWindow.OpenWindows.Where(w => ReferenceEquals(w.Shell?.Settings, crashShell.Settings)).ToList();
+            restored.AddRange(windows.Where(w => !restored.Contains(w)));
+            check($"two crashed documents restore into two windows, one each ({windows.Count} window(s))",
+                  windows.Count == 2 && windows.All(w => w.Shell is { Documents.Count: 1 })
+                  && windows.Any(w => SamePath(w.Active?.DocumentPath, crashedA))
+                  && windows.Any(w => SamePath(w.Active?.DocumentPath, crashedB)));
+            check("  each with its recovered edit, unsaved", windows.All(w => w.Active is { IsDirty: true }));
+        }
+        finally
+        {
+            foreach (var w in restored)
+            {
+                w.SkipCloseConfirmation();
+                w.Close();
+            }
+            MenuProbe.Pump();
+            try { Directory.Delete(crashState, recursive: true); } catch (IOException) { }
+        }
     }
 
     /// <summary>

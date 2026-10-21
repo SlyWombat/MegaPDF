@@ -702,6 +702,12 @@ jobs:
           Run-Check "reading" 60
           Run-Check "zoom-anchor" 60
           Run-Check "close-tabs" 60
+          # #711: a tab moved to a window of its own and back, through the one code path a
+          # drag, a drop and "Move tab to new window" share. Opens its own windows and two
+          # copies of fixture.pdf; closes the ones it made. Both windows draw, the edit and
+          # its undo survive, the toolbar is live in both, and closing the first window
+          # leaves the second working.
+          Run-Check "tab-move" 90
           Run-Check "pages" 120
           Run-Check "more" 45
           # #3/#4: whiteout move/resize chrome and the inline editor's size chips/multi-line.

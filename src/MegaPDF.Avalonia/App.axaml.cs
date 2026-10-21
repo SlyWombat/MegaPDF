@@ -56,7 +56,8 @@ public partial class App : Application
     internal static bool IsAutomationArgument(string argument) =>
         argument is "--screenshot" or "--screenshot-state" or "--story" or "--desktop-check"
                   or "--brand-check" or "--render-check" or "--print-check" or "--portal-print-check"
-                  or "--language-check" or "--install-kind" or "--self-test" or "--open-check";
+                  or "--language-check" or "--install-kind" or "--self-test" or "--open-check"
+                  or "--window-tabs-check";
 
     /// <summary>
     /// Drives the app into a state worth photographing, for --screenshot.
@@ -996,6 +997,11 @@ public partial class App : Application
         Console.WriteLine($"open-check: launched with {files.Count} file(s): "
                           + string.Join(", ", files.Select(Path.GetFileName)));
 
+        // Every window's tabs, not only the first's: on the Mac each document is a window of
+        // its own, merged into tabs by AppKit (#711), so "the tabs" are spread over them.
+        static List<DocumentViewModel> AllDocuments() =>
+            MainWindow.OpenWindows.SelectMany(w => w.Shell?.Documents ?? []).ToList();
+
         var settled = TimeSpan.FromSeconds(1.5);
         var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(15);
         var lastCount = -1;
@@ -1003,34 +1009,42 @@ public partial class App : Application
         while (DateTime.UtcNow < deadline)
         {
             await Task.Delay(100);
-            var count = shell.Documents.Count;
+            var documents = AllDocuments();
+            var count = documents.Count;
             if (count != lastCount)
             {
                 lastCount = count;
                 stableSince = DateTime.UtcNow;
             }
-            var allOpen = count > 0 && shell.Documents.All(d => d.IsDocumentOpen);
+            var allOpen = count > 0 && documents.All(d => d.IsDocumentOpen);
             if (allOpen && DateTime.UtcNow - stableSince >= settled)
                 break;
         }
 
-        var tabs = shell.Documents.Select(d => d.DocumentPath).ToList();
+        var all = AllDocuments();
+        var tabs = all.Select(d => d.DocumentPath).ToList();
+        var front = MainWindow.MostRecentlyActive ?? window;
+        // This line's shape is read by the self-test's CheckLaunchWithArguments: "N tab(s): a, b".
         Console.WriteLine($"open-check: {tabs.Count} tab(s): "
                           + string.Join(", ", tabs.Select(p => p is null ? "(no document)" : Path.GetFileName(p))));
-        Console.WriteLine($"open-check: window title: {window.Title}");
+        Console.WriteLine($"open-check: in {MainWindow.OpenWindows.Count} window(s)");
+        Console.WriteLine($"open-check: window title: {front.Title}");
 
         var distinct = files.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-        Check("every file opened", shell.Documents.All(d => d.IsDocumentOpen));
+        Check("every file opened", all.All(d => d.IsDocumentOpen));
         Check("one tab per file, no duplicates (#398)",
               tabs.Count == distinct.Count
               && distinct.All(f => tabs.Count(t => t is not null && Core.Recovery.LaunchedDocument.SameFile(t, f)) == 1));
 
-        var active = shell.Active;
+        var active = front.Active;
         Check("the active tab is the last file given", files.Count == 0
               ? active is null
               : active?.DocumentPath is { } activePath && Core.Recovery.LaunchedDocument.SameFile(activePath, files[^1]));
         Check("the window title names the active tab (#399)",
-              active is { DocumentName: { } name } && window.Title == Strings.WindowTitleFormat(name));
+              active is { DocumentName: { } name } && front.Title == Strings.WindowTitleFormat(name));
+        if (shell.OneDocumentPerWindow)
+            Check("one document per window, the Mac's shape (#711)",
+                  MainWindow.OpenWindows.All(w => w.Shell is { Documents.Count: <= 1 }));
 
         Console.WriteLine(failures == 0 ? "open-check: PASS" : $"::error::open-check: {failures} check(s) failed");
         return failures == 0 ? 0 : 1;
@@ -1357,11 +1371,15 @@ public partial class App : Application
             // drive — they still assume exactly one — added as a tab below, once (and
             // only if) the command-line .pdf argument actually opens it: the "home"
             // state needs Shell.HasDocuments false, which an empty tab would break.
+            // One document per window on the Mac, merged into tabs by AppKit (#711); the
+            // in-window strip everywhere else.
+            var oneDocumentPerWindow = MainWindow.UsesNativeWindowTabs;
             var shell = ArgumentAfter(desktop.Args, "--screenshot-state") == "sign"
-                ? new ShellViewModel(Directory.CreateTempSubdirectory("megapdf-shot-sign-").FullName)
-                : new ShellViewModel();
+                ? new ShellViewModel(Directory.CreateTempSubdirectory("megapdf-shot-sign-").FullName, oneDocumentPerWindow)
+                : new ShellViewModel(oneDocumentPerWindow: oneDocumentPerWindow);
             var viewModel = shell.CreateDocument();
             var window = new MainWindow { DataContext = shell };
+            window.EnableNativeTabs();
             desktop.MainWindow = window;
 
             // Computed once, reused below for the recovery offer, the command-line
@@ -1391,7 +1409,10 @@ public partial class App : Application
             {
                 Platform.SingleInstance.RoutePaths = paths =>
                 {
-                    var target = desktop.Windows.OfType<MainWindow>().FirstOrDefault(w => w.IsActive)
+                    // The window used last (#711), not the active one: the file manager that
+                    // sent the path is what is active. A path already open in another window
+                    // goes there instead (MainWindow.FindOpenDocument).
+                    var target = MainWindow.MostRecentlyActive
                                  ?? desktop.Windows.OfType<MainWindow>().FirstOrDefault();
                     if (target is null)
                         return;
@@ -1439,9 +1460,13 @@ public partial class App : Application
             {
                 activatable.Activated += (_, e) =>
                 {
+                    // The window used last, once there is more than one (#711): the first
+                    // window may be closed by now, and on the Mac a new document goes beside
+                    // the front window (as a tab of it if the person prefers tabs). Before any
+                    // window has opened, the first.
                     if (e is FileActivatedEventArgs { Files: var items })
                         foreach (var file in items.OfType<IStorageFile>())
-                            window.OpenFromSystem(file);
+                            (MainWindow.MostRecentlyActive ?? window).OpenFromSystem(file);
                 };
             }
 
@@ -1502,11 +1527,13 @@ public partial class App : Application
             // way those two do, and still waits for the app-level recovery offer
             // (RunLaunchSequenceAsync, started from OnOpened) rather than racing it.
             //
-            // --open-check is the one rig that takes the person's route on purpose:
-            // its whole job is to report what that route does in a real process (#398).
+            // --open-check and --window-tabs-check are the rigs that take the person's
+            // route on purpose: their whole job is to report what that route does in a
+            // real process (#398, #711).
             var isOpenCheck = desktop.Args?.Contains("--open-check") == true;
+            var takesPersonsRoute = isOpenCheck || desktop.Args?.Contains("--window-tabs-check") == true;
             var cliPathsForOpenCheck = new List<string>();
-            if (isAutomationRun && !isOpenCheck)
+            if (isAutomationRun && !takesPersonsRoute)
             {
                 var path = desktop.Args?.FirstOrDefault(a =>
                     a.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase) && File.Exists(a));
@@ -1561,6 +1588,29 @@ public partial class App : Application
                     }
                     desktop.Shutdown(code);
                 }, TimeSpan.FromMilliseconds(200));
+                base.OnFrameworkInitializationCompleted();
+                return;
+            }
+
+            // --window-tabs-check <out-dir> a.pdf b.pdf c.pdf (#711): native window tabs in
+            // this real process, on a real Mac. Like --open-check it takes its files the
+            // person's way, which is what puts them in windows and tabs.
+            if (OperatingSystem.IsMacOS() && ArgumentAfter(desktop.Args, "--window-tabs-check") is { } tabsCheckDir)
+            {
+                window.Opened += (_, _) => DispatcherTimer.RunOnce(async () =>
+                {
+                    int code;
+                    try
+                    {
+                        code = await Platform.MacWindowTabsCheck.RunAsync(window, tabsCheckDir, cliPathsForOpenCheck);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.Error.WriteLine($"::error::window-tabs-check: {ex.GetType().Name}: {ex.Message}");
+                        code = 1;
+                    }
+                    desktop.Shutdown(code);
+                }, TimeSpan.FromMilliseconds(500));
                 base.OnFrameworkInitializationCompleted();
                 return;
             }

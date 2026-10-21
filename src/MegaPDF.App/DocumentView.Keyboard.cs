@@ -42,7 +42,8 @@ public sealed partial class DocumentView
 
     private void InitializePageKeyboard()
     {
-        ViewModel.PropertyChanged += (_, e) =>
+        var vm = ViewModel;
+        System.ComponentModel.PropertyChangedEventHandler onFocus = (_, e) =>
         {
             if (e.PropertyName is nameof(DocumentViewModel.PageFocus))
             {
@@ -51,8 +52,13 @@ public sealed partial class DocumentView
                 UpdateFocusRing();
             }
         };
-        ViewModel.Pages.CollectionChanged += OnPagesChangedForFocus;
-        ViewModel.Announced += text => DispatcherQueue.TryEnqueue(() => Announce(text));
+        vm.PropertyChanged += onFocus;
+        _unhook.Add(() => vm.PropertyChanged -= onFocus);
+        vm.Pages.CollectionChanged += OnPagesChangedForFocus;
+        _unhook.Add(() => vm.Pages.CollectionChanged -= OnPagesChangedForFocus);
+        Action<string> onAnnounced = text => DispatcherQueue.TryEnqueue(() => Announce(text));
+        vm.Announced += onAnnounced;
+        _unhook.Add(() => vm.Announced -= onAnnounced);
 
         // #169: keyboard focus left on a toolbar button must not stay live behind work on
         // the page, a busy state or a dialog.

@@ -83,6 +83,7 @@ entry_roots = [
   "src/MegaPDF.Avalonia/Views/MainWindow.ReadingMode.cs",
   "src/MegaPDF.Avalonia/Views/MainWindow.Selection.cs",
   "src/MegaPDF.Avalonia/Views/MainWindow.Zoom.cs",
+  "src/MegaPDF.Avalonia/Views/MainWindow.Windows.cs",
   "src/MegaPDF.Avalonia/App.axaml.cs",
   "src/MegaPDF.Avalonia/ViewModels/DocumentViewModel.cs",
   "src/MegaPDF.Avalonia/ViewModels/ShellViewModel.cs",
@@ -106,6 +107,7 @@ entry_roots = [
   "src/MegaPDF.Avalonia/Views/MainWindow.ReadingMode.cs",
   "src/MegaPDF.Avalonia/Views/MainWindow.Selection.cs",
   "src/MegaPDF.Avalonia/Views/MainWindow.Zoom.cs",
+  "src/MegaPDF.Avalonia/Views/MainWindow.Windows.cs",
   "src/MegaPDF.Avalonia/App.axaml.cs",
   "src/MegaPDF.Avalonia/ViewModels/DocumentViewModel.cs",
   "src/MegaPDF.Avalonia/ViewModels/ShellViewModel.cs",
@@ -314,14 +316,17 @@ coverage = "ui"
 tests = [
   ".github/workflows/ci.yml::Run-Check \"close-tabs\"",
   ".github/workflows/ci.yml::Run-Check \"reading\"",
+  ".github/workflows/ci.yml::Run-Check \"tab-move\"",
+  "src/MegaPDF.App/Screenshot.TabMove.cs::CheckTabMoveAsync",
 ]
 manual = "TESTING.md::**Tabs**"
-note = "close-tabs asserts the documents are really disposed; reading opens a second tab. Per-tab undo/find/zoom isolation is checked by hand only."
+note = "close-tabs asserts the documents are really disposed; reading opens a second tab; tab-move (#711) moves a tab with an unsaved edit to a window of its own and back and checks both windows draw, the edit and its undo survive, and the toolbar is live. The drag itself is by hand: a WinUI process cannot synthesise one. Per-tab undo/find/zoom isolation is checked by hand only."
 [feature.macos]
 presence = "present"
-entry = "src/MegaPDF.Avalonia/Views/MainWindow.axaml::TabStrip"
+entry = "src/MegaPDF.Avalonia/Views/MainWindow.Windows.cs::EnableNativeTabs"
 coverage = "ui"
 tests = [
+  "src/MegaPDF.Avalonia/Program.cs::CheckOneDocumentPerWindow",
   "src/MegaPDF.Avalonia/Program.cs::CheckTabs",
   "src/MegaPDF.Avalonia/Program.cs::CheckEmptyWindow",
   "src/MegaPDF.Avalonia/Program.cs::CheckMultiFileOpen",
@@ -329,8 +334,8 @@ tests = [
   "src/MegaPDF.Avalonia/Program.cs::CheckWindowTitle",
   "src/MegaPDF.Avalonia/Program.cs::CheckCloseDuringRender",
 ]
-manual = "TESTING.md::**Tabs**"
-note = "the deepest tab coverage anywhere: mid-gesture switches, scroll and selection survival, close during render, the window with no tab."
+manual = "TESTING.md::**Tabs on the Mac and Linux**"
+note = "since #711 the Mac's tabs are AppKit's own window tabs, one window per document; CheckOneDocumentPerWindow drives that shell shape headless, and AppKit's half (merging, Move Tab to New Window, Merge All Windows, the menu bar, drawing) is --window-tabs-check, which needs a real Mac and runs on the mini, not in CI. The in-window checks still run here, on the shape Linux uses."
 [feature.linux]
 presence = "present"
 entry = "src/MegaPDF.Avalonia/Views/MainWindow.axaml::TabStrip"
@@ -342,9 +347,10 @@ tests = [
   "src/MegaPDF.Avalonia/Program.cs::CheckTabTransitionSafety",
   "src/MegaPDF.Avalonia/Program.cs::CheckWindowTitle",
   "src/MegaPDF.Avalonia/Program.cs::CheckCloseDuringRender",
+  "src/MegaPDF.Avalonia/Program.cs::CheckMoveTabToNewWindow",
 ]
-manual = "TESTING.md::**Tabs**"
-note = "same harness as macOS."
+manual = "TESTING.md::**Tabs on the Mac and Linux**"
+note = "the in-window strip; CheckMoveTabToNewWindow covers Move Tab to New Window and a drag off the strip (headless pointer events), with edit, undo, zoom, scroll and file handle surviving, and external opens with two windows. A real X11 drag has not been tried."
 [feature.ios]
 presence = "absent"
 coverage = "n/a"

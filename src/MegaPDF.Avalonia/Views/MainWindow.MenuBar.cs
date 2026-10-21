@@ -204,8 +204,14 @@ public partial class MainWindow
         // (#348: ⌘W closes the active tab, or the window itself when it is the last
         // one — the standard Safari/Preview convention — and ⇧⌘W always closes the
         // whole window).
-        file.Items.Add(Command("Close", Strings.CloseTab, CloseGesture, () => true,
-            () => _ = ActiveMainWindow().CloseActiveTabOrWindowAsync()));
+        var close = Command("Close", Strings.CloseTab, CloseGesture, () => true,
+            () => _ = ActiveMainWindow().CloseActiveTabOrWindowAsync());
+        // The Mac's one-document windows (#711): ⌘W closes this window, which AppKit shows
+        // as a tab when it has company — so the item says Close Tab then and Close otherwise,
+        // as Preview's does.
+        if (Shell.OneDocumentPerWindow)
+            _menuBarHeaders.Add((close, () => IsInNativeTabGroup ? Strings.CloseTab : Strings.Close));
+        file.Items.Add(close);
         file.Items.Add(Command("CloseWindowItem", Strings.CloseWindow, CloseWindowGesture, () => true,
             () => ActiveMainWindow().CloseWindow()));
         file.Items.Add(new NativeMenuItemSeparator());
@@ -373,15 +379,22 @@ public partial class MainWindow
                 ? WindowState.Normal
                 : WindowState.Maximized;
         }));
-        window.Items.Add(new NativeMenuItemSeparator());
         // The standard AppKit item names (#348) — enabled only with more than one tab,
-        // since with one there is nowhere to switch to.
-        window.Items.Add(Command("ShowNextTab", Strings.ShowNextTab, NextTabGesture,
-            () => ActiveMainWindow().Shell is { Documents.Count: > 1 },
-            () => ActiveMainWindow().Shell?.ActivateNextTab()));
-        window.Items.Add(Command("ShowPreviousTab", Strings.ShowPreviousTab, PreviousTabGesture,
-            () => ActiveMainWindow().Shell is { Documents.Count: > 1 },
-            () => ActiveMainWindow().Shell?.ActivatePreviousTab()));
+        // since with one there is nowhere to switch to. Not in the Mac's one-document shape
+        // (#711): there the tabs are AppKit's, and so are Show Previous Tab, Show Next Tab,
+        // Move Tab to New Window and Merge All Windows, which AppKit adds to this menu itself
+        // once it is told this is the Window menu (OnWindowActivated) — in the system's own
+        // words in every language. A second Show Next Tab of ours would sit beside its.
+        if (!Shell.OneDocumentPerWindow)
+        {
+            window.Items.Add(new NativeMenuItemSeparator());
+            window.Items.Add(Command("ShowNextTab", Strings.ShowNextTab, NextTabGesture,
+                () => ActiveMainWindow().Shell is { Documents.Count: > 1 },
+                () => ActiveMainWindow().Shell?.ActivateNextTab()));
+            window.Items.Add(Command("ShowPreviousTab", Strings.ShowPreviousTab, PreviousTabGesture,
+                () => ActiveMainWindow().Shell is { Documents.Count: > 1 },
+                () => ActiveMainWindow().Shell?.ActivatePreviousTab()));
+        }
 
         var help = new NativeMenu();
         help.Items.Add(Command("Notices", Strings.ThirdPartyNoticesEllipsis, null, () => true,

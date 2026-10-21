@@ -200,7 +200,7 @@ public sealed partial class ShellViewModel : ObservableObject
     /// <summary>A fresh, not-yet-opened document — what a new tab starts as. Becomes the active tab.</summary>
     public DocumentViewModel AddDocument()
     {
-        var doc = new DocumentViewModel(_window, Settings, RecentFiles, SignatureLibrary);
+        var doc = new DocumentViewModel(() => _window, Settings, RecentFiles, SignatureLibrary);
         // Lost in the #348 phase 1 split (2d9960c): when there was one DocumentViewModel per
         // window, MainWindow's constructor called this once, on the window's one instance.
         // Now that AddDocument is where a document is actually born, this is where the call
@@ -217,16 +217,29 @@ public sealed partial class ShellViewModel : ObservableObject
         // stayed disabled on a document launched from Explorer or redirected into a running
         // window, until a tab switch raised Active again (#696; it shipped in 2.2.0, and
         // #427's OpenSettled nudge raises Active itself, which none of these depend on).
-        doc.PropertyChanged += (_, e) =>
+        WireDocument(doc);
+        Documents.Add(doc);
+        Active = doc;
+        return doc;
+    }
+
+    // The per-document subscriptions live in WireDocument so a tab can leave this shell for
+    // another window (#711) without leaving its handlers behind: a handler left on the document
+    // would keep raising this shell's properties for a tab it no longer holds.
+    private readonly Dictionary<DocumentViewModel, Action> _unwire = [];
+
+    private void WireDocument(DocumentViewModel doc)
+    {
+        System.ComponentModel.PropertyChangedEventHandler onChanged = (_, e) =>
         {
             if (doc == Active && e.PropertyName is { } name && ForwardedFromActive.Contains(name))
                 OnPropertyChanged(name);
         };
-        doc.RecentFilesChanged += (_, _) => LoadRecentDocuments();
+        EventHandler onRecents = (_, _) => LoadRecentDocuments();
         // A brand-new tab's DocumentView is not realized (Loaded has not run) at the instant
         // it becomes Active — MainWindow's per-active-tab wiring needs another nudge once it
         // is (see DocumentViewModel.ViewAttached).
-        doc.ViewAttached += (_, _) =>
+        EventHandler onViewAttached = (_, _) =>
         {
             if (doc == Active)
                 OnPropertyChanged(nameof(Active));
@@ -236,14 +249,54 @@ public sealed partial class ShellViewModel : ObservableObject
         // that x:Bind drops one — see DocumentViewModel.OpenSettled for the full account. The
         // fix is the same shape as ViewAttached just above: force one more Active-rooted
         // refresh once the burst is over, rather than reaching into WinUI's binding engine.
-        doc.OpenSettled += (_, _) =>
+        EventHandler onSettled = (_, _) =>
         {
             if (doc == Active)
                 OnPropertyChanged(nameof(Active));
         };
-        Documents.Add(doc);
+        doc.PropertyChanged += onChanged;
+        doc.RecentFilesChanged += onRecents;
+        doc.ViewAttached += onViewAttached;
+        doc.OpenSettled += onSettled;
+        _unwire[doc] = () =>
+        {
+            doc.PropertyChanged -= onChanged;
+            doc.RecentFilesChanged -= onRecents;
+            doc.ViewAttached -= onViewAttached;
+            doc.OpenSettled -= onSettled;
+        };
+    }
+
+    /// <summary>
+    /// Takes a tab out of this shell without disposing its document (#711): the document is on
+    /// its way to another window, with its edits, undo history, zoom, scroll position and journal
+    /// intact. Same ordering as <see cref="RemoveDocument"/>: out of <see cref="Documents"/> and
+    /// <see cref="Active"/> re-pointed first.
+    /// </summary>
+    public bool ReleaseDocument(DocumentViewModel doc)
+    {
+        var index = Documents.IndexOf(doc);
+        if (index < 0)
+            return false;
+        Documents.RemoveAt(index);
+        if (Active == doc)
+            Active = Documents.Count == 0 ? null : Documents[Math.Min(index, Documents.Count - 1)];
+        if (_unwire.Remove(doc, out var unwire))
+            unwire();
+        return true;
+    }
+
+    /// <summary>
+    /// Takes in a tab another window released (#711), at <paramref name="index"/> in the strip,
+    /// and makes it the active one. The document is re-homed first, so by the time anything binds
+    /// to it its dialogs, pickers and render scale already ask this window.
+    /// </summary>
+    public void AdoptDocument(DocumentViewModel doc, int index)
+    {
+        doc.SetHost(() => _window);
+        WireDocument(doc);
+        Documents.Insert(Math.Clamp(index, 0, Documents.Count), doc);
         Active = doc;
-        return doc;
     }
 
     /// <summary>
@@ -260,9 +313,7 @@ public sealed partial class ShellViewModel : ObservableObject
         var index = Documents.IndexOf(doc);
         if (index < 0)
             return;
-        Documents.RemoveAt(index);
-        if (Active == doc)
-            Active = Documents.Count == 0 ? null : Documents[Math.Min(index, Documents.Count - 1)];
+        ReleaseDocument(doc);
         doc.Dispose();
     }
 
