@@ -170,6 +170,18 @@ jobs:
         run: |
           echo "iPhone: $SIM_MODEL  ($SIM_UDID)"
           echo "iPad:   $IPAD_MODEL ($IPAD_UDID)"
+          # What the runner has to share between them, which is the whole of #681's story.
+          echo "runner: $(sysctl -n hw.ncpu) cores, $(( $(sysctl -n hw.memsize) / 1073741824 )) GB, load $(sysctl -n vm.loadavg)"
+
+      # The iPad's FIRST boot -- the data migration, two minutes and more on a hosted runner --
+      # gets done here, alone, and the device is shut down again. It used to happen in "Boot
+      # the simulators", straight before the iPhone UI lane, with the iPhone booted beside it,
+      # and the first ten minutes of that lane were where the runner fell over (#681: tests
+      # starting in its first five minutes averaged 105 s against 25-35 s later; seventeen of
+      # twenty-five hosted failures were in those ten minutes; #693's lost iPhone was in the
+      # same window). See scripts/ci-simulator.sh for the measurement.
+      - name: Give the iPad its first boot, alone
+        run: bash scripts/ci-simulator.sh first-boot "$IPAD_UDID"
 
       - name: Build and test (simulator, unsigned)
         run: |
@@ -244,33 +256,30 @@ jobs:
       # simulator comes up under iOS's QuickPath tip, and the flag is what a
       # first keyboard would have left (#406).
       #
-      # **Both of them now, which is a gap rather than an improvement being closed.**
-      # Since #615 this job creates both simulators, and only the iPhone was ever booted
-      # here; the iPad was left for xcodebuild to boot inside its own test step. On a
-      # hosted runner that put a cold first boot inside the first assertion of that lane
-      # (#599, run 36929065249 — `app.launch()` took a minute, forty seconds of it in
-      # "Setting up automation session").
+      # **One simulator at a time (#681, #693).** Each UI lane runs with only its own
+      # simulator booted: the iPad is shut down (its first boot is long done, above) while
+      # the iPhone lane runs, and the iPhone while the iPad's does. Both used to be up for
+      # both lanes, on a three-core runner. `ready` also waits for xcodebuild's own device
+      # discovery to list the device -- the thing #693's runs failed on -- and logs the load
+      # and the busiest processes by name.
       #
       # Booting is all this does. Installing the app and launching it once was tried as
       # well and is NOT here: measured on a hosted runner it cost ten minutes and the
       # first test still took 76 s, because the forty seconds is XCTest's own automation
       # session and `simctl` cannot warm it. The waits themselves had to stop assuming a
-      # machine instead — see `PageToolsUITests.launch(with:)`.
-      - name: Boot the simulators
-        run: |
-          for u in "$SIM_UDID" "$IPAD_UDID"; do
-            xcrun simctl boot "$u" || true
-            xcrun simctl bootstatus "$u" -b
-            xcrun simctl spawn "$u" defaults write com.apple.keyboard.preferences \
-              DidShowContinuousPathIntroduction -bool true
-          done
+      # machine instead — see `PageToolsUITests.launch(with:)` and `PageInput`.
+      - name: Ready the iPhone, alone
+        run: bash scripts/ci-simulator.sh ready "$SIM_UDID" "$IPAD_UDID"
 
+      # -destination-timeout: xcodebuild's own wait for the device to show up, which #693's
+      # runs measured at 61 s, every time, before "Unable to find a device".
       - name: Run the UI tests
         run: |
           xcodebuild test-without-building \
             -project MegaPDF.xcodeproj \
             -scheme MegaPDFDemo \
             -destination "id=$SIM_UDID" \
+            -destination-timeout 300 \
             -derivedDataPath "$DD" \
             -resultBundlePath "$RUNNER_TEMP/ui-tests.xcresult" \
             -only-testing:MegaPDFUITests/ViewerZoomUITests \
@@ -301,12 +310,16 @@ jobs:
       # Save a copy is here because #589 was reported on both widths, the ⋯ menu it is
       # tapped from is a different control on each, and in regular width the pages sidebar
       # puts a second file exporter in the same hierarchy as the viewer's own.
+      - name: Ready the iPad, alone
+        run: bash scripts/ci-simulator.sh ready "$IPAD_UDID" "$SIM_UDID"
+
       - name: Run the zoom, reading-mode, page-tools and Save-a-copy tests on an iPad too
         run: |
           xcodebuild test-without-building \
             -project MegaPDF.xcodeproj \
             -scheme MegaPDFDemo \
             -destination "id=$IPAD_UDID" \
+            -destination-timeout 300 \
             -derivedDataPath "$DD" \
             -resultBundlePath "$RUNNER_TEMP/ui-tests-ipad.xcresult" \
             -only-testing:MegaPDFUITests/ViewerZoomUITests \

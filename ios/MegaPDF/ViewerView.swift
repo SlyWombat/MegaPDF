@@ -163,6 +163,9 @@ struct ViewerView: View {
                 // wrong room.
                 .background(Brand.Reading.gutter(model.pageTint))
                 .overlay(alignment: .topLeading) { zoomProbes(geo: geo) }
+                .overlay(alignment: .topLeading) {
+                    if UITestInputProbe.requested { InputProbe(model: model, busy: model.busy) }
+                }
                 // The pinch itself lives in the overlay inside the stack above, not
                 // here: `MagnificationGesture` reports a bare scale and no location at
                 // all, so nothing hung off it could know where to anchor (#530).
@@ -1654,6 +1657,7 @@ struct ViewerView: View {
         .overlay(
             PageLongPress(enabled: model.canSelectText,
                           onPress: { xFraction, yFraction in
+                              model.probeNotePress()
                               model.beginTextSelection(pageIndex: index, xFraction: xFraction, yFraction: yFraction)
                           },
                           onEnd: model.endTextSelectionPress)
@@ -1716,6 +1720,7 @@ struct ViewerView: View {
                 }
                 .exclusively(before: SpatialTapGesture()
                     .onEnded { value in
+                        model.probeNoteTap()
                         // A tap with a selection showing puts the selection away, as it does in
                         // every iOS text view, and does nothing else (#710): it is the
                         // dismissal, not an edit.
@@ -1854,6 +1859,29 @@ struct BusyStrip: View {
         .padding(.vertical, 6)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.bar)
+    }
+}
+
+/// What became of the page's touches, for the UI tests that send them (#681): built only under
+/// `-uiTestInputProbe` (see `UITestInputProbe`). Draws nothing and takes no touch.
+///
+/// `busy` is whether page taps are being ignored right now (#145) -- the condition a test has
+/// to wait out before a tap can do anything -- which is why it observes the busy state itself
+/// rather than taking the model's word at the last render. `selection` is whether a long press
+/// has left a text selection up (#710), which takes the next tap on the page to put away.
+struct InputProbe: View {
+    @ObservedObject var model: ViewerModel
+    @ObservedObject var busy: BusyState
+
+    var body: some View {
+        Text(verbatim: "taps \(model.probeTaps) dispatched \(model.probeDispatched)"
+             + " ignored \(model.probeIgnoredBusy) presses \(model.probePresses)"
+             + " busy \(busy.isBlocked || busy.blocksFileCommands ? "on" : "off")"
+             + " selection \(model.textSelection == nil ? "off" : "on")")
+            .font(.system(size: 6))
+            .foregroundColor(.clear)
+            .allowsHitTesting(false)
+            .accessibilityIdentifier("viewerInputProbe")
     }
 }
 
