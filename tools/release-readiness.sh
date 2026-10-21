@@ -123,7 +123,10 @@ while read -r b; do
   tip=$(git rev-parse "$ref")
   age=$(( ( $(date +%s) - $(git log -1 --format=%ct "$ref") ) / 86400 ))
   uniq=$(git cherry origin/main "$ref" | grep -c '^+')
-  if [ "$tip" = "$MAIN" ]; then ok "$b ($where): at origin/main, no commits yet, ${age}d"; continue; fi
+  # A branch with no commits of its own sits at some origin/main, today's or an older one: a
+  # fresh worktree, not a merged branch. Merged is "no unmerged commits AND a merged PR".
+  merged_pr=$(gh pr list --head "$b" --state merged --json number -q 'length' 2>/dev/null)
+  if git merge-base --is-ancestor "$tip" origin/main && [ "${merged_pr:-0}" = 0 ]; then ok "$b ($where): at origin/main (${age}d ago), no commits yet"; continue; fi
   if [ "$uniq" = 0 ]; then attn "$b ($where): MERGED, 0 unmerged commits, ${age}d: delete"; continue; fi
   if printf '%s\n' "$OPEN_PR_REFS" | grep -qxF "$b"; then ok "$b ($where): $uniq unmerged, ${age}d, has an open PR"; continue; fi
   iss=$(gh issue list --state open --search "\"$b\" in:title,body,comments" --json number -q '[.[].number|"#"+tostring]|join(" ")' 2>/dev/null)
@@ -154,7 +157,8 @@ while IFS=$'\t' read -r path br prun; do
   if ! git show-ref -q --verify "refs/heads/$br"; then attn "worktree $path: branch $br deleted"; continue; fi
   tip=$(git rev-parse "$br"); uniq=$(git cherry origin/main "$br" | grep -c '^+')
   dirty=$(git -C "$path" status --porcelain 2>/dev/null | wc -l)
-  if [ "$tip" != "$MAIN" ] && [ "$uniq" = 0 ]; then attn "worktree $path: branch $br is MERGED: remove the worktree and the branch"
+  merged_pr=$(gh pr list --head "$br" --state merged --json number -q 'length' 2>/dev/null)
+  if [ "$uniq" = 0 ] && ! { git merge-base --is-ancestor "$tip" origin/main && [ "${merged_pr:-0}" = 0 ]; }; then attn "worktree $path: branch $br is MERGED: remove the worktree and the branch"
   else ok "worktree $path: $br, $uniq unmerged, $dirty dirty file(s)"; fi
 done < "${TMPDIR:-/tmp}/rr-wt.$$" > "${TMPDIR:-/tmp}/rr-wt.out.$$"
 cat "${TMPDIR:-/tmp}/rr-wt.out.$$"; ATTN=$((ATTN + $(grep -c '^ATTENTION' "${TMPDIR:-/tmp}/rr-wt.out.$$"))); rm -f "${TMPDIR:-/tmp}/rr-wt.$$" "${TMPDIR:-/tmp}/rr-wt.out.$$"
