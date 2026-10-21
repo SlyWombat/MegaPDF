@@ -421,9 +421,7 @@ to miss the date.
    parseable tag with a `.msix` in it, so no Linux release can reach them. That was
    proved by running the retired `UpdateVersion.cs` against every candidate tag and the
    live `/releases/latest` (#158).
-2. **Publish the draft** on GitHub. The Linux page's download links and the Flathub
-   manifest's URL only resolve after this.
-3. **Put the repository into the site.** Download the tag run's `MegaPDF-apt-repository`
+2. **Put the repository into the site.** Download the tag run's `MegaPDF-apt-repository`
    artefact into `website/megapdf/apt/` (it holds `dists/` and `pool/`, and the same key
    files). Or build it locally from the release's own .deb, with `APT_SIGNING_KEY_FILE`
    pointing at the key file: `tools/linux/make-apt-repo.sh website/megapdf/apt
@@ -432,9 +430,13 @@ to miss the date.
    repository always offers the current release and the two before it (#372, Dave
    2026-09-27). A machine that is a version or two behind can still resolve what it has;
    one further behind keeps what it has installed and is offered the newest.
-4. **Rehearse.** `python3 website/deploy.py --dry-run --linux --privacy`. It refuses
+3. **Rehearse.** `python3 website/deploy.py --dry-run --linux --privacy`. It refuses
    unless the repository verifies against the committed key and holds the version
-   `linux/index.html` offers.
+   `linux/index.html` offers, and its `Login file` line must say `found`. Steps 2 and 3
+   need nothing from the published release: the repository comes from the tag run's
+   artefact. Publishing cannot be taken back, so the rehearsal comes first (#668).
+4. **Publish the draft** on GitHub. The Linux page's download links and the Flathub
+   manifest's URL only resolve after this.
 5. **Deploy.** `python3 website/deploy.py --linux --privacy`. That uploads `linux/`,
    `apt/`, and the landing page and privacy policy with their Linux text live (the Linux
    chip links the Linux page).
