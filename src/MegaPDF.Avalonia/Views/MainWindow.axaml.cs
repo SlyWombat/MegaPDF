@@ -111,7 +111,12 @@ public partial class MainWindow : Window
         AddHandler(DragDrop.DragOverEvent, OnWindowDragOver);
         AddHandler(DragDrop.DropEvent, OnWindowDrop);
 
+        // The most recently active window is where an external open goes (#711), and on the
+        // Mac a window becoming key is when AppKit is told which menu is the Window menu.
+        Activated += (_, _) => OnWindowActivated();
+
         BindShortcuts();
+        WireTabStrip();
         WireToolbar();
         WireSignatures();
         WireFind();
@@ -190,6 +195,8 @@ public partial class MainWindow : Window
             {
                 if (args.PropertyName == nameof(ShellViewModel.Active))
                     OnActiveDocumentChanged();
+                if (args.PropertyName == nameof(ShellViewModel.WindowTitle))
+                    Dispatcher.UIThread.Post(UpdateNativeTabTitle);
                 // The gutter and the floating pill follow the page's tint (#511): the
                 // engine tints the page, this tints the chrome around it.
                 if (args.PropertyName == nameof(ShellViewModel.PageTint))
@@ -538,6 +545,8 @@ public partial class MainWindow : Window
     protected override void OnOpened(EventArgs e)
     {
         base.OnOpened(e);
+        MarkMostRecentlyActive();
+        UpdateNativeTabTitle();
         // RenderScaling is only meaningful once there is a window on a screen. Feeding
         // it to every tab's view model — not just the active one — is what makes a
         // page sharp on a retina Mac rather than upscaled from a 96 DPI raster, and
@@ -652,8 +661,18 @@ public partial class MainWindow : Window
             _handedOverDocumentArrived?.TrySetResult();
             return;
         }
+        // Already open in this window or another (#711): that window and tab come forward,
+        // and nothing is opened twice.
+        if (path is not null && FindOpenDocument(path) is var (window, document))
+        {
+            window.ShowDocument(document);
+            return;
+        }
+        // Before the open, not after it: on the Mac the open may put the document in a new
+        // window of its own, which activates itself, and activating this one afterwards would
+        // put the old tab back in front of it.
+        BringToFront();
         _ = RunOpenAsync(open);
-        Activate();
     }
 
     /// <summary>How many documents handed over by the OS were actually opened, for the self-test.</summary>
@@ -682,9 +701,14 @@ public partial class MainWindow : Window
     {
         if (Shell is not { } shell)
             return;
-        if (shell.FindTab(path) is { } existing)
+        if (FindOpenDocument(path) is var (window, existing))
         {
-            shell.ActivateTab(existing);
+            window.ShowDocument(existing);
+            return;
+        }
+        if (HostForNewDocument() is var host && !ReferenceEquals(host, this))
+        {
+            await host.OpenPathIntoTabAsync(path, password);
             return;
         }
         var document = shell.CreateDocument();
@@ -697,7 +721,10 @@ public partial class MainWindow : Window
         document.DpiScale = RenderScaling;
         await document.OpenAsync(path, password);
         if (!document.IsDocumentOpen && document.PendingPasswordPath is null)
+        {
             shell.CloseTab(document);
+            CloseIfLeftEmpty();
+        }
     }
 
     /// <summary>
@@ -747,7 +774,7 @@ public partial class MainWindow : Window
             // location) cannot be compared, so it is opened: the open asks about unsaved
             // changes rather than losing them. Everything else opens into its own tab
             // unless a just-restored crash session already put it in one (#348 §5.5).
-            if (path is null || (Shell is { } shell && !shell.IsOpen(path)))
+            if (path is null || (Shell is not null && FindOpenDocument(path) is null))
                 await RunOpenAsync(open);
         }
     }
@@ -834,6 +861,7 @@ public partial class MainWindow : Window
     protected override void OnClosed(EventArgs e)
     {
         base.OnClosed(e);
+        WindowsByRecency.Remove(this);
         Shell?.Dispose();
     }
 
@@ -1068,6 +1096,14 @@ public partial class MainWindow : Window
         set { if (_inlineEditor is { } editor) editor.Text = value; }
     }
 
+    /// <summary>The open in-place editor itself, for the self-test (#709, #712): its size, selection and line-break setting.</summary>
+    internal TextBox? InlineEditorForTest => _inlineEditor;
+
+    /// <summary>The form field the open editor is over, or null, for the self-test (#709).</summary>
+    internal PdfFormField? InlineEditorFieldForTest => _inlineEditorField;
+
+    private PdfFormField? _inlineEditorField;
+
     /// <summary>Whether a whiteout/redaction drag is in progress, for the self-test.</summary>
     internal bool HasBandInProgress => _band is not null;
 
@@ -1099,7 +1135,8 @@ public partial class MainWindow : Window
     private void ShowInlineEditor(
         Control container, Point at, double fontSizePoints, string fontFamily,
         string initialText, double minWidth, Action<string> commit,
-        bool allowMultiline = false, bool showSizePicker = false)
+        bool allowMultiline = false, bool showSizePicker = false,
+        PdfFormField? formField = null, int formPageIndex = 0, double? height = null)
     {
         if (Active is not { } vm || container is not ContentPresenter presenter)
             return;
@@ -1126,6 +1163,15 @@ public partial class MainWindow : Window
             AcceptsReturn = allowMultiline,
             Watermark = allowMultiline ? Strings.TypeThenEnterMultiline : Strings.TypeThenEnter,
         };
+        if (height is { } blockHeight)
+        {
+            // A multi-line form field is a block (#712): as wide as the widget, tall enough for
+            // several lines, wrapping and scrolling inside itself rather than growing past it.
+            editor.Height = blockHeight;
+            editor.Width = Math.Max(140, minWidth);
+            editor.TextWrapping = TextWrapping.Wrap;
+            editor.SetValue(ScrollViewer.VerticalScrollBarVisibilityProperty, ScrollBarVisibility.Auto);
+        }
 
         void Commit()
         {
@@ -1159,6 +1205,16 @@ public partial class MainWindow : Window
                 vm.CancelModes();
                 e.Handled = true;
             }
+            else if (e.Key == Key.Tab && formField is not null)
+            {
+                // #709: in a form field, Tab commits and opens the next form field, however this one
+                // was opened. Before this the editor claimed no Tab at all, so focus went to Avalonia's
+                // default traversal (the toolbar) from a field opened by a click or by Enter alike.
+                var forward = !e.KeyModifiers.HasFlag(KeyModifiers.Shift);
+                Commit();
+                e.Handled = true;
+                StepFormField(formPageIndex, formField, forward);
+            }
         }, RoutingStrategies.Tunnel);
         // Clicking away commits rather than discarding: losing typing to a stray
         // click is the more annoying failure. Except into the font and size pickers
@@ -1180,6 +1236,7 @@ public partial class MainWindow : Window
             overlay.Children.Add(editor);
             _inlineEditor = editor;
             _inlineEditorOwner = vm;
+            _inlineEditorField = formField;
             editor.Focus();
             editor.SelectAll();
             if (showSizePicker)
@@ -1332,15 +1389,80 @@ public partial class MainWindow : Window
             return;
 
         var dip = PageBitmap.PointsToPixels * vm.Zoom;
-        // A widget's height is the box; the text inside it sits a little smaller.
-        var fontSize = Math.Max(6, field.Bounds.Height * 0.7);
+        // A widget's height is the box; the text inside it sits a little smaller. A multi-line
+        // field is a block, many lines tall, and 70 % of that would be huge type: it gets an
+        // ordinary 12 pt and a box as tall as the widget (#712).
+        var fontSize = field.IsMultiline ? 12 : Math.Max(6, field.Bounds.Height * 0.7);
+        var blockHeight = field.IsMultiline
+            ? Math.Max(field.Bounds.Height * dip, fontSize * dip * 1.5 * 4 + 16)
+            : (double?)null;
 
         ShowInlineEditor(
             container,
             new Point(field.Bounds.X * dip, field.Bounds.Y * dip),
             fontSize, "Helvetica, Arial, sans-serif",
             field.Value, field.Bounds.Width * dip,
-            text => vm.SetFieldValue(pageIndex, field, text));
+            text => vm.SetFieldValue(pageIndex, field, text),
+            allowMultiline: field.IsMultiline,
+            formField: field, formPageIndex: pageIndex, height: blockHeight);
+    }
+
+    /// <summary>
+    /// Tab or Shift+Tab out of an open form field, or off a checkbox Tab reached (#709): on to the
+    /// next form field in <see cref="FormFieldOrder"/>, skipping the printed labels between them.
+    /// A text field opens for typing with its text selected, a checkbox or radio takes page focus
+    /// (Space toggles it, and Tab moves on), and past the last field the form is left the way Escape
+    /// leaves it (page focus cleared, keyboard focus handed to the toolbar). Unlike the page's own
+    /// Tab, which wraps, this does not.
+    /// </summary>
+    private async void StepFormField(int pageIndex, PdfFormField from, bool forward)
+    {
+        if (Active is not { } vm)
+            return;
+        // The field just left is still being written, off the UI thread, and one change applies at a
+        // time (#145): a second one started now would be dropped. Wait for it, so a quick Tab, type, Tab
+        // loses nothing, and the next field is read after the first one's value is in.
+        for (var waited = 0; waited < 500 && !vm.IsIdle; waited++)
+            await Task.Delay(10);
+        if (!ReferenceEquals(Active, vm))
+            return; // the tab changed meanwhile
+        if (vm.NextFormField(pageIndex, from, forward) is not { } next)
+        {
+            vm.ClearPageFocus();
+            OpenButton.Focus();
+            return;
+        }
+
+        if (next.Field.Kind == FormFieldKind.Text)
+        {
+            vm.ClearPageFocus();
+            vm.RequestFocusScroll(next.PageIndex, next.Field.Bounds);
+            await OpenFieldEditorWhenRealisedAsync(next.PageIndex, next.Field);
+            return;
+        }
+
+        if (!vm.FocusFormField(next.PageIndex, next.Field))
+        {
+            vm.ClearPageFocus();
+            OpenButton.Focus();
+            return;
+        }
+        // The ring is the focus; keyboard focus leaves the toolbar so Space reaches the page (#169).
+        FocusManager?.ClearFocus();
+    }
+
+    /// <summary>A page far from the one on screen has no container until the scroll has landed.</summary>
+    private async Task OpenFieldEditorWhenRealisedAsync(int pageIndex, PdfFormField field)
+    {
+        for (var attempt = 0; attempt < 40; attempt++)
+        {
+            if (ContainerFor(pageIndex) is not null)
+            {
+                ShowFieldEditor(pageIndex, field);
+                return;
+            }
+            await Task.Delay(25);
+        }
     }
 
     private Control? ContainerFor(int pageIndex)
@@ -1371,6 +1493,7 @@ public partial class MainWindow : Window
         // IsEditingTextBox reads true (see CheckTabTransitionSafety).
         var owner = _inlineEditorOwner;
         _inlineEditorOwner = null;
+        _inlineEditorField = null;
         _editorFollowsPickers = false;
         (editor.Parent as Panel)?.Children.Remove(editor);
         if (owner is { } vm)
@@ -1495,9 +1618,12 @@ public partial class MainWindow : Window
         {
             case RecoveryWindow.Decision.Restore:
                 // A crashed session restores into a brand new tab (#348 §5.3), not into
-                // whichever document happened to be active — there may be none yet.
-                var document = await shell.RestoreSessionAsync(session);
-                document.DpiScale = RenderScaling;
+                // whichever document happened to be active — there may be none yet. On the
+                // Mac a second restored document is a second window, tabbed by AppKit or not as
+                // the person's "Prefer tabs" setting says (#711).
+                var host = HostForNewDocument();
+                var document = await host.Shell!.RestoreSessionAsync(session);
+                document.DpiScale = host.RenderScaling;
                 break;
             case RecoveryWindow.Decision.Discard:
                 ShellViewModel.DiscardSession(session);
@@ -2271,18 +2397,29 @@ public partial class MainWindow : Window
         shell.CloseTab(document);
     }
 
-    /// <summary>⇧⌘W (Mac) / no Linux binding yet: closes the whole window regardless of how many tabs it has.</summary>
-    internal void CloseWindow() => Close();
+    /// <summary>
+    /// ⇧⌘W (Mac) / no Linux binding yet: closes the whole window regardless of how many tabs it
+    /// has. On the Mac's shape the tabs are windows of their own, so that is every window
+    /// AppKit shows in this one's tab bar (#711).
+    /// </summary>
+    internal void CloseWindow()
+    {
+        var group = NativeTabGroup();
+        if (group.Count > 1)
+            _ = CloseTabGroupAsync(group);
+        else
+            Close();
+    }
 
     /// <summary>File ▸ New Window (⌘N / Ctrl+Shift+N): another window sharing this process's settings, recents and signature library.</summary>
     internal void NewWindow()
     {
         if (Shell is not { } shell)
             return;
-        var window = new MainWindow
-        {
-            DataContext = new ShellViewModel(shell.Settings, shell.RecentFiles, shell.SignatureLibrary, shell.RecoveryDirectory),
-        };
+        var window = new MainWindow { DataContext = shell.CreateSibling() };
+        // A separate window, or a tab, as the person's "Prefer tabs" setting says (#711) —
+        // TextEdit's ⌘N.
+        window.EnableNativeTabs();
         window.Show();
     }
 
@@ -2367,9 +2504,9 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (shell.FindTab(path) is { } existing)
+        if (FindOpenDocument(path) is var (window, existing))
         {
-            shell.ActivateTab(existing);
+            window.ShowDocument(existing);
             return;
         }
 
@@ -2398,6 +2535,13 @@ public partial class MainWindow : Window
     /// </summary>
     private async Task OpenIntoNewTabAsync(ShellViewModel shell, IStorageFile file, string path)
     {
+        // The Mac's one-document windows (#711): a second document goes to a new window,
+        // which AppKit tabs beside this one if the person prefers tabs.
+        if (HostForNewDocument() is var host && !ReferenceEquals(host, this))
+        {
+            await host.OpenIntoNewTabAsync(host.Shell!, file, path);
+            return;
+        }
         var document = shell.CreateDocument();
         shell.AddTab(document);
         document.DpiScale = RenderScaling;
@@ -2407,6 +2551,7 @@ public partial class MainWindow : Window
         {
             _openedFiles.Remove(document);
             shell.CloseTab(document);
+            CloseIfLeftEmpty();
             return;
         }
         if (document.IsDocumentOpen)
@@ -2441,9 +2586,9 @@ public partial class MainWindow : Window
         if (Shell is not { } shell)
             return;
 
-        if (shell.FindTab(entry.Path) is { } existing)
+        if (FindOpenDocument(entry.Path) is var (window, existing))
         {
-            shell.ActivateTab(existing);
+            window.ShowDocument(existing);
             return;
         }
 

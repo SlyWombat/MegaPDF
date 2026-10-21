@@ -702,6 +702,12 @@ jobs:
           Run-Check "reading" 60
           Run-Check "zoom-anchor" 60
           Run-Check "close-tabs" 60
+          # #711: a tab moved to a window of its own and back, through the one code path a
+          # drag, a drop and "Move tab to new window" share. Opens its own windows and two
+          # copies of fixture.pdf; closes the ones it made. Both windows draw, the edit and
+          # its undo survive, the toolbar is live in both, and closing the first window
+          # leaves the second working.
+          Run-Check "tab-move" 90
           Run-Check "pages" 120
           Run-Check "more" 45
           # #3/#4: whiteout move/resize chrome and the inline editor's size chips/multi-line.
@@ -725,6 +731,11 @@ jobs:
           # widgets fixture.pdf does not have -- the "Generate fixtures" step above already
           # wrote both next to it.
           Run-Check "fill" 60
+          # #709/#712: filling formflow.pdf the way a person does -- a click into the first field,
+          # then Tab, Shift+Tab, Shift+Enter in a multi-line field, Space on a checkbox and Tab across
+          # a page, with every value read back from the saved file. formflow.pdf is beside fixture.pdf
+          # from the same "Generate fixtures" step. 90s: it opens a second tab and scrolls between pages.
+          Run-Check "form-flow" 90
           # `sign` already existed and was never run: the signature library with a seeded
           # card, extended here to also place one on the page, select it, move it and undo.
           Run-Check "sign" 60

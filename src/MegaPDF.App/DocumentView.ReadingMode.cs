@@ -126,11 +126,14 @@ public sealed partial class DocumentView
         // belongs on the bar; this decides what it is, and refreshes it when the answer
         // changes. Pushing the string instead left the bar blank on a second tab — found
         // by --screenshot-state reading, not by hand.
-        ViewModel.PropertyChanged += (_, e) =>
+        var vm = ViewModel;
+        System.ComponentModel.PropertyChangedEventHandler onPath = (_, e) =>
         {
             if (e.PropertyName is nameof(DocumentViewModel.DocumentPath))
                 RefreshReadingFileName();
         };
+        vm.PropertyChanged += onPath;
+        _unhook.Add(() => vm.PropertyChanged -= onPath);
     }
 
     private static void NameControl(Control control, string name)

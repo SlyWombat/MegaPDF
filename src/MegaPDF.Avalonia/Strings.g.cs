@@ -863,6 +863,9 @@ public static partial class Strings
     /// <summary>Show Previous Tab</summary>
     public static string ShowPreviousTab => Get("ShowPreviousTab");
 
+    /// <summary>Move Tab to New Window</summary>
+    public static string MoveTabToNewWindow => Get("MoveTabToNewWindow");
+
     /// <summary>{0}, tab</summary>
     public static string TabAccessibleName(object? arg0) => string.Format(CultureInfo.CurrentCulture, Get("TabAccessibleName"), arg0);
 

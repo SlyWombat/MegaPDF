@@ -122,6 +122,13 @@ public partial class MainWindow
                 // only reach the region with the ring (#169).
                 if (IsToolbarControl(FocusManager?.GetFocusedElement() as Control))
                     FocusManager?.ClearFocus();
+                // On a checkbox that form Tab reached (#709), Tab goes on through the form's fields.
+                if (vm.FormTabActive && vm.PageFocus is { Kind: PageHitKind.FormCheckbox } onBox)
+                {
+                    StepFormField(onBox.PageIndex, new PdfFormField("", FormFieldKind.Checkbox, onBox.Bounds, ""),
+                                  forward: !e.KeyModifiers.HasFlag(KeyModifiers.Shift));
+                    return true;
+                }
                 vm.MoveFocus(forward: !e.KeyModifiers.HasFlag(KeyModifiers.Shift));
                 return true;
 

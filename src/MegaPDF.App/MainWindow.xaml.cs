@@ -55,6 +55,10 @@ public sealed partial class MainWindow : Window
                 OnActiveDocumentChanged();
         };
         Title = Shell.WindowTitle;
+        // A window's only tab is not torn out (#711): dragging it would leave an empty window to
+        // close and nothing to show for it. Measured, a sole tab let go over its own window's
+        // strip got that window closed by TabView with the document still in it.
+        Shell.Documents.CollectionChanged += (_, _) => DocumentsTabView.CanTearOutTabs = Shell.Documents.Count > 1;
         OnActiveDocumentChanged(); // wires up the initial (absent) tab's picker/focus hooks
     }
 
@@ -104,7 +108,10 @@ public sealed partial class MainWindow : Window
         // newly active one's viewport re-renders — the eviction/re-render code paths
         // already existed (RestoreSessionAsync's placeholder loop, UpdateViewportAsync);
         // this is what wires them to a tab switch rather than only to restore.
-        if (_lastActiveDocument is { } previouslyActive && previouslyActive != Shell.Active)
+        // A tab that has left for another window (#711) is not this window's to evict: it is about
+        // to draw there.
+        if (_lastActiveDocument is { } previouslyActive && previouslyActive != Shell.Active
+            && Shell.Documents.Contains(previouslyActive))
             previouslyActive.EvictBackgroundRenders();
         _lastActiveDocument = Shell.Active;
         if (Shell.Active is { } nowActive)

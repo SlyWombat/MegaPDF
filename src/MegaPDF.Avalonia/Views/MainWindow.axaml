@@ -408,12 +408,19 @@
     <TabStrip Name="DocumentTabStrip"
               ItemsSource="{Binding Documents}"
               SelectedItem="{Binding Active, Mode=TwoWay}"
-              IsVisible="{Binding HasDocuments}"
+              IsVisible="{Binding ShowsTabStrip}"
               Background="{DynamicResource SystemControlBackgroundBaseLowBrush}"
               BorderThickness="0,0,0,1"
               BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}">
+      <!-- ShowsTabStrip (#711): never on the Mac, whose windows are one document each
+           and are merged into tabs by AppKit itself; there, the strip would be a second
+           row of tabs saying the same thing as the system's. -->
       <TabStrip.ItemTemplate>
         <DataTemplate DataType="vm:DocumentViewModel">
+          <!-- Each tab's context menu (Move Tab to New Window, #711) is put on its
+               TabStripItem in code (MainWindow.Windows.cs), not on this Grid: Shift+F10
+               and the Menu key ask the focused element, which is the item, and a menu
+               declared down here would only ever answer a right-click. -->
           <Grid ColumnDefinitions="Auto,Auto" Margin="4,2"
                 AutomationProperties.Name="{Binding TabAccessibleNameText}">
             <TextBlock Grid.Column="0" Text="{Binding TabTitle}" VerticalAlignment="Center"

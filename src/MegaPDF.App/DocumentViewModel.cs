@@ -158,10 +158,11 @@ public sealed record RecentDocument(string Name, string Path, string Location, b
     public string LocationLine => IsMissing ? $"{Strings.RecentNotFound} · {Location}" : Location;
 }
 
-/// <param name="window">
-/// The window hosting this document — dialogs need its <c>XamlRoot</c>, pickers its hwnd.
-/// One per document for phase 1 (#348); tear-out (a later phase) will need this to become
-/// a <c>Func&lt;Window&gt;</c> so a torn-out tab can follow its document to a new window.
+/// <param name="host">
+/// The window hosting this document right now — dialogs need its <c>XamlRoot</c>, pickers its
+/// hwnd, rendering its display scale. A function, not a window, so a tab torn out into another
+/// window (#711) takes its document with it: <see cref="SetHost"/> re-points it, and every read
+/// goes through <c>window</c> below, so nothing caches the old window.
 /// </param>
 /// <param name="settings">
 /// Shared with every other document in the process (#348 §6.3): each used to construct its
@@ -171,9 +172,20 @@ public sealed record RecentDocument(string Name, string Path, string Location, b
 /// </param>
 /// <param name="recentFiles">Shared for the same reason as <paramref name="settings"/> — one <see cref="RecentFiles"/> list, not one per document.</param>
 /// <param name="signatureLibrary">Shared for the same reason — a signature added in one tab must appear in every other tab's flyout.</param>
-public partial class DocumentViewModel(Window window, AppSettings settings, RecentFiles recentFiles, SignatureLibrary signatureLibrary) : ObservableObject, IDisposable
+public partial class DocumentViewModel(Func<Window> host, AppSettings settings, RecentFiles recentFiles, SignatureLibrary signatureLibrary) : ObservableObject, IDisposable
 {
     private static readonly IPdfEngine Engine = new PdfiumEngine();
+
+    private Func<Window> _host = host;
+
+    /// <summary>The window this document is in now (#711). Always read through here, never kept.</summary>
+    private Window window => _host();
+
+    /// <summary>
+    /// Re-homes the document in another window (#711): the tab moved, the document did not. Dialogs,
+    /// pickers and the render scale follow from the next call on.
+    /// </summary>
+    internal void SetHost(Func<Window> newHost) => _host = newHost;
 
     private readonly UndoStack _undoStack = new();
 
@@ -364,6 +376,41 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
     /// </summary>
     public DocumentView TabContent => _tabContent ??= new DocumentView { ViewModel = this };
     private DocumentView? _tabContent;
+
+    /// <summary>
+    /// Lets go of this tab's page view so the next <see cref="TabContent"/> makes a new one (#711).
+    /// A WinUI element cannot move between windows (each has its own <c>XamlRoot</c>), so a document
+    /// that changes window gets a new view; everything the view showed lives on this object, and the
+    /// file is not read again. Returns what the old view was showing that only it knew.
+    /// </summary>
+    internal (bool Open, string Query) ReleaseView()
+    {
+        var find = _view?.FindBarState ?? (false, "");
+        (_tabContent ?? _view)?.Detach();
+        _tabContent = null;
+        _view = null;
+        return find;
+    }
+
+    /// <summary>The scale pages were last drawn at, so a move to a display of another scale can redraw.</summary>
+    private double _renderScale = 1.0;
+
+    /// <summary>For the tab-move self-test (#711).</summary>
+    internal double RenderScaleForTest => _renderScale;
+
+    /// <summary>
+    /// After a move (#711): the new window may be on a display with another scale, in which case the
+    /// bitmaps drawn for the old one are the wrong size. Drops them and draws the visible pages again;
+    /// the document is not touched.
+    /// </summary>
+    internal void RedrawIfScaleChanged()
+    {
+        var now = window.Content?.XamlRoot?.RasterizationScale ?? 1.0;
+        if (Math.Abs(now - _renderScale) < 0.001)
+            return;
+        EvictBackgroundRenders();
+        _ = ReactivateRendersAsync();
+    }
 
     internal DocumentView? View
     {
@@ -928,7 +975,9 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
     private async Task<PageView> RenderPageAsync(IPdfDocument doc, int pageIndex, bool preview = false)
     {
         // Render at monitor rasterization scale × zoom so pages stay crisp.
-        var scale = (window.Content?.XamlRoot?.RasterizationScale ?? 1.0) * ZoomFactor;
+        var rasterScale = window.Content?.XamlRoot?.RasterizationScale ?? 1.0;
+        _renderScale = rasterScale;
+        var scale = rasterScale * ZoomFactor;
         var zoom = ZoomFactor;
         // Read on the UI thread and carried into the render, so the slot records the
         // tint it was actually drawn in even if the choice changes mid-render (#510).

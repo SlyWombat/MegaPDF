@@ -26,7 +26,7 @@ namespace MegaPDF.App;
 /// This renders the XAML tree instead, so it needs no input, no focus, and no
 /// desktop to itself.
 /// </summary>
-internal static class Screenshot
+internal static partial class Screenshot
 {
     /// <summary>The busy operation a `busy` capture holds open until the process exits (#145).</summary>
     private static IDisposable? _heldBusy;
@@ -226,6 +226,14 @@ internal static class Screenshot
             case "fill":
                 return await CheckFillFormAsync(window);
 
+            // #709/#712: a form filled in from the keyboard once a click has opened the first
+            // field — type, Tab, type, a line break in a multi-line field, Tab to a checkbox and
+            // Space, Tab across a page, Tab off the end — and the values read back from the saved
+            // file. Needs formflow.pdf beside the document on the command line
+            // (tools/gen_test_fixtures.py writes it next to fixture.pdf). The exit code is the test.
+            case "form-flow":
+                return await CheckFormFlowAsync(window);
+
             // #590: a redaction mark drawn, selected, moved, resized, removed, cleared and
             // undone — the #329 mark lifecycle, with no Windows self-test state to watch
             // it. Needs a document; the exit code is the test.
@@ -254,6 +262,12 @@ internal static class Screenshot
             // touched Active. Needs a document; the exit code is the test.
             case "launch-toolbar":
                 return CheckLaunchToolbar(window, vm);
+
+            // #711: a tab moved to a window of its own and back, through the one code path a
+            // drag, the context menu and a drop all share. Needs a document; the exit code is
+            // the test.
+            case "tab-move":
+                return await CheckTabMoveAsync(window);
 
             default:
                 Console.Error.WriteLine($"unknown --screenshot-state '{state}'");
@@ -1098,7 +1112,7 @@ internal static class Screenshot
         SynchronizationContext.SetSynchronizationContext(null);
         try
         {
-            return new DocumentViewModel(window, shell.Settings, shell.RecentFiles, shell.SignatureLibrary);
+            return new DocumentViewModel(() => window, shell.Settings, shell.RecentFiles, shell.SignatureLibrary);
         }
         finally
         {
@@ -2576,6 +2590,178 @@ internal static class Screenshot
 
         Console.Error.WriteLine($"fill: {passed} passed, {failed} failed ({passed + failed} checks)");
         return failed == 0;
+    }
+
+    /// <summary>
+    /// #709 and #712 in a real window: filling formflow.pdf the way a person does. A click opens the
+    /// first field (which is how Tab went to the toolbar before: page focus was only set by Tab from
+    /// the page); Tab commits it and opens the next form field, stepping over the printed labels;
+    /// a multi-line field takes a line break on Shift+Enter; a checkbox reached by Tab takes Space;
+    /// Tab crosses to the next page and leaves the form past the last field. The values are then read
+    /// back from the saved file. WinUI cannot synthesize a key press into a TextBox, so each key goes
+    /// through <see cref="DocumentView.PressEditorKeyForTest"/>, which runs the editor's own key
+    /// decision; the routed event reaching it is the part this cannot show.
+    /// </summary>
+    private static async Task<bool> CheckFormFlowAsync(MainWindow window)
+    {
+        if (window.Shell.Active is not { IsDocumentOpen: true } fixtureTab
+            || fixtureTab.DocumentPath is not { } fixturePath)
+        {
+            Console.Error.WriteLine("--screenshot-state form-flow needs a document.");
+            return false;
+        }
+
+        var passed = 0;
+        var failed = 0;
+        void Check(string what, bool ok)
+        {
+            Console.Error.WriteLine($"{(ok ? "PASS" : "FAIL")}: {what}");
+            if (ok)
+                passed++;
+            else
+                failed++;
+        }
+
+        var scratch = Path.Combine(Path.GetTempPath(), $"megapdf-selftest-formflow-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(scratch);
+        try
+        {
+            await RunFormFlowChecksAsync(window, fixturePath, scratch, Check);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"FAIL: the form-flow check threw: {ex}");
+            failed++;
+        }
+        finally
+        {
+            foreach (var tab in window.Shell.Documents.Where(t => !ReferenceEquals(t, fixtureTab)).ToList())
+            {
+                tab.HasUnsavedChanges = false;
+                await window.CloseTabAsync(tab);
+            }
+            try { Directory.Delete(scratch, recursive: true); } catch { /* best-effort scratch cleanup */ }
+        }
+
+        Console.Error.WriteLine($"form-flow: {passed} passed, {failed} failed ({passed + failed} checks)");
+        return failed == 0;
+    }
+
+    private static async Task RunFormFlowChecksAsync(
+        MainWindow window, string fixturePath, string scratch, Action<string, bool> Check)
+    {
+        var source = Path.Combine(Path.GetDirectoryName(fixturePath) ?? "", "formflow.pdf");
+        if (!File.Exists(source))
+        {
+            Check($"formflow.pdf is beside {Path.GetFileName(fixturePath)}", false);
+            return;
+        }
+        var work = Path.Combine(scratch, "formflow-work.pdf");
+        File.Copy(source, work, overwrite: true);
+        var tab = await window.Shell.OpenInTabAsync(work);
+        await Task.Delay(1000);
+        Check("a working tab opened on formflow.pdf", tab.IsDocumentOpen && tab.View is not null);
+        if (tab.View is not { } view)
+            return;
+
+        // Centres in top-left page space on the 792 pt page (see tools/gen_test_fixtures.py).
+        var first = new PdfPoint(250, 82);
+        async Task Settle() => await Task.Delay(400);
+        string Open() => view.ActiveFormFieldForTest?.Name ?? "(none)";
+
+        // --- a click opens the first field, a single-line one ---
+        Check("clicking the first field opens its editor",
+              await view.ActivatePageForTest(0, first) && view.HasActiveEditorForTest && Open() == "first");
+        Check("a single-line field takes no line break", !view.ActiveEditorAcceptsReturnForTest);
+        view.ActiveEditorTextForTest = "Ada";
+
+        // --- Tab from a CLICKED field: the next form field, not the label, not the toolbar ---
+        Check("Tab is claimed by the editor", await view.PressEditorKeyForTest(Windows.System.VirtualKey.Tab));
+        await Settle();
+        Check("Tab opened the next form field, stepping over the printed label 'Last name:'",
+              view.HasActiveEditorForTest && Open() == "last");
+        Check("  and the first value was committed", tab.HitTestPage(0, first).Field is { Value: "Ada" });
+        Check("  with its text selected, so typing replaces it",
+              view.ActiveEditorSelectionLengthForTest == (view.ActiveEditorTextForTest ?? "").Length);
+
+        Check("Shift+Tab goes back to the field before", await view.PressEditorKeyForTest(Windows.System.VirtualKey.Tab, shift: true));
+        await Settle();
+        Check("  and opens it, text selected",
+              Open() == "first" && view.ActiveEditorTextForTest == "Ada"
+              && view.ActiveEditorSelectionLengthForTest == 3);
+        await view.PressEditorKeyForTest(Windows.System.VirtualKey.Tab);
+        await Settle();
+        Check("Tab again is back on the second field", Open() == "last");
+        view.ActiveEditorTextForTest = "Lovelace";
+
+        // --- the multi-line field ---
+        await view.PressEditorKeyForTest(Windows.System.VirtualKey.Tab);
+        await Settle();
+        Check("Tab opened the multi-line field", view.HasActiveEditorForTest && Open() == "notes");
+        Check("  which takes line breaks", view.ActiveEditorAcceptsReturnForTest);
+        Check("  and whose editor is as tall as the 80 pt widget, not one line",
+              view.ActiveEditorHeightForTest >= 80 * 96.0 / 72 * tab.ZoomFactor);
+        view.ActiveEditorTextForTest = "line one";
+        Check("Shift+Enter inserts a break", await view.PressEditorKeyForTest(Windows.System.VirtualKey.Enter, shift: true)
+              && view.HasActiveEditorForTest && (view.ActiveEditorTextForTest ?? "").Length > "line one".Length);
+        view.ActiveEditorTextForTest = view.ActiveEditorTextForTest + "line two";
+
+        // --- Tab to a checkbox, Space toggles it ---
+        Check("Tab commits the notes", await view.PressEditorKeyForTest(Windows.System.VirtualKey.Tab));
+        await Settle();
+        Check("Tab onto the checkbox closes the editor and gives the box focus",
+              !view.HasActiveEditorForTest && tab.PageFocus is { Kind: PageHitKind.FormCheckbox });
+        Check("  the box is not ticked yet", tab.HitTestPage(0, new PdfPoint(157.5, 284.5)).Field is { IsChecked: false });
+        await view.ActivateFocusedRegionForTest();
+        await Settle();
+        Check("Space ticks it", tab.HitTestPage(0, new PdfPoint(157.5, 284.5)).Field is { IsChecked: true });
+        Check("  and focus is still on it", tab.PageFocus is { Kind: PageHitKind.FormCheckbox });
+
+        // --- Tab on across the page break, then off the end ---
+        await view.StepPageFocusForTest(forward: true);
+        await Settle();
+        Check("Tab from the checkbox crosses to the second page's field",
+              view.HasActiveEditorForTest && Open() == "second");
+        view.ActiveEditorTextForTest = "Page two";
+        // Shift+Enter in a single-line field commits it, as Enter does: it puts no break in a one-line value.
+        await view.PressEditorKeyForTest(Windows.System.VirtualKey.Enter, shift: true);
+        await Settle();
+        Check("Shift+Enter in a single-line field commits it rather than breaking the line",
+              !view.HasActiveEditorForTest && tab.HitTestPage(1, first).Field is { Value: "Page two" });
+        await view.ActivatePageForTest(1, first);
+        Check("the last field opens again", view.HasActiveEditorForTest && Open() == "second");
+        await view.PressEditorKeyForTest(Windows.System.VirtualKey.Tab);
+        await Settle();
+        Check("Tab past the last field leaves the form without wrapping",
+              !view.HasActiveEditorForTest && tab.PageFocus is null);
+
+        // --- Escape still cancels ---
+        await view.ActivatePageForTest(0, first);
+        view.ActiveEditorTextForTest = "NOT KEPT";
+        await view.PressEditorKeyForTest(Windows.System.VirtualKey.Escape);
+        await Settle();
+        Check("Escape cancels the open field", !view.HasActiveEditorForTest
+              && tab.HitTestPage(0, first).Field is { Value: "Ada" });
+
+        // --- the values, read back from the saved file ---
+        var saved = Path.Combine(scratch, "formflow-filled.pdf");
+        await tab.SaveToPathForTestAsync(saved);
+        using var engine = new PdfiumEngine();
+        using var reopened = engine.Open(saved);
+        PdfFormField? Field(int page, string name)
+        {
+            using var p = reopened.GetPage(page);
+            return p.GetFormFields().FirstOrDefault(f => f.Name == name);
+        }
+        Check("saved: first = Ada", Field(0, "first") is { Value: "Ada" });
+        Check("saved: last = Lovelace", Field(0, "last") is { Value: "Lovelace" });
+        var notes = Field(0, "notes")?.Value ?? "";
+        Console.Error.WriteLine("notes /V code units: " + string.Join(" ", notes.Select(c => ((int)c).ToString("X2"))));
+        Check("saved: notes keeps both lines and the break between them",
+              notes.StartsWith("line one", StringComparison.Ordinal) && notes.EndsWith("line two", StringComparison.Ordinal)
+              && notes.IndexOfAny(['\r', '\n']) > 0);
+        Check("saved: the checkbox is ticked", Field(0, "agree") is { IsChecked: true });
+        Check("saved: second = Page two", Field(1, "second") is { Value: "Page two" });
     }
 
     private static async Task RunFillFormChecksAsync(

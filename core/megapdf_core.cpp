@@ -1928,6 +1928,8 @@ struct FormField {
     megapdf_form_field info{};
     U16 name;
     U16 value;
+    unsigned int flags = 0;   // MEGAPDF_FIELD_FLAG_* (#712)
+    int max_length = 0;
 };
 
 // FPDFAnnot_GetFormFieldName/Value: UTF-16, length in bytes including the terminator.
@@ -1983,6 +1985,20 @@ MEGAPDF_API megapdf_form_fields* megapdf_form_fields_load(const megapdf_page* p)
                     field.info.is_checked =
                         (field.info.kind == MEGAPDF_FIELD_CHECKBOX || field.info.kind == MEGAPDF_FIELD_RADIO) &&
                         FPDFAnnot_IsChecked(form, annot) ? 1 : 0;
+                    {
+                        // Ff bit 25 (comb) has no FPDF_FORMFLAG_ name in the vendored header.
+                        constexpr int kFormFlagComb = 1 << 24;
+                        const int ff = FPDFAnnot_GetFormFieldFlags(form, annot);
+                        if (ff & FPDF_FORMFLAG_READONLY) field.flags |= MEGAPDF_FIELD_FLAG_READONLY;
+                        if (field.info.kind == MEGAPDF_FIELD_TEXT) {
+                            if (ff & FPDF_FORMFLAG_TEXT_MULTILINE) field.flags |= MEGAPDF_FIELD_FLAG_MULTILINE;
+                            if (ff & kFormFlagComb) field.flags |= MEGAPDF_FIELD_FLAG_COMB;
+                            if (ff & FPDF_FORMFLAG_TEXT_PASSWORD) field.flags |= MEGAPDF_FIELD_FLAG_MASKED;
+                            float max_len = 0;
+                            if (FPDFAnnot_GetNumberValue(annot, "MaxLen", &max_len) && max_len > 0 && max_len < 1e6f)
+                                field.max_length = static_cast<int>(max_len);
+                        }
+                    }
                     field.name = ReadAnnotWide([&](FPDF_WCHAR* buf, unsigned long len) {
                         return FPDFAnnot_GetFormFieldName(form, annot, buf, len);
                     });
@@ -2010,6 +2026,16 @@ MEGAPDF_API int megapdf_form_field_get(const megapdf_form_fields* f, size_t inde
     if (f == nullptr || out == nullptr || index >= f->fields.size()) return MEGAPDF_ERR_ARGUMENT;
     *out = f->fields[index].info;
     return MEGAPDF_OK;
+}
+
+MEGAPDF_API unsigned int megapdf_form_field_flags(const megapdf_form_fields* f, size_t index) {
+    if (f == nullptr || index >= f->fields.size()) return 0;
+    return f->fields[index].flags;
+}
+
+MEGAPDF_API int megapdf_form_field_max_length(const megapdf_form_fields* f, size_t index) {
+    if (f == nullptr || index >= f->fields.size()) return 0;
+    return f->fields[index].max_length;
 }
 
 MEGAPDF_API size_t megapdf_form_field_string(const megapdf_form_fields* f, size_t index, megapdf_field_string which,

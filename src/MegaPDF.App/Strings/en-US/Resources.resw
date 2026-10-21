@@ -1174,6 +1174,14 @@ Saved as {2} — ready to email.</value>
     <value>{0}, unsaved changes, tab</value>
     <comment>Narrator name for a tab header with the unsaved dot showing; {0} is the document's file name</comment>
   </data>
+  <data name="MoveTabToNewWindowItem.Text" xml:space="preserve">
+    <value>Move tab to new window</value>
+    <comment>Context menu item on a tab (#711); the keyboard and screen reader way to drag a tab off the strip</comment>
+  </data>
+  <data name="TabMoved" xml:space="preserve">
+    <value>Tab {0} moved to another window</value>
+    <comment>Announced by Narrator once a tab has been dragged or moved to another window (#711); {0} is the document's file name</comment>
+  </data>
   <!-- ===== Reading mode (#504 tier 1, #510 tier 2; docs/reading-mode-plan.md §4) ===== -->
   <data name="ReadingMode" xml:space="preserve">
     <value>Reading mode</value>

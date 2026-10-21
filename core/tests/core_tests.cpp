@@ -1267,6 +1267,61 @@ void test_form_fields(const std::string& fixtures) {
     megapdf_form_fields_free(nullptr);
 }
 
+// #712: the flags accessor. formflow.pdf (tools/gen_test_fixtures.py) has "first" and "last"
+// single-line, a multi-line "notes", a checkbox "agree" and, on page 2, "second".
+void test_form_field_flags(const std::string& fixtures) {
+    Doc d(fixtures + "/formflow.pdf");
+    if (!d.doc) { check(false, "formflow.pdf opens"); return; }
+    Page p(d.doc, 0);
+    if (!p.page) { check(false, "formflow.pdf page 1 loads"); return; }
+    megapdf_form_fields* f = megapdf_form_fields_load(p.page);
+    check(f != nullptr && megapdf_form_field_count(f) == 4, "formflow.pdf page 1 has four widgets",
+          std::to_string(megapdf_form_field_count(f)));
+    if (f == nullptr || megapdf_form_field_count(f) != 4) { megapdf_form_fields_free(f); return; }
+    const char* names[] = {"first", "last", "notes", "agree"};
+    for (size_t i = 0; i < 4; i++)
+        check(show(field_string(f, i, MEGAPDF_FIELD_NAME)) == names[i],
+              std::string("widget order: ") + names[i] + " is index " + std::to_string(i),
+              show(field_string(f, i, MEGAPDF_FIELD_NAME)));
+    check((megapdf_form_field_flags(f, 0) & MEGAPDF_FIELD_FLAG_MULTILINE) == 0, "#712 a single-line field is not multi-line");
+    check((megapdf_form_field_flags(f, 1) & MEGAPDF_FIELD_FLAG_MULTILINE) == 0, "#712 the second single-line field is not multi-line");
+    check((megapdf_form_field_flags(f, 2) & MEGAPDF_FIELD_FLAG_MULTILINE) != 0, "#712 the notes field reports multi-line",
+          std::to_string(megapdf_form_field_flags(f, 2)));
+    check((megapdf_form_field_flags(f, 2) & (MEGAPDF_FIELD_FLAG_COMB | MEGAPDF_FIELD_FLAG_MASKED | MEGAPDF_FIELD_FLAG_READONLY)) == 0,
+          "#712 notes is not comb, masked or read-only");
+    check(megapdf_form_field_flags(f, 3) == 0, "#712 a checkbox carries no text flags");
+    check(megapdf_form_field_max_length(f, 2) == 0, "#712 no /MaxLen reads as 0");
+    check(megapdf_form_field_flags(f, 99) == 0 && megapdf_form_field_flags(nullptr, 0) == 0, "#712 flags: bad index and null handle read 0");
+    check(megapdf_form_field_max_length(f, 99) == 0 && megapdf_form_field_max_length(nullptr, 0) == 0, "#712 max length: bad index and null handle read 0");
+
+    // The printed labels are text, not widgets: the fields are all the page's widgets.
+    megapdf_form_field notes{};
+    megapdf_form_field_get(f, 2, &notes);
+    megapdf_form_fields_free(f);
+
+    // A line break survives set_text into the multi-line field and reads back.
+    auto value = utf16("line one\r\nline two");
+    const double cx = (notes.bounds.left + notes.bounds.right) / 2, cy = (notes.bounds.bottom + notes.bounds.top) / 2;
+    check(megapdf_form_set_text(p.page, cx, cy, value.data()) == MEGAPDF_OK, "#712 set_text into the multi-line field returns OK");
+    megapdf_form_commit(d.doc);
+    f = megapdf_form_fields_load(p.page);
+    const U16 raw = field_string(f, 2, MEGAPDF_FIELD_VALUE);
+    const std::string got = show(raw);   // show() prints a control character as '?'
+    bool has_break = false;
+    for (auto u : raw) if (u == 0x0D || u == 0x0A) has_break = true;
+    check(got.find("line one") != std::string::npos && got.find("line two") != std::string::npos && has_break,
+          "#712 the multi-line value keeps its break", got);
+    megapdf_form_fields_free(f);
+
+    // Page 2's field is single-line and a different page: fields do not leak across pages.
+    Page p2(d.doc, 1);
+    f = megapdf_form_fields_load(p2.page);
+    check(f != nullptr && megapdf_form_field_count(f) == 1 && show(field_string(f, 0, MEGAPDF_FIELD_NAME)) == "second",
+          "#712 formflow.pdf page 2 has the one field \"second\"");
+    check(megapdf_form_field_flags(f, 0) == 0, "#712 page 2's field has no flags");
+    megapdf_form_fields_free(f);
+}
+
 // --------------------------------------------------------------------------
 // Contract 4 (#108): stamps and MegaPDF_Id marks. stamped.pdf carries a
 // signature stamp (sig:interop-1, [100 500 190 560]) and a mark
@@ -10082,6 +10137,7 @@ int main(int argc, char** argv) {
     test_schematic(argv[2]);
     test_text_runs(argv[1], argv[2], argv[3]);
     test_form_fields(argv[1]);
+    test_form_field_flags(argv[1]);
     test_stamps(argv[1]);
     test_whiteouts_and_text_boxes(argv[1]);
     test_save_flatten_images(argv[1]);

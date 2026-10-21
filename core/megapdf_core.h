@@ -642,6 +642,23 @@ MEGAPDF_API megapdf_form_fields* megapdf_form_fields_load(const megapdf_page* pa
 MEGAPDF_API void megapdf_form_fields_free(megapdf_form_fields* fields);
 MEGAPDF_API size_t megapdf_form_field_count(const megapdf_form_fields* fields);
 MEGAPDF_API int megapdf_form_field_get(const megapdf_form_fields* fields, size_t index, megapdf_form_field* out);
+/**
+ * A form field's flags (#712), kept out of megapdf_form_field because that struct is
+ * mirrored by hand in .NET's CoreNative.cs and growing it would overflow the mirror.
+ * Bits are ours, not the PDF Ff bits, so callers need not know the Ff layout.
+ * MULTILINE, COMB and the masked-entry bit are set for text fields only.
+ */
+#define MEGAPDF_FIELD_FLAG_READONLY 0x1
+#define MEGAPDF_FIELD_FLAG_MULTILINE 0x2
+#define MEGAPDF_FIELD_FLAG_COMB 0x4
+#define MEGAPDF_FIELD_FLAG_MASKED 0x8
+/** The MEGAPDF_FIELD_FLAG_* bits of field `index`; 0 for a bad handle or index. */
+MEGAPDF_API unsigned int megapdf_form_field_flags(const megapdf_form_fields* fields, size_t index);
+/**
+ * The field's /MaxLen read from the widget's own dictionary, or 0 when it has none
+ * (or it is inherited from a parent field, which this does not walk).
+ */
+MEGAPDF_API int megapdf_form_field_max_length(const megapdf_form_fields* fields, size_t index);
 /** UTF-16 code units, no terminator, count-then-fill. */
 MEGAPDF_API size_t megapdf_form_field_string(const megapdf_form_fields* fields, size_t index,
                                              megapdf_field_string which, unsigned short* out, size_t capacity);
