@@ -39,3 +39,19 @@ jobs:
       # whose gaps nobody reads is a run that only proves a file parses.
       - name: The gaps it names
         run: python3 tools/qa/check-matrix.py --gaps
+
+      # #644: every literal in a localised SwiftUI position has a key in Localizable.xcstrings,
+      # with its fr-CA. Here and not in StringCatalogueTests.cs, because ci.yml ignores ios/**
+      # and a Swift-only pull request is exactly where a missing key is introduced.
+      - name: Every iOS literal shown to a person is in the string catalogue
+        run: |
+          python3 tools/qa/check-ios-strings.py --self-test
+          python3 tools/qa/check-ios-strings.py
+
+      # The France derivation for the iOS catalogue, for the same reason: ci.yml's drift check
+      # (gen_strings.py fr-fr) never runs on an iOS-only pull request.
+      - name: The iOS catalogue's France French is derived, not stale
+        run: |
+          python3 tools/gen_strings.py fr-fr
+          git diff --exit-code -- ios/MegaPDF/Localizable.xcstrings \
+            || { echo "::error::ios/MegaPDF/Localizable.xcstrings is stale — run 'python3 tools/gen_strings.py fr-fr' and commit"; exit 1; }

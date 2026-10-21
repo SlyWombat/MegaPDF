@@ -2182,8 +2182,11 @@ note = "the only platform where CI starts the real UI in French and reads the PO
 presence = "present"
 entry = "ios/MegaPDF/SettingsView.swift::settingsPageColours"
 coverage = "ui"
-tests = [".github/workflows/ios-ci.yml::-testLanguage fr"]
-note = "the whole unit suite is re-run in fr-CA, which proves the catalogue compiles and the app launches — no test asserts any French string."
+tests = [
+  ".github/workflows/ios-ci.yml::-testLanguage fr",
+  "tools/qa/check-ios-strings.py::def main",
+]
+note = "the whole unit suite is re-run in fr-CA, which proves the catalogue compiles and the app launches — no test asserts any French string; and every literal in a localised SwiftUI position is checked against the catalogue, with its fr-CA, on every pull request (#644)."
 [feature.android]
 presence = "present"
 entry = "android/app/src/main/res/values/strings.xml::app_name"
