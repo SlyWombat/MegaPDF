@@ -52,19 +52,70 @@ The full Software Design Document lives in [SDD.md](SDD.md) — product principl
 
 ## Tech stack
 
-- C# / .NET 8, WinUI 3 (Windows App SDK), CommunityToolkit.Mvvm
-- PDFium as the PDF engine, behind an `IPdfEngine` adapter, with an in-house interactive text-editing layer
-- MSIX packaging (Microsoft Store, direct download, winget)
+Five native apps over one engine. What MegaPDF does to a PDF (opening, rendering,
+text editing, redaction, forms, page tools, search, extraction) is decided once, in a
+shared C++ core, so a fix there reaches every platform. Each app is written in its own
+platform's language and UI toolkit on top of it.
+
+- **Engine: `core/`.** C++17 behind a C ABI (`core/megapdf_core.h`), over **our own
+  build of PDFium, not upstream's.** We carry a patch series
+  (`tools/pdfium/patches/`, each patch explained in `tools/pdfium/README.md`) that
+  fixes how PDFium rewrites a page when it is edited, writes AES-256 with new
+  passwords, and more. `libs/pdfium/RELEASE` pins the build every platform links. The
+  number of patches in that build is compiled into the core as
+  `MEGAPDF_PDFIUM_PATCHES`, and behaviour that needs a patch is gated on it. Do not
+  assume upstream PDFium behaviour.
+- **Windows:** C# / .NET 8, WinUI 3 (Windows App SDK), CommunityToolkit.Mvvm. x64 and
+  ARM64, shipped as an MSIX through the Microsoft Store only.
+- **Mac and Linux:** one app, `src/MegaPDF.Avalonia`. C# / .NET 8 and Avalonia,
+  **one binary for both platforms**, with what differs between them under its
+  `Platform/` folder. A change there lands on two platforms. The Mac build is for Apple
+  silicon and goes through the Mac App Store. The Linux build (x64) ships as a `.deb`
+  with a signed APT repository, a Snap, and a tarball.
+- **Both desktop apps** reach the core through `src/MegaPDF.Core`: P/Invoke bindings,
+  plus the services and edit operations the two apps share. There the core is a
+  native library: `megapdf_core.dll`, `libmegapdf_core.dylib` or `libmegapdf_core.so`.
+- **iPhone and iPad:** Swift and SwiftUI, iOS 16 and later. The core's sources compile
+  into the app, and Swift calls the C ABI through a bridging header. The Xcode project
+  is generated from `ios/project.yml` by XcodeGen.
+- **Android:** Kotlin and Jetpack Compose (Material 3), Android 8.0 (API 26) and
+  later. The core compiles into a JNI library in `android/engine`.
+- **Command line:** `megapdf-cli` (`core/cli/`) extracts a PDF's text or Markdown
+  with the same core.
+- **Tests:** xUnit for `MegaPDF.Core`, a native test binary for the core
+  (`core/tests/`), XCTest on iOS, JUnit and instrumented tests on Android, and each
+  desktop app's own self-test (`--self-test` on Mac and Linux, `--screenshot-state` on
+  Windows). Corpus batteries in `tools/stress/` run the core over thousands of real
+  PDFs. `tests/matrix/coverage.toml` maps every feature to its proof on every
+  platform, and CI fails a test file that no feature cites.
 
 ## Repository layout
 
 ```
-SDD.md                     Software Design Document (start here)
-core/                      The shared engine core in C++ (ADR-003)
-src/MegaPDF.Core/          Engine adapter, services, edit operations (UI-independent)
-src/MegaPDF.App/           WinUI 3 application (Windows)
-src/MegaPDF.Avalonia/      The cross-platform app (macOS, Linux) — ADR-002
-tests/MegaPDF.Core.Tests/  Unit tests (engine mocked)
+core/                       The shared engine: C++17 over our patched PDFium (ADR-003)
+  megapdf_core.h            Its C ABI, the one surface every platform calls
+  cli/                      megapdf-cli, text and Markdown extraction
+  tests/                    The core's native tests and their expected outputs
+src/MegaPDF.Core/           .NET bindings to the core and services shared by both desktop apps
+src/MegaPDF.App/            Windows app (WinUI 3)
+src/MegaPDF.Avalonia/       Mac and Linux app (Avalonia), one binary for both (ADR-002)
+ios/                        iPhone and iPad app (SwiftUI); project.yml generates the Xcode project
+android/                    Android app (Compose): app/ is the UI, engine/ wraps the core over JNI
+tests/MegaPDF.Core.Tests/   xUnit tests for MegaPDF.Core, against the real engine
+tests/matrix/coverage.toml  Which test proves each feature on each platform; enforced in CI
+libs/pdfium/                The pinned PDFium build (RELEASE) and its Windows and Android binaries
+libs/licenses/              Third-party licence texts the apps ship
+tools/                      Build, packaging, store submission, test fixtures and QA
+  pdfium/                   The PDFium patch series and the script that builds it
+  linux/                    .deb, APT repository, Snap and Flatpak packaging
+  stress/                   Corpus batteries over real-world PDFs
+  gen_strings.py            Localisation: fr-CA is written by hand, fr-FR is derived from it
+docs/                       ADRs, the release runbook (RELEASING.md), the localisation glossary
+website/                    electricrv.ca/megapdf: the site's source and its deploy script
+assets/branding/            Logo, icon and splash artwork
+.github/workflows/          CI for every platform, and the release pipelines
+SDD.md                      Software Design Document (start here)
+TESTING.md                  How to test MegaPDF, and the record of corpus battery runs
 ```
 
 ## Building
