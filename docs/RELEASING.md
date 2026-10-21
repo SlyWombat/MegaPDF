@@ -21,6 +21,19 @@ Start by opening an issue from the **Release checklist** template
 #395; every finding, run number, submission id and hash goes in that issue's comments as
 it happens, because the consoles are reachable from nowhere else in this repo.
 
+## 0. Always ready
+
+Run `tools/release-readiness.sh` and clear what it lists before starting §1. It prints one
+line per check, `OK` or `ATTENTION`, with the evidence, and exits non-zero if anything needs
+attention: `main` CI, open PRs, stale or orphaned `wip/*` branches and worktrees, the state
+of the checkouts, the twelve version locations of §1's table (parsed from that table, so it
+cannot drift from it), the docs that name the shipped version, the open issues in the
+matching milestone (printed, never a failure: milestones are Dave's) and the coverage map.
+`--machines` adds the leftovers check on the Mac mini, kdocker2, kdocker3 and GPD-DAVE (§4's
+"machines left as found"); `--stores` adds §4's read-backs. `.github/workflows/readiness.yml`
+runs the plain check weekly and keeps one "Release readiness" issue in step with it. The aim
+is that §1 starts from a repo with nothing on that list.
+
 ## 1. What a release is
 
 **A release is the checklist issue closed, not a tag pushed.** The version tags are how

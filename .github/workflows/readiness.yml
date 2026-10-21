@@ -1,0 +1,66 @@
+# Weekly release-readiness report (docs/RELEASING.md section 0).
+#
+# Runs tools/release-readiness.sh (no --machines, no --stores: those need ssh and a
+# Windows host) and keeps ONE issue titled "Release readiness" in step with its output:
+# opened or updated while anything is ATTENTION, commented on and closed once it is clear.
+# It never creates or touches a milestone. Read-only on everything but issues.
+name: Release readiness
+
+on:
+  schedule:
+    - cron: '17 11 * * 1'     # Mondays, 11:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  pull-requests: read
+  issues: write
+
+jobs:
+  readiness:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run the readiness check
+        id: run
+        run: |
+          set +e
+          tools/release-readiness.sh > "$RUNNER_TEMP/readiness.txt" 2>&1
+          echo "code=$?" >> "$GITHUB_OUTPUT"
+          cat "$RUNNER_TEMP/readiness.txt"
+
+      - name: Open, update or close the issue
+        run: |
+          set -e
+          {
+            echo "Output of \`tools/release-readiness.sh\` from the [weekly run](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}), $(date -u +%Y-%m-%d). Clear what it lists before starting docs/RELEASING.md section 1. The machine and store checks need \`--machines\` / \`--stores\` and are not in this report."
+            echo
+            echo '```'
+            grep -E '^(ATTENTION|release-readiness|==)' "$RUNNER_TEMP/readiness.txt" || true
+            echo '```'
+            echo
+            echo '<details><summary>Full output</summary>'
+            echo
+            echo '```'
+            cat "$RUNNER_TEMP/readiness.txt"
+            echo '```'
+            echo '</details>'
+          } > "$RUNNER_TEMP/body.md"
+          existing=$(gh issue list --state open --search '"Release readiness" in:title' --json number,title \
+            -q '[.[]|select(.title=="Release readiness")][0].number // empty')
+          if [ "${{ steps.run.outputs.code }}" != 0 ]; then
+            if [ -n "$existing" ]; then
+              gh issue edit "$existing" --body-file "$RUNNER_TEMP/body.md"
+            else
+              gh issue create --title "Release readiness" --label infra --body-file "$RUNNER_TEMP/body.md"
+            fi
+          elif [ -n "$existing" ]; then
+            gh issue comment "$existing" --body "All clear as of $(date -u +%Y-%m-%d): the weekly run found nothing needing attention. Closing."
+            gh issue close "$existing"
+          fi
