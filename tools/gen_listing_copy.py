@@ -23,6 +23,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
 from gen_strings import to_france  # noqa: E402
+import store_slots  # noqa: E402
 
 # The spacing rule the 2.0 store blocks follow, applied here too: U+00A0 before ":"
 # in both French variants, and before "?", "!" and ";" as well in France's
@@ -103,16 +104,16 @@ MegaPDF is open source (Apache-2.0): github.com/SlyWombat/MegaPDF""",
     # argument — read it, fix it, fill it, sign it, put the pages in order, find
     # anything in it, take something out of it for good, and none of it leaves
     # your PC — so moving one without re-reading the rest breaks the run.
-    "captions": [
-        ("01-reading.png", "Press Ctrl+H and the tools come off the screen, leaving the page. A small floating bar keeps your place; Escape brings it all back."),
-        ("02-text.png", "Click the document's own text and type — fixing a PDF the way you would fix a Word file."),
-        ("03-checkbox.png", "Click an empty square and it is ticked — printed boxes that were never meant to be filled on screen, filled on screen."),
-        ("04-sign.png", "Pick a signature from your library, click where it goes, then nudge it until it sits right on the line."),
-        ("05-pages.png", "The Pages pane is somewhere to work: rotate a sideways scan, drop a page, reorder them, or save the ones you picked as a file of their own."),
-        ("06-search.png", "Ctrl+F highlights every match at once and counts them, so the one clause you need is a couple of keys away."),
-        ("07-redact.png", "Mark what has to come out. Saving takes it out of the file rather than covering it over — and says how much it removed."),
-        ("08-home.png", "No account, no cloud, no subscription, no telemetry. Every document is opened and handled on your own PC."),
-    ],
+    "captions": {
+        "reading": "Press Ctrl+H and the tools come off the screen, leaving the page. A small floating bar keeps your place; Escape brings it all back.",
+        "text": "Click the document's own text and type — fixing a PDF the way you would fix a Word file.",
+        "checkbox": "Click an empty square and it is ticked — printed boxes that were never meant to be filled on screen, filled on screen.",
+        "sign": "Pick a signature from your library, click where it goes, then nudge it until it sits right on the line.",
+        "pages": "The Pages pane is somewhere to work: rotate a sideways scan, drop a page, reorder them, or save the ones you picked as a file of their own.",
+        "search": "Ctrl+F highlights every match at once and counts them, so the one clause you need is a couple of keys away.",
+        "redact": "Mark what has to come out. Saving takes it out of the file rather than covering it over — and says how much it removed.",
+        "home": "No account, no cloud, no subscription, no telemetry. Every document is opened and handled on your own PC.",
+    },
 }
 
 MS_FR_CA = {
@@ -159,16 +160,16 @@ MegaPDF est un logiciel libre (Apache-2.0) : github.com/SlyWombat/MegaPDF""",
     "terms": ["éditeur PDF", "modifier PDF", "signer PDF", "remplir formulaire PDF", "signature PDF", "compresser PDF", "PDF léger"],
     "copyright": "© 2026 Electric RV. Sous licence Apache-2.0.",
     # Huit emplacements depuis 2.2 (#613), dans l'ordre où ils sont téléversés et lus.
-    "captions": [
-        ("01-reading.png", "Appuyez sur Ctrl+H : les outils quittent l'écran et laissent la page. Une petite barre flottante garde votre place; Échap ramène tout."),
-        ("02-text.png", "Cliquez sur le texte du document et tapez : corriger un PDF comme on corrige un document Word."),
-        ("03-checkbox.png", "Cliquez sur un carré vide et il est coché : des cases imprimées, jamais conçues pour être remplies à l'écran, remplies à l'écran."),
-        ("04-sign.png", "Choisissez une signature dans votre bibliothèque, cliquez à l'endroit voulu, puis ajustez-la jusqu'à ce qu'elle soit bien sur la ligne."),
-        ("05-pages.png", "Le volet Pages est un endroit où travailler : faites pivoter une page de travers, supprimez-en une, réordonnez-les ou extrayez celles que vous avez choisies."),
-        ("06-search.png", "Ctrl+F surligne tous les résultats d'un coup et les compte : la seule clause utile est à deux touches."),
-        ("07-redact.png", "Marquez ce qui doit disparaître. L'enregistrement le retire du fichier au lieu de le recouvrir, et dit ce qu'il a retiré."),
-        ("08-home.png", "Pas de compte, pas d'infonuagique, pas d'abonnement, pas de télémétrie. Chaque document est ouvert et traité sur votre propre PC."),
-    ],
+    "captions": {
+        "reading": "Appuyez sur Ctrl+H : les outils quittent l'écran et laissent la page. Une petite barre flottante garde votre place; Échap ramène tout.",
+        "text": "Cliquez sur le texte du document et tapez : corriger un PDF comme on corrige un document Word.",
+        "checkbox": "Cliquez sur un carré vide et il est coché : des cases imprimées, jamais conçues pour être remplies à l'écran, remplies à l'écran.",
+        "sign": "Choisissez une signature dans votre bibliothèque, cliquez à l'endroit voulu, puis ajustez-la jusqu'à ce qu'elle soit bien sur la ligne.",
+        "pages": "Le volet Pages est un endroit où travailler : faites pivoter une page de travers, supprimez-en une, réordonnez-les ou extrayez celles que vous avez choisies.",
+        "search": "Ctrl+F surligne tous les résultats d'un coup et les compte : la seule clause utile est à deux touches.",
+        "redact": "Marquez ce qui doit disparaître. L'enregistrement le retire du fichier au lieu de le recouvrir, et dit ce qu'il a retiré.",
+        "home": "Pas de compte, pas d'infonuagique, pas d'abonnement, pas de télémétrie. Chaque document est ouvert et traité sur votre propre PC.",
+    },
 }
 
 # --------------------------------------------------------------------------
@@ -232,17 +233,17 @@ MegaPDF is deliberately simple: it doesn't bury you in toolbars. It opens, it fi
     # with exceptions, so the difference is visible rather than implied. The iPhone's reads
     # as the common/#613 argument in order: read it, fix it, sign it (twice), organise it,
     # fill it, find it, take something out, nothing leaves the device.
-    "captions_iphone": [
-        ("reading", "Reading mode leaves nothing but the page — the one you checked and signed"),
-        ("text-edit", "Fix a typo in the document itself"),
-        ("sign", "Your signatures, saved on your device"),
-        ("draw", "Draw it once, use it everywhere"),
-        ("pages", "Rotate, reorder, delete — one Undo puts it all back"),
-        ("text", "Type on the blank line — your size, your font"),
-        ("search", "Find any word, on every page"),
-        ("redact", "Redact removes it. It does not just cover it."),
-        ("home", "No account. No cloud. No tracking."),
-    ],
+    "captions_iphone": {
+        "reading": "Reading mode leaves nothing but the page — the one you checked and signed",
+        "text-edit": "Fix a typo in the document itself",
+        "sign": "Your signatures, saved on your device",
+        "draw": "Draw it once, use it everywhere",
+        "pages": "Rotate, reorder, delete — one Undo puts it all back",
+        "text": "Type on the blank line — your size, your font",
+        "search": "Find any word, on every page",
+        "redact": "Redact removes it. It does not just cover it.",
+        "home": "No account. No cloud. No tracking.",
+    },
     # The iPad's argument is a different one (Dave, PR #651): lead on what only this device
     # has — the sidebar and the 2.2 toolbar (#172) — rather than repeat the phone's case.
     # `pages` and `reading` get their own captions to carry it; the other seven are read in
@@ -257,17 +258,17 @@ MegaPDF is deliberately simple: it doesn't bury you in toolbars. It opens, it fi
     #   7. search      find anything — useful, not the reason someone installs it
     #   8. redact      minor feature, still moved to the back
     #   9. home        the close every platform's sequence ends on
-    "captions_ipad": [
-        ("pages", "Your own toolbar, pages in a sidebar — built for the bigger screen"),
-        ("reading", "Then it's gone: reading mode leaves nothing but the page"),
-        ("text-edit", "Fix a typo in the document itself"),
-        ("sign", "Your signatures, saved on your device"),
-        ("draw", "Draw it once, use it everywhere"),
-        ("text", "Type on the blank line — your size, your font"),
-        ("search", "Find any word, on every page"),
-        ("redact", "Redact removes it. It does not just cover it."),
-        ("home", "No account. No cloud. No tracking."),
-    ],
+    "captions_ipad": {
+        "pages": "Your own toolbar, pages in a sidebar — built for the bigger screen",
+        "reading": "Then it's gone: reading mode leaves nothing but the page",
+        "text-edit": "Fix a typo in the document itself",
+        "sign": "Your signatures, saved on your device",
+        "draw": "Draw it once, use it everywhere",
+        "text": "Type on the blank line — your size, your font",
+        "search": "Find any word, on every page",
+        "redact": "Redact removes it. It does not just cover it.",
+        "home": "No account. No cloud. No tracking.",
+    },
 }
 
 AS_FR_CA = {
@@ -315,31 +316,31 @@ MegaPDF est volontairement simple : il ne vous noie pas sous les barres d'outils
     "keywords": "pdf,signer,signature,remplir,formulaire,case,cocher,éditeur,recherche,document,annoter,lecture",
     "whatsnew": release_block("app-store.md", "Français (Canada)"),
     # See AS_EN's captions comment (#613, PR #651) — same re-cut, two sequences.
-    "captions_iphone": [
-        ("reading", "Le mode lecture ne laisse que la page : celle que vous avez cochée et signée"),
-        ("text-edit", "Corrigez une coquille dans le document même"),
-        ("sign", "Vos signatures, enregistrées sur votre appareil"),
-        ("draw", "Dessinez-la une fois, utilisez-la partout"),
-        ("pages", "Faites pivoter, réordonnez, supprimez : une seule annulation remet tout en place"),
-        ("text", "Écrivez sur la ligne vide : votre taille, votre police"),
-        ("search", "Trouvez n'importe quel mot, sur chaque page"),
-        ("redact", "Caviardez : c'est retiré, pas seulement couvert."),
-        ("home", "Pas de compte. Pas d'infonuagique. Pas de suivi."),
-    ],
+    "captions_iphone": {
+        "reading": "Le mode lecture ne laisse que la page : celle que vous avez cochée et signée",
+        "text-edit": "Corrigez une coquille dans le document même",
+        "sign": "Vos signatures, enregistrées sur votre appareil",
+        "draw": "Dessinez-la une fois, utilisez-la partout",
+        "pages": "Faites pivoter, réordonnez, supprimez : une seule annulation remet tout en place",
+        "text": "Écrivez sur la ligne vide : votre taille, votre police",
+        "search": "Trouvez n'importe quel mot, sur chaque page",
+        "redact": "Caviardez : c'est retiré, pas seulement couvert.",
+        "home": "Pas de compte. Pas d'infonuagique. Pas de suivi.",
+    },
     # The iPad's own argument (Dave, PR #651): "panneau latéral" and "volet" are the words
     # the rest of the catalogue already uses for this (docs/microsoft-store-listing.md,
     # the Mac reading-mode copy) — not new vocabulary for this one pair of captions.
-    "captions_ipad": [
-        ("pages", "Votre propre barre d'outils, vos pages dans un panneau latéral : conçu pour le grand écran"),
-        ("reading", "Puis tout disparaît : le mode lecture ne laisse que la page"),
-        ("text-edit", "Corrigez une coquille dans le document même"),
-        ("sign", "Vos signatures, enregistrées sur votre appareil"),
-        ("draw", "Dessinez-la une fois, utilisez-la partout"),
-        ("text", "Écrivez sur la ligne vide : votre taille, votre police"),
-        ("search", "Trouvez n'importe quel mot, sur chaque page"),
-        ("redact", "Caviardez : c'est retiré, pas seulement couvert."),
-        ("home", "Pas de compte. Pas d'infonuagique. Pas de suivi."),
-    ],
+    "captions_ipad": {
+        "pages": "Votre propre barre d'outils, vos pages dans un panneau latéral : conçu pour le grand écran",
+        "reading": "Puis tout disparaît : le mode lecture ne laisse que la page",
+        "text-edit": "Corrigez une coquille dans le document même",
+        "sign": "Vos signatures, enregistrées sur votre appareil",
+        "draw": "Dessinez-la une fois, utilisez-la partout",
+        "text": "Écrivez sur la ligne vide : votre taille, votre police",
+        "search": "Trouvez n'importe quel mot, sur chaque page",
+        "redact": "Caviardez : c'est retiré, pas seulement couvert.",
+        "home": "Pas de compte. Pas d'infonuagique. Pas de suivi.",
+    },
 }
 
 # --------------------------------------------------------------------------
@@ -510,8 +511,8 @@ def respace(copy: dict, punctuation: str) -> dict:
     for k, v in copy.items():
         if isinstance(v, str):
             out[k] = space_before(v, punctuation)
-        elif isinstance(v, list) and v and isinstance(v[0], tuple):
-            out[k] = [(f, space_before(c, punctuation)) for f, c in v]
+        elif isinstance(v, dict):
+            out[k] = {p: space_before(c, punctuation) for p, c in v.items()}
         else:
             out[k] = [space_before(x, punctuation) for x in v]
     return out
@@ -528,8 +529,8 @@ def derive(copy: dict) -> dict:
     for k, v in copy.items():
         if isinstance(v, str):
             out[k] = to_france(v)
-        elif isinstance(v, list) and v and isinstance(v[0], tuple):
-            out[k] = [(f, to_france(c)) for f, c in v]
+        elif isinstance(v, dict):
+            out[k] = {p: to_france(c) for p, c in v.items()}
         else:
             out[k] = [to_france(x) for x in v]
     return respace(out, ":?!;")
@@ -542,8 +543,10 @@ def ms_section(title: str, tag: str, c: dict, note: str = "") -> str:
     parts.append(f"**App features** — one line per box, {len(c['features'])} boxes\n" + block("\n".join(c["features"])))
     parts.append("**Search terms** — one per box, seven boxes\n" + block("\n".join(c["terms"])))
     parts.append("**Copyright**\n" + block(c["copyright"]))
-    parts.append(f"**Screenshot captions** — same {len(c['captions'])} files, same order\n"
-                 + block("\n".join(f"{f}: {cap}" for f, cap in c["captions"])))
+    poses = store_slots.listing_poses("microsoft", "desktop")
+    files = store_slots.listing_files("microsoft", "desktop")
+    parts.append(f"**Screenshot captions** — same {len(poses)} files, same order\n"
+                 + block("\n".join(f"{f}: {c['captions'][p]}" for f, p in zip(files, poses))))
     return "\n".join(p for p in parts if p)
 
 
@@ -560,10 +563,12 @@ def as_section(title: str, tag: str, c: dict, note: str = "") -> str:
     # toolbar (#172) rather than repeating the iPhone's argument, so its slots 1 and 2
     # swap and carry their own captions. Printed as two blocks under their own headings
     # rather than one list with a footnote, so the difference is a glance, not a diff.
-    parts.append(f"**Screenshot captions** (optional overlay text) — iPhone 6.9\", {len(c['captions_iphone'])} files, in this order\n"
-                 + block("\n".join(f"{f}: {cap}" for f, cap in c["captions_iphone"])))
-    parts.append(f"**Screenshot captions** (optional overlay text) — iPad 13\", {len(c['captions_ipad'])} files, in this order\n"
-                 + block("\n".join(f"{f}: {cap}" for f, cap in c["captions_ipad"])))
+    iphone = store_slots.listing_poses("ios", "iphone-6_9")
+    ipad = store_slots.listing_poses("ios", "ipad-13")
+    parts.append(f"**Screenshot captions** (optional overlay text) — iPhone 6.9\", {len(iphone)} files, in this order\n"
+                 + block("\n".join(f"{p}: {c['captions_iphone'][p]}" for p in iphone)))
+    parts.append(f"**Screenshot captions** (optional overlay text) — iPad 13\", {len(ipad)} files, in this order\n"
+                 + block("\n".join(f"{p}: {c['captions_ipad'][p]}" for p in ipad)))
     return "\n".join(p for p in parts if p)
 
 
@@ -594,7 +599,7 @@ LIMITS_OK = [
     (len(MS_EN["features"]) <= 20 and len(MS_FR_CA["features"]) <= 20, "MS at most 20 features"),
     (len(MS_EN["description"]) <= 10000 and len(MS_FR_CA["description"]) <= 10000, "MS description ≤10000"),
     (all(len(t) <= 30 for t in MS_EN["terms"] + MS_FR_CA["terms"]), "MS terms ≤30"),
-    (all(len(c) <= 200 for _, c in MS_EN["captions"] + MS_FR_CA["captions"]), "MS captions ≤200"),
+    (all(len(c) <= 200 for c in list(MS_EN["captions"].values()) + list(MS_FR_CA["captions"].values())), "MS captions ≤200"),
     (len(AS_EN["subtitle"]) <= 30 and len(AS_FR_CA["subtitle"]) <= 30, "AS subtitle ≤30"),
     (len(AS_EN["promo"]) <= 170 and len(AS_FR_CA["promo"]) <= 170, "AS promo ≤170"),
     (len(AS_EN["keywords"]) <= 100 and len(AS_FR_CA["keywords"]) <= 100, "AS keywords ≤100"),

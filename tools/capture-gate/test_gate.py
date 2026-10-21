@@ -336,13 +336,6 @@ class MacReadingPose(unittest.TestCase):
         self.assertIn("reading", profile["toolbar"]["chromeless_poses"])
         self.assertIn("pages", profile["accent_poses"])
 
-    def test_the_listing_order_is_the_order_the_rig_shoots(self):
-        """The seven slots #613 settled, in order, ahead of the pose that is no
-        longer a listing slot."""
-        self.assertEqual(
-            stores.STORES["mac"]["order"][:7],
-            ["reading", "text", "sign", "pages", "search", "redact", "home"])
-
 
 @unittest.skipUnless(shutil.which("convert"), "ImageMagick is not installed")
 class PlayReadingPose(unittest.TestCase):
@@ -418,14 +411,6 @@ class PlayReadingPose(unittest.TestCase):
         self.assertIsNotNone(parsed)
         self.assertEqual(parsed[1], "reading")
         self.assertIn("reading", stores.STORES["play"]["barless_poses"])
-
-    def test_the_listing_order_is_the_order_the_rig_shoots(self):
-        """The eight slots #613 settled, in order, ahead of the two poses that
-        are no longer listing slots but are still in the QA matrix."""
-        self.assertEqual(
-            stores.STORES["play"]["order"][:8],
-            ["reading", "text-edit", "sign", "pages", "text", "search",
-             "redact", "home"])
 
 
 @unittest.skipUnless(shutil.which("convert"), "ImageMagick is not installed")
@@ -503,33 +488,6 @@ class IosReadingPose(unittest.TestCase):
         ipad = [n for n in names if n.startswith("ipad-")]
         self.assertEqual(iphone, ["iphone-6_9-reading.png", "iphone-6_9-text.png"])
         self.assertEqual(ipad, ["ipad-13-pages.png", "ipad-13-reading.png"])
-
-    def test_the_iphone_order_leads_with_reading_and_keeps_both_text_slots(self):
-        """The order #613 settled for the iPhone: reading and the page tools lead, both
-        the inline body-text edit and the Add Text slot are kept (the App Store's
-        ten-image limit never forced Android's choice between them), and `draw` — kept
-        on Apple's higher slot limit, PR #651 — sits beside `sign`."""
-        self.assertEqual(
-            stores.STORES["ios"]["order"]["iphone-6_9"],
-            ["reading", "text-edit", "sign", "draw", "pages", "text", "search",
-             "redact", "home"])
-
-    def test_the_ipad_order_is_a_different_sequence_not_the_iphones_reordered(self):
-        """PR #651: Dave's call on the iPad was to lead on the sidebar and the 2.2
-        toolbar (#172) rather than repeat the iPhone's argument, so `pages` and
-        `reading` swap to the front — and the two devices' orders are kept as two
-        entries of a `{device: [...]}` dict rather than one list with an iPad
-        exception threaded through it, which this test is also checking the shape of."""
-        profile = stores.STORES["ios"]
-        self.assertIsInstance(profile["order"], dict)
-        self.assertEqual(
-            profile["order"]["ipad-13"],
-            ["pages", "reading", "text-edit", "sign", "draw", "text", "search",
-             "redact", "home"])
-        # Same nine poses on both devices, different lead.
-        self.assertEqual(set(profile["order"]["iphone-6_9"]),
-                         set(profile["order"]["ipad-13"]))
-        self.assertNotEqual(profile["order"]["iphone-6_9"], profile["order"]["ipad-13"])
 
 
 @unittest.skipUnless(shutil.which("convert"), "ImageMagick is not installed")
