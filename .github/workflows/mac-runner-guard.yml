@@ -1,0 +1,24 @@
+# The Mac mini runner's job-started hook (#614) is the fork guard that no pull request
+# can edit: it lives on the machine, not in a workflow. This tests the in-tree copy that
+# tools/mac-runner/service.sh install puts there, against the events it must allow and
+# refuse, on GitHub's runner rather than ours.
+name: Mac runner guard
+
+on:
+  pull_request:
+    branches: [main]
+    paths: ['tools/mac-runner/**', '.github/workflows/mac-runner-guard.yml']
+  push:
+    branches: [main]
+    paths: ['tools/mac-runner/**', '.github/workflows/mac-runner-guard.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  hook:
+    name: job-started hook refuses forks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash tools/mac-runner/test-job-started.sh

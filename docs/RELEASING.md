@@ -28,7 +28,8 @@ line per check, `OK` or `ATTENTION`, with the evidence, and exits non-zero if an
 attention: `main` CI, open PRs, stale or orphaned `wip/*` branches and worktrees, the state
 of the checkouts, the twelve version locations of §1's table (parsed from that table, so it
 cannot drift from it), the docs that name the shipped version, the open issues in the
-matching milestone (printed, never a failure: milestones are Dave's) and the coverage map.
+matching milestone (printed, never a failure: milestones are Dave's), the coverage map and
+the Mac mini CI runner (switched on, picking up jobs).
 `--machines` adds the leftovers check on the Mac mini, kdocker2, kdocker3 and GPD-DAVE (§4's
 "machines left as found"); `--stores` adds §4's read-backs. `.github/workflows/readiness.yml`
 runs the plain check weekly and keeps one "Release readiness" issue in step with it. The aim

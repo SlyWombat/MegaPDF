@@ -22,6 +22,9 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
+      # Section 9b reads the switch. The job's own token cannot read variables through
+      # the REST API, but the vars context is readable here (#614).
+      MAC_SELF_HOSTED: ${{ vars.MAC_SELF_HOSTED }}
     steps:
       - uses: actions/checkout@v4
         with:
