@@ -115,7 +115,6 @@ internal fun TextSelectionOverlay(
                                 val down = awaitFirstDown(requireUnconsumed = true)
                                 down.consume()
                                 dragging = true
-                                android.util.Log.d("MegaPDFSel", "handle down isStart=$isStart")
                                 val rect = currentRects.let { if (isStart) it.first() else it.last() }
                                 var finger = Offset(
                                     (if (isStart) rect.left else rect.right).toFloat() * sx,
@@ -139,11 +138,9 @@ internal fun TextSelectionOverlay(
                                         selectable.caretAt(xPt, yPt), isStart, now, selectable.length,
                                     )
                                     val next = now.withHandleAt(isStart, caret)
-                                    android.util.Log.d("MegaPDFSel", "drag moved=$moved caret=$caret next=$next now=$now")
                                     if (next != now) onChange(next)
                                 }
                                 dragging = false
-                                android.util.Log.d("MegaPDFSel", "handle up")
                             }
                         },
                 ) {

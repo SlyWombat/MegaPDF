@@ -2610,7 +2610,6 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
 
     /** Long-press on a page: selects the word under the finger, if there is one. A tap still edits. */
     fun onPageLongPressed(pageIndex: Int, xFraction: Float, yFraction: Float) {
-        Log.d("MegaPDFSel", "long press x=$xFraction y=$yFraction")
         val state = uiState as? ViewerUiState.Viewing ?: return
         val doc = document ?: return
         // A drag tool armed means a press on the page is the start of its gesture, not a selection.
@@ -2645,7 +2644,6 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
 
     /** A handle moved: the selection becomes these two carets. */
     fun updateTextSelection(selection: TextSelection) {
-        Log.d("MegaPDFSel", "update $selection (current $textSelection)")
         if (textSelection?.pageIndex == selection.pageIndex) textSelection = selection
     }
 
@@ -2657,7 +2655,6 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun dropTextSelection() {
-        Log.d("MegaPDFSel", "drop", Throwable())
         textSelection = null
         selectables.values.forEach { it.close() }
         selectables.clear()
