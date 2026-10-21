@@ -21,35 +21,49 @@ on:
     branches: [main]
     paths: ['ios/**', 'core/**', 'libs/pdfium/**', 'tools/gen_test_fixtures.py', '.github/workflows/ios-ci.yml']
 
+# One iOS CI run per pull request at a time: a push to a PR cancels that PR's older run,
+# so a single standing runner never works through stale commits (#614). Pushes to main
+# are never cancelled.
+concurrency:
+  group: ios-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   build:
+    # 37-38 minutes measured on both runners (tools/mac-mini.md). A hung job on the one
+    # standing Mac runner blocks every PR behind it, and the default is 6 hours (#614).
+    timeout-minutes: 90
     # Our own Mac mini when it is switched on and the pull request is ours;
     # GitHub's hosted macOS otherwise (#614). Read this right to left:
     #
     #   vars.MAC_SELF_HOSTED == 'on'      the switch. A repository variable, not a
     #                                     setting on the machine, so Dave can turn the
-    #                                     Mac out of the loop from anywhere and the
-    #                                     queued jobs go back to GitHub instead of
-    #                                     waiting 24 hours for a runner that is off.
+    #                                     Mac out of the loop from anywhere; jobs that
+    #                                     start after it go to GitHub. A job ALREADY
+    #                                     queued for the Mac keeps its labels and waits
+    #                                     for it (up to 24 hours): cancel it with
+    #                                     `gh run cancel`, or bring the Mac back.
     #                                     Unset means hosted, so this file changes
     #                                     nothing until the variable is set.
-    #   head.repo.full_name == repository THE fork guard, and the reason any of this is
-    #                                     safe. THIS REPOSITORY IS PUBLIC, and the runner
-    #                                     runs as `claude`, the account that holds the
+    #   head.repo.full_name == repository the first of two fork guards; the second is the
+    #                                     hook on the machine
+    #                                     (tools/mac-runner/job-started.sh). THIS
+    #                                     REPOSITORY IS PUBLIC, and the runner runs as
+    #                                     `claude`, the account that holds the
     #                                     read-write deploy key and the working clones
     #                                     (Dave's call, 2026-10-01). So a job that gets
-    #                                     here can read all of that, and the only thing
-    #                                     standing between a stranger and it is this
-    #                                     comparison. A pull request opened from a fork
-    #                                     is still checked — on GitHub's disposable
+    #                                     here can read all of that. A pull request
+    #                                     opened from a fork is still checked — on
+    #                                     GitHub's disposable
     #                                     runner, which is what that is for. There are no
     #                                     forks today; that is the moment to write this,
     #                                     not the moment after.
-    #                                     It is in the workflow and not left to the
-    #                                     repository's "require approval for fork pull
-    #                                     requests" setting on purpose: a setting is one
-    #                                     click from being loosened, and this guard has
-    #                                     to survive that click.
+    #                                     It is not left to the repository's "require
+    #                                     approval for fork pull requests" setting: a
+    #                                     setting is one click from being loosened. But
+    #                                     a fork's pull request runs ITS OWN copy of this
+    #                                     file and can delete this guard, so the guard
+    #                                     that matters is the hook (see below).
     #   head.repo.fork == false           a second, independent term, ANDed. On its own
     #                                     it would be WORSE than nothing: when head.repo
     #                                     is null — a fork deleted after the pull request
@@ -58,7 +72,7 @@ jobs:
     #                                     written only this way fails OPEN. The
     #                                     full_name comparison is what catches null, and
     #                                     is the load-bearing half. Both are proved,
-    #                                     including that null case, by the probe below.
+    #                                     including that null case (see below).
     #   event_name != 'pull_request'      a push to main, or a workflow_dispatch: the
     #                                     code is already in the repository, so there is
     #                                     no untrusted author to guard against.
@@ -73,11 +87,13 @@ jobs:
     #                                       gh workflow run ios-ci.yml -f runner=hosted
     #                                     `auto` means the rules above.
     #
-    # Verified rather than assumed: .github/workflows/runner-selection-probe.yml
-    # evaluated this expression and three held-constant variants on a hosted runner in
-    # both event shapes. The one that matters is a pull_request whose head repository is
-    # not this one with the switch forced on: it resolves to macos-latest. Recorded on
-    # #614.
+    # Verified rather than assumed: a probe workflow evaluated this expression and its
+    # variants on a hosted runner in both event shapes, including a fork that was deleted
+    # after its PR was opened (run 36888016328, recorded on #614; the probe is deleted).
+    # This expression is NOT the fork guard for the Mac: a fork's pull request runs its
+    # own copy of this file. The guard is the runner's job-started hook,
+    # tools/mac-runner/job-started.sh, which no pull request can edit. This keeps honest
+    # fork PRs on GitHub's runner, where they pass rather than being refused.
     runs-on: ${{ fromJSON((github.event_name == 'workflow_dispatch' && github.event.inputs.runner == 'self-hosted') && '["self-hosted","macOS","ARM64","megapdf-ios"]' || (github.event_name == 'workflow_dispatch' && github.event.inputs.runner == 'hosted') && '["macos-latest"]' || (vars.MAC_SELF_HOSTED == 'on' && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.repo.fork == false))) && '["self-hosted","macOS","ARM64","megapdf-ios"]' || '["macos-latest"]') }}
     defaults:
       run:

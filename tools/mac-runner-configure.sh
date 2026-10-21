@@ -2,9 +2,10 @@
 # Register the Mac mini as this repository's self-hosted GitHub Actions runner (#614).
 # Runs ON the Mac. See tools/mac-mini.md § "CI on this machine" for the whole picture.
 #
-# The runner is registered --ephemeral, so it takes one job and then removes its own
-# registration: this has to be run again before each job. Invoke it from a machine
-# that has `gh` (there is deliberately no GitHub credential on the Mac):
+# It registers the runner once; the registration then persists in the runner directory
+# and the runner runs as a LaunchAgent (tools/mac-runner/service.sh install). Run this
+# again only after the registration has been removed. Invoke it from a machine that has
+# `gh` (there is deliberately no GitHub credential on the Mac):
 #
 #   gh api -X POST repos/SlyWombat/MegaPDF/actions/runners/registration-token --jq .token \
 #     | ssh mac-mini 'bash /Users/claude/Projects/MegaPDF/tools/mac-runner-configure.sh'
@@ -38,8 +39,6 @@ fi
 
 cd "$DIR"
 
-# --ephemeral   one job, then the registration is gone. A compromised job cannot
-#               persist into the next one.
 # --labels      self-hosted, macOS and ARM64 are added automatically; megapdf-ios is
 #               the one ios-ci.yml asks for, so nothing else can drift onto this
 #               machine by accident.
@@ -51,13 +50,10 @@ ACTIONS_RUNNER_INPUT_TOKEN="$CRED" ./config.sh \
   --url "https://github.com/SlyWombat/MegaPDF" \
   --name "mac-mini-megapdf" \
   --labels "megapdf-ios" \
-  --work "_work" \
-  --ephemeral
+  --work "_work"
 unset CRED
 
 cat <<'EOF'
 
-CONFIGURED. Now start it (it will take one job and exit):
-
-  cd /Users/claude/actions-runner && nohup ./run.sh >> ~/runner.log 2>&1 &
+CONFIGURED. Now install the service: bash /Users/claude/Projects/MegaPDF/tools/mac-runner/service.sh install
 EOF

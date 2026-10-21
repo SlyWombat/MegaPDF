@@ -287,6 +287,49 @@ head_ "9. coverage map"
 if out=$(python3 tools/qa/check-matrix.py --check 2>&1); then ok "check-matrix.py --check: $(printf '%s' "$out" | tail -1)"
 else attn "check-matrix.py --check failed: $(printf '%s' "$out" | tail -3 | tr '\n' ' ')"; fi
 
+# ---------------------------------------------------------------- 9b. Mac mini CI runner
+head_ "9b. Mac mini CI runner (#614, tools/mac-mini.md)"
+SW=${MAC_SELF_HOSTED-}
+[ -n "$SW" ] || SW=$(gh variable get MAC_SELF_HOSTED 2>/dev/null)
+if [ "$SW" = on ]; then ok "MAC_SELF_HOSTED=on: iOS CI's build job runs on the Mac mini"
+else attn "MAC_SELF_HOSTED='${SW:-unset}': every iOS PR waits on GitHub's macOS queue; the standing order is on (tools/mac-mini.md)"; fi
+if rn=$(gh api "repos/$REPO/actions/runners" --jq '.runners[]|select(.name=="mac-mini-megapdf")|"\(.status) busy=\(.busy)"' 2>/dev/null); then
+  case "$rn" in online*) ok "runner mac-mini-megapdf: $rn" ;; "") attn "runner mac-mini-megapdf: not registered" ;; *) attn "runner mac-mini-megapdf: $rn" ;; esac
+else
+  printf '           %s\n' "runner list not readable with this token (the weekly GITHUB_TOKEN cannot list runners); judged by the jobs below"
+fi
+emit < <(for id in $(gh run list --workflow ios-ci.yml --limit 15 --json databaseId -q '.[].databaseId' 2>/dev/null); do
+  gh api "repos/$REPO/actions/runs/$id/jobs" --jq '.jobs[]|select(.name=="build")|[.status,(.labels|join(",")),(.runner_name//""),.created_at,(.started_at//"")]|@tsv' 2>/dev/null
+done | python3 -I -c '
+import sys, statistics
+from datetime import datetime, timezone, timedelta
+sw = sys.argv[1]
+now = datetime.now(timezone.utc)
+ts = lambda s: datetime.fromisoformat(s.replace("Z", "+00:00")) if s else None
+jobs = []
+for line in sys.stdin:
+    f = line.rstrip("\n").split("\t")
+    if len(f) == 5: jobs.append(f)
+if not jobs:
+    print("ATTENTION\tno ios-ci.yml build jobs found"); sys.exit()
+mini, hosted = [], []
+recent = False
+for status, labels, runner, created, started in jobs:
+    c, s = ts(created), ts(started)
+    if status == "queued" and "megapdf-ios" in labels.split(",") and c and now - c > timedelta(minutes=30):
+        m = int((now - c).total_seconds() // 60)
+        print(f"ATTENTION\ta job has waited {m} min for the mini: is the runner down? Jobs wait 24 h before failing")
+    if not runner or not c or not s:
+        continue
+    if now - s < timedelta(days=7): recent = True
+    wait = max(0, int((s - c).total_seconds()))
+    (mini if runner == "mac-mini-megapdf" else hosted).append(wait)
+if sw == "on" and not mini and recent:
+    print("ATTENTION\tMAC_SELF_HOSTED is on but none of the last %d build jobs ran on mac-mini-megapdf" % len(jobs))
+med = lambda w: f"{int(statistics.median(w))}s" if w else "n/a"
+print(f"OK\tlast {len(jobs)} build jobs: {len(mini)} on the mini (median wait {med(mini)}), {len(hosted)} hosted (median wait {med(hosted)})")
+' "$SW")
+
 # ---------------------------------------------------------------- 10. machines
 if [ $MACHINES = 1 ]; then
   head_ "10. machines (leftovers)"
@@ -297,7 +340,10 @@ if [ $MACHINES = 1 ]; then
     if [ -n "$out" ]; then attn "$1 $2: $(printf '%s' "$out" | tr '\n' ' ')"; else ok "$1 $2: nothing"; fi
   }
   remote mac-mini "~/megapdf-* ~/mp-*" 'for f in "$HOME"/megapdf-* "$HOME"/mp-*; do [ -e "$f" ] && echo "$f"; done; true'
-  remote mac-mini "simulators" 'xcrun simctl list devices 2>/dev/null | grep -E "Booted|megapdf-|MegaPDF" ; true'
+  # megapdf-ci-* belong to a CI job in flight; its own always() step and the next job's
+  # start step remove them (#614).
+  remote mac-mini "simulators" 'xcrun simctl list devices 2>/dev/null | grep -E "Booted|megapdf-|MegaPDF" | grep -v "megapdf-ci-" ; true'
+  remote mac-mini "runner service" 'o=$(launchctl print gui/$(id -u)/ca.electricrv.megapdf.actions-runner 2>&1) || { echo "LaunchAgent not loaded"; exit 0; }; printf "%s\n" "$o" | grep -E "^[[:space:]]state = " | grep -v "state = running"; true'
   remote kdocker2 "~/megapdf-* ~/mp-* /data/megapdf-work/*" 'for f in "$HOME"/megapdf-* "$HOME"/mp-* /data/megapdf-work/*; do [ -e "$f" ] && echo "$f"; done; true'
   remote kdocker3 "~/megapdf-* ~/mp-*" 'for f in "$HOME"/megapdf-* "$HOME"/mp-*; do [ -e "$f" ] && echo "$f"; done; true'
   if command -v powershell.exe >/dev/null; then
