@@ -107,6 +107,7 @@ internal fun TextSelectionOverlay(
                             var lineHeightPx = 0f
                             detectDragGestures(
                                 onDragStart = {
+                                    android.util.Log.d("MegaPDFSel", "drag start isStart=$isStart")
                                     dragging = true
                                     val rect = currentRects.let { if (isStart) it.first() else it.last() }
                                     finger = Offset(
@@ -127,6 +128,7 @@ internal fun TextSelectionOverlay(
                                         selectable.caretAt(xPt, yPt), isStart, now, selectable.length,
                                     )
                                     val next = now.withHandleAt(isStart, caret)
+                                    android.util.Log.d("MegaPDFSel", "drag xPt=$xPt yPt=$yPt caret=$caret next=$next")
                                     if (next != now) onChange(next)
                                 },
                                 onDragEnd = { dragging = false },
