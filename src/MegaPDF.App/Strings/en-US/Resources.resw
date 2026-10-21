@@ -376,10 +376,8 @@
   <data name="SmallerCopySavedTitle" xml:space="preserve">
     <value>Smaller copy saved</value>
   </data>
-  <data name="SmallerCopySavedBody" xml:space="preserve">
-    <value>Was {0:F1} MB, now {1:F1} MB.
-
-Saved as {2} — ready to email.</value>
+  <data name="SmallerCopySavedNotice" xml:space="preserve">
+    <value>Was {0:F1} MB, now {1:F1} MB. Saved as {2}, ready to email.</value>
   </data>
   <data name="PasswordPlaceholder" xml:space="preserve">
     <value>Password</value>

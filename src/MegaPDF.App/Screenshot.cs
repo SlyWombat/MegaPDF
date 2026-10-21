@@ -283,6 +283,12 @@ internal static partial class Screenshot
             case "undo-loss":
                 return await CheckUndoLossAsync(window);
 
+            // #632: Shrink's outcome is an InfoBar, never a dialog. The real command on a document
+            // with no pictures (fixture.pdf has none), then the success bar raised without the
+            // save picker. The exit code is the test.
+            case "shrink-notice":
+                return await CheckShrinkNoticeAsync(window);
+
             default:
                 Console.Error.WriteLine($"unknown --screenshot-state '{state}'");
                 return false;

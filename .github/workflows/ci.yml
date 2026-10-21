@@ -754,6 +754,9 @@ jobs:
           # history -- the real dialog cancelled (history kept), Save through the seam, once per
           # document, never with flatten off. Restores the flatten setting it changes.
           Run-Check "undo-loss" 60
+          # #632: Shrink's outcome is a notice bar, not a dialog -- the real Shrink command on a
+          # document with no pictures, then the success bar raised without the save picker.
+          Run-Check "shrink-notice" 60
           # Opens a real ContentDialog and reads it back through DialogGate.Current, then
           # drives the save-with-a-password write path directly and reopens the result --
           # give it a little more room than the others.

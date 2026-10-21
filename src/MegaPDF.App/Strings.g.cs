@@ -139,8 +139,8 @@ public static partial class Strings
     /// <summary>Smaller copy saved</summary>
     public static string SmallerCopySavedTitle => Get("SmallerCopySavedTitle");
 
-    /// <summary>Was {0:F1} MB, now {1:F1} MB.  Saved as {2} — ready to email.</summary>
-    public static string SmallerCopySavedBody(object? arg0, object? arg1, object? arg2) => string.Format(CultureInfo.CurrentCulture, Get("SmallerCopySavedBody"), arg0, arg1, arg2);
+    /// <summary>Was {0:F1} MB, now {1:F1} MB. Saved as {2}, ready to email.</summary>
+    public static string SmallerCopySavedNotice(object? arg0, object? arg1, object? arg2) => string.Format(CultureInfo.CurrentCulture, Get("SmallerCopySavedNotice"), arg0, arg1, arg2);
 
     /// <summary>Password</summary>
     public static string PasswordPlaceholder => Get("PasswordPlaceholder");
