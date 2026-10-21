@@ -20,7 +20,7 @@ set_target_properties(pdfium PROPERTIES
 set(CORE_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/../../../../../core)
 
 add_library(megapdf_engine SHARED engine.cpp ${CORE_ROOT}/megapdf_core.cpp
-    ${CORE_ROOT}/megapdf_structure.cpp ${CORE_ROOT}/megapdf_write_text.cpp)
+    ${CORE_ROOT}/megapdf_structure.cpp ${CORE_ROOT}/megapdf_write_text.cpp ${CORE_ROOT}/megapdf_select.cpp)
 target_include_directories(megapdf_engine PRIVATE ${PDFIUM_ROOT}/include ${CORE_ROOT})
 target_link_libraries(megapdf_engine pdfium android jnigraphics log)
 

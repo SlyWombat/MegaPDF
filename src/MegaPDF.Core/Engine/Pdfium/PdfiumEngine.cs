@@ -969,6 +969,22 @@ internal sealed class PdfiumPage : IPdfPage
         return new PageHit(PageHitKind.None);
     }
 
+    public PdfSelectableText LoadSelectableText()
+    {
+        ThrowIfDisposed();
+        // Contract 11 (#710): reading order, ligatures, hyphens and hit testing are all the
+        // core's; this flips the coordinates and owns the handle.
+        var handle = CoreNative.megapdf_selectable_load(_core);
+        if (handle.IsInvalid)
+        {
+            handle.Dispose();
+            if (CoreNative.megapdf_last_error() == CoreNative.LastErrClosed)
+                throw new ObjectDisposedException(nameof(PdfiumPage), "The document this page belonged to has been closed.");
+            throw new InvalidOperationException($"Could not read page {Index}'s text: {CoreNative.LastErrorMessage()}");
+        }
+        return new PdfSelectableText(handle, Index, Height);
+    }
+
     public IReadOnlyList<PdfTextLine> GetTextLines()
     {
         ThrowIfDisposed();

@@ -9739,6 +9739,376 @@ void test_rotated_content() {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Contract 11: text selection (#710). selection.pdf is tools/gen_selection_fixture.py's: page 1
+// a title and two columns, page 2 ligatures and line-end hyphens. rotated-pages.pdf, scan.pdf
+// and empty-page.pdf are the contract 9 fixtures of the same names; doubled.pdf and
+// owner-only.pdf are the hidden-copy (#136) and security (#131) fixtures.
+// ---------------------------------------------------------------------------
+
+std::string sel_text(const megapdf_selectable* s, int a, int b) {
+    const size_t n = megapdf_selectable_text(s, a, b, nullptr, 0);
+    std::vector<unsigned short> buf(n);
+    if (n > 0) megapdf_selectable_text(s, a, b, buf.data(), n);
+    std::string out;
+    for (unsigned short u : buf) {
+        if (u >= 0x20 && u < 0x7F) out += static_cast<char>(u);
+        else if (u == '\n') out += '\n';
+        else { char hex[12]; std::snprintf(hex, sizeof hex, "<U+%04X>", u); out += hex; }
+    }
+    return out;
+}
+
+std::vector<megapdf_rect> sel_rects(const megapdf_selectable* s, int a, int b) {
+    const size_t n = megapdf_selectable_rects(s, a, b, nullptr, 0);
+    std::vector<megapdf_rect> out(n);
+    if (n > 0) megapdf_selectable_rects(s, a, b, out.data(), n);
+    return out;
+}
+
+// The caret range of the first occurrence of `needle` in the page's whole copied text; only
+// meaningful while the text up to it has no separators the caret count does not have, so the
+// callers below search within one line. Returns -1 when absent.
+int sel_find(const megapdf_selectable* s, const std::string& needle) {
+    const int n = megapdf_selectable_length(s);
+    // Walk carets rather than string offsets: a separator is in the text but not a character.
+    for (int a = 0; a + static_cast<int>(needle.size()) <= n; a++) {
+        if (sel_text(s, a, a + static_cast<int>(needle.size())) == needle) return a;
+    }
+    return -1;
+}
+
+double cx(const megapdf_rect& r) { return (r.left + r.right) / 2; }
+double cy(const megapdf_rect& r) { return (r.bottom + r.top) / 2; }
+
+void test_selection_columns(const std::string& repo) {
+    Doc d(repo + "/structure/selection.pdf");
+    if (!d.doc) { check(false, "selection: selection.pdf opens"); return; }
+    Page p(d.doc, 0);
+    megapdf_selectable* s = megapdf_selectable_load(p.page);
+    check(s != nullptr, "selection columns: loads");
+    if (s == nullptr) return;
+    const int n = megapdf_selectable_length(s);
+
+    // Reading order: the title, then all of the left column, then all of the right one.
+    const std::string whole = sel_text(s, 0, n);
+    const std::string expected_whole =
+        "Selection Columns\n"
+        "Left one alpha\nLeft two bravo and more\nLeft three charlie\nLeft four delta\nLeft five echo\n"
+        "Right one golf\nRight two hotel\nRight three india\nRight four juliet\nRight five kilo";
+    check(whole == expected_whole, "selection columns: the whole page reads down each column in turn", whole);
+    check(sel_text(s, n, 0) == whole, "selection columns: carets may come in either order");
+    check(sel_text(s, -5, n + 5) == whole, "selection columns: carets are clamped to the page");
+    check(sel_text(s, 3, 3).empty() && sel_rects(s, 3, 3).empty(), "selection columns: an empty range is empty");
+
+    // One rect per line, in reading order, the title's first.
+    const auto all_rects = sel_rects(s, 0, n);
+    check(all_rects.size() == 11, "selection columns: one rect per line", std::to_string(all_rects.size()));
+    if (all_rects.size() != 11) { megapdf_selectable_free(s); return; }
+    const megapdf_rect left1 = all_rects[1], left2 = all_rects[2], right1 = all_rects[6], right2 = all_rects[7];
+    check(close_to(left1.left, 72, 1.0) && close_to(right1.left, 330, 1.0),
+          "selection columns: the columns' rects start where their text does",
+          std::to_string(left1.left) + " / " + std::to_string(right1.left));
+    // A line's rect is its full height, whatever glyphs are selected: "Left one alpha" is the
+    // 12 pt line at baseline 680, so it covers the descent below 680 and the ascent above it.
+    check(left1.bottom < 680 && left1.top > 688, "selection columns: a line's rect is the line's height",
+          std::to_string(left1.bottom) + ".." + std::to_string(left1.top));
+
+    // A drag from the start of "Left two" to past the end of "Right two hotel" runs down the
+    // left column and into the right one -- not across both rows.
+    const int anchor = megapdf_selectable_caret_at(s, left2.left + 0.5, cy(left2), 4);
+    const int focus = megapdf_selectable_caret_at(s, right2.right + 30, cy(right2), MEGAPDF_SELECT_ANYWHERE);
+    const std::string dragged = sel_text(s, anchor, focus);
+    check(dragged == "Left two bravo and more\nLeft three charlie\nLeft four delta\nLeft five echo\n"
+                     "Right one golf\nRight two hotel",
+          "selection columns: a drag across the columns follows the columns", dragged);
+    check(sel_rects(s, anchor, focus).size() == 6, "selection columns: and is drawn as six line rects",
+          std::to_string(sel_rects(s, anchor, focus).size()));
+    check(sel_text(s, focus, anchor) == dragged, "selection columns: a drag upwards selects the same text");
+
+    // Past the end of a short line, inside its column, the caret stays on that line: "Left one
+    // alpha" is shorter than "Left two bravo and more" below it, and the nearest glyph to this
+    // point is on the longer line.
+    const double ragged_x = (left1.right + left2.right) / 2;
+    const int end_of_one = megapdf_selectable_caret_at(s, ragged_x, cy(left1), MEGAPDF_SELECT_ANYWHERE);
+    const int start_two = megapdf_selectable_caret_at(s, left2.left + 0.2, cy(left2), 4);
+    check(end_of_one == start_two && sel_text(s, 0, end_of_one) == "Selection Columns\nLeft one alpha",
+          "selection columns: past the end of a short line, the caret is at that line's end",
+          std::to_string(end_of_one) + " vs " + std::to_string(start_two));
+
+    // Between two lines: inside the tolerance it resolves to one of them, outside it to nothing.
+    const double gap_y = (left1.bottom + left2.top) / 2;
+    check(left2.top < left1.bottom, "selection columns: the fixture's lines have a gap between them");
+    const int between = megapdf_selectable_caret_at(s, 100, gap_y, 4);
+    check(between >= 0, "selection columns: a point between lines resolves within a tolerance");
+    check(megapdf_selectable_caret_at(s, 100, gap_y, 0) == -1,
+          "selection columns: and resolves to nothing with no tolerance");
+
+    // Off the text altogether.
+    check(megapdf_selectable_caret_at(s, 300, 200, 4) == -1 && megapdf_selectable_char_at(s, 300, 200, 4) == -1,
+          "selection columns: a point far from any text is not on it");
+    int ws = 7, we = 7;
+    check(megapdf_selectable_word_at(s, 300, 200, 4, &ws, &we) == 0 && ws == 0 && we == 0,
+          "selection columns: and has no word");
+    const int anywhere = megapdf_selectable_caret_at(s, 300, 200, MEGAPDF_SELECT_ANYWHERE);
+    check(anywhere >= 0 && anywhere <= n, "selection columns: but a drag that reaches it still has a caret");
+
+    // A word, a line.
+    const int bravo = sel_find(s, "bravo");
+    if (bravo >= 0) {
+        const auto r = sel_rects(s, bravo + 2, bravo + 3);   // the "a" of "bravo"
+        const int len = r.size() == 1 ? megapdf_selectable_word_at(s, cx(r[0]), cy(r[0]), 4, &ws, &we) : 0;
+        check(len == 5 && sel_text(s, ws, we) == "bravo", "selection columns: the word at a point",
+              sel_text(s, ws, we));
+        check(megapdf_selectable_char_at(s, cx(r[0]), cy(r[0]), 4) == bravo + 2,
+              "selection columns: the character at a point");
+    } else {
+        check(false, "selection columns: 'bravo' is on the page");
+    }
+    const auto three = all_rects[3];
+    check(megapdf_selectable_line_at(s, cx(three), cy(three), 4, &ws, &we) > 0 &&
+              sel_text(s, ws, we) == "Left three charlie",
+          "selection columns: the line at a point", sel_text(s, ws, we));
+    megapdf_selectable_free(s);
+}
+
+void test_selection_ligatures_and_hyphens(const std::string& repo) {
+    Doc d(repo + "/structure/selection.pdf");
+    if (!d.doc) { check(false, "selection: selection.pdf opens"); return; }
+    Page p(d.doc, 1);
+    megapdf_selectable* s = megapdf_selectable_load(p.page);
+    check(s != nullptr, "selection ligatures: loads");
+    if (s == nullptr) return;
+    const int n = megapdf_selectable_length(s);
+    // Both ligatures expand ("fi" drawn as one glyph mapped to two characters, "fl" mapped to
+    // U+FB02); every line-end hyphen stays, soft or hard, with the line break after it.
+    const std::string whole = sel_text(s, 0, n);
+    check(whole == "The final flow test\nWe test hyphen-\nation here.\nA well-\nknown word.",
+          "selection ligatures: ligatures expand, line-end hyphens and line breaks are kept", whole);
+
+    // The "fi" glyph is two characters with one box between them, split evenly: a point in its
+    // right half is after the "i", one in its left half is between the "f" and the "i".
+    const int f = sel_find(s, "fi");
+    if (f >= 0) {
+        const auto glyph = sel_rects(s, f, f + 2);
+        check(glyph.size() == 1, "selection ligatures: the ligature is one rect");
+        if (glyph.size() == 1) {
+            const double w = glyph[0].right - glyph[0].left;
+            const int mid = megapdf_selectable_caret_at(s, glyph[0].left + w * 0.4, cy(glyph[0]), 4);
+            const int after = megapdf_selectable_caret_at(s, glyph[0].left + w * 0.9, cy(glyph[0]), 4);
+            check(mid == f + 1, "selection ligatures: a caret can sit inside a ligature",
+                  sel_text(s, 0, mid));
+            check(after == f + 2, "selection ligatures: and after it", sel_text(s, 0, after));
+            const auto f_alone = sel_rects(s, f, f + 1);
+            check(f_alone.size() == 1 && close_to(f_alone[0].right - f_alone[0].left, w / 2, 0.05),
+                  "selection ligatures: half the glyph is the f's");
+        }
+        int ws = 0, we = 0;
+        const auto i_box = sel_rects(s, f + 1, f + 2);
+        if (i_box.size() == 1) {
+            megapdf_selectable_word_at(s, cx(i_box[0]), cy(i_box[0]), 4, &ws, &we);
+            check(sel_text(s, ws, we) == "final", "selection ligatures: the word through a ligature",
+                  sel_text(s, ws, we));
+        }
+    } else {
+        check(false, "selection ligatures: 'fi' is in the text", whole);
+    }
+
+    // Punctuation at the end of a word is not part of it, unless the point is on it.
+    const int here = sel_find(s, "here.");
+    if (here >= 0) {
+        int ws = 0, we = 0;
+        const auto e_box = sel_rects(s, here + 1, here + 2);
+        const auto dot_box = sel_rects(s, here + 4, here + 5);
+        if (e_box.size() == 1 && dot_box.size() == 1) {
+            megapdf_selectable_word_at(s, cx(e_box[0]), cy(e_box[0]), 4, &ws, &we);
+            check(sel_text(s, ws, we) == "here", "selection ligatures: a word leaves its full stop out",
+                  sel_text(s, ws, we));
+            megapdf_selectable_word_at(s, cx(dot_box[0]), cy(dot_box[0]), 4, &ws, &we);
+            check(sel_text(s, ws, we) == ".", "selection ligatures: unless the point is on it",
+                  sel_text(s, ws, we));
+        }
+    } else {
+        check(false, "selection ligatures: 'here.' is in the text", whole);
+    }
+    // Across a hyphenated line break: both halves, hyphen and line break included.
+    const int well = sel_find(s, "well-");
+    const int known = sel_find(s, "known");
+    if (well >= 0 && known >= 0) {
+        check(sel_text(s, well, known + 5) == "well-\nknown", "selection ligatures: a hard hyphen is not joined",
+              sel_text(s, well, known + 5));
+    }
+    megapdf_selectable_free(s);
+}
+
+void test_selection_rotated(const std::string& repo) {
+    // Every /Rotate reads the same words, in order, and a point back on a word's own rect finds
+    // that word: the hit test goes through the same frame the rects come out of (#472).
+    const int kRotations[4] = {0, 90, 180, 270};
+    Doc d(repo + "/structure/rotated-pages.pdf");
+    if (!d.doc) { check(false, "selection rotated: opens"); return; }
+    for (int page = 0; page < 4; page++) {
+        const std::string what = "selection rotated: /Rotate " + std::to_string(kRotations[page]);
+        Page p(d.doc, page);
+        megapdf_selectable* s = megapdf_selectable_load(p.page);
+        check(s != nullptr, what + " loads");
+        if (s == nullptr) continue;
+        const int n = megapdf_selectable_length(s);
+        check(sel_text(s, 0, n) == "Alpha Bravo Charlie Delta", what + " reads in order", sel_text(s, 0, n));
+        const int bravo = sel_find(s, "Bravo");
+        const auto r = bravo >= 0 ? sel_rects(s, bravo, bravo + 5) : std::vector<megapdf_rect>{};
+        check(r.size() == 1, what + " has one rect for one word");
+        if (r.size() == 1) {
+            const double w = megapdf_page_width(p.page), h = megapdf_page_height(p.page);
+            check(r[0].left >= 0 && r[0].right <= w && r[0].bottom >= 0 && r[0].top <= h,
+                  what + ": the rect is on the page");
+            int ws = 0, we = 0;
+            megapdf_selectable_word_at(s, cx(r[0]), cy(r[0]), 2, &ws, &we);
+            check(sel_text(s, ws, we) == "Bravo", what + ": the word under the word's own rect",
+                  sel_text(s, ws, we));
+            // The first character's rect must hold the first caret's character, whichever way
+            // round the page is: a drag over "Br" selects "Br", not "vo".
+            const auto b = sel_rects(s, bravo, bravo + 1);
+            if (b.size() == 1) {
+                check(megapdf_selectable_char_at(s, cx(b[0]), cy(b[0]), 2) == bravo,
+                      what + ": the character under its own rect");
+            }
+        }
+        megapdf_selectable_free(s);
+    }
+}
+
+void test_selection_nothing_to_select(const std::string& repo) {
+    // A blank page and a scan load, and answer nothing, cleanly.
+    for (const char* name : {"empty-page", "scan"}) {
+        const std::string what = std::string("selection ") + name;
+        Doc d(repo + "/structure/" + name + ".pdf");
+        if (!d.doc) { check(false, what + ": opens"); continue; }
+        Page p(d.doc, 0);
+        megapdf_selectable* s = megapdf_selectable_load(p.page);
+        check(s != nullptr, what + ": loads");
+        if (s == nullptr) continue;
+        int ws = 3, we = 3;
+        check(megapdf_selectable_length(s) == 0, what + ": has nothing to select");
+        check(megapdf_selectable_caret_at(s, 100, 100, MEGAPDF_SELECT_ANYWHERE) == -1 &&
+                  megapdf_selectable_char_at(s, 100, 100, MEGAPDF_SELECT_ANYWHERE) == -1,
+              what + ": no caret anywhere");
+        check(megapdf_selectable_word_at(s, 100, 100, MEGAPDF_SELECT_ANYWHERE, &ws, &we) == 0 && ws == 0 && we == 0,
+              what + ": no word");
+        check(megapdf_selectable_line_at(s, 100, 100, MEGAPDF_SELECT_ANYWHERE, &ws, &we) == 0, what + ": no line");
+        check(megapdf_selectable_text(s, 0, 10, nullptr, 0) == 0 && megapdf_selectable_rects(s, 0, 10, nullptr, 0) == 0,
+              what + ": no text and no rects");
+        megapdf_selectable_free(s);
+    }
+}
+
+void test_selection_handles_and_permissions(const std::string& fixtures, const std::string& repo) {
+    // NULL everywhere is harmless.
+    check(megapdf_selectable_load(nullptr) == nullptr, "selection: NULL page loads nothing");
+    megapdf_selectable_free(nullptr);
+    int ws = 0, we = 0;
+    check(megapdf_selectable_length(nullptr) == 0 && megapdf_selectable_caret_at(nullptr, 0, 0, -1) == -1 &&
+              megapdf_selectable_char_at(nullptr, 0, 0, -1) == -1 &&
+              megapdf_selectable_word_at(nullptr, 0, 0, -1, &ws, &we) == MEGAPDF_ERR_ARGUMENT &&
+              megapdf_selectable_line_at(nullptr, 0, 0, -1, &ws, &we) == MEGAPDF_ERR_ARGUMENT &&
+              megapdf_selectable_text(nullptr, 0, 1, nullptr, 0) == 0 &&
+              megapdf_selectable_rects(nullptr, 0, 1, nullptr, 0) == 0,
+          "selection: NULL snapshots answer nothing");
+    check(megapdf_selectable_caret_at(nullptr, NAN, 0, -1) == -1, "selection: NaN is not a point");
+
+    // A count-then-fill buffer smaller than the text is filled to its capacity, never past it.
+    {
+        Doc d(repo + "/structure/selection.pdf");
+        Page p(d.doc, 0);
+        megapdf_selectable* s = megapdf_selectable_load(p.page);
+        if (s != nullptr) {
+            const size_t total = megapdf_selectable_text(s, 0, megapdf_selectable_length(s), nullptr, 0);
+            std::vector<unsigned short> small(5, 0xBEEF);
+            check(megapdf_selectable_text(s, 0, megapdf_selectable_length(s), small.data(), 4) == total &&
+                      small[4] == 0xBEEF && small[0] == 'S',
+                  "selection: a short buffer is filled to its capacity and the total returned");
+            megapdf_rect one[2] = {};
+            one[1].left = 12345;
+            check(megapdf_selectable_rects(s, 0, megapdf_selectable_length(s), one, 1) == 11 && one[1].left == 12345,
+                  "selection: rects fill to capacity");
+            megapdf_selectable_free(s);
+        }
+    }
+
+    // The dead-handle contract (#551): a page whose document has closed loads nothing and says
+    // why, and a snapshot taken before the close keeps answering -- it holds no PDFium state.
+    {
+        auto bytes = read_file(repo + "/structure/selection.pdf");
+        megapdf_document* doc = megapdf_open(bytes.data(), bytes.size(), nullptr);
+        megapdf_page* page = doc ? megapdf_load_page(doc, 0) : nullptr;
+        megapdf_selectable* before = page ? megapdf_selectable_load(page) : nullptr;
+        check(before != nullptr, "selection dead page: a live page loads");
+        megapdf_close(doc);
+        check(megapdf_selectable_load(page) == nullptr && megapdf_last_error() == MEGAPDF_LAST_ERR_CLOSED,
+              "selection dead page: a page whose document closed is refused, with MEGAPDF_LAST_ERR_CLOSED");
+        check(before != nullptr && sel_text(before, 0, 16) == "Selection Columns",   // 16 characters: a space is a separator, not a character
+              "selection dead page: a snapshot outlives its document");
+        megapdf_selectable_free(before);
+        megapdf_close_page(page);
+    }
+
+    // PDFium's hidden-copy removal (#136) reaches a copy too: fake-bold text copies once.
+    {
+        Doc d(fixtures + "/doubled.pdf");
+        if (d.doc) {
+            std::string all;
+            for (int i = 0; i < megapdf_page_count(d.doc); i++) {
+                Page p(d.doc, i);
+                megapdf_selectable* s = megapdf_selectable_load(p.page);
+                if (s == nullptr) continue;
+                all += sel_text(s, 0, megapdf_selectable_length(s)) + "\n";
+                megapdf_selectable_free(s);
+            }
+            for (const char* needle : {"Fake bold heading", "Filled then stroked", "Two runs"}) {
+                size_t count = 0;
+                for (size_t at = all.find(needle); at != std::string::npos; at = all.find(needle, at + 1)) count++;
+                check(count == 1, std::string("selection doubled: '") + needle + "' copies once", all);
+            }
+        } else {
+            check(false, "selection doubled: doubled.pdf opens");
+        }
+    }
+
+    // Copy's gate: MEGAPDF_PERMIT_COPY as this open acts on it.
+    check(megapdf_permissions_in_effect(nullptr) == 0, "permissions in effect: NULL is nothing");
+    {
+        Doc plain(fixtures + "/fixture.pdf");
+        check(plain.doc && megapdf_permissions_in_effect(plain.doc) == MEGAPDF_PERMIT_ALL,
+              "permissions in effect: an unprotected document allows everything");
+    }
+    {
+        const std::string path = std::string(MEGAPDF_SECURITY_FIXTURES) + "/owner-only.pdf";
+        Doc restricted(path);
+        if (restricted.doc) {
+            check((megapdf_permissions_in_effect(restricted.doc) & MEGAPDF_PERMIT_COPY) == 0,
+                  "permissions in effect: owner-only.pdf does not allow copying");
+            // It still selects: the gate is Copy's, not the selection's.
+            Page p(restricted.doc, 0);
+            megapdf_selectable* s = megapdf_selectable_load(p.page);
+            check(s != nullptr && megapdf_selectable_length(s) > 0,
+                  "permissions in effect: a document that forbids copying still selects");
+            megapdf_selectable_free(s);
+            megapdf_security_override(restricted.doc, 1);
+            check((megapdf_permissions_in_effect(restricted.doc) & MEGAPDF_PERMIT_COPY) != 0,
+                  "permissions in effect: the person's override reaches Copy");
+            megapdf_security info{};
+            megapdf_security_info(restricted.doc, &info);
+            check((info.permissions & MEGAPDF_PERMIT_COPY) == 0,
+                  "permissions in effect: while megapdf_security_info still reports the file's bits");
+        } else {
+            check(false, "permissions in effect: owner-only.pdf opens");
+        }
+        Doc owner(path, "o-restricted");
+        check(owner.doc && megapdf_permissions_in_effect(owner.doc) == MEGAPDF_PERMIT_ALL,
+              "permissions in effect: the owner password allows everything");
+    }
+}
+
 int main(int argc, char** argv) {
     if (argc < 5) {
         std::fprintf(stderr,
@@ -9831,6 +10201,11 @@ int main(int argc, char** argv) {
     test_page_tools(argv[1], std::string(MEGAPDF_REPO_FIXTURES), std::string(MEGAPDF_SECURITY_FIXTURES));
     test_rotation_coordinates(argv[1]);
     test_rotated_content();
+    test_selection_columns(std::string(MEGAPDF_REPO_FIXTURES));
+    test_selection_ligatures_and_hyphens(std::string(MEGAPDF_REPO_FIXTURES));
+    test_selection_rotated(std::string(MEGAPDF_REPO_FIXTURES));
+    test_selection_nothing_to_select(std::string(MEGAPDF_REPO_FIXTURES));
+    test_selection_handles_and_permissions(argv[1], std::string(MEGAPDF_REPO_FIXTURES));
     if (cli_path.empty()) {
         std::printf("cli tests: skipped (no megapdf-cli path given on the command line)\n");
     } else {

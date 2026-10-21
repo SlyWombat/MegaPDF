@@ -1143,6 +1143,8 @@ megapdf_rect ToCropRect(const megapdf_page* p, double l, double b, double r, dou
 int PageTurns(const megapdf_page* p) { return PageQuarterTurns(p); }
 void SetLastError(unsigned long code, const char* message) { SetError(code, message); }
 bool IsCancelled(const megapdf_cancel* c) { return c != nullptr && c->raised.load(std::memory_order_relaxed) != 0; }
+bool PageClosed(const megapdf_page* p) { return p != nullptr && Dead(p); }
+void ReportClosedPage() { DeadPage(); }
 
 }  // namespace megapdf_internal
 
@@ -6528,6 +6530,15 @@ std::string TemporarySiblingOf(const std::string& path_utf8) {
 }  // namespace
 
 extern "C" {
+
+// #710: the advisory bits as this open acts on them -- PermissionsOf(), the same answer the page
+// tools and redaction consult, so the app's Copy and the core can never disagree about whether
+// copying is allowed. Declared with megapdf_security_info() in the header.
+MEGAPDF_API unsigned int megapdf_permissions_in_effect(const megapdf_document* d) {
+    if (d == nullptr) return 0;
+    Guard guard(CoreLock());
+    return PermissionsOf(d);
+}
 
 MEGAPDF_API int megapdf_page_index(const megapdf_page* p) {
     if (p == nullptr) return -1;

@@ -2396,6 +2396,31 @@ Not verified: only Linux; the other four platforms not run. Page 44's items come
 level 3 (the page has three indents), rendered with four spaces of indent after a heading and no
 parent item; that is the existing depth logic and was not changed here.
 
+## Text selection costs (#710), 2026-10-20
+
+Contract 11's calls (`megapdf_selectable_*`, `core/megapdf_core.h`), timed because a drag calls
+them on every pointer move. A Release build of the core on kdocker3, in a throwaway `megapdf:base`
+container, from `wip/710-core-selection`. A scratch harness (not committed) loaded every page's
+selection snapshot, up to the first 20-60 pages of each document, and then ran the queries 2,000-20,000
+times at random points on each of the five densest pages it found. No document is named here.
+
+| corpus sample | pages | load median | load p99 | load max |
+|---|---|---|---|---|
+| public: govinfo-signed, irs, uscis, uk-hmrc (40 pages each) | 2,574 | 2.29 ms | 10.71 ms | 14.20 ms |
+| public: govinfo-large, uk-dwp, uk-homeoffice, qpdf, pdfium (60 each) | 2,057 | 0.61 ms | 6.71 ms | 16.02 ms |
+| private (20 each) | 3,953 | 0.54 ms | 4.69 ms | 12.07 ms |
+
+On the fifteen densest pages (8,582-15,070 characters): the load 6.4-13.2 ms, against 2.0-7.8 ms for
+contract 2's `megapdf_text_load` of the same page and 7.1-18.4 ms for a one-page
+`megapdf_structure_load` (the load is the same reading of the page that contract 9 does); `caret_at`
+and `word_at` 0.22-0.69 us per call; a drag move (`caret_at`, then `rects` from the page's first
+character to the new caret, every line of the page in the worst case) 3.2-5.6 us; a whole-page
+`text` 19-39 us. The #98 schematic (in the repo) loads in 8.9 ms and answers `caret_at` in 0.66 us.
+
+So the per-move cost is three to four orders of magnitude under a 16.7 ms frame, and the load is
+the call to keep off a per-move path. Not measured: a phone. The load there will be slower by the
+phone's factor; the contract says to load once per page, off the UI thread if needed.
+
 ## Reporting
 
 For each issue: what you clicked, what you expected, what happened, and the PDF

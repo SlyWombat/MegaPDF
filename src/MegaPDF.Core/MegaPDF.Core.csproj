@@ -76,8 +76,15 @@
     <MegaPdfCoreBuildCommand Condition="!$([MSBuild]::IsOSPlatform('Windows'))">bash "$(MSBuildThisFileDirectory)../../tools/build-core.sh"</MegaPdfCoreBuildCommand>
   </PropertyGroup>
 
+  <!-- Every source the library is built from, not only megapdf_core.cpp: a change to
+       megapdf_structure.cpp or megapdf_select.cpp (#710) alone must rebuild it too, or the
+       tests run against a stale library. -->
+  <ItemGroup>
+    <MegaPdfCoreSource Include="$(MegaPdfCoreDir)*.cpp;$(MegaPdfCoreDir)*.h;$(MegaPdfCoreDir)CMakeLists.txt" />
+  </ItemGroup>
+
   <Target Name="BuildMegaPdfCore" BeforeTargets="BeforeBuild"
-          Inputs="$(MegaPdfCoreDir)megapdf_core.cpp;$(MegaPdfCoreDir)megapdf_core.h;$(MegaPdfCoreDir)CMakeLists.txt"
+          Inputs="@(MegaPdfCoreSource)"
           Outputs="$(MegaPdfCoreArtifact)">
     <Exec Command="$(MegaPdfCoreBuildCommand)" />
   </Target>

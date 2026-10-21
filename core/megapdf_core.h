@@ -948,6 +948,15 @@ MEGAPDF_API int megapdf_security_info(const megapdf_document* document, megapdf_
 MEGAPDF_API int megapdf_security_override(megapdf_document* document, int allow);
 
 /**
+ * The MEGAPDF_PERMIT_* bits this open ACTS on (#710): the file's own, or every advisory bit
+ * after megapdf_security_override(), or all of them for full access. The same answer the
+ * core's own refusals consult (page tools, redaction), where megapdf_security_info() reports
+ * the file's bits for telling the person what its author asked. What an app gates Copy on
+ * (contract 11): copying selected text needs MEGAPDF_PERMIT_COPY here. 0 for a NULL document.
+ */
+MEGAPDF_API unsigned int megapdf_permissions_in_effect(const megapdf_document* document);
+
+/**
  * Writes a copy encrypted with AES-256 (the standard handler at revision 6)
  * under new passwords, in place of any security the document had. The user
  * password (UTF-8; NULL or empty for none) opens the copy with `permissions`
@@ -2108,6 +2117,204 @@ MEGAPDF_API int megapdf_pages_import(megapdf_document* document, const char* oth
  */
 MEGAPDF_API int megapdf_pages_extract(const megapdf_document* document, const int* pages, size_t count,
                                       const char* out_path_utf8, const megapdf_cancel* cancel);
+
+/* --------------------------------------------------------------------------
+ * Contract 11: text selection (#710). Select a page's text with a drag, a word or a line,
+ * extend it, draw it, and copy it -- the same calls on every platform, so the four UIs only
+ * decide gestures and drawing, never what was selected or what reaches the clipboard.
+ *
+ * THE MODEL. megapdf_selectable_load() reads a page once into an immutable snapshot: its
+ * characters in READING ORDER, numbered 0 .. length-1. A selection is two CARETS, each a
+ * position between characters, 0 .. length (caret k sits just before character k; caret
+ * length is after the last). The selected characters are [min(a, b), max(a, b)): a caller
+ * keeps an anchor caret and a focus caret and never has to order them. A selection that
+ * crosses pages is one such range per page (see "Across pages" below).
+ *
+ * READING ORDER, AND WHY IT IS CONTRACT 9'S. PDFium's character order is content-stream
+ * order, which is whatever order the producer drew in -- a two-column page drawn row by row
+ * reads across both columns. So the snapshot does not use it. It is built from exactly the
+ * characters, words, visual lines and recursive XY-cut that contract 9's heuristic path
+ * builds blocks from (megapdf_structure.cpp's ReadChars, BuildWords, BuildLines and
+ * OrderLines, called, not copied), so across two columns a selection runs down the first
+ * column and then the second, and a copy reads in the order a text export does. Rotated
+ * text (#363) comes last, as contract 9's trailing paragraph does, and a page whose text
+ * reads in another direction is laid out in its own frame first (#472, #482), so a rotated
+ * page selects in its own reading order. Three things are deliberately NOT taken from
+ * contract 9:
+ *   - the structure tree (#358): a selection is a gesture over what is SEEN, and geometry
+ *     is what is seen; a tagged page's tree can order content differently from its layout,
+ *     and a drag must never select something nowhere near the pointer;
+ *   - furniture removal: a running header or a page number is on the page, so it can be
+ *     selected and copied;
+ *   - hyphen-joining (below).
+ *
+ * WHAT A COPY CONTAINS (megapdf_selectable_text). The characters as the document encodes
+ * them, in reading order, with:
+ *   - one U+0020 between two words on a line, and one U+000A where a line ends. Spacing is
+ *     the core's, as it is in contract 9: the document's own space characters, PDFium's
+ *     generated ones and the gaps between glyphs all become word breaks, so two spaces in
+ *     the file copy as one, and a tab as a space. Lines are separated by U+000A on every
+ *     platform; a binding that wants CR LF on Windows converts when it writes the clipboard.
+ *     No line break is added after the last line selected.
+ *   - ligatures expanded. A glyph that stands for several characters ("fi" drawn as one
+ *     glyph) yields each of them, and so does a glyph mapped to a presentation form such as
+ *     U+FB02: measured on selection.pdf, PDFium already expands both (only U+FB02 of the
+ *     U+FB00..U+FB06 forms was tried), and the snapshot splits such a
+ *     glyph's box evenly among its characters, so a caret can sit between the "f" and the "i".
+ *   - hyphens kept. A line that ends in a hyphen copies as that hyphen and a line break --
+ *     "well-\nknown" -- and is NOT joined the way contract 9 joins it for an export. That is
+ *     the decision #710 asked for, and the reason: a selection is a highlight over glyphs the
+ *     person can see, and a copy that silently drops one of them, and joins two lines into one
+ *     word, is a copy of something that is not on the page. Contract 9's join is a reading
+ *     heuristic, not a fact: it strips a hard hyphen before a lowercase word, which is wrong
+ *     for "well-known" broken across two lines. A person pasting a paragraph can take the
+ *     hyphens out; one whose real hyphens were taken out cannot get them back.
+ *   - soft hyphens as U+002D. PDF does not reflow, so a U+00AD in a content stream is drawn
+ *     like any other glyph, and pasted as U+00AD it vanishes in most editors. And PDFium masks
+ *     every hyphen it judges to end a line (soft or hard) to the code point 2 (#584), so the
+ *     two cannot be told apart there anyway: both copy as U+002D.
+ *   - nothing for control characters (C0, C1, U+FFFE, U+FFFF), which draw nothing; a
+ *     character outside the BMP is a surrogate pair.
+ * Plain text only: no fonts, sizes or styles.
+ *
+ * COORDINATES. Crop space, like every contract here: points, bottom-left origin, the page's
+ * /Rotate already applied, so (x, y) is the point the person sees in a render of the page,
+ * and every rectangle returned is drawn over that render directly. The desktop binding
+ * flips to top-left the way it does for search matches.
+ *
+ * HIT TESTING. A point is resolved in three steps: the XY-cut region it is in (else the
+ * nearest), the line in that region whose band it is in (else the nearest), the character on
+ * that line nearest it. Region first is what keeps a caret where a person expects it: a point
+ * past the end of a short line stays on that line instead of jumping to the longer one below,
+ * and a point in a column's margin stays in that column. `tolerance` is in points, measured
+ * from the point to that line's box; a negative tolerance (MEGAPDF_SELECT_ANYWHERE) means no
+ * limit, so a page with any text always answers. The calls that find something return -1 (a
+ * caret, a character) or 0 (a word, a line) when the page has no text or nothing is within the
+ * tolerance -- a blank page or a scan answers that cleanly, every time, with length 0.
+ *
+ * THE CALL SEQUENCES.
+ *   Load:   on showing a page, or on first touching it, megapdf_selectable_load(page). Keep it
+ *           while the page is shown; free it with the page. Reload after ANY change to the
+ *           page's content or rotation (an edit, a whiteout, a text box, a redaction, a
+ *           rotate, an undo of one of those) and drop the selection: carets index one
+ *           snapshot and mean nothing in the next.
+ *   Drag (desktop press-and-drag; a phone's handle drag):
+ *           press:  anchor = caret_at(p, small tolerance, e.g. 4 pt). -1 means there is no
+ *                   text under the press to anchor on, so no selection starts.
+ *           move:   once the pointer has moved past the platform's drag threshold, focus =
+ *                   caret_at(p, MEGAPDF_SELECT_ANYWHERE), on every move after that; it costs
+ *                   microseconds (see below). Then rects(anchor, focus) to draw. A press
+ *                   released without passing the threshold is a click, and does what a
+ *                   click does now (on body text, it edits).
+ *   Word (double-click; long-press):
+ *           word_at(p, small tolerance, &start, &end); 0 means no word there. anchor =
+ *           start, focus = end. Punctuation at either end of a word is left out ("column."
+ *           selects "column"), unless the point is on it; inside a word it stays ("don't",
+ *           "1,000", "e-mail"). Words are contract 9's: glyphs within 0.8 em of each other.
+ *           That is right for space-separated scripts and too coarse for Chinese or
+ *           Japanese, where a "word" is a run of the line; a phone may refine a CJK word
+ *           with its own word breaker over the returned text.
+ *   Line (triple-click): line_at(p, small tolerance, &start, &end).
+ *   Extend (Shift+click; moving a handle): keep the anchor, focus = caret_at(p,
+ *           MEGAPDF_SELECT_ANYWHERE). For a handle, the handle being dragged is the focus
+ *           and the other one is the anchor.
+ *   All on the page: anchor 0, focus length.
+ *   Draw:   rects(anchor, focus): one rectangle per line the selection touches, in reading
+ *           order, each spanning the selected glyphs' advances and the line's full height,
+ *           so a partial line and a whole one are the same height. Draw them in the
+ *           platform's own selection colour.
+ *   Copy:   text(anchor, focus), count-then-fill, onto the platform clipboard as plain text.
+ *           Gate Copy (the command, the menu item, the shortcut) on MEGAPDF_PERMIT_COPY in
+ *           megapdf_permissions_in_effect(): a document that forbids copying still selects
+ *           and highlights, and Copy is disabled and says why. The text calls do not check
+ *           the bit themselves -- reading is not copying, and the same text already reaches
+ *           search and accessibility -- so the gate is the app's, and that one call is the
+ *           whole of it.
+ *
+ * ACROSS PAGES. A selection from (page p, caret a) to (page q, caret b), p < q, is
+ * text(p: a .. length), then every page between in full (0 .. length), then text(q: 0 .. b),
+ * the non-empty pieces joined with one U+000A -- a page break is a line break. A page with no
+ * text contributes nothing and no extra break. The highlight is each page's own rects() over
+ * the same ranges. The anchor's page and caret stay fixed while the focus moves onto
+ * another page; order the two by (page, caret) before slicing. A caller does this stitching
+ * rather than the core because the pages' snapshots are the caller's already: the desktop
+ * binding provides it once for both desktops (MegaPDF.Core's PdfTextSelection).
+ *
+ * THREADING. megapdf_selectable_load() reads PDFium, so it takes the core's lock and refuses a
+ * page whose document has closed (NULL, megapdf_last_error() == MEGAPDF_LAST_ERR_CLOSED). The
+ * snapshot it returns holds no PDFium state and never changes: every other megapdf_selectable_*
+ * call reads only it, takes NO lock, and may be called from any thread, concurrently with
+ * each other and with any other core call -- a hit test on the UI thread never waits behind a
+ * render on the engine's. Only megapdf_selectable_free() must not race a call on the same
+ * snapshot. A snapshot is not a page handle: it outlives its page and its document (it then
+ * describes the page as it was), and the dead-handle contract does not apply to it.
+ *
+ * COST. Measured for #710 (TESTING.md, "Text selection costs"), a Release build on kdocker3
+ * (x86-64), over 8,584 real pages from the public and private corpora: the load is the one
+ * expensive call -- median 0.5-2.3 ms, worst 16 ms, 12 ms for the densest page found (15,070
+ * characters), about what a one-page megapdf_structure_load() costs, because it is the same
+ * reading of the page. Every query after it is a scan of in-memory arrays: caret_at and
+ * word_at at most 0.7 us on those pages, a drag move (caret_at, then rects() from the anchor
+ * to the new focus, the whole page in the worst case) at most 5.6 us, a whole-page copy at most
+ * 39 us. So: load once per page, never per pointer move; on a phone, load when the page is
+ * shown or on the first touch, off the UI thread if a dense page's load would be felt there.
+ * ----------------------------------------------------------------------- */
+
+typedef struct megapdf_selectable megapdf_selectable;
+
+/** megapdf_selectable_caret_at() and friends: no tolerance, a page with text always answers. */
+#define MEGAPDF_SELECT_ANYWHERE (-1.0)
+
+/**
+ * Reads `page`'s text into a selection snapshot (above). NULL for a NULL page, a page whose
+ * document has closed (megapdf_last_error() == MEGAPDF_LAST_ERR_CLOSED), or when the core
+ * cannot allocate. A page with no text -- blank, or a scan -- loads, with length 0.
+ */
+MEGAPDF_API megapdf_selectable* megapdf_selectable_load(const megapdf_page* page);
+/** NULL is fine. Must not race another call on the same snapshot. */
+MEGAPDF_API void megapdf_selectable_free(megapdf_selectable* selectable);
+
+/** How many characters the page has to select; carets run 0 .. this. 0 for NULL. */
+MEGAPDF_API int megapdf_selectable_length(const megapdf_selectable* selectable);
+
+/**
+ * The caret (0 .. length) nearest the crop-space point (x, y): before the nearest character
+ * when the point is in its first half, after it otherwise. -1 when the page has no text, or
+ * the point is farther than `tolerance` points from the line it resolves to.
+ */
+MEGAPDF_API int megapdf_selectable_caret_at(const megapdf_selectable* selectable, double x, double y,
+                                            double tolerance);
+
+/** The character (0 .. length-1) nearest (x, y), resolved as megapdf_selectable_caret_at(); -1 as it is. */
+MEGAPDF_API int megapdf_selectable_char_at(const megapdf_selectable* selectable, double x, double y,
+                                           double tolerance);
+
+/**
+ * The word at (x, y): `*out_start` .. `*out_end` are its carets. Returns its length in
+ * characters, 0 when there is none within `tolerance` (both outs then 0), MEGAPDF_ERR_ARGUMENT
+ * for a NULL snapshot. Either out may be NULL.
+ */
+MEGAPDF_API int megapdf_selectable_word_at(const megapdf_selectable* selectable, double x, double y,
+                                           double tolerance, int* out_start, int* out_end);
+
+/** megapdf_selectable_word_at() for the whole visual line at (x, y). */
+MEGAPDF_API int megapdf_selectable_line_at(const megapdf_selectable* selectable, double x, double y,
+                                           double tolerance, int* out_start, int* out_end);
+
+/**
+ * The text between two carets, in either order (clamped to 0 .. length), as UTF-16 code
+ * units with no terminator, count-then-fill: returns the total, fills up to `capacity`.
+ * 0 for an empty range or a NULL snapshot.
+ */
+MEGAPDF_API size_t megapdf_selectable_text(const megapdf_selectable* selectable, int start, int end,
+                                           unsigned short* out, size_t capacity);
+
+/**
+ * The crop-space rectangles that cover the characters between two carets (either order,
+ * clamped), one per line touched, in reading order; count-then-fill.
+ */
+MEGAPDF_API size_t megapdf_selectable_rects(const megapdf_selectable* selectable, int start, int end,
+                                            megapdf_rect* out, size_t capacity);
 
 #ifdef __cplusplus
 }  /* extern "C" */

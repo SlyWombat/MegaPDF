@@ -593,6 +593,41 @@ tests = [
 note = "engine parity only; no Compose test types in the search field. #98's canary lives in the engine suite, not the UI. #676: Find on a scanned page (ML Kit, bundled), the cache following page tools tested on the JVM, the recogniser itself on a device."
 
 [[feature]]
+id = "select-copy"
+title = "Select text and copy it"
+area = "Viewing"
+[feature.windows]
+presence = "absent"
+coverage = "n/a"
+absence = "gap"
+issue = 710
+note = "the core (contract 11) and the shared .NET binding are in, tested by core_tests.cpp's test_selection_* and TextSelectionTests.cs; the press-and-drag UI and its self-test state are not yet built."
+[feature.macos]
+presence = "absent"
+coverage = "n/a"
+absence = "gap"
+issue = 710
+note = "as Windows: MegaPDF.Core's PdfSelectableText and PdfTextSelection are ready, the Avalonia UI and its headless check are not."
+[feature.linux]
+presence = "absent"
+coverage = "n/a"
+absence = "gap"
+issue = 710
+note = "same as macOS."
+[feature.ios]
+presence = "absent"
+coverage = "n/a"
+absence = "gap"
+issue = 710
+note = "the core's megapdf_selectable_* calls compile into the app; the Swift binding and the long-press UI are not yet built."
+[feature.android]
+presence = "absent"
+coverage = "n/a"
+absence = "gap"
+issue = 710
+note = "megapdf_select.cpp is in the engine's CMake build; the JNI binding and the long-press UI are not yet built."
+
+[[feature]]
 id = "reading-mode"
 title = "Reading mode"
 area = "Viewing"
@@ -2430,6 +2465,10 @@ note = "CI assembles a debug APK and tests it; the release AAB is only verified 
 # =============================================================================
 # Test artefacts deliberately not on the map.
 # =============================================================================
+
+[[exempt]]
+ref = "tests/MegaPDF.Core.Tests/TextSelectionTests.cs"
+why = "#710's binding tests, landed ahead of any platform's UI: every select-copy cell is still absent, and an absent cell cannot cite a test. The first desktop cell to turn present cites this file and removes this exemption."
 
 [[exempt]]
 ref = "ios/MegaPDFUITests/DocumentOpening.swift"
