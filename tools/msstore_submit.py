@@ -406,6 +406,7 @@ def describe_submission(sub, label):
         print(f"  {lang}: title '{b.get('title')}', description {len(b.get('description') or '')}, "
               f"what's new {len(b.get('releaseNotes') or '')}, {len(b.get('features') or [])} features, "
               f"{len(b.get('keywords') or [])} search terms; images: {types}")
+        print(f"      website {b.get('websiteUrl')}  support {b.get('supportContact')}  privacy {b.get('privacyPolicy')}")
     pr = sub.get("pricing", {})
     print(f"  pricing {pr.get('priceId')}  visibility {sub.get('visibility')}")
 

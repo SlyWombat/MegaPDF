@@ -38,7 +38,7 @@ Dave's go-ahead: <quote and date>. Live before this release: Windows <>, iOS <>,
 - [ ] **Windows** — `tools/msstore.sh build` → `signin` → `status` → `plan` → `submit` → `status`. Submission id: ___, publish Immediate.
 - [ ] **iOS** — `git tag ios-v<ver> <sha> && git push origin ios-v<ver>` → `ios-release.yml` run ___ → build N = ___. Then `tools/asc-publish.sh version <ver>` → `copy` → `screenshots artifacts/store/captures-<ver>` → `review` → `assets-state` (loop to COMPLETE) → `build <N>` → `version-info` → `submit`.
 - [ ] **Mac** — `gh workflow run macos-appstore.yml -f upload=true` → run ___ → build ___. Then the same `asc-publish.sh` sequence with `ASC_PLATFORM=MAC_OS`.
-- [ ] **Play** — `git tag android-v<ver> <sha> && git push origin android-v<ver>` → `android-release.yml` run ___ → internal. Then `tools/play.sh listing status`; `push artifacts/store/captures-<ver> --production <vc> --phone-only` (validate) → the same with `--commit` → `readback …`. Edit id: ___.
+- [ ] **Play** — `git tag android-v<ver> <sha> && git push origin android-v<ver>` → `android-release.yml` run ___ → internal. Then `tools/play.sh listing status`; `push artifacts/store/captures-<ver> --production <vc> --phone-only` (validate) → the same with `--commit` → `readback …`; `tools/play.sh listing contact` (the first time also `--website https://electricrv.ca/megapdf/support/ --commit`). Edit id: ___.
 - [ ] **Linux** — `git tag -a linux-v$(tools/linux/package-version.sh <ver>) <sha> -m "MegaPDF <ver> for Linux"`; run ___; `gh release edit linux-v<ver> --draft=false`; `gh run download <run> -n MegaPDF-apt-repository -D website/megapdf/apt`; `python3 website/deploy.py --dry-run --linux --privacy` → without `--dry-run`.
 - [ ] **CLI archives** — `windows-cli-v<ver>` and `macos-cli-v<ver>` tags; download each draft's zip and **run it** (sha256, `--version`, an extract) on GPD-DAVE / the Mac mini; `gh release edit <tag> --draft=false`.
 - [ ] **Snap** — skipped until #314.
@@ -48,6 +48,7 @@ Dave's go-ahead: <quote and date>. Live before this release: Windows <>, iOS <>,
 - [ ] Windows: `tools/msstore.sh status` and https://apps.microsoft.com/detail/9PF4TRRH4M76 show <ver4>.
 - [ ] Apple: `curl -s 'https://itunes.apple.com/lookup?id=6799522972'` shows <ver> (iOS and Mac go together).
 - [ ] Play: the store page returns 200 and shows <ver>; `tools/play.sh listing status` shows production vc <vc> completed.
+- [ ] Support links (#662): `asc-publish.sh version-info` (iOS and Mac) shows support `…/megapdf/support/` in every locale; `msstore.sh status` shows support `…/megapdf/support/`; `play.sh listing contact` says "(the support page)"; the Snap links call (`docs/RELEASING.md` § 4) shows contact `…/support/`.
 - [ ] APT: `InRelease` and `Packages` at https://electricrv.ca/megapdf/apt/ name <ver>; a clean container installs it from the live page's commands.
 - [ ] GitHub: `gh release view` for `linux-v<ver>`, `windows-cli-v<ver>`, `macos-cli-v<ver>` lists every asset with its `.sha256`.
 - [ ] Last comment here: what went live where, ids and hashes.

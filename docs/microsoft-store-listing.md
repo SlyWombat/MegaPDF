@@ -352,12 +352,14 @@ https://electricrv.ca/megapdf/privacy/
 https://electricrv.ca/megapdf/
 ```
 ```
-info@electricrv.ca
+https://electricrv.ca/megapdf/support/
 ```
 ```
 © 2026 Electric RV. Licensed under Apache-2.0.
 ```
 (privacy policy URL, website, support contact, copyright — in that order)
+
+The support contact is the support page, not the bare address (#662): the page asks for platform, version and OS and answers the common questions, and its form still ends in a mail to info@electricrv.ca.
 
 ## Store logo
 
