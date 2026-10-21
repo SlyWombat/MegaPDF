@@ -856,6 +856,23 @@
         }
       }
     },
+    "Copy" : {
+      "comment" : "#710: the edit menu's one item over a text selection on the page; the system's own French for Copy. FR-REVIEW #710 — new, not yet read by the reviewer.",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copier"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copier"
+          }
+        }
+      }
+    },
     "Copyright © 2026 ElectricRV.ca Corporation. All rights reserved." : {
       "localizations" : {
         "fr" : {
@@ -1534,6 +1551,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Modifier le texte"
+          }
+        }
+      }
+    },
+    "End of selection" : {
+      "comment" : "#710: VoiceOver name of the selection's end handle. FR-REVIEW #710 — new, not yet read by the reviewer.",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fin de la sélection"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fin de la sélection"
           }
         }
       }
@@ -3941,6 +3975,23 @@
         }
       }
     },
+    "Start of selection" : {
+      "comment" : "#710: VoiceOver name of the selection's start handle. FR-REVIEW #710 — new, not yet read by the reviewer.",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Début de la sélection"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Début de la sélection"
+          }
+        }
+      }
+    },
     "Stop" : {
       "comment" : "Busy strip (#145): the button that stops the work the strip is reporting. Stop, not Cancel -- Cancel is the word that abandons a question, and this abandons work. Same word as the desktops' CancelThisWork",
       "localizations" : {
@@ -4213,6 +4264,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "La police d'origine ne pouvait pas afficher ce texte; une police standard semblable a été utilisée."
+          }
+        }
+      }
+    },
+    "The owner of this document doesn't allow copying its text." : {
+      "comment" : "#710: notice when a document's copy permission is off; the text still selects, Copy is disabled. FR-REVIEW #710 — new, not yet read by the reviewer.",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le propriétaire de ce document n'autorise pas la copie de son texte."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le propriétaire de ce document n'autorise pas la copie de son texte."
           }
         }
       }
@@ -4593,6 +4661,23 @@
         }
       }
     },
+    "This field is read-only." : {
+      "comment" : "#712: notice on tapping a form field its author marked read-only. FR-REVIEW #712 — new, not yet read by the reviewer.",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ce champ est en lecture seule."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ce champ est en lecture seule."
+          }
+        }
+      }
+    },
     "This file is too large for MegaPDF to open." : {
       "localizations" : {
         "fr" : {
@@ -4671,6 +4756,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Cette ligne ne peut pas être modifiée sans déplacer du texte ailleurs sur la page."
+          }
+        }
+      }
+    },
+    "This page has no text to select." : {
+      "comment" : "#710: notice after a long press on a page with no text (a scan). FR-REVIEW #710 — new, not yet read by the reviewer.",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cette page ne contient aucun texte à sélectionner."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cette page ne contient aucun texte à sélectionner."
           }
         }
       }

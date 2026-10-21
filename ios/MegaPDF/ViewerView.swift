@@ -688,6 +688,8 @@ struct ViewerView: View {
                 FormTextSheet(
                     text: $model.formTextDraft,
                     fieldName: pending.name,
+                    isMultiline: pending.isMultiline,
+                    maxLength: pending.maxLength,
                     onDone: { model.commitFormText(model.formTextDraft) },
                     onCancel: model.cancelFormText
                 )
@@ -1610,6 +1612,29 @@ struct ViewerView: View {
                     onEdit: model.editSelectedTextBox
                 )
             }
+            // The text selection (#710): the highlight, the two handles and the system's edit
+            // menu with Copy, on the page it began on.
+            if let selection = model.textSelection, selection.pageIndex == index,
+               !model.selectionRects.isEmpty {
+                let space = PageSpace(pageSize: size, viewSize: CGSize(width: width, height: height))
+                TextSelectionOverlay(
+                    rects: model.selectionRects, space: space,
+                    onDragHandle: { handle, point in
+                        model.dragSelectionHandle(handle, xFraction: Double(point.x / width),
+                                                  yFraction: Double(point.y / height))
+                    },
+                    onEndDrag: model.endSelectionHandleDrag)
+                if let box = SelectionGeometry.bounds(of: model.selectionRects) {
+                    let frame = space.rect(box)
+                    SelectionMenuHost(request: model.selectionMenuRequest,
+                                      canCopy: model.canCopyText,
+                                      onCopy: model.copyTextSelection)
+                        .frame(width: max(frame.width, 1), height: max(frame.height, 1))
+                        .offset(x: frame.minX, y: frame.minY)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                }
+            }
             // Page-level work (#145): a small spinner on the line or box it is about, else mid-page.
             if let work = busy.pageIndicator, case let .page(page, rect) = work.scope, page == index {
                 let scaleX = width / size.width
@@ -1622,6 +1647,18 @@ struct ViewerView: View {
         }
         .frame(width: width, height: height)
         .clipped()
+        .coordinateSpace(name: PageSpace.name)
+        // A long press selects the word under the finger (#710); nothing else on the page uses a
+        // long press, and a tap still edits. A UIKit recogniser on the scroll view, simultaneous
+        // with every other gesture, and off while a tool is armed: an armed tool owns the touch.
+        .overlay(
+            PageLongPress(enabled: model.canSelectText,
+                          onPress: { xFraction, yFraction in
+                              model.beginTextSelection(pageIndex: index, xFraction: xFraction, yFraction: yFraction)
+                          },
+                          onEnd: model.endTextSelectionPress)
+            .allowsHitTesting(false)
+        )
         // While Redact or Whiteout is armed a drag draws a rectangle instead of scrolling
         // (#173, #3). One gesture for both tools rather than a second one of its own -- the
         // armed tool decides what the rectangle becomes, and the band above shows which. The
@@ -1679,6 +1716,13 @@ struct ViewerView: View {
                 }
                 .exclusively(before: SpatialTapGesture()
                     .onEnded { value in
+                        // A tap with a selection showing puts the selection away, as it does in
+                        // every iOS text view, and does nothing else (#710): it is the
+                        // dismissal, not an edit.
+                        if model.textSelection != nil {
+                            model.clearTextSelection()
+                            return
+                        }
                         // Inside reading mode a single tap on the page shows and hides the
                         // floating bar, and does nothing else (#168 decision 2, #506). It
                         // is scoped to reading mode deliberately: the ordinary tap on a

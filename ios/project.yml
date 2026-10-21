@@ -107,7 +107,10 @@ targets:
   MegaPDFUITests:
     type: bundle.ui-testing
     platform: iOS
-    sources: [MegaPDFUITests]
+    sources:
+      - MegaPDFUITests
+      # The core's selection fixture, shared with the unit tests rather than copied (#710).
+      - path: MegaPDFTests/selection.pdf
     dependencies:
       - target: MegaPDF
     settings:

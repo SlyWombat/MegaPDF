@@ -628,11 +628,15 @@ tests = [
 ]
 note = "same as macOS, with Ctrl+C and Ctrl+A bound on the window (X11 hosts no menu bar)."
 [feature.ios]
-presence = "absent"
-coverage = "n/a"
-absence = "gap"
-issue = 710
-note = "the core's megapdf_selectable_* calls compile into the app; the Swift binding and the long-press UI are not yet built."
+presence = "present"
+entry = "ios/MegaPDF/ViewerModel.swift::beginTextSelection"
+coverage = "ui"
+tests = [
+  "ios/MegaPDFTests/TextSelectionTests.swift::class",
+  "ios/MegaPDFUITests/SelectCopyUITests.swift::class",
+  ".github/workflows/ios-ci.yml::MegaPDFUITests/SelectCopyUITests",
+]
+note = "#710: a long press selects the word, drawn in the tint at the selection opacity with two draggable handles and the system's UIEditMenuInteraction offering Copy (plain text to UIPasteboard); a tap clears it. One page at a time, not across pages. Copy is disabled with a notice when the document's copy bit is off. TextSelectionTests runs selection.pdf through the Swift binding and the handle logic; SelectCopyUITests long-presses, copies and reads the pasteboard back. iOS reading mode shows page images, not reflowed text, so there is nothing there to make selectable."
 [feature.android]
 presence = "absent"
 coverage = "n/a"
@@ -808,10 +812,11 @@ tests = [
   "ios/MegaPDFTests/FormTextTests.swift::class",
   "ios/MegaPDFTests/CheckboxTests.swift::class",
   "ios/MegaPDFTests/DocumentCapabilitiesTests.swift::class",
+  "ios/MegaPDFTests/FormFieldFlagsTests.swift::class",
   "ios/MegaPDFUITests/FormTextUITests.swift::class",
   ".github/workflows/ios-ci.yml::MegaPDFUITests/FormTextUITests",
 ]
-note = "#701: a tap on a text widget opens FormTextSheet; Done writes through megapdf_form_set_text as one undo step (FormTextOperation), gated on fill-forms. FormTextTests fills formtext.pdf through the model, saves, reopens and undoes; FormTextUITests types into the real sheet. Multi-line, maximum-length and comb behaviour is whatever PDFium does with the written value; the core now reports multi-line, comb and maximum length (#712, megapdf_form_field_flags) but the sheet does not use them yet."
+note = "#701: a tap on a text widget opens FormTextSheet; Done writes through megapdf_form_set_text as one undo step (FormTextOperation), gated on fill-forms. FormTextTests fills formtext.pdf through the model, saves, reopens and undoes; FormTextUITests types into the real sheet. #712: the sheet reads the core's flags (megapdf_form_field_flags, _max_length): only a multi-line field takes returns, a single-line field's return submits like Done, a /MaxLen cuts the draft, and a read-only field says so instead of opening. FormFieldFlagsTests reads formflow.pdf's flags through the binding. Comb and masked entry are read but not yet acted on."
 [feature.android]
 presence = "present"
 entry = "android/app/src/main/java/com/megapdf/android/ViewerViewModel.kt::commitFormText"

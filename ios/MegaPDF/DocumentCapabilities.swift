@@ -47,6 +47,10 @@ struct DocumentCapabilities: Equatable {
     /// Printing (#675): the document's print bit, which is what the desktops gate their Print on
     /// (`DocumentCapabilities.CanPrint`). Full access prints whatever the bits say.
     let canPrint: Bool
+    /// Copying the document's text to the pasteboard (#710): the document's copy bit, which is
+    /// what the core's `megapdf_permissions_in_effect` reports and what the desktops gate their
+    /// Copy on (`DocumentCapabilities.CanCopyText`). Selecting is never gated, only this.
+    let canCopyText: Bool
     /// Protected and opened without full access: the app says so and offers the owner password.
     let isRestricted: Bool
 
@@ -65,6 +69,7 @@ struct DocumentCapabilities: Equatable {
         // not restructure (#558). Modify grants it too, as contract 10's own check does.
         canAssemblePages = modify || security.allows(.assemble)
         canExtractPages = full || security.allows(.copy)
+        canCopyText = full || security.allows(.copy)
         canChangeSecurity = full
         canPrint = full || security.allows(.print)
         isRestricted = security.isEncrypted && !full
