@@ -108,7 +108,9 @@ us, so the policy section describing what happens to that message has to be part
 of the same upload — the ordering §11 promises and the one the page-view counter
 followed (#501). `--support` also refuses unless the policy it is about to
 upload really carries that section (an `id="support"` heading, the anchor the
-support page links), so a policy edited back to its old text cannot slip through.
+support page links) and the paragraph disclosing that support mail is read by an
+automated system (`id="support-triage"`, #635), so a policy edited back to its old
+text cannot slip through.
 
 `--dry-run --support --privacy` runs the same checks, so it is the rehearsal.
 Besides the policy, it validates the answers list, because that list is the one
@@ -137,6 +139,43 @@ this check changes with it.
 `support:` regions currently appear in `index.html` (the support strip above the
 footer, and the footer link), `privacy/` (§4, where the page's URL is a link only
 once the page is up, so the policy can go first) and `linux/` (the footer link).
+
+### The support mailbox: what the page writes and who reads it (#635)
+
+The support page's intake is deliberately the oldest one there is: a `mailto:` to
+`info@electricrv.ca`, a Microsoft 365 mailbox. Nothing is collected server-side and
+there is no endpoint (option A of #635; Dave's decision of 2026-10-21). What reads the
+mailbox is **not in this repository**: an in-house, multi-product support system with
+its own repo, built on the house mail service. It triages, flags what needs Dave's
+review, and after his decision sends the disposition itself. MegaPDF's whole part is the
+convention below, which that system consumes, and the policy paragraph that discloses it
+(§4, `id="support-triage"`). Link the system's repo here once Dave creates it:
+**support system repo: not yet created.**
+
+**The convention** (it is an interface, so `check_support()` refuses a page that stops
+building the subject, and `check-support-page.js` pins every combination):
+
+- **Subject:** `MegaPDF support MP-YYMMDD-XXXX`, then `[<platform>]` if the reader chose
+  one, then `[<kind>]` if they chose one. Platform is one of `Windows`, `Mac`,
+  `iPhone / iPad`, `Android`, `Linux`. Kind is one of `Something is broken`,
+  `How do I…?` (an ellipsis character, not three dots), `An idea or a request`.
+  `XXXX` is four characters from `ACDEFGHJKLMNPQRTUVWXY34679`, made in the reader's
+  browser. A new product's page uses its own prefix, so one rule per product.
+- **Body:** the first lines are `Reference: MP-…`, `App: MegaPDF <version>`,
+  `Platform: …`, `Kind: …`. A reader can edit the subject in their mail program, and a
+  reader who copies the message instead of using the button sends no subject at all
+  (and no `[...]` tags), so a consumer should fall back to the `Reference:` line in the
+  body and treat the tags as a hint, not a guarantee.
+- **Reply threads:** the page tells readers to quote the reference in a later email, so
+  a reply's subject still contains `MP-YYMMDD-XXXX` after any `Re:`.
+
+**The Outlook rule** (Dave's mailbox; it cannot be made from this repository). On
+`info@electricrv.ca`: *if the subject contains* `MegaPDF support MP-` *move to the
+folder* `MegaPDF support`. "Contains", not "begins with", so a reply (`Re: MegaPDF
+support MP-...`) lands in the same folder as the message it answers. Optionally
+categorise by platform with one rule per `[Windows]`, `[Mac]`, `[iPhone / iPad]`,
+`[Android]`, `[Linux]`. Nothing else depends on the rule: it is a human convenience,
+and the support system reads the mailbox itself.
 
 ### Checking the triage itself
 

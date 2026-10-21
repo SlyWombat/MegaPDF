@@ -149,6 +149,47 @@ const titles = (doc) => [...doc.querySelectorAll("#hits .hit h4")].map((h) => h.
           ticked.includes("ver") && ticked.includes("plat"), ticked.join(","));
     check("the version reaches the message", /App: MegaPDF 2\.1\.1/.test(report.value));
 
+    // #635: the mailbox is read by an Outlook rule and by an in-house support system, both
+    // keyed on the subject. The subject's shape is an interface (website/README.md, 'The
+    // support mailbox'), so every platform and kind the page offers is pinned here, exactly.
+    {
+        const PLAT = { windows: "Windows", mac: "Mac", ios: "iPhone / iPad",
+                       android: "Android", linux: "Linux" };
+        const KIND = { bug: "Something is broken", question: "How do I\u2026?",
+                       idea: "An idea or a request" };
+        const subjectOf = () => {
+            const m = /[?&]subject=([^&]*)/.exec(doc.getElementById("mailbtn").href);
+            return m ? decodeURIComponent(m[1]) : null;
+        };
+        const refNow = doc.getElementById("refshow").textContent;
+        const bad = [];
+        for (const [pv, pn] of Object.entries(PLAT)) {
+            for (const [kv, kn] of Object.entries(KIND)) {
+                type(doc, win, "x", pv, kv);
+                plat(pv);
+                await settle();
+                const want = `MegaPDF support ${refNow} [${pn}] [${kn}]`;
+                if (subjectOf() !== want) { bad.push(`${pv}/${kv}: ${subjectOf()}`); }
+            }
+        }
+        check("the subject is 'MegaPDF support <ref> [platform] [kind]' for every choice",
+              bad.length === 0, bad.join("; "));
+        check("every platform and kind the page offers is one this test knows",
+              [...doc.querySelectorAll("input[name=plat]")].every((r) => r.value in PLAT) &&
+              [...doc.querySelectorAll("input[name=kind]")].every((r) => r.value in KIND));
+        check("the reference in the subject is the one in the body's first line",
+              report.value.split("\n")[0] === "Reference: " + refNow &&
+              /^MP-\d{6}-[ACDEFGHJKLMNPQRTUVWXY34679]{4}$/.test(refNow), refNow);
+
+        const dom3 = load();
+        await settle();
+        const doc3 = dom3.window.document;
+        const m3 = /[?&]subject=([^&]*)/.exec(doc3.getElementById("mailbtn").href);
+        check("with nothing chosen the subject is the bare prefix and reference, no empty tags",
+              !!m3 && decodeURIComponent(m3[1]) ===
+              "MegaPDF support " + doc3.getElementById("refshow").textContent);
+    }
+
     // Every answer must be reachable by its own terms, or it is dead weight on the page.
     // A fresh page, because "Not it" above is remembered for the rest of that visit.
     const dom2 = load();
