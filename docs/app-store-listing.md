@@ -552,13 +552,13 @@ changes from "the one you checked and signed" (closing a thought `reading`
 opened) to the contrast argument instead ("then it's gone": the same
 workspace `pages` just showed, taken away). The other seven slots keep the
 iPhone's words exactly; nothing about *them* is an iPad story.
-`tools/capture-gate/stores.py`'s `"ios"` profile's `"order"` is a
-`{"iphone-6_9": [...], "ipad-13": [...]}` dict now rather than one shared
-list, and `tools/gen_listing_copy.py`'s `AS_EN`/`AS_FR_CA` dicts carry
-`captions_iphone` and `captions_ipad` instead of one `captions` — in both
-places, two sequences side by side rather than one list with an iPad
-exception folded in, so the difference is something the next reader sees
-rather than has to reconstruct.
+The iOS orders live in `tools/store_slots.py` (#656) as a
+`{"iphone-6_9": [...], "ipad-13": [...]}` dict rather than one shared list;
+`tools/capture-gate/stores.py`'s `"ios"` profile's `"order"` reads it, and
+`tools/gen_listing_copy.py`'s `AS_EN`/`AS_FR_CA` dicts carry `captions_iphone`
+and `captions_ipad` (keyed by pose) instead of one `captions`. Two sequences
+side by side rather than one list with an iPad exception folded in, so the
+difference is something the next reader sees rather than has to reconstruct.
 
 Reading mode (#506) and Pages (#174, #613) both open the bundled six-page
 agreement (`demo-pages.pdf` / `demo-fr-pages.pdf` / `demo-fr-FR-pages.pdf`,

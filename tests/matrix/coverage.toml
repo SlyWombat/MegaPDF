@@ -2498,6 +2498,10 @@ ref = "ios/MegaPDFUITests/DocumentOpening.swift"
 why = "the shared wait for a document to open (#599), not a test: it holds no assertion of its own and the eleven suites that call it are each on the map"
 
 [[exempt]]
+ref = "ios/MegaPDFUITests/PageInput.swift"
+why = "the shared page taps, ⋯ menu and export sheet for the UI suites (#681, #706), driven by the app's -uiTestInputProbe: a harness with no assertion of its own, and every suite that calls it is on the map"
+
+[[exempt]]
 ref = "ios/MegaPDFTests/ModelOpening.swift"
 why = "the same wait for the unit suites (#599), replacing nine identical private copies; a harness, not a test"
 
