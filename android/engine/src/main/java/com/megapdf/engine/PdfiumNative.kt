@@ -66,11 +66,21 @@ internal object PdfiumNative {
     // Checkbox surface (#15). Packed arrays keep the JNI boundary simple:
     // form fields are [type, checked, l, b, r, t] per field; squares and annot
     // rects are [l, b, r, t] each, all in PDF points, bottom-left origin.
+    /** [type, checked, l, b, r, t, flags, maxLength] per field since #712 (flags are `MEGAPDF_FIELD_FLAG_*`). */
     external fun nativeFormFieldsPacked(handle: Long): DoubleArray
     external fun nativeClickAt(handle: Long, x: Double, y: Double)
     /** Current values of the text fields (type 1 in the packed array), in the same order (#701). */
     external fun nativeFormTextValues(handle: Long): Array<String>
     external fun nativeFormSetText(handle: Long, x: Double, y: Double, value: String): Boolean
+    // Text selection (#710, contract 11): an opaque snapshot handle; see SelectableText.
+    external fun nativeSelectableLoad(handle: Long): Long
+    external fun nativeSelectableFree(selectable: Long)
+    external fun nativeSelectableLength(selectable: Long): Int
+    external fun nativeSelectableCaretAt(selectable: Long, x: Double, y: Double, tolerance: Double): Int
+    /** [start, end] of the word (kind 0) or line (kind 1) at the point, or empty. */
+    external fun nativeSelectableRangeAt(selectable: Long, x: Double, y: Double, tolerance: Double, kind: Int): IntArray
+    external fun nativeSelectableText(selectable: Long, start: Int, end: Int): String
+    external fun nativeSelectableRects(selectable: Long, start: Int, end: Int): DoubleArray
     external fun nativeDetectSquaresPacked(handle: Long): DoubleArray
     external fun nativeAddCheckMark(
         handle: Long, l: Double, b: Double, r: Double, t: Double, id: String,

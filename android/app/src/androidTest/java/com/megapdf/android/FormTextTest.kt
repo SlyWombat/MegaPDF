@@ -114,4 +114,29 @@ class FormTextTest {
         save()
         assertTrue(fields(file).single().isChecked)
     }
+
+    /**
+     * #712: the editor takes line breaks exactly when the field's own multi-line flag says so, on
+     * `formflow.pdf` (a single-line "first", a multi-line "notes"). The flag is read in the engine
+     * and the view model passes it through, so this is the screen path of the same fact
+     * `FormFieldFlagsTest` reads from the core.
+     */
+    @Test
+    fun theEditorIsMultilineOnlyForAFieldFlaggedMultiline() {
+        val file = Fixtures.testAsset("formflow.pdf", "form-flags-712.pdf")
+        val facts = PageFacts.of(file)
+        val widgets = fields(file)
+        rule.open(file)
+
+        rule.page().tapCentreOf(facts, widgets[0].rect)
+        rule.waitUntil(SETTLE_MS) { rule.viewModel.pendingFormText != null }
+        assertFalse(rule.viewModel.pendingFormText!!.multiline)
+        rule.onNodeWithText(str(R.string.cancel)).performClick()
+        rule.waitUntil(SETTLE_MS) { rule.viewModel.pendingFormText == null }
+
+        rule.page().tapCentreOf(facts, widgets[2].rect)
+        rule.waitUntil(SETTLE_MS) { rule.viewModel.pendingFormText != null }
+        assertTrue(rule.viewModel.pendingFormText!!.multiline)
+        rule.onNodeWithText(str(R.string.cancel)).performClick()
+    }
 }

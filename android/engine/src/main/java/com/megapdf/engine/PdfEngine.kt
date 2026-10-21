@@ -627,7 +627,7 @@ class PdfPage internal constructor(
         val packed = PdfiumNative.nativeFormFieldsPacked(handle)
         val values = PdfiumNative.nativeFormTextValues(handle)
         var nextValue = 0
-        (packed.indices step 6).map { i ->
+        (packed.indices step 8).map { i ->
             val isText = packed[i] == 1.0  // FPDF_FORMFIELD_TEXTFIELD
             FormField(
                 isRadio = packed[i] == 3.0,  // FPDF_FORMFIELD_RADIOBUTTON
@@ -635,8 +635,21 @@ class PdfPage internal constructor(
                 rect = PdfRect(packed[i + 2], packed[i + 3], packed[i + 4], packed[i + 5]),
                 isText = isText,
                 value = if (isText) values.getOrNull(nextValue++).orEmpty() else "",
+                flags = packed[i + 6].toInt(),
+                maxLength = packed[i + 7].toInt(),
             )
         }
+    }
+
+    /**
+     * Reads this page's text into a selection snapshot (#710, contract 11). The one expensive
+     * call, up to about 16 ms on a dense page, so it runs on the engine's dispatcher and never
+     * the UI thread. The snapshot outlives the page; the caller closes it. Null when the page
+     * cannot be read (its document closed).
+     */
+    suspend fun loadSelectable(): SelectableText? = withContext(engine.dispatcher) {
+        check(!closed) { "page is closed" }
+        PdfiumNative.nativeSelectableLoad(handle).takeIf { it != 0L }?.let(::SelectableText)
     }
 
     /**
@@ -1118,7 +1131,24 @@ data class FormField(
     /** A text field (#701); [value] is what it holds. Checkboxes and radios are neither. */
     val isText: Boolean = false,
     val value: String = "",
-)
+    /** The core's `MEGAPDF_FIELD_FLAG_*` bits (#712): read-only, multi-line, comb, masked. */
+    val flags: Int = 0,
+    /** The field's `/MaxLen`, 0 when it has none (#712). */
+    val maxLength: Int = 0,
+) {
+    /** The field's own multi-line flag (#712): what the editor asks, in place of a height guess. */
+    val isMultiline: Boolean get() = isText && flags and FLAG_MULTILINE != 0
+
+    /** The author made the field read-only (#712): there is nothing to type into. */
+    val isReadOnly: Boolean get() = flags and FLAG_READONLY != 0
+
+    companion object {
+        const val FLAG_READONLY = 0x1
+        const val FLAG_MULTILINE = 0x2
+        const val FLAG_COMB = 0x4
+        const val FLAG_MASKED = 0x8
+    }
+}
 
 /** A MegaPDF-placed stamp annotation (`mark:` check mark or `sig:` signature). */
 data class Stamp(val annotIndex: Int, val id: String, val rect: PdfRect)
@@ -1308,5 +1338,66 @@ data class LayoutVerdict(
                 maxShiftPoints = packed[6],
             )
         }
+    }
+}
+
+/**
+ * A page's text as a selection snapshot (#710, contract 11): characters in reading order, a
+ * selection being two carets `0..length`. Points are crop space, bottom-left origin, the same as
+ * [PdfRect] everywhere else. Queries read only the snapshot, so they are safe from any thread (a
+ * drag's hit test runs on the UI thread). [close] waits for queries in flight and makes later
+ * ones answer as an empty page, which keeps the contract's "free must not race" in one place.
+ */
+class SelectableText internal constructor(private var pointer: Long) : AutoCloseable {
+    private val lock = java.util.concurrent.locks.ReentrantReadWriteLock()
+
+    private inline fun <T> read(whenClosed: T, block: (Long) -> T): T {
+        lock.readLock().lock()
+        try {
+            return if (pointer == 0L) whenClosed else block(pointer)
+        } finally {
+            lock.readLock().unlock()
+        }
+    }
+
+    /** How many characters there are to select; carets run `0..length`. */
+    val length: Int get() = read(0) { PdfiumNative.nativeSelectableLength(it) }
+
+    /** The caret nearest ([x], [y]), or -1 when there is no text or nothing within [tolerance] points. */
+    fun caretAt(x: Double, y: Double, tolerance: Double = ANYWHERE): Int =
+        read(-1) { PdfiumNative.nativeSelectableCaretAt(it, x, y, tolerance) }
+
+    /** The word at the point as a caret range, or null. */
+    fun wordAt(x: Double, y: Double, tolerance: Double): IntRange? = rangeAt(x, y, tolerance, 0)
+
+    /** The visual line at the point as a caret range, or null. */
+    fun lineAt(x: Double, y: Double, tolerance: Double): IntRange? = rangeAt(x, y, tolerance, 1)
+
+    private fun rangeAt(x: Double, y: Double, tolerance: Double, kind: Int): IntRange? =
+        read(IntArray(0)) { PdfiumNative.nativeSelectableRangeAt(it, x, y, tolerance, kind) }
+            .takeIf { it.size == 2 }?.let { it[0]..it[1] }
+
+    /** The text between two carets, either order, with the core's line feeds for line ends. */
+    fun text(start: Int, end: Int): String = read("") { PdfiumNative.nativeSelectableText(it, start, end) }
+
+    /** One rectangle per line the range touches, in reading order. */
+    fun rects(start: Int, end: Int): List<PdfRect> {
+        val packed = read(DoubleArray(0)) { PdfiumNative.nativeSelectableRects(it, start, end) }
+        return (packed.indices step 4).map { PdfRect(packed[it], packed[it + 1], packed[it + 2], packed[it + 3]) }
+    }
+
+    override fun close() {
+        lock.writeLock().lock()
+        try {
+            if (pointer != 0L) PdfiumNative.nativeSelectableFree(pointer)
+            pointer = 0L
+        } finally {
+            lock.writeLock().unlock()
+        }
+    }
+
+    companion object {
+        /** `MEGAPDF_SELECT_ANYWHERE`: no tolerance, so a page with text always answers. */
+        const val ANYWHERE = -1.0
     }
 }

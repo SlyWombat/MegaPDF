@@ -2459,12 +2459,17 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                     // A form text field (#701): the phone's own editor, prefilled. Asked here for
                     // what perform asks at the end, so nobody types into a field they are about
                     // to be refused (the body-text editor does the same, #558).
-                    if (capabilities.isDynamicXfa) {
+                    if (field.isReadOnly) {
+                        // The author locked it (#712): there is nothing to type into, so no
+                        // dialog that would write a value the form means to refuse.
+                        statusMessage = str(R.string.form_field_read_only)
+                    } else if (capabilities.isDynamicXfa) {
                         showDynamicXfaNotice()
                     } else if (permitted(PermissionClass.EDITING, capabilities.canFillForms) && document === doc) {
                         pendingFormText = PendingFormText(
                             pageIndex, field.rect.centerX, field.rect.centerY, field.value,
-                            multiline = isMultilineField(field),
+                            multiline = field.isMultiline,
+                            maxLength = field.maxLength,
                         )
                     }
                     return@launchEdit
@@ -2575,7 +2580,8 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         val doc = document ?: return
         if (editingBlocked) return
         pendingFormText = null
-        val value = if (pending.multiline) text else text.replace(Regex("[\\r\\n]+"), " ")
+        val unbroken = if (pending.multiline) text else text.replace(Regex("[\\r\\n]+"), " ")
+        val value = if (pending.maxLength > 0) unbroken.take(pending.maxLength) else unbroken
         if (value == pending.oldValue) return
         launchEdit(R.string.edit_failed) {
             perform(FormTextOperation(pending.pageIndex, pending.x, pending.y, pending.oldValue, value), doc)
@@ -2584,6 +2590,92 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
 
     fun cancelFormText() {
         pendingFormText = null
+    }
+
+    // --- Selecting and copying the document's text (#710) ---
+
+    /** The text the person has selected, on one page; null when nothing is. */
+    var textSelection: TextSelection? by mutableStateOf(null)
+        private set
+
+    /**
+     * The pages' selection snapshots, loaded on the first long-press on each (contract 11: one
+     * load, then microsecond queries). Touched on the main thread only. Dropped with the
+     * selection, because a snapshot's carets mean nothing once the page changed.
+     */
+    private val selectables = HashMap<Int, com.megapdf.engine.SelectableText>()
+
+    /** The snapshot for [pageIndex], once a long-press has loaded it; the handles' drag queries it. */
+    fun selectableFor(pageIndex: Int): com.megapdf.engine.SelectableText? = selectables[pageIndex]
+
+    /** Long-press on a page: selects the word under the finger, if there is one. A tap still edits. */
+    fun onPageLongPressed(pageIndex: Int, xFraction: Float, yFraction: Float) {
+        val state = uiState as? ViewerUiState.Viewing ?: return
+        val doc = document ?: return
+        // A drag tool armed means a press on the page is the start of its gesture, not a selection.
+        if (redactMode || whiteoutMode) return
+        val size = state.pageSizes.getOrNull(pageIndex) ?: return
+        viewModelScope.launch {
+            try {
+                var snapshot = selectables[pageIndex]
+                if (snapshot == null) {
+                    val page = doc.openPage(pageIndex)
+                    snapshot = try { page.loadSelectable() } finally { page.close() }
+                    // The document may have changed or closed while the load ran; a snapshot of
+                    // the page as it was must not be drawn over the page as it is.
+                    if (snapshot == null || document !== doc) {
+                        snapshot?.close()
+                        return@launch
+                    }
+                    selectables[pageIndex]?.close()
+                    selectables[pageIndex] = snapshot
+                }
+                val (x, y) = pagePoint(size, xFraction, yFraction)
+                val word = snapshot.wordAt(x, y, SELECT_TOLERANCE_POINTS) ?: return@launch
+                textSelection = TextSelection(pageIndex, word.first, word.last)
+                if (!capabilities.canCopyText) statusMessage = str(R.string.select_copy_forbidden)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w("MegaPDF", "text selection failed", e)
+            }
+        }
+    }
+
+    /** A handle moved: the selection becomes these two carets. */
+    fun updateTextSelection(selection: TextSelection) {
+        if (textSelection?.pageIndex == selection.pageIndex) textSelection = selection
+    }
+
+    /** What Copy would put on the clipboard, or null when nothing is selected or copying is forbidden. */
+    fun selectedTextForCopy(): String? {
+        val selection = textSelection ?: return null
+        if (!capabilities.canCopyText) return null
+        return selectables[selection.pageIndex]?.text(selection.start, selection.end)?.takeIf { it.isNotEmpty() }
+    }
+
+    fun dropTextSelection() {
+        textSelection = null
+        selectables.values.forEach { it.close() }
+        selectables.clear()
+    }
+
+    /**
+     * Copy, from the floating toolbar: the selection as plain text on the system clipboard, then
+     * the selection is released, as a TextView's is. Android 13 and later show their own "copied"
+     * confirmation, so only older versions get ours. Returns whether anything was copied; a
+     * document that forbids copying copies nothing (the toolbar does not offer it either).
+     */
+    fun copySelectedText(): Boolean {
+        val text = selectedTextForCopy() ?: return false
+        val clipboard = getApplication<Application>()
+            .getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("MegaPDF", text))
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.TIRAMISU) {
+            statusMessage = str(R.string.select_copied)
+        }
+        dropTextSelection()
+        return true
     }
 
     /** Shows a notice over the page for a few seconds. */
@@ -2876,6 +2968,8 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     private suspend fun afterHistoryChange(operation: PdfEditOperation) {
+        // Carets index one snapshot of one page: an edit, an undo or a page operation ends them.
+        dropTextSelection()
         canUndo = history.canUndo
         canRedo = history.canRedo
         selectedStamp = null
@@ -3162,6 +3256,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     private fun markEditedAndRerender(pageIndex: Int) {
+        dropTextSelection()
         // A cover, a stamp or a text box changes what the page shows (#676).
         scanSearcher.pageChanged(pageIndex)
         dirty.markEdited()
@@ -3656,6 +3751,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
 
     private fun closeCurrent() {
         renderJob?.cancel()
+        dropTextSelection()
         closeSearch()
         scanSearcher.clear()
         // Reading mode belongs to the document being looked at, not to the app (#507): the
@@ -3879,7 +3975,8 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
 
 /**
  * A form text field being filled (#701), at the centre of its widget (page points). [multiline]
- * is a guess, since the core does not report the field's multi-line flag: see [isMultilineField].
+ * is the field's own flag as the core reports it (#712), and [maxLength] its `/MaxLen`, 0 for none.
+ * The 30 pt height guess this replaced is gone: with the flag read, a guess could only be wrong.
  */
 data class PendingFormText(
     val pageIndex: Int,
@@ -3887,17 +3984,8 @@ data class PendingFormText(
     val y: Double,
     val oldValue: String,
     val multiline: Boolean,
+    val maxLength: Int = 0,
 )
-
-/**
- * Whether the editor should take line breaks. The core reports a field's kind, value and bounds
- * but not its multi-line flag, so this reads the widget: a value that already has a break, or a
- * box tall enough for several lines (30 pt, about two lines of 12 pt text), is multi-line.
- */
-fun isMultilineField(field: com.megapdf.engine.FormField): Boolean =
-    field.value.any { it == '\n' || it == '\r' } || (field.rect.top - field.rect.bottom) >= MULTILINE_HEIGHT_POINTS
-
-private const val MULTILINE_HEIGHT_POINTS = 30.0
 
 /** A line of the document's own text being retyped (#114). */
 data class PendingBodyEdit(
