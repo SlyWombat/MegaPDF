@@ -3,8 +3,8 @@
 #
 #   ci-simulator.sh first-boot <udid>         boot, finish the first-boot migration, shut down
 #   ci-simulator.sh ready <udid> [<other>]    shut <other> down, boot <udid>, and return once
-#                                             it is booted, the machine has settled, and
-#                                             xcodebuild's own device discovery can see it
+#                                             it is booted and xcodebuild's own device
+#                                             discovery can see it
 #
 # WHY ONE AT A TIME. Measured over every hosted run of this workflow from 2026-10-17 to
 # 2026-10-21 (1,026 UI-test launches, 25 failures): a test that started in the first five
@@ -16,9 +16,14 @@
 # being asked to share a runner that has room for one, during the most expensive minutes of the
 # second one's life.
 #
-# So the iPad gets its first boot over with at the start of the job, alone, and is shut down;
-# each UI lane then runs with only its own simulator up; and before a lane starts this waits —
-# for a condition, with a cap, not for a number of seconds — for the machine to have settled.
+# So the iPad gets its first boot over with at the start of the job, alone, and is shut down,
+# and each UI lane then runs with only its own simulator up.
+#
+# NOT A LOAD-AVERAGE WAIT. The first version of this also waited for the one-minute load average
+# to fall to the core count. On the hosted runner it never did: 69 at the very start of the job,
+# before anything of ours ran, 165 at the iPhone lane and 45-80 after five minutes of waiting
+# (PR #725's first run). That was a five-minute sleep in disguise, so it is gone; what is left
+# is the reading, and the busiest processes by name, logged at each step for the next diagnosis.
 #
 # WHY THE DISCOVERY CHECK (#693). Six hosted runs failed before any UI test with xcodebuild's
 # "Unable to find a device matching the provided destination specifier", listing no simulators
@@ -54,19 +59,11 @@ boot() {
     log "booted $udid in $((SECONDS - started)) s"
 }
 
-# Waits, up to a cap, for the one-minute load average to fall to the number of cores. Never
-# fails: it is a settle, and the line it prints is the measurement.
-settle() {
-    local cap="${1:-300}" cores started=$SECONDS
-    cores=$(sysctl -n hw.ncpu)
-    while (( SECONDS - started < cap )); do
-        if awk -v l="$(loadavg)" -v c="$cores" 'BEGIN { exit !(l <= c) }'; then
-            log "settled: load $(loadavg) on $cores cores after $((SECONDS - started)) s"
-            return 0
-        fi
-        sleep 10
-    done
-    log "not settled after ${cap} s: load $(loadavg) on $cores cores; going ahead"
+# The busiest processes right now, by process NAME only (top's `command` column is the name,
+# never the arguments, so nothing a job was handed can appear here).
+busiest() {
+    log "load $(loadavg) on $(sysctl -n hw.ncpu) cores; busiest:"
+    top -l 2 -s 2 -o cpu -n 8 -stats command,cpu,mem 2>/dev/null | tail -n 9
 }
 
 # Polls xcodebuild's own device discovery until it lists the device. Fails after the cap.
@@ -87,7 +84,8 @@ visible() {
 case "${1:-}" in
     first-boot)
         udid="$2"
-        log "first boot of $udid, alone; load $(loadavg)"
+        busiest
+        log "first boot of $udid, alone"
         boot "$udid"
         xcrun simctl shutdown "$udid"
         state "$udid"
@@ -99,8 +97,8 @@ case "${1:-}" in
         fi
         log "readying $udid; load $(loadavg)"
         boot "$udid"
-        settle 300
         visible "$udid" 300 || exit 1
+        busiest
         state "$udid" ${other:+"$other"}
         ;;
     *)

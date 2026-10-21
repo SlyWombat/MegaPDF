@@ -52,7 +52,7 @@ final class FormTextUITests: XCTestCase {
 
     private func editor() -> XCUIElement {
         let field = editorField
-        XCTAssertTrue(field.waitForExistence(timeout: 30), "tapping the form field did not open the editor")
+        XCTAssertTrue(PageInput.appears(field, timeout: 30), "tapping the form field did not open the editor")
         return field
     }
 

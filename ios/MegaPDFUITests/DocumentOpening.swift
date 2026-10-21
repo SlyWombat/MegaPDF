@@ -61,11 +61,13 @@ enum DocumentOpening {
         var deadline = start.addingTimeInterval(grace)
         var shown = false
         while Date() < deadline && Date().timeIntervalSince(start) < cap {
-            if page.exists { shown = true; break }
+            // A snapshot rather than `exists`: run 39045592433 failed right here, on one
+            // snapshot the app took too long to answer, with time left on this very wait.
+            if PageInput.present(page) { shown = true; break }
             if label(app) != nil { deadline = Date().addingTimeInterval(grace) }
             Thread.sleep(forTimeInterval: 0.2)
         }
-        guard shown || page.exists else { return false }
+        guard shown || PageInput.present(page) else { return false }
         if app.launchArguments.contains(PageInput.launchArgument) {
             return PageInput.waitUntilIdle(app, timeout: max(cap - Date().timeIntervalSince(start), grace)) != nil
         }

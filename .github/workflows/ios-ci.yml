@@ -259,9 +259,9 @@ jobs:
       # **One simulator at a time (#681, #693).** Each UI lane runs with only its own
       # simulator booted: the iPad is shut down (its first boot is long done, above) while
       # the iPhone lane runs, and the iPhone while the iPad's does. Both used to be up for
-      # both lanes, on a three-core runner. `ready` also waits, for a condition and with a
-      # cap, for the machine to settle after the boot, and for xcodebuild's own device
-      # discovery to list the device -- the thing #693's runs failed on.
+      # both lanes, on a three-core runner. `ready` also waits for xcodebuild's own device
+      # discovery to list the device -- the thing #693's runs failed on -- and logs the load
+      # and the busiest processes by name.
       #
       # Booting is all this does. Installing the app and launching it once was tried as
       # well and is NOT here: measured on a hosted runner it cost ten minutes and the

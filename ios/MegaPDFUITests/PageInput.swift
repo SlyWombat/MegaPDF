@@ -103,7 +103,7 @@ enum PageInput {
             let deadline = Date().addingTimeInterval(arrival)
             var outcome = "nothing became of it in \(Int(arrival)) s"
             while Date() < deadline {
-                if expected.exists { return nil }
+                if present(expected) { return nil }
                 guard let now = probe(app) else {
                     // A sheet coming up takes the probe out of the tree, and so, now and then,
                     // does a snapshot that times out on a slow runner. Neither is an answer.
@@ -111,7 +111,7 @@ enum PageInput {
                     continue
                 }
                 if now.dispatched > before.dispatched {
-                    if expected.waitForExistence(timeout: effect) { return nil }
+                    if appears(expected, timeout: effect) { return nil }
                     return "the tap was dispatched (\(now)) and nothing appeared in \(Int(effect)) s"
                 }
                 if now.ignored > before.ignored {
@@ -156,6 +156,27 @@ enum PageInput {
 }
 
 extension PageInput {
+    /// Whether `element` is in the tree, by one snapshot that is allowed to fail.
+    ///
+    /// `exists` and `waitForExistence` record a test failure of their own when the app cannot
+    /// answer an accessibility snapshot in time — "Failed to get matching snapshots: Timed out
+    /// while evaluating UI query", five of the hosted failures in October, every one of them a
+    /// wait that still had time left. A snapshot that throws is "not yet" here, and the caller's
+    /// own deadline decides.
+    static func present(_ element: XCUIElement) -> Bool {
+        (try? element.snapshot()) != nil
+    }
+
+    /// Polls `present` until `timeout`.
+    static func appears(_ element: XCUIElement, timeout: TimeInterval) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        repeat {
+            if present(element) { return true }
+            Thread.sleep(forTimeInterval: 0.5)
+        } while Date() < deadline
+        return false
+    }
+
     /// Whether `element` has the keyboard's focus within `seconds`, which is the thing
     /// `typeText` actually checks. A keyboard on screen is not the same thing: run 39048968581
     /// had one up, focus elsewhere, and failed with "Neither element nor any descendant has
@@ -185,12 +206,12 @@ extension PageInput {
     /// so its presence is what "the menu is open" means here).
     static func openMoreMenu(in app: XCUIApplication, for row: XCUIElement, attempts: Int = 3) -> String? {
         let more = app.buttons["viewerMore"].firstMatch
-        guard more.waitForExistence(timeout: 30) else { return "there is no ⋯ menu" }
+        guard appears(more, timeout: 30) else { return "there is no ⋯ menu" }
         let open = app.buttons["viewerSaveCopy"].firstMatch
         for attempt in 1...attempts {
             more.tap()
-            if row.waitForExistence(timeout: 20) { return nil }
-            if open.exists { return "the ⋯ menu is open and has no \(row)" }
+            if appears(row, timeout: 20) { return nil }
+            if present(open) { return "the ⋯ menu is open and has no \(row)" }
             print("PAGE INPUT: attempt \(attempt): the ⋯ menu was not open 20 s after its tap")
         }
         return "the ⋯ menu did not open in \(attempts) taps"
@@ -201,10 +222,11 @@ extension PageInput {
     /// complaint — which surfaces later as a sheet that never appeared.
     static func waitEnabled(_ element: XCUIElement, timeout: TimeInterval = 90) -> Bool {
         let deadline = Date().addingTimeInterval(timeout)
-        while !element.isEnabled && Date() < deadline {
+        while Date() < deadline {
+            if (try? element.snapshot())?.isEnabled == true { return true }
             Thread.sleep(forTimeInterval: 0.5)
         }
-        return element.isEnabled
+        return false
     }
 }
 
@@ -223,21 +245,21 @@ enum ExportSheet {
     static func save(in app: XCUIApplication, appearTimeout: TimeInterval = 60,
                      saveTimeout: TimeInterval = 90) -> String? {
         let bar = app.navigationBars["FullDocumentManagerViewControllerNavigationBar"]
-        guard bar.waitForExistence(timeout: appearTimeout) else { return "the export sheet did not appear" }
+        guard PageInput.appears(bar, timeout: appearTimeout) else { return "the export sheet did not appear" }
         let save = bar.buttons["Save"]
         // The device's own storage in the Browse root's Locations: "On My iPhone" or "On My iPad".
         let local = app.cells.matching(NSPredicate(format: "identifier BEGINSWITH 'DOC.sidebar.item.On My'")).firstMatch
         let deadline = Date().addingTimeInterval(saveTimeout)
         var lastRootTap = Date.distantPast
         while Date() < deadline {
-            if save.exists, save.isEnabled {
+            if (try? save.snapshot())?.isEnabled == true {
                 save.tap()
                 // A name clash is asked after this; `completionAlert` answers it.
                 return nil
             }
             // On the root, and not already on the way into a folder (a Back button means a
             // folder has been pushed and is loading).
-            if !bar.buttons["BackButton"].exists, local.exists, local.isHittable,
+            if !PageInput.present(bar.buttons["BackButton"]), PageInput.present(local),
                Date().timeIntervalSince(lastRootTap) > 10 {
                 print("PAGE INPUT: the export sheet opened on its Browse root; opening \(local.label)")
                 local.tap()
@@ -256,9 +278,9 @@ enum ExportSheet {
         let deadline = Date().addingTimeInterval(timeout)
         let alert = app.alerts.firstMatch
         while Date() < deadline {
-            if alert.waitForExistence(timeout: 1) {
+            if PageInput.present(alert) {
                 let keepBoth = alert.buttons["Keep Both"]
-                if keepBoth.exists {
+                if PageInput.present(keepBoth) {
                     print("PAGE INPUT: the export sheet asked to replace; Keep Both")
                     keepBoth.tap()
                     continue
@@ -266,7 +288,8 @@ enum ExportSheet {
                 return alert
             }
             let keepBoth = app.buttons["Keep Both"].firstMatch
-            if keepBoth.exists { keepBoth.tap() }
+            if PageInput.present(keepBoth) { keepBoth.tap() }
+            Thread.sleep(forTimeInterval: 0.5)
         }
         return nil
     }

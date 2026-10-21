@@ -115,7 +115,7 @@ final class BodyTextEditUITests: XCTestCase {
 
     private func retype(_ text: String) {
         let field = bodyTextField
-        XCTAssertTrue(field.waitForExistence(timeout: 30), "tapping the line did not open the text editor")
+        XCTAssertTrue(PageInput.appears(field, timeout: 30), "tapping the line did not open the text editor")
         XCTAssertTrue(PageInput.focus(field),
                       "the text editor's field never took the keyboard's focus, so nothing could be typed")
         // One typing call rather than two, so focus is relied on once: the old line, deleted,
