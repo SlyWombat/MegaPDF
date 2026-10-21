@@ -747,8 +747,13 @@ jobs:
           Run-Check "security" 75
           # #576: the signed-save warning's removal tick, parity with Avalonia's desktops.
           # Needs a genuinely signed document rather than fixture.pdf -- see "Generate
-          # signature fixtures" above -- so it is the one check here with a fixture override.
+          # signature fixtures" above -- so it is one of the two checks here with a fixture override.
           Run-Check "signed-save-remove" 60 $signedFixture
+          # #710: selecting text across two columns and a page break, copying it with CR LF, a
+          # plain click still editing, and a no-copy document that selects but will not copy.
+          # Opens selection.pdf, with owner-only.pdf beside it -- both committed fixtures, which
+          # gen_test_fixtures.py copies into the fixtures directory.
+          Run-Check "select-copy" 60 "$env:RUNNER_TEMP/fixtures/selection.pdf"
           Run-Check "about" 45
 
           if ($failed.Count -gt 0) {

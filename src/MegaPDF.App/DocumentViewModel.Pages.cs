@@ -514,6 +514,7 @@ public partial class DocumentViewModel
         _pageWarnings.Renumber(shifts);
         // What was read of a scan follows its page, and a turned page is read again (#676).
         _scanSearcher?.Renumbered(shifts);
+        _selectableText?.Renumbered(); // #710: a selection's carets belong to the pages as they were
         foreach (var changed in changedPages)
             _scanSearcher?.PageChanged(changed);
 

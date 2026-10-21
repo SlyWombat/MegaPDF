@@ -307,6 +307,29 @@ public sealed partial class MainWindow : Window
     private void OnFindAccelerator(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args) =>
         args.Handled = ActiveDocumentView?.ShowFindBar() ?? false;
 
+    // --- Selected text (#710) ---
+
+    /// <summary>Whether a control that copies and selects its own text has focus: it keeps Ctrl+C and Ctrl+A.</summary>
+    private bool TextControlHasFocus() =>
+        Content?.XamlRoot is { } root
+        && FocusManager.GetFocusedElement(root) is TextBox or PasswordBox or RichEditBox or AutoSuggestBox
+            or TextBlock { IsTextSelectionEnabled: true } or RichTextBlock { IsTextSelectionEnabled: true };
+
+    private async void OnCopyTextAccelerator(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
+    {
+        if (TextControlHasFocus() || ActiveDocumentView is not { HasTextSelection: true } view)
+            return; // not handled: the key goes on to whatever else wants it
+        args.Handled = true;
+        await view.CopySelectedTextAsync();
+    }
+
+    private void OnSelectAllTextAccelerator(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
+    {
+        if (TextControlHasFocus() || ActiveDocumentView is not { } view)
+            return;
+        args.Handled = view.SelectAllText();
+    }
+
     private void OnFindClicked(object sender, RoutedEventArgs e) => ActiveDocumentView?.ShowFindBar();
 
     /// <summary>

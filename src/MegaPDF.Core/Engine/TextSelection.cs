@@ -186,4 +186,18 @@ public static class PdfTextSelection
         }
         return string.Join('\n', pieces);
     }
+
+    /// <summary>
+    /// <paramref name="text"/> with its line ends as a platform's clipboard wants them. The core
+    /// ends every line with <c>\n</c>; Windows expects CR LF (<c>"\r\n"</c>) on the clipboard, and
+    /// macOS and Linux LF. Any CR LF or lone CR already in the text is normalised first, so the
+    /// conversion never doubles one.
+    /// </summary>
+    public static string WithLineEnds(string text, string newline)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        ArgumentException.ThrowIfNullOrEmpty(newline);
+        var lf = text.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n');
+        return newline == "\n" ? lf : lf.Replace("\n", newline, StringComparison.Ordinal);
+    }
 }

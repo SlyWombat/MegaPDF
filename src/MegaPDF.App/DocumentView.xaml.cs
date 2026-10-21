@@ -227,6 +227,7 @@ public sealed partial class DocumentView : UserControl
         _unhook.Add(() => vm.PropertyChanged -= onVmChanged);
 
         InitializePageKeyboard();
+        InitializeTextSelection();
 
         // Keyboard interaction with the selected signature (SDD §3.3):
         // Delete removes, arrows nudge 1pt (Shift = 10pt), Esc deselects.
@@ -239,6 +240,13 @@ public sealed partial class DocumentView : UserControl
             {
                 args.Handled = true;
                 ViewModel.CancelPlacementModes();
+                return;
+            }
+
+            // Selected text (#710): Escape lets go of it, Shift+Left/Right move its end.
+            if (HandleTextSelectionKey(args.Key))
+            {
+                args.Handled = true;
                 return;
             }
 
@@ -289,14 +297,30 @@ public sealed partial class DocumentView : UserControl
         if (sender is not Grid pageGrid || pageGrid.DataContext is not PageView pageView)
             return;
 
+        var position = e.GetPosition(pageGrid);
+        var dipToPoint = 72.0 / 96 / ViewModel.ZoomFactor;
+        await HandlePageTapAsync(pageGrid, pageView, new PdfPoint(position.X * dipToPoint, position.Y * dipToPoint));
+    }
+
+    /// <summary>A click on the page, from the mouse or the self-test (#710).</summary>
+    private async Task HandlePageTapAsync(Grid pageGrid, PageView pageView, PdfPoint pagePoint)
+    {
+        // The release of a selection drag or a Shift+click is not a click (#710).
+        if (_textGestureSwallowsTap)
+        {
+            _textGestureSwallowsTap = false;
+            return;
+        }
+        // A plain click lets go of selected text, as anywhere else, and then does what it always did.
+        ViewModel.TextSelection.Clear();
+
         // A pointer takes over from the keyboard (#2): the ring would otherwise stay
         // on a region the person has moved away from.
         ViewModel.ClearPageFocus();
 
-        var position = e.GetPosition(pageGrid);
-        var dipToPoint = 72.0 / 96 / ViewModel.ZoomFactor;
-        await RoutePageActivationAsync(pageGrid, pageView,
-            new PdfPoint(position.X * dipToPoint, position.Y * dipToPoint));
+        // The double-click that may follow takes this click back (OnPageDoubleTappedForWord).
+        _lastPageTap = (Environment.TickCount64, pageView.Index);
+        await RoutePageActivationAsync(pageGrid, pageView, pagePoint, ++_pageTapGeneration);
     }
 
     /// <summary>
@@ -306,8 +330,11 @@ public sealed partial class DocumentView : UserControl
     /// A tap comes here, and so do Enter and Space on a keyboard-focused region, aimed
     /// at its centre (#2) — one routing, so the keyboard cannot diverge from the mouse.
     /// </summary>
-    private async Task RoutePageActivationAsync(Grid pageGrid, PageView pageView, PdfPoint pagePoint)
+    private async Task RoutePageActivationAsync(Grid pageGrid, PageView pageView, PdfPoint pagePoint, int? tapGeneration = null)
     {
+        // A double-click selecting a word took this click back while it was on its way (#710).
+        bool TakenBack() => tapGeneration is { } generation && generation != _pageTapGeneration;
+
         // Reading mode is looking, not editing (#504): the click is swallowed here
         // rather than rerouted, so nothing on the page is armed, opened or toggled.
         // First, before the busy and placement branches, because it outranks both —
@@ -390,6 +417,8 @@ public sealed partial class DocumentView : UserControl
         // click and Enter on a region died silently right here (#401).
         var viewModel = ViewModel;
         var hit = await Task.Run(() => viewModel.HitTestPage(pageView.Index, pagePoint));
+        if (TakenBack())
+            return;
         // #131: on a restricted document a click on something the owner does not allow
         // changing opens no editor and selects nothing; the notice says why.
         if (!ViewModel.AllowsInteraction(hit.Kind))
@@ -453,6 +482,8 @@ public sealed partial class DocumentView : UserControl
                     await ViewModel.ShowErrorAsync(Strings.CannotEditTextTitle, UserFacing.Describe(ex));
                     break;
                 }
+                if (TakenBack())
+                    break;
                 if (refusal is not null)
                 {
                     await ViewModel.ShowLayoutRefusalAsync(refusal);
@@ -690,6 +721,7 @@ public sealed partial class DocumentView : UserControl
         }
         pageGrid.Children.Add(editor);
         _activeEditor = editor;
+        _activeEditorInitialText = initialText;
         _activeEditorCommit = CommitAsync;
         _activeEditorKeyAction = KeyAction;
         _activeFormField = formField;
@@ -1246,6 +1278,18 @@ public sealed partial class DocumentView : UserControl
         // none, so the flag used to wait and swallow the next real click — the first click
         // on a line, a box or the signature line after any whiteout did nothing.
         _suppressNextTap = false;
+        _textGestureSwallowsTap = false;
+
+        // Text selection (#710): a press on the page's text, or on blank paper, may become a
+        // selection if it moves past the drag threshold. It takes nothing from an armed tool or
+        // a selected object (see TryBeginTextPress), and works in reading mode too — selecting
+        // and copying are reading, not editing.
+        if (sender is PageCanvas pressed && TryBeginTextPress(pressed, Sample(e, pressed), IsShiftDown(), out var claimed))
+        {
+            if (claimed)
+                e.Handled = true;
+            return;
+        }
 
         // Belt and braces for reading mode (#504): entering it disarms both of these,
         // so this branch should already be unreachable — but a band drawn on the page
@@ -1288,6 +1332,11 @@ public sealed partial class DocumentView : UserControl
 
     private async void OnPagePointerReleased(object sender, PointerRoutedEventArgs e)
     {
+        if (sender is UIElement released && EndTextPress(Sample(e, released)))
+        {
+            e.Handled = true; // the end of a selection drag (#710), not a click
+            return;
+        }
         if (_whiteoutPreview is null || sender is not PageCanvas canvas || canvas != _whiteoutCanvas)
             return;
         var end = e.GetCurrentPoint(canvas).Position;
@@ -1398,7 +1447,10 @@ public sealed partial class DocumentView : UserControl
     private void OnPageCanvasLoaded(object sender, RoutedEventArgs e)
     {
         if (sender is PageCanvas canvas && canvas.DataContext is PageView pageView)
+        {
             RefreshRedactionOverlay(canvas, pageView);
+            PrepareCanvasForText(canvas, pageView); // and the text selection over it (#710)
+        }
     }
 
     private void OnPagePointerMoved(object sender, PointerRoutedEventArgs e)
@@ -1414,6 +1466,13 @@ public sealed partial class DocumentView : UserControl
                 Math.Min(_whiteoutStart.X, current.X), Math.Min(_whiteoutStart.Y, current.Y), 0, 0);
             _whiteoutPreview.Width = Math.Abs(current.X - _whiteoutStart.X);
             _whiteoutPreview.Height = Math.Abs(current.Y - _whiteoutStart.Y);
+            e.Handled = true;
+            return;
+        }
+
+        // A selection drag in progress (#710).
+        if (TrackTextPress(canvas, Sample(e, canvas)))
+        {
             e.Handled = true;
             return;
         }

@@ -2073,6 +2073,17 @@ internal static class Program
             failures++;
         }
 
+        Console.WriteLine("selecting text and copying it (#710):");
+        try
+        {
+            CheckTextSelection(dir, state, Check);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"::error::text selection: {ex.GetType().Name}: {ex.Message}");
+            failures++;
+        }
+
         Console.WriteLine("switching tabs mid-gesture (#348):");
         try
         {
@@ -6215,6 +6226,247 @@ internal static class Program
     /// and Space ticks it, Tab crosses to page two, and Tab off the last field leaves the form. The
     /// values are read back from the saved file. Before the fix the editor claimed no Tab at all.
     /// </summary>
+    /// <summary>
+    /// Selecting a document's text and copying it (#710), in a real MainWindow driven by real
+    /// headless pointer and key input over the core's two-column fixture selection.pdf and the
+    /// no-copy owner-only.pdf (both copied into the fixtures folder by tools/gen_test_fixtures.py).
+    ///
+    /// A drag across the columns selects in reading order and copies with LF line ends; a click
+    /// that does not travel still opens the editor; Shift+Right and Escape act on the selection;
+    /// a double-click selects a word and takes back the editor its first click opened; a drag
+    /// runs across a page break; Select All takes the whole document; an armed tool keeps its
+    /// drag; an edit to the page drops the selection on it; reading mode selects too; and a
+    /// document that asked not to be copied from selects, but greys Copy and says why.
+    ///
+    /// The double-click's second press is the one thing not sent as real input: the headless
+    /// platform does not raise a click count of two reliably (the same limit
+    /// BeginEditingSelectedTextBoxForTest documents), so it goes through the decision the real
+    /// one takes, DoubleClickWordForTest, straight after a real first click.
+    /// </summary>
+    private static void CheckTextSelection(string dir, string state, Action<string, bool> check)
+    {
+        EnsureHeadlessPlatform();
+        static void Pump() => MenuProbe.Pump();
+        static void PumpUntilRendered(Func<bool> done, TimeSpan timeout)
+        {
+            var deadline = DateTime.UtcNow + timeout;
+            while (!done() && DateTime.UtcNow < deadline)
+            {
+                Pump();
+                Thread.Sleep(5);
+            }
+        }
+        static T Wait<T>(Task<T> task)
+        {
+            PumpUntilRendered(() => task.IsCompleted, TimeSpan.FromSeconds(10));
+            return task.IsCompleted ? task.GetAwaiter().GetResult() : default!;
+        }
+
+        var source = Path.Combine(dir, "selection.pdf");
+        var noCopySource = Path.Combine(dir, "owner-only.pdf");
+        if (!File.Exists(source) || !File.Exists(noCopySource))
+        {
+            check("selection.pdf and owner-only.pdf are beside fixture.pdf (tools/gen_test_fixtures.py copies them)", false);
+            return;
+        }
+
+        using var shell = new ShellViewModel(state);
+        var window = new Views.MainWindow { DataContext = shell, Width = 1280, Height = 900 };
+        window.SkipRecoveryOffer = true;
+        window.Show();
+        Pump();
+        var scratch = Path.Combine(Path.GetTempPath(), $"megapdf-selftest-selection-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(scratch);
+        var work = Path.Combine(scratch, "selection.pdf");
+        var noCopy = Path.Combine(scratch, "owner-only.pdf");
+        File.Copy(source, work);
+        File.Copy(noCopySource, noCopy);
+        try
+        {
+            window.OpenFromSystem(work);
+            PumpUntil(() => shell.Documents.Count == 1 && shell.Documents.All(d => d.IsDocumentOpen), TimeSpan.FromSeconds(5));
+            var vm = shell.Active!;
+            // Half size, so the foot of page 1 and the head of page 2 are both on screen for the
+            // drag across the break.
+            vm.SetZoomCommand.Execute(0.5);
+            PumpUntil(() => vm.IsIdle, TimeSpan.FromSeconds(5));
+            Pump();
+            if (vm.SelectableText is not { } cache)
+            {
+                check("the open document has its text for selecting", false);
+                return;
+            }
+            PumpUntilRendered(() => cache.Peek(0) is not null && vm.Pages[0].Regions.Count > 0, TimeSpan.FromSeconds(5));
+            check("page 1's text was read ahead as the page came on screen", cache.Peek(0) is not null);
+
+            var page = cache.Get(0);
+            var lines = page.GetRects(0, page.Length);
+            check("the fixture's first page has its title and ten column lines", lines.Count == 11);
+            if (lines.Count != 11)
+                return;
+            static PdfPoint Mid(PdfRect r) => new(r.X + r.Width / 2, r.Y + r.Height / 2);
+            Point At(int pageIndex, PdfPoint p) => window.WindowPointForTest(pageIndex, p) ?? throw new InvalidOperationException($"page {pageIndex + 1} is not on screen");
+            void Drag(int fromPage, PdfPoint from, int toPage, PdfPoint to, RawInputModifiers mods = RawInputModifiers.None)
+            {
+                var a = At(fromPage, from);
+                var b = At(toPage, to);
+                HeadlessWindowExtensions.MouseDown(window, a, MouseButton.Left, mods);
+                Pump();
+                for (var i = 1; i <= 10; i++)
+                {
+                    HeadlessWindowExtensions.MouseMove(window, new Point(a.X + (b.X - a.X) * i / 10, a.Y + (b.Y - a.Y) * i / 10), mods);
+                    Pump();
+                }
+                HeadlessWindowExtensions.MouseUp(window, b, MouseButton.Left, mods);
+                Pump();
+                PumpUntil(() => vm.IsIdle, TimeSpan.FromSeconds(5));
+            }
+            void Click(int pageIndex, PdfPoint p)
+            {
+                var a = At(pageIndex, p);
+                HeadlessWindowExtensions.MouseDown(window, a, MouseButton.Left);
+                HeadlessWindowExtensions.MouseUp(window, a, MouseButton.Left);
+                Pump();
+            }
+            void Press(Key key, PhysicalKey physical, RawInputModifiers mods = RawInputModifiers.None)
+            {
+                HeadlessWindowExtensions.KeyPress(window, key, mods, physical, null);
+                HeadlessWindowExtensions.KeyRelease(window, key, mods, physical, null);
+                Pump();
+            }
+            string? Copied()
+            {
+                if (!Wait(window.CopySelectedTextAsync()))
+                    return null;
+                return window.Clipboard is { } clipboard ? Wait(clipboard.GetTextAsync()) : null;
+            }
+            static string Shown(string? s) => s is null ? "(none)" : s.Replace("\r", "\\r").Replace("\n", "\\n");
+
+            // --- a drag across the two columns ---
+            var from = new PdfPoint(lines[2].X + 0.5, Mid(lines[2]).Y);   // the start of "Left two bravo and more"
+            var to = new PdfPoint(lines[7].Right + 30, Mid(lines[7]).Y);  // past the end of "Right two hotel"
+            Drag(0, from, 0, to);
+            check("a press on a line that travels selects text", vm.HasTextSelection);
+            check("  and opens no editor", !window.HasOpenInlineEditor);
+            check("  it is drawn: one highlight per line selected", vm.Pages[0].TextSelectionRects.Count == 6);
+            check("  the Edit menu's Copy is on", vm.CanCopySelection);
+            check("  and so is the context menu's, with no reason shown", window.TextMenuStateForTest() == (true, false));
+            var copied = Copied();
+            Console.WriteLine($"  clipboard: {Shown(copied)}");
+            check("the clipboard runs down the left column and then the right, with LF line ends",
+                  copied == "Left two bravo and more\nLeft three charlie\nLeft four delta\nLeft five echo\nRight one golf\nRight two hotel");
+
+            // --- keys ---
+            Press(Key.Right, PhysicalKey.ArrowRight, RawInputModifiers.Shift);
+            var stepped = Copied();
+            check("Shift+Right takes the next character, over the line end",
+                  stepped == "Left two bravo and more\nLeft three charlie\nLeft four delta\nLeft five echo\nRight one golf\nRight two hotel\nR");
+            Press(Key.Escape, PhysicalKey.Escape);
+            check("Escape lets go of the selection", !vm.HasTextSelection && vm.Pages[0].TextSelectionRects.Count == 0);
+
+            // --- a click that does not travel is a click: the editor opens, as before ---
+            Click(0, Mid(lines[3]));
+            PumpUntilRendered(() => window.HasOpenInlineEditor, TimeSpan.FromSeconds(5));
+            check("a plain click on a line still opens the editor on it", window.HasOpenInlineEditor);
+            check("  and selects nothing", !vm.HasTextSelection);
+            Press(Key.Escape, PhysicalKey.Escape);
+            PumpUntilRendered(() => !window.HasOpenInlineEditor, TimeSpan.FromSeconds(3));
+            check("  Escape closes it, nothing changed", !window.HasOpenInlineEditor && !vm.IsDirty);
+
+            // --- a double-click selects a word and takes back its first click's editor ---
+            var charlie = new PdfPoint(lines[3].Right - 2, Mid(lines[3]).Y);
+            Click(0, charlie);
+            PumpUntilRendered(() => window.HasOpenInlineEditor, TimeSpan.FromSeconds(3));
+            check("a double-click on a word selects it", window.DoubleClickWordForTest(0, charlie) && vm.HasTextSelection);
+            check("  and the editor its first click opened is gone, nothing changed", !window.HasOpenInlineEditor && !vm.IsDirty);
+            check("  the clipboard gets the word", Copied() == "charlie");
+            Press(Key.Escape, PhysicalKey.Escape);
+
+            // --- across the page break, and the whole document ---
+            PumpUntilRendered(() => window.WindowPointForTest(1, new PdfPoint(72, 72)) is not null && cache.Peek(1) is not null, TimeSpan.FromSeconds(5));
+            var second = cache.Get(1);
+            var the = second.GetRects(0, 3)[0];
+            Drag(0, new PdfPoint(lines[10].X + 0.2, Mid(lines[10]).Y), 1, new PdfPoint(the.Right + 0.3, Mid(the).Y));
+            var crossed = Copied();
+            Console.WriteLine($"  clipboard: {Shown(crossed)}");
+            check("a drag from the foot of page 1 onto page 2 copies across the break as one line break",
+                  crossed is not null && crossed.StartsWith("Right five kilo\nThe", StringComparison.Ordinal));
+            check("  and both pages show their share", vm.Pages[0].TextSelectionRects.Count == 1 && vm.Pages[1].TextSelectionRects.Count >= 1);
+
+            window.SelectAllCommand();
+            var all = Copied() ?? "";
+            check("Select All copies the whole document, ligatures expanded and line-end hyphens kept",
+                  all.StartsWith("Selection Columns\nLeft one alpha\n", StringComparison.Ordinal)
+                  && all.Contains("Right five kilo\nThe final flow test\nWe test hyphen-\nation here.", StringComparison.Ordinal)
+                  && all.EndsWith("known word.", StringComparison.Ordinal));
+
+            // --- an armed tool keeps its drag, and the edit it makes drops the selection on its page ---
+            vm.ToggleWhiteoutCommand.Execute(null);
+            Pump();
+            var a = At(0, new PdfPoint(400, 600));
+            HeadlessWindowExtensions.MouseDown(window, a, MouseButton.Left);
+            Pump();
+            check("with Cover armed, a press is the tool's band, not a selection", window.HasBandInProgress && !window.HasTextPressForTest);
+            HeadlessWindowExtensions.MouseMove(window, new Point(a.X + 30, a.Y + 20));
+            Pump();
+            HeadlessWindowExtensions.MouseUp(window, new Point(a.X + 30, a.Y + 20), MouseButton.Left);
+            Pump();
+            PumpUntil(() => vm.IsIdle, TimeSpan.FromSeconds(5));
+            check("  and its release covered, as before", vm.IsDirty);
+            PumpUntilRendered(() => !vm.HasTextSelection, TimeSpan.FromSeconds(3));
+            check("an edit to the page let go of the selection on it", !vm.HasTextSelection);
+            while (vm.CanUndo)
+                vm.UndoCommand.Execute(null);
+            PumpUntil(() => vm.IsIdle, TimeSpan.FromSeconds(5));
+            if (vm.IsWhiteoutMode)
+                vm.ToggleWhiteoutCommand.Execute(null);
+            Pump();
+
+            // --- reading mode: selecting is reading ---
+            window.ToggleReadingMode();
+            Pump();
+            PumpUntilRendered(() => window.WindowPointForTest(0, from) is not null, TimeSpan.FromSeconds(3));
+            Drag(0, from, 0, to);
+            check("in reading mode a drag still selects", vm.HasTextSelection);
+            Click(0, Mid(lines[3]));
+            PumpFor(TimeSpan.FromMilliseconds(200));
+            check("  and a click there opens no editor, and lets go", !window.HasOpenInlineEditor && !vm.HasTextSelection);
+            window.ToggleReadingMode();
+            Pump();
+
+            // --- a document that asked not to be copied from ---
+            window.OpenFromSystem(noCopy);
+            PumpUntil(() => shell.Documents.Count == 2 && shell.Active is { IsDocumentOpen: true } next && !ReferenceEquals(next, vm), TimeSpan.FromSeconds(5));
+            var restricted = shell.Active!;
+            restricted.SetZoomCommand.Execute(1.0);
+            PumpUntil(() => restricted.IsIdle, TimeSpan.FromSeconds(5));
+            PumpUntilRendered(() => restricted.SelectableText?.Peek(0) is not null && window.WindowPointForTest(0, new PdfPoint(72, 72)) is not null,
+                              TimeSpan.FromSeconds(5));
+            if (restricted.SelectableText is not { } restrictedText)
+            {
+                check("the no-copy document has its text for selecting", false);
+                return;
+            }
+            var firstLine = restrictedText.Get(0).GetRects(0, restrictedText.Get(0).Length).First();
+            restricted.Status = "";
+            var before = window.Clipboard is { } cb ? Wait(cb.GetTextAsync()) : null;
+            Drag(0, new PdfPoint(firstLine.X + 0.2, Mid(firstLine).Y), 0, new PdfPoint(firstLine.Right, Mid(firstLine).Y));
+            check("the no-copy document's text still selects", restricted.HasTextSelection);
+            check("  and the status line says why Copy is off", restricted.Status == Strings.CopyWithheld);
+            check("  the Edit menu's Copy is greyed", !restricted.CanCopySelection);
+            check("  the context menu's Copy is greyed, and says why", window.TextMenuStateForTest() == (false, true));
+            check("  Copy copies nothing", !Wait(window.CopySelectedTextAsync()));
+            check("  and the clipboard is as it was",
+                  (window.Clipboard is { } after ? Wait(after.GetTextAsync()) : null) == before);
+        }
+        finally
+        {
+            window.Close();
+            Pump();
+            try { Directory.Delete(scratch, recursive: true); } catch { /* best-effort scratch cleanup */ }
+        }
+    }
+
     private static void CheckFormFlow(string dir, string state, Action<string, bool> check)
     {
         EnsureHeadlessPlatform();

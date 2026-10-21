@@ -351,6 +351,9 @@ established French for the cryptographic sense.
 | Settings… | Réglages… | #512, the iOS ⋯ menu row that opens the settings sheet. *Settings* itself is *Réglages* on iOS — Apple's own idiom — not *Paramètres*, which is Windows and Android's word (see the Settings exception rows above); both were briefly swapped in the shipped strings (Fable review, 2026-10-01) |
 | Reading | Lecture | #512, the section of reading preferences in the iOS settings sheet. The noun on its own, not *Mode lecture*: the section holds page colours, which apply whether or not reading mode is on |
 | Hide the tools and read the page (Ctrl+H) | Masquer les outils et lire la page (Ctrl+H) | #504, the Windows-only tooltip on the Reading mode command. "The tools", not "the toolbar": on Windows the command also sits in the "…" overflow, where the row itself is not what goes |
+| Copy (selected text) | Copier | #710, the desktops' page context menu and the Mac's Edit menu. The verb, as every OS's own Copy says it; not *Copie*, which is the noun in *Enregistrer une copie* |
+| Select all / Select All | Tout sélectionner | #710, the desktops' page context menu and the Mac's Edit menu; the same words the phones' page tools already use (`pages_select_all`). Title case in the Mac's English only, its menu idiom |
+| The author of this document asked that nothing be copied out of it. (Copy unavailable) | L'auteur de ce document a demandé que rien n'en soit copié. | #710 reuses #558's extraction-class row word for word as the reason Copy is greyed on a document without the copy permission: selecting still works, only Copy is off. A request, never *interdit* |
 
 ## Français (France)
 

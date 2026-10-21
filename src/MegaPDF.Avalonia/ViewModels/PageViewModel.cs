@@ -154,7 +154,35 @@ public sealed partial class PageViewModel : ObservableObject, IDisposable
         // the words it covers rather than over them (#173). Found in a real window; the
         // headless checks never zoom.
         RebuildRedactionMarks();
+        RebuildTextSelection(); // and so is the text selection (#710)
         PlaceBusy();
+    }
+
+    // --- Selected text (#710) ---
+
+    /// <summary>The selected text's highlight on this page, one rectangle per line, in device-independent pixels.</summary>
+    public ObservableCollection<SelectionRect> TextSelectionRects { get; } = [];
+
+    private IReadOnlyList<PdfRect> _textSelection = [];
+
+    /// <summary>This page's share of the selection, in page points; empty for none.</summary>
+    internal void SetTextSelection(IReadOnlyList<PdfRect> rects)
+    {
+        if (rects.Count == 0 && _textSelection.Count == 0)
+            return;
+        _textSelection = rects;
+        RebuildTextSelection();
+    }
+
+    /// <summary>What is highlighted here now, in page points, for the self-test.</summary>
+    internal IReadOnlyList<PdfRect> TextSelectionForTest => _textSelection;
+
+    private void RebuildTextSelection()
+    {
+        TextSelectionRects.Clear();
+        var scale = PageBitmap.PointsToPixels * Zoom;
+        foreach (var r in _textSelection)
+            TextSelectionRects.Add(new SelectionRect(r.X * scale, r.Y * scale, Math.Max(1, r.Width * scale), Math.Max(1, r.Height * scale)));
     }
 
     // --- Page-level busy work (#145): the #139 check, the text-edit check, applying a change ---
@@ -648,6 +676,12 @@ public sealed partial class PageViewModel : ObservableObject, IDisposable
 public sealed record RedactionMarkView(int MarkId, double X, double Y, double Width, double Height, bool IsSelected)
 {
     /// <summary>Positioned as a margin, for the reason <see cref="Highlight.Margin"/> gives.</summary>
+    public global::Avalonia.Thickness Margin => new(X, Y, 0, 0);
+}
+
+/// <summary>One line of the selected text's highlight (#710), placed the way <see cref="Highlight"/> is.</summary>
+public sealed record SelectionRect(double X, double Y, double Width, double Height)
+{
     public global::Avalonia.Thickness Margin => new(X, Y, 0, 0);
 }
 

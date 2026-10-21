@@ -597,23 +597,36 @@ id = "select-copy"
 title = "Select text and copy it"
 area = "Viewing"
 [feature.windows]
-presence = "absent"
-coverage = "n/a"
-absence = "gap"
-issue = 710
-note = "the core (contract 11) and the shared .NET binding are in, tested by core_tests.cpp's test_selection_* and TextSelectionTests.cs; the press-and-drag UI and its self-test state are not yet built."
+presence = "present"
+entry = "src/MegaPDF.App/DocumentView.xaml.cs::OnPagePointerPressed"
+coverage = "ui"
+tests = [
+  ".github/workflows/ci.yml::Run-Check \"select-copy\"",
+  "tests/MegaPDF.Core.Tests/TextSelectionTests.cs::TextSelectionTests",
+  "core/tests/core_tests.cpp::test_selection_columns",
+  "core/tests/core_tests.cpp::test_selection_handles_and_permissions",
+]
+note = "#710: press and drag selects, a click that does not travel still edits; double-click selects a word (taking back the editor its first click opened), Shift+click and Shift+Left/Right extend, Ctrl+A selects the document, Ctrl+C and the page's context menu copy with CR LF line ends, Escape lets go. `select-copy` opens selection.pdf and feeds synthetic pointer readings to the page's real press, move and release handlers (WinUI cannot synthesise a pointer), so the threshold, hit checks, page walk and tap swallowing are the real ones; it reads the real clipboard back, checks reading order across two columns and a page break, a plain click still opening the editor, armed tools keeping their drags, an edit dropping the selection, and owner-only.pdf selecting but refusing Copy with the reason shown. The key and menu routes themselves (accelerators, the flyout opening) are not driven. TextSelectionTests.cs holds the shared cache, selection and line-end rules both desktops use."
 [feature.macos]
-presence = "absent"
-coverage = "n/a"
-absence = "gap"
-issue = 710
-note = "as Windows: MegaPDF.Core's PdfSelectableText and PdfTextSelection are ready, the Avalonia UI and its headless check are not."
+presence = "present"
+entry = "src/MegaPDF.Avalonia/Views/MainWindow.axaml.cs::OnPagePointerPressed"
+coverage = "ui"
+tests = [
+  "src/MegaPDF.Avalonia/Program.cs::CheckTextSelection",
+  "tests/MegaPDF.Core.Tests/TextSelectionTests.cs::TextSelectionTests",
+  "core/tests/core_tests.cpp::test_selection_columns",
+]
+note = "#710: the same gestures in the Mac idiom: Edit > Copy and Select All (Cmd+C, Cmd+A), Copy greyed on a no-copy document with the reason in the status line and the context menu; LF line ends. The press now opens the line editor on release rather than on press, because a press cannot yet know it is a click. CheckTextSelection drives a real MainWindow with real headless mouse and key input over selection.pdf and owner-only.pdf: a drag across the columns, Shift+Right, Escape, a click that still edits, a drag across the page break, Select All, Cover keeping its drag, an edit dropping the selection, reading mode, and the no-copy document. The double-click's second press goes through DoubleClickWordForTest, since headless input gives no reliable click count of two."
 [feature.linux]
-presence = "absent"
-coverage = "n/a"
-absence = "gap"
-issue = 710
-note = "same as macOS."
+presence = "present"
+entry = "src/MegaPDF.Avalonia/Views/MainWindow.axaml.cs::OnPagePointerPressed"
+coverage = "ui"
+tests = [
+  "src/MegaPDF.Avalonia/Program.cs::CheckTextSelection",
+  "tests/MegaPDF.Core.Tests/TextSelectionTests.cs::TextSelectionTests",
+  "core/tests/core_tests.cpp::test_selection_columns",
+]
+note = "same as macOS, with Ctrl+C and Ctrl+A bound on the window (X11 hosts no menu bar)."
 [feature.ios]
 presence = "absent"
 coverage = "n/a"
@@ -2465,10 +2478,6 @@ note = "CI assembles a debug APK and tests it; the release AAB is only verified 
 # =============================================================================
 # Test artefacts deliberately not on the map.
 # =============================================================================
-
-[[exempt]]
-ref = "tests/MegaPDF.Core.Tests/TextSelectionTests.cs"
-why = "#710's binding tests, landed ahead of any platform's UI: every select-copy cell is still absent, and an absent cell cannot cite a test. The first desktop cell to turn present cites this file and removes this exemption."
 
 [[exempt]]
 ref = "ios/MegaPDFUITests/DocumentOpening.swift"
