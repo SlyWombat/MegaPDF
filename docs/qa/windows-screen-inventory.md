@@ -82,6 +82,7 @@ Check every surface in en, fr-CA and fr-FR, light and dark, at effective widths 
   
   M
 - [ ] **Page rewrite warning** before an edit that rewrites the page (`PageRewriteWarningTitle`, #139). M
+- [ ] **Your changes can't be undone after this** — flatten or password wording (#633). Save (default) or Continue / Cancel; reached by a save with "Make marks & signatures permanent when saving" on and an edit, or the Password command with an edit. R `undo-loss`
 - [ ] **Signature dialogs:** Type signature, Draw signature, Rename signature, Delete signature "name"? M
 - [ ] **Third-party notices** (scrolling text, or the notices-load-failed message). M
 - [ ] **Messages** (`ShowErrorAsync`, with OK):

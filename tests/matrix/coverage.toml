@@ -1913,7 +1913,9 @@ coverage = "ui"
 tests = [
   "tests/MegaPDF.Core.Tests/UndoStackTests.cs::Undo",
   ".github/workflows/ci.yml::Run-Check \"whiteout-text\"",
+  ".github/workflows/ci.yml::Run-Check \"undo-loss\"",
 ]
+note = "#633: a save that flattens, or a password change, asks first when there is something to lose - Cancel keeps it; asked once per document for flatten."
 [feature.macos]
 presence = "present"
 entry = "src/MegaPDF.Avalonia/Views/MainWindow.MenuBar.cs::Strings.Undo"
@@ -1921,7 +1923,9 @@ coverage = "ui"
 tests = [
   "tests/MegaPDF.Core.Tests/UndoStackTests.cs::Undo",
   "src/MegaPDF.Avalonia/Program.cs::CheckPageTools",
+  "src/MegaPDF.Avalonia/Program.cs::CheckUndoLossQuestion",
 ]
+note = "#633: a save that flattens, or a password change, asks first when there is something to lose - Cancel keeps it; asked once per document for flatten."
 [feature.linux]
 presence = "present"
 entry = "src/MegaPDF.Avalonia/Views/MainWindow.MenuBar.cs::Strings.Undo"
@@ -1929,7 +1933,9 @@ coverage = "ui"
 tests = [
   "tests/MegaPDF.Core.Tests/UndoStackTests.cs::Undo",
   "src/MegaPDF.Avalonia/Program.cs::CheckPageTools",
+  "src/MegaPDF.Avalonia/Program.cs::CheckUndoLossQuestion",
 ]
+note = "#633: a save that flattens, or a password change, asks first when there is something to lose - Cancel keeps it; asked once per document for flatten."
 [feature.ios]
 presence = "present"
 entry = "ios/MegaPDF/ViewerView.swift::Label(\"Undo\""

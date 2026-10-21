@@ -277,6 +277,12 @@ internal static partial class Screenshot
             case "select-copy":
                 return await CheckTextSelectionAsync(window);
 
+            // #633: the question before a save or a password change clears the undo history,
+            // Cancel keeping it, once per document, never when flatten is off. Needs a
+            // document; the exit code is the test.
+            case "undo-loss":
+                return await CheckUndoLossAsync(window);
+
             default:
                 Console.Error.WriteLine($"unknown --screenshot-state '{state}'");
                 return false;

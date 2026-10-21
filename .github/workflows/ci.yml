@@ -750,6 +750,10 @@ jobs:
           Run-Check "sign" 60
           Run-Check "redact" 60
           Run-Check "save" 60
+          # #633: the question before flatten-on-save or a password change clears the undo
+          # history -- the real dialog cancelled (history kept), Save through the seam, once per
+          # document, never with flatten off. Restores the flatten setting it changes.
+          Run-Check "undo-loss" 60
           # Opens a real ContentDialog and reads it back through DialogGate.Current, then
           # drives the save-with-a-password write path directly and reopens the result --
           # give it a little more room than the others.
