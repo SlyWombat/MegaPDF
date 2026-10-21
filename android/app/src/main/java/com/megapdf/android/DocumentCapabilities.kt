@@ -64,6 +64,12 @@ data class DocumentCapabilities(
      * wording differs, not because either changes what is allowed.
      */
     val isCertificationSigned: Boolean = false,
+    /**
+     * Copying the document's text to the clipboard (#710): the copy permission, the same bit
+     * [canExtractPages] reads and the one contract 11 names (`MEGAPDF_PERMIT_COPY`). Selecting is
+     * not gated: a document that forbids copying still selects, and Copy says why it will not.
+     */
+    val canCopyText: Boolean = true,
 ) {
     /** Whether this open may apply [operation]. An edit this list does not know needs full access. */
     fun allows(operation: PdfEditOperation): Boolean = when (operation) {
@@ -153,6 +159,7 @@ data class DocumentCapabilities(
                 isDynamicXfa = flags.isDynamicXfa,
                 isSigned = flags.isSigned,
                 isCertificationSigned = flags.isCertificationSigned,
+                canCopyText = may(PdfPermissions.COPY),
             )
         }
 

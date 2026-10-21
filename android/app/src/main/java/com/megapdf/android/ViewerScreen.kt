@@ -186,6 +186,7 @@ fun ViewerScreen(
     pendingTextTap: PendingTextTap?,
     pendingBodyEdit: PendingBodyEdit? = null,
     pendingFormText: PendingFormText? = null,
+    textSelectionHost: TextSelectionHost = TextSelectionHost(),
     notice: String? = null,
     searchQuery: String,
     searchHits: List<SearchHit>,
@@ -575,7 +576,9 @@ fun ViewerScreen(
                     LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
                     OutlinedTextField(
                         value = typed,
-                        onValueChange = { typed = it },
+                        onValueChange = {
+                            typed = if (pendingFormText.maxLength > 0) it.take(pendingFormText.maxLength) else it
+                        },
                         modifier = Modifier.fillMaxWidth().focusRequester(focus),
                         singleLine = !pendingFormText.multiline,
                         maxLines = if (pendingFormText.multiline) 6 else 1,
@@ -1463,7 +1466,7 @@ fun ViewerScreen(
                         // readingMode is a key, not just a capture: this block is built once
                         // per key set, and a plain capture would hold whatever the mode was
                         // when the page was first laid out.
-                        .pointerInput(index, readingMode) {
+                        .pointerInput(index, readingMode, textSelectionHost.selection != null) {
                             detectTapGestures(
                                 onTap = { offset ->
                                     // In reading mode the page's own dispatch returns here
@@ -1472,6 +1475,12 @@ fun ViewerScreen(
                                     // and armed tools have been disarmed on the way in
                                     // besides. What the tap does instead is the one thing
                                     // reading mode has a tap for: show or hide the bar.
+                                    // A tap on the page with text selected only lets the selection go,
+                                    // as in any text view: it does not also edit what is under it (#710).
+                                    if (textSelectionHost.selection != null) {
+                                        textSelectionHost.onClear()
+                                        return@detectTapGestures
+                                    }
                                     if (readingMode) {
                                         if (barVisible) barVisible = false else showReadingBar()
                                         return@detectTapGestures
@@ -1483,6 +1492,16 @@ fun ViewerScreen(
                                     )
                                 },
                                 onDoubleTap = { zoom = if (zoom < 1.5f) 2f else 1f },
+                                // Long-press was unused on the page before #710, so it is free for
+                                // the platform's own gesture to select a word. Reading mode is a
+                                // tint of the same page, so it selects there too.
+                                onLongPress = { offset ->
+                                    textSelectionHost.onLongPress(
+                                        index,
+                                        offset.x / this.size.width,
+                                        offset.y / this.size.height,
+                                    )
+                                },
                             )
                         }
                     androidx.compose.foundation.layout.Box(pageModifier) {
@@ -1531,6 +1550,20 @@ fun ViewerScreen(
                                 onRemove = { onRemoveRedactionMark(index, selectedRedactionMark.markId) },
                                 enabled = !editingBlocked,
                             )
+                        }
+                        val selection = textSelectionHost.selection
+                        if (selection != null && selection.pageIndex == index) {
+                            val selectable = textSelectionHost.selectableFor(index)
+                            if (selectable != null) {
+                                TextSelectionOverlay(
+                                    selection = selection,
+                                    selectable = selectable,
+                                    pageSize = size,
+                                    canCopy = textSelectionHost.canCopy,
+                                    onChange = textSelectionHost.onChange,
+                                    onCopy = textSelectionHost.onCopy,
+                                )
+                            }
                         }
                         val pageHits = searchHits.withIndex()
                             .filter { it.value.pageIndex == index }

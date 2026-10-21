@@ -462,4 +462,9 @@
     <string name="pages_refused_file">The file couldn\'t be read or written.</string>
     <string name="pages_refused_poisoned">A redaction on this document didn\'t finish, so it can only be closed now. Close it and open it again — nothing was written.</string>
     <string name="pages_refused_engine">MegaPDF couldn\'t make that page change safely, so it left the document as it was.</string>
+
+    <!-- Selecting and copying text (#710), and read-only form fields (#712) -->
+    <string name="select_copy_forbidden">This document doesn\'t allow copying its text.</string>
+    <string name="select_copied">Copied</string>
+    <string name="form_field_read_only">This field is read-only.</string>
 </resources>
