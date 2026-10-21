@@ -349,10 +349,9 @@
   <data name="SmallerCopySavedTitle" xml:space="preserve">
     <value>Copie réduite enregistrée</value>
   </data>
-  <data name="SmallerCopySavedBody" xml:space="preserve">
-    <value>Avant&#160;: {0:F1} Mo, après&#160;: {1:F1} Mo.
-
-Enregistrée sous {2}, prête pour le courriel.</value>
+  <data name="SmallerCopySavedNotice" xml:space="preserve">
+    <value>Avant&#160;: {0:F1} Mo, après&#160;: {1:F1} Mo. Enregistrée sous {2}, prête pour le courriel.</value>
+    <comment>FR-REVIEW #632 — new, not yet read by the reviewer. The old two-paragraph dialog body joined into one line for a notice bar; same words.</comment>
   </data>
   <data name="PasswordPlaceholder" xml:space="preserve">
     <value>Mot de passe</value>

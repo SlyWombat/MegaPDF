@@ -261,6 +261,7 @@ established French for the cryptographic sense.
 | Save first | Enregistrez d'abord | |
 | Nothing to shrink | Rien à réduire | |
 | Smaller copy saved | Copie réduite enregistrée | |
+| Was {0} MB, now {1} MB. Saved as {2}, ready to email. | Avant : {0} Mo, après : {1} Mo. Enregistrée sous {2}, prête pour le courriel. | #632, the Windows shrink notice; Mac/Linux say this on the status line in their own words |
 | Saved | Enregistré | |
 | Saving… | Enregistrement… | |
 | Opening… | Ouverture… | busy strip (#145) |

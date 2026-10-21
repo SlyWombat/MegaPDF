@@ -562,6 +562,37 @@ public partial class DocumentViewModel(Func<Window> host, AppSettings settings, 
     [ObservableProperty]
     private string _securityNotice = "";
 
+    /// <summary>What Shrink for email finished with (#632): the smaller copy's sizes, or that
+    /// there was nothing to shrink. A notice, not a dialog: nothing failed, nothing to decide.</summary>
+    [ObservableProperty]
+    private string _shrinkNoticeTitle = "";
+
+    [ObservableProperty]
+    private string _shrinkNotice = "";
+
+    [ObservableProperty]
+    private InfoBarSeverity _shrinkNoticeSeverity = InfoBarSeverity.Success;
+
+    [ObservableProperty]
+    private bool _isShrinkNoticeOpen;
+
+    private void ShowShrinkNotice(string title, string message, InfoBarSeverity severity)
+    {
+        ShrinkNoticeTitle = title;
+        ShrinkNotice = message;
+        ShrinkNoticeSeverity = severity;
+        IsShrinkNoticeOpen = true;
+        // Spoken as well: a bar at the foot of the page is easy to miss (as ShowPageToolNotice).
+        Announced?.Invoke(message);
+    }
+
+    /// <summary>The success half of <see cref="ShrinkForEmailAsync"/>, split out so the
+    /// self-test can raise it without the save picker, which cannot be driven headless.</summary>
+    internal void ReportSmallerCopySaved(long originalBytes, long newBytes, string fileName) =>
+        ShowShrinkNotice(Strings.SmallerCopySavedTitle,
+            Strings.SmallerCopySavedNotice(originalBytes / 1024.0 / 1024, newBytes / 1024.0 / 1024, fileName),
+            InfoBarSeverity.Success);
+
     /// <summary>
     /// True for the life of this open when the document is dynamic XFA (#456, #457):
     /// it opens, reports a plausible page count and draws a page, but that page is
@@ -717,6 +748,7 @@ public partial class DocumentViewModel(Func<Window> host, AppSettings settings, 
         IsRestrictedNoticeOpen = Capabilities.IsRestricted;
         IsRecoveryOffNoticeOpen = openedWithPassword;
         IsSecurityNoticeOpen = false;
+        IsShrinkNoticeOpen = false;
         // #457: read alongside Capabilities/Security, the other document-level facts
         // this open reads once. A hybrid-XFA document, an ordinary AcroForm, or one
         // with no form at all never sets this.
@@ -2876,7 +2908,7 @@ public partial class DocumentViewModel(Func<Window> host, AppSettings settings, 
 
             if (replaced == 0)
             {
-                await ShowErrorAsync(Strings.NothingToShrinkTitle, Strings.NothingToShrinkBody);
+                ShowShrinkNotice(Strings.NothingToShrinkTitle, Strings.NothingToShrinkBody, InfoBarSeverity.Informational);
                 return;
             }
 
@@ -2906,8 +2938,7 @@ public partial class DocumentViewModel(Func<Window> host, AppSettings settings, 
             }
 
             var newBytes = new FileInfo(file.Path).Length;
-            await ShowErrorAsync(Strings.SmallerCopySavedTitle,
-                Strings.SmallerCopySavedBody(originalBytes / 1024.0 / 1024, newBytes / 1024.0 / 1024, Path.GetFileName(file.Path)));
+            ReportSmallerCopySaved(originalBytes, newBytes, Path.GetFileName(file.Path));
         }
         finally
         {
