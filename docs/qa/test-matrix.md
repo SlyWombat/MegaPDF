@@ -17,7 +17,7 @@ Each cell says two things and both are checked against the code:
 | `GAP` | the feature is **missing** where it should exist — the #571 shape |
 | `+m` | a by-hand step in `TESTING.md` / `docs/RELEASING.md` covers it too |
 
-235 pairings: 140 UI, 60 eng, 14 —, 14 n/a, 7 GAP.
+235 pairings: 141 UI, 60 eng, 14 —, 14 n/a, 6 GAP.
 
 This map is about *what is covered*, not whether the covering tests pass — that is the
 other jobs' business — and it does not replace the by-hand pass in `docs/RELEASING.md`
@@ -28,7 +28,7 @@ other jobs' business — and it does not replace the by-hand pass in `docs/RELEA
 This is the part worth reading. A map that only restated what passes would not be
 worth checking in.
 
-### Missing feature — absent where it should exist (7)
+### Missing feature — absent where it should exist (6)
 
 Nothing is failing; nothing is looking. #571 (Linux had an About window with no route to it) and #3 (Android had no whiteout at all) were both this.
 
@@ -40,7 +40,6 @@ Nothing is failing; nothing is looking. #571 (Linux had an About window with no 
 | A withheld permission is said out loud, and the person may continue (`permission-override`) | windows | still refuses. DocumentCapabilities.cs reads the bits and the toolbar greys out what the author withheld; megapdf_security_override() is in the core and unbound in CoreNative.cs. | #558 |
 | Shrink for email (`shrink`) | android | no shrink on Android either, for the same reason and with the same silence. | — |
 | Shrink for email (`shrink`) | ios | no shrink on iOS. Nothing in the source says it was decided against, and a phone mailing a scan is the case it exists for. | — |
-| Select text and copy it (`select-copy`) | android | megapdf_select.cpp is in the engine's CMake build; the JNI binding and the long-press UI are not yet built. | #710 |
 
 ### Present, nothing automated (14)
 
@@ -149,7 +148,7 @@ The shared core proves the operation. Nothing proves this platform reaches it co
 | **A small side indicator of scroll position, including in reading mode** | UI | UI | UI | — | eng |
 | **Zoom (buttons, keyboard, wheel, pinch) and fit** | UI | UI | UI | UI | UI |
 | **Find in document** | eng+m | UI+m | UI+m | eng | eng |
-| **Select text and copy it** | UI | UI | UI | UI | GAP |
+| **Select text and copy it** | UI | UI | UI | UI | UI |
 | **Reading mode** | UI | UI | UI | UI | UI |
 | **Page colours (normal / sepia / night)** | UI | UI | UI | eng | UI |
 | **Page thumbnails pane** | UI | UI | UI | UI | UI |
@@ -320,7 +319,7 @@ others are the proof that nothing was needed.
 - **macOS** — UI. coverage: UI/VM. reachable from `src/MegaPDF.Avalonia/Views/MainWindow.axaml.cs::OnPagePointerPressed`. tests: `src/MegaPDF.Avalonia/Program.cs::CheckTextSelection`, `tests/MegaPDF.Core.Tests/TextSelectionTests.cs::TextSelectionTests`, `core/tests/core_tests.cpp::test_selection_columns`. #710: the same gestures in the Mac idiom: Edit > Copy and Select All (Cmd+C, Cmd+A), Copy greyed on a no-copy document with the reason in the status line and the context menu; LF line ends. The press now opens the line editor on release rather than on press, because a press cannot yet know it is a click. CheckTextSelection drives a real MainWindow with real headless mouse and key input over selection.pdf and owner-only.pdf: a drag across the columns, Shift+Right, Escape, a click that still edits, a drag across the page break, Select All, Cover keeping its drag, an edit dropping the selection, reading mode, and the no-copy document. The double-click's second press goes through DoubleClickWordForTest, since headless input gives no reliable click count of two.
 - **Linux** — UI. coverage: UI/VM. reachable from `src/MegaPDF.Avalonia/Views/MainWindow.axaml.cs::OnPagePointerPressed`. tests: `src/MegaPDF.Avalonia/Program.cs::CheckTextSelection`, `tests/MegaPDF.Core.Tests/TextSelectionTests.cs::TextSelectionTests`, `core/tests/core_tests.cpp::test_selection_columns`. same as macOS, with Ctrl+C and Ctrl+A bound on the window (X11 hosts no menu bar).
 - **iOS/iPadOS** — UI. coverage: UI/VM. reachable from `ios/MegaPDF/ViewerModel.swift::beginTextSelection`. tests: `ios/MegaPDFTests/TextSelectionTests.swift::class`, `ios/MegaPDFUITests/SelectCopyUITests.swift::class`, `.github/workflows/ios-ci.yml::MegaPDFUITests/SelectCopyUITests`. #710: a long press selects the word, drawn in the tint at the selection opacity with two draggable handles and the system's UIEditMenuInteraction offering Copy (plain text to UIPasteboard); a tap clears it. One page at a time, not across pages. Copy is disabled with a notice when the document's copy bit is off. TextSelectionTests runs selection.pdf through the Swift binding and the handle logic; SelectCopyUITests long-presses, copies and reads the pasteboard back. iOS reading mode shows page images, not reflowed text, so there is nothing there to make selectable.
-- **Android** — GAP. absent (gap). megapdf_select.cpp is in the engine's CMake build; the JNI binding and the long-press UI are not yet built. #710.
+- **Android** — UI. coverage: UI/VM. reachable from `android/app/src/main/java/com/megapdf/android/ViewerViewModel.kt::onPageLongPressed`. tests: `android/app/src/androidTest/java/com/megapdf/android/TextSelectCopyTest.kt::class`, `android/engine/src/androidTest/java/com/megapdf/engine/TextSelectionEngineTest.kt::class`, `android/app/src/test/java/com/megapdf/android/TextSelectionTest.kt::class`. #710: long-press on page text selects the word (it was unused on the page); the highlight is LocalTextSelectionColors, the two handles are drawn and dragged in Compose, and Copy is the system's floating text toolbar (LocalTextToolbar), which a Compose test cannot see, so TextSelectCopyTest calls ViewerViewModel.copySelectedText, the toolbar's own callback, and reads the real clipboard back. One page only: a handle stops at the page's last character. A tap with a selection only releases it. Copy follows DocumentCapabilities.canCopyText (the copy permission); a document that forbids it still selects. Reading mode is a tint of the same page, so it selects there too and has no reflowed text to wrap in a SelectionContainer.
 
 ### Reading mode (`reading-mode`)
 
@@ -352,7 +351,7 @@ others are the proof that nothing was needed.
 - **macOS** — UI. coverage: UI/VM. reachable from `src/MegaPDF.Avalonia/ViewModels/DocumentViewModel.cs::HandlePageClick`. tests: `tests/MegaPDF.Core.Tests/AcroFormTests.cs::Field`, `tests/MegaPDF.Core.Tests/FormFieldOrderTests.cs::FormFieldOrder`, `src/MegaPDF.Avalonia/Program.cs::CheckFormFlow`. the self-test's fill-check-sign block drives the view model's hit test and round-trips the value through PDFium. #709/#712: CheckFormFlow drives a real MainWindow with real headless pointer and key events over formflow.pdf: a click opens the first field, Tab and Shift+Tab step field to field past the printed labels, Shift+Enter breaks a line in the multi-line field, Space ticks a checkbox Tab reached, and the values are read back from the saved file.
 - **Linux** — UI. coverage: UI/VM. reachable from `src/MegaPDF.Avalonia/ViewModels/DocumentViewModel.cs::HandlePageClick`. tests: `tests/MegaPDF.Core.Tests/AcroFormTests.cs::Field`, `tests/MegaPDF.Core.Tests/FormFieldOrderTests.cs::FormFieldOrder`, `src/MegaPDF.Avalonia/Program.cs::CheckFormFlow`. same as macOS.
 - **iOS/iPadOS** — UI. coverage: UI/VM. reachable from `ios/MegaPDF/ViewerModel.swift::commitFormText`. tests: `ios/MegaPDFTests/FormTextTests.swift::class`, `ios/MegaPDFTests/CheckboxTests.swift::class`, `ios/MegaPDFTests/DocumentCapabilitiesTests.swift::class`, `ios/MegaPDFTests/FormFieldFlagsTests.swift::class`, `ios/MegaPDFUITests/FormTextUITests.swift::class`, `.github/workflows/ios-ci.yml::MegaPDFUITests/FormTextUITests`. #701: a tap on a text widget opens FormTextSheet; Done writes through megapdf_form_set_text as one undo step (FormTextOperation), gated on fill-forms. FormTextTests fills formtext.pdf through the model, saves, reopens and undoes; FormTextUITests types into the real sheet. #712: the sheet reads the core's flags (megapdf_form_field_flags, _max_length): only a multi-line field takes returns, a single-line field's return submits like Done, a /MaxLen cuts the draft, and a read-only field says so instead of opening. FormFieldFlagsTests reads formflow.pdf's flags through the binding. Comb and masked entry are read but not yet acted on.
-- **Android** — UI. coverage: UI/VM. reachable from `android/app/src/main/java/com/megapdf/android/ViewerViewModel.kt::commitFormText`. tests: `android/app/src/androidTest/java/com/megapdf/android/FormTextTest.kt::class`, `android/app/src/test/java/com/megapdf/android/FormTextFieldTest.kt::class`, `android/app/src/test/java/com/megapdf/android/DocumentCapabilitiesTest.kt::class`. #701: a tap on a text widget opens a Compose dialog on its value; Done is one FormTextOperation (megapdf_form_set_text), gated on fill-forms. FormTextTest fills formtext.pdf through the real screen, saves, reopens and reads the value back, undoes, and ticks forms.pdf's checkbox. Multi-line is still a heuristic: the core now reports the flag (#712, megapdf_form_field_flags) but the editor does not use it yet, and max length / comb are not applied.
+- **Android** — UI. coverage: UI/VM. reachable from `android/app/src/main/java/com/megapdf/android/ViewerViewModel.kt::commitFormText`. tests: `android/app/src/androidTest/java/com/megapdf/android/FormTextTest.kt::class`, `android/app/src/test/java/com/megapdf/android/FormTextFieldTest.kt::class`, `android/app/src/test/java/com/megapdf/android/DocumentCapabilitiesTest.kt::class`, `android/engine/src/androidTest/java/com/megapdf/engine/FormFieldFlagsTest.kt::class`. #701: a tap on a text widget opens a Compose dialog on its value; Done is one FormTextOperation (megapdf_form_set_text), gated on fill-forms. FormTextTest fills formtext.pdf through the real screen, saves, reopens and reads the value back, undoes, and ticks forms.pdf's checkbox. #712: the editor is multi-line exactly when the core's own flag says so (the 30 pt height guess is gone), a read-only field opens no dialog and says so, and /MaxLen caps the typed text; FormFieldFlagsTest reads the flags off formflow.pdf across JNI and FormTextTest taps its single-line and multi-line fields. Comb and masked are read but not yet applied, and no fixture has a read-only or /MaxLen field, so those two paths are covered by the pure FormTextFieldTest only.
 
 ### Checkboxes, real and drawn (`checkboxes`)
 

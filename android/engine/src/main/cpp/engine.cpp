@@ -374,7 +374,7 @@ std::vector<jchar> JavaChars(JNIEnv* env, jstring s) {
 
 extern "C" {
 
-// Widget checkbox, radio and text fields, packed [type, checked, l, b, r, t] per
+// Widget checkbox, radio and text fields, packed [type, checked, l, b, r, t, flags, maxLength] per
 // field - read through the core's form environment (#107); the kind filter is this
 // platform's choice of what to surface. Type 1 is a text field (#701), whose current
 // value comes from nativeFormTextValues, in the same order.
@@ -397,6 +397,9 @@ Java_com_megapdf_engine_PdfiumNative_nativeFormFieldsPacked(JNIEnv* env, jobject
             packed.push_back(f.bounds.bottom);
             packed.push_back(f.bounds.right);
             packed.push_back(f.bounds.top);
+            // #712: the core's own flags and /MaxLen, in place of a height guess on this side.
+            packed.push_back(static_cast<double>(megapdf_form_field_flags(fields, i)));
+            packed.push_back(static_cast<double>(megapdf_form_field_max_length(fields, i)));
         }
         megapdf_form_fields_free(fields);
     }
@@ -450,6 +453,83 @@ Java_com_megapdf_engine_PdfiumNative_nativeFormSetText(JNIEnv* jni, jobject, jlo
     wide.push_back(0);
     return megapdf_form_set_text(p->core, x, y,
                                  reinterpret_cast<const unsigned short*>(wide.data())) == MEGAPDF_OK;
+}
+
+// ---- Text selection (#710): contract 11's snapshot, handed to Kotlin as an opaque handle.
+// Every call after the load reads only the snapshot (no lock, any thread); free must not race.
+
+// Reads the page's text into a snapshot; 0 when the document has closed.
+JNIEXPORT jlong JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativeSelectableLoad(JNIEnv*, jobject, jlong handle) {
+    auto* p = reinterpret_cast<Page*>(handle);
+    return reinterpret_cast<jlong>(megapdf_selectable_load(p->core));
+}
+
+JNIEXPORT void JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativeSelectableFree(JNIEnv*, jobject, jlong selectable) {
+    megapdf_selectable_free(reinterpret_cast<megapdf_selectable*>(selectable));
+}
+
+JNIEXPORT jint JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativeSelectableLength(JNIEnv*, jobject, jlong selectable) {
+    return megapdf_selectable_length(reinterpret_cast<megapdf_selectable*>(selectable));
+}
+
+JNIEXPORT jint JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativeSelectableCaretAt(JNIEnv*, jobject, jlong selectable,
+                                                             jdouble x, jdouble y, jdouble tolerance) {
+    return megapdf_selectable_caret_at(reinterpret_cast<megapdf_selectable*>(selectable), x, y, tolerance);
+}
+
+// [start, end] carets of the word (kind 0) or line (kind 1) at the point; empty when none.
+JNIEXPORT jintArray JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativeSelectableRangeAt(JNIEnv* env, jobject, jlong selectable,
+                                                             jdouble x, jdouble y, jdouble tolerance,
+                                                             jint kind) {
+    auto* s = reinterpret_cast<megapdf_selectable*>(selectable);
+    int start = 0, end = 0;
+    const int n = kind == 1 ? megapdf_selectable_line_at(s, x, y, tolerance, &start, &end)
+                            : megapdf_selectable_word_at(s, x, y, tolerance, &start, &end);
+    jintArray out = env->NewIntArray(n > 0 ? 2 : 0);
+    if (out && n > 0) {
+        const jint both[2] = {start, end};
+        env->SetIntArrayRegion(out, 0, 2, both);
+    }
+    return out;
+}
+
+JNIEXPORT jstring JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativeSelectableText(JNIEnv* env, jobject, jlong selectable,
+                                                          jint start, jint end) {
+    auto* s = reinterpret_cast<megapdf_selectable*>(selectable);
+    const size_t n = megapdf_selectable_text(s, start, end, nullptr, 0);
+    std::vector<jchar> text(n);
+    if (n > 0) {
+        megapdf_selectable_text(s, start, end, reinterpret_cast<unsigned short*>(text.data()), n);
+    }
+    return env->NewString(text.data(), static_cast<jsize>(n));
+}
+
+// One [l, b, r, t] per line the range touches, crop space, bottom-left origin.
+JNIEXPORT jdoubleArray JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativeSelectableRects(JNIEnv* env, jobject, jlong selectable,
+                                                           jint start, jint end) {
+    auto* s = reinterpret_cast<megapdf_selectable*>(selectable);
+    const size_t n = megapdf_selectable_rects(s, start, end, nullptr, 0);
+    std::vector<megapdf_rect> rects(n);
+    if (n > 0) megapdf_selectable_rects(s, start, end, rects.data(), n);
+    std::vector<double> packed;
+    for (const auto& r : rects) {
+        packed.push_back(r.left);
+        packed.push_back(r.bottom);
+        packed.push_back(r.right);
+        packed.push_back(r.top);
+    }
+    jdoubleArray out = env->NewDoubleArray(static_cast<jsize>(packed.size()));
+    if (out && !packed.empty()) {
+        env->SetDoubleArrayRegion(out, 0, static_cast<jsize>(packed.size()), packed.data());
+    }
+    return out;
 }
 
 // Simulated click in page coordinates (PDF bottom-left origin, crop space) —
