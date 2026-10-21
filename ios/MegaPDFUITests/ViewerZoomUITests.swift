@@ -125,6 +125,26 @@ final class ViewerZoomUITests: XCTestCase {
         return bytes
     }
 
+    /// The page's pixels, looked at again until `settled` says they are what the app's own
+    /// zoom already says, or until `timeout`. Returns the last look either way, so the assertion
+    /// after it still decides.
+    ///
+    /// Run 39535378949 is why: the app's probe said 2.5276 after the pinch, and the screenshot
+    /// taken 1.5 s later was **identical** to the one before it — difference 0.0. The zoom had
+    /// happened; the hosted simulator had not drawn it yet, on a runner where waiting for the
+    /// app to idle had just taken eleven seconds. One look at a fixed time was asking the
+    /// screen a question the probe had already answered.
+    private func pixels(of rect: CGRect, timeout: TimeInterval = 30,
+                        until settled: ([UInt8]) -> Bool) -> [UInt8] {
+        let deadline = Date().addingTimeInterval(timeout)
+        var look = pixels(of: rect)
+        while !settled(look) && Date() < deadline {
+            Thread.sleep(forTimeInterval: 0.5)
+            look = pixels(of: rect)
+        }
+        return look
+    }
+
     /// The fraction of pixels that differ by more than `tolerance` in any channel, 0...1.
     ///
     /// A tolerance rather than an equality test: two renders of the same page can differ
@@ -163,7 +183,7 @@ final class ViewerZoomUITests: XCTestCase {
         // promise of the app's, and a test that pinned it down would be measuring XCTest.
         pinchProbe().pinch(withScale: 2.5, velocity: 2.0)
         Thread.sleep(forTimeInterval: 1.5)   // scroll indicators fade
-        let zoomed = pixels(of: rect)
+        let zoomed = pixels(of: rect) { self.difference(atOne, $0) > 0.05 }
         let zoomedZoom = committedZoom()
         XCTAssertGreaterThan(difference(atOne, zoomed), 0.05,
                              "a pinch out did not change the page (#336); the app's zoom is "
@@ -176,7 +196,7 @@ final class ViewerZoomUITests: XCTestCase {
         // because the first one is the gesture #465 was filed about.
         pinchProbe().pinch(withScale: 0.4, velocity: -2.0)
         Thread.sleep(forTimeInterval: 1.5)
-        let halfClosed = pixels(of: rect)
+        let halfClosed = pixels(of: rect) { self.difference(zoomed, $0) > 0.05 }
         let halfClosedZoom = committedZoom()
         // This is the assertion the old test did not have. It compared `zoomed` against
         // `closed` and asked them to be CLOSE, which a pinch in that does nothing at all
@@ -191,7 +211,7 @@ final class ViewerZoomUITests: XCTestCase {
 
         pinchProbe().pinch(withScale: 0.4, velocity: -2.0)
         Thread.sleep(forTimeInterval: 1.5)
-        let closed = pixels(of: rect)
+        let closed = pixels(of: rect) { self.difference(atOne, $0) < 0.05 }
         XCTAssertEqual(committedZoom(), 1, accuracy: 0.01,
                        "pinching in twice from the 4× clamp did not come back to 1×")
         // All the way off means the picture it started as. Safe to demand exactly that

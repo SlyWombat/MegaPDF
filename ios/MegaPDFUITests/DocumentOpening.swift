@@ -46,16 +46,30 @@ enum DocumentOpening {
     }
 
     /// Waits for `page`, renewing the deadline for as long as the app reports itself opening.
+    ///
+    /// **And then, for a suite that launched with `-uiTestInputProbe`, for the open to have
+    /// finished (#681).** The page is drawn before the open's own work ends —
+    /// `ViewerModel.open` sets the viewing state, then reads the document's redaction marks,
+    /// then lets go — and in that window page taps are ignored and the file commands in the ⋯
+    /// menu are disabled, both on purpose (#145). On the Mac mini the window is too short to
+    /// hit. On a hosted runner it is not: a tap there was ignored, a disabled Export as Markdown
+    /// row swallowed its tap, and the next line failed as "did not open the text editor" or "the
+    /// export sheet did not appear". The probe's `busy` is that window, by the app's account.
     static func wait(for page: XCUIElement, in app: XCUIApplication,
                      grace: TimeInterval = 30, cap: TimeInterval = 240) -> Bool {
         let start = Date()
         var deadline = start.addingTimeInterval(grace)
+        var shown = false
         while Date() < deadline && Date().timeIntervalSince(start) < cap {
-            if page.exists { return true }
+            if page.exists { shown = true; break }
             if label(app) != nil { deadline = Date().addingTimeInterval(grace) }
             Thread.sleep(forTimeInterval: 0.2)
         }
-        return page.exists
+        guard shown || page.exists else { return false }
+        if app.launchArguments.contains(PageInput.launchArgument) {
+            return PageInput.waitUntilIdle(app, timeout: max(cap - Date().timeIntervalSince(start), grace)) != nil
+        }
+        return true
     }
 
     /// `sentence`, plus what the app said it was doing — the thing that would have turned a
@@ -63,6 +77,9 @@ enum DocumentOpening {
     static func why(_ app: XCUIApplication, _ sentence: String) -> String {
         if let label = label(app) {
             return "\(sentence) — the app is still busy: '\(label)'"
+        }
+        if let probe = PageInput.probe(app), probe.busy {
+            return "\(sentence) — the page is up but the open never finished: '\(probe)'"
         }
         return "\(sentence), and the app was not reporting itself busy"
     }

@@ -22,6 +22,8 @@ final class BodyTextEditUITests: XCTestCase {
         // accessibility snapshots, so both kinds of check were races rather than
         // measurements.
         app.launchArguments += ["-uiTestPinNotices"]
+        // What became of each tap, by the app's account (#681): see `PageInput`.
+        app.launchArguments += [PageInput.launchArgument]
     }
 
     /// Ends the app after every test, passed or failed (#487).
@@ -91,35 +93,35 @@ final class BodyTextEditUITests: XCTestCase {
         return page
     }
 
-    /// Taps a point on the page given in PDF points (origin bottom-left).
+    /// A vertical-axis TextField is exposed as a text field or a text view depending on the
+    /// OS, so it is looked up by identifier across element types.
+    private var bodyTextField: XCUIElement {
+        app.descendants(matching: .any).matching(identifier: "bodyTextField").firstMatch
+    }
+
+    /// Taps a point on the page given in PDF points (origin bottom-left), until `expected`
+    /// appears — by the app's account of the tap, not by a stopwatch (#681, `PageInput.tap`).
     ///
-    /// The app defers a single tap by the double-tap-to-zoom window before dispatching it,
-    /// so nothing here can assume the tap has been acted on when this returns; what waits
-    /// for that is the `waitForExistence` in `retype`, or the banner's own wait. (An
-    /// earlier version of this comment claimed the helper waited the window out. It never
-    /// did, and nothing needed it to.)
-    private func tap(_ page: XCUIElement, x: Double, yFromBottom: Double) {
-        page.coordinate(withNormalizedOffset: CGVector(dx: x / 612.0, dy: (792.0 - yFromBottom) / 792.0)).tap()
+    /// The app defers a single tap by the double-tap-to-zoom window before dispatching it, and
+    /// on a hosted runner the tap itself has taken 25 s to arrive; a fixed ten seconds for the
+    /// editor was the wrong unit for both.
+    private func tap(_ page: XCUIElement, x: Double, yFromBottom: Double, until expected: XCUIElement,
+                     _ what: String) {
+        let point = page.coordinate(withNormalizedOffset: CGVector(dx: x / 612.0, dy: (792.0 - yFromBottom) / 792.0))
+        if let failure = PageInput.tap(point, in: app, until: expected) {
+            XCTFail("\(what): \(failure)")
+        }
     }
 
     private func retype(_ text: String) {
-        // A vertical-axis TextField is exposed as a text field or a text view depending on
-        // the OS, so look it up by identifier across element types — and only after
-        // waiting, never by probing which type exists before the sheet has appeared.
-        let field = app.descendants(matching: .any).matching(identifier: "bodyTextField").firstMatch
-        XCTAssertTrue(field.waitForExistence(timeout: 10), "tapping the line did not open the text editor")
-        field.tap()
-        // A tap is delivered long before the keyboard is up on a loaded machine, and text
-        // typed before the field has focus is simply thrown away — XCTest reports it as
-        // "Neither element nor any descendant has keyboard focus", which is how this test
-        // failed in run 36435613648. Waiting for the keyboard is waiting for the thing
-        // `typeText` actually needs.
-        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 15),
-                      "the keyboard never came up for the text editor, so nothing could be typed")
-        if let current = field.value as? String, !current.isEmpty {
-            field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: current.count + 2))
-        }
-        field.typeText(text)
+        let field = bodyTextField
+        XCTAssertTrue(field.waitForExistence(timeout: 30), "tapping the line did not open the text editor")
+        XCTAssertTrue(PageInput.focus(field),
+                      "the text editor's field never took the keyboard's focus, so nothing could be typed")
+        // One typing call rather than two, so focus is relied on once: the old line, deleted,
+        // then the new one.
+        let current = (field.value as? String) ?? ""
+        field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: current.isEmpty ? 0 : current.count + 2) + text)
         app.buttons["bodyTextSave"].tap()
     }
 
@@ -127,7 +129,7 @@ final class BodyTextEditUITests: XCTestCase {
 
     func testTier1_aLineTheFontCanCarryIsRetypedWithNoNotice() {
         let page = launch(with: helveticaHeading)
-        tap(page, x: 120, yFromBottom: 708)
+        tap(page, x: 120, yFromBottom: 708, until: bodyTextField, "tapping the line did not open the text editor")
         retype("Annual report")
         XCTAssertFalse(app.otherElements["noticeBanner"].waitForExistence(timeout: 2)
                        || app.staticTexts["noticeBanner"].exists,
@@ -137,7 +139,7 @@ final class BodyTextEditUITests: XCTestCase {
 
     func testTier2_aFontThatCannotShowTheTextIsSubstitutedWithANotice() {
         let page = launch(with: symbolHeading)
-        tap(page, x: 90, yFromBottom: 708)
+        tap(page, x: 90, yFromBottom: 708, until: bodyTextField, "tapping the line did not open the text editor")
         retype("Hello")
         let banner = app.staticTexts["noticeBanner"]
         // 15 seconds, and it is a real 15 now: the notice is pinned, so the wait is bounded
@@ -165,7 +167,7 @@ final class BodyTextEditUITests: XCTestCase {
     /// be: `core_tests.cpp` §#118 and `test_rewrite_fidelity`, per patch level.
     func testTextUnderCharacterSpacingIsEditableWithThePinnedPdfium() {
         let page = launch(with: spacedHeading)
-        tap(page, x: 160, yFromBottom: 708)
+        tap(page, x: 160, yFromBottom: 708, until: bodyTextField, "tapping the line did not open the text editor")
         retype("Adjusted report")
         XCTAssertFalse(app.staticTexts["noticeBanner"].waitForExistence(timeout: 2),
                        "an edit the engine accepts must not show a refusal notice: "
@@ -176,10 +178,12 @@ final class BodyTextEditUITests: XCTestCase {
 
     func testTier3_aPageWithNoTextSaysItIsAScannedImage() {
         let page = launch(with: pictureOnly)
-        tap(page, x: 300, yFromBottom: 550)
         let banner = app.staticTexts["noticeBanner"]
-        XCTAssertTrue(banner.waitForExistence(timeout: 15),
-                      "a picture-only page must explain why nothing happened")
+        // The scanned-page notice in particular: a tap a starved runner holds long enough to be
+        // a long press raises a different notice on this page ("no text to select", #710), and
+        // that one must not count as the tap having worked.
+        let scanned = app.staticTexts.matching(NSPredicate(format: "identifier == 'noticeBanner' AND label CONTAINS 'scanned'")).firstMatch
+        tap(page, x: 300, yFromBottom: 550, until: scanned, "a picture-only page must explain why nothing happened")
         XCTAssertTrue(banner.label.contains("scanned"), banner.label)
         XCTAssertFalse(app.descendants(matching: .any).matching(identifier: "bodyTextField").firstMatch.exists,
                        "there is no text to edit")
