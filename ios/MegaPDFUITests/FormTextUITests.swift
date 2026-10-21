@@ -66,6 +66,25 @@ final class FormTextUITests: XCTestCase {
         app.buttons["formTextCancel"].tap()
     }
 
+    /// A single-line field's return submits, as Done does (#712): the sheet closes and the
+    /// value is written. `formtext.pdf`'s one field is single-line.
+    func testReturnSubmitsASingleLineField() {
+        let page = launch()
+        tapField(page)
+        let field = editor()
+        field.tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 15))
+        field.typeText("Dave Plumber\n")
+        XCTAssertTrue(app.buttons["Undo"].waitForExistence(timeout: 15),
+                      "the return did not submit the field")
+        XCTAssertFalse(app.buttons["formTextDone"].exists, "the editor is still up")
+
+        tapField(page)
+        let value = (editor().value as? String) ?? ""
+        XCTAssertEqual(value, "Dave Plumber")
+        app.buttons["formTextCancel"].tap()
+    }
+
     func testCancelWritesNothing() {
         let page = launch()
         tapField(page)

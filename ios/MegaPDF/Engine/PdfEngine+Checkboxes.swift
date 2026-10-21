@@ -16,6 +16,15 @@ struct PdfFormTextField: Equatable {
     let name: String
     let value: String
     let rect: PdfRect
+    /// The core's `MEGAPDF_FIELD_FLAG_*` bits for the field (#712).
+    var flags: UInt32 = 0
+    /// The field's /MaxLen, or 0 when it has none (#712).
+    var maxLength: Int = 0
+
+    var isReadOnly: Bool { flags & UInt32(MEGAPDF_FIELD_FLAG_READONLY) != 0 }
+    var isMultiline: Bool { flags & UInt32(MEGAPDF_FIELD_FLAG_MULTILINE) != 0 }
+    var isComb: Bool { flags & UInt32(MEGAPDF_FIELD_FLAG_COMB) != 0 }
+    var isMasked: Bool { flags & UInt32(MEGAPDF_FIELD_FLAG_MASKED) != 0 }
 }
 
 extension PdfRect {
@@ -58,8 +67,8 @@ extension PdfEngine {
 
     /// Text-field widgets on the page with their current values (#701). Kept apart from
     /// `formFields`, whose callers want buttons only. The core reports the kind, bounds,
-    /// name and value; it does not report multi-line, maximum length or comb flags, so
-    /// those are left to PDFium's own handling when the value is written.
+    /// name and value, and (#712) the field's flags and maximum length through two accessors
+    /// beside the struct, so the editor can take a return only where the field is multi-line.
     func formTextFields(_ document: PdfDocument, pageIndex: Int) throws -> [PdfFormTextField] {
         try withCorePage(document, index: pageIndex) { page in
             guard let fields = megapdf_form_fields_load(page) else { return [] }
@@ -83,7 +92,9 @@ extension PdfEngine {
                     name: string(i, MEGAPDF_FIELD_NAME),
                     value: string(i, MEGAPDF_FIELD_VALUE),
                     rect: PdfRect(left: f.bounds.left, bottom: f.bounds.bottom,
-                                  right: f.bounds.right, top: f.bounds.top)))
+                                  right: f.bounds.right, top: f.bounds.top),
+                    flags: megapdf_form_field_flags(fields, i),
+                    maxLength: Int(megapdf_form_field_max_length(fields, i))))
             }
             return result
         }

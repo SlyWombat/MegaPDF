@@ -100,6 +100,10 @@ struct PendingFormText: Identifiable {
     let y: Double
     let name: String
     let original: String
+    /// Whether a return is text (#712). A single-line field's return submits.
+    var isMultiline = false
+    /// The field's /MaxLen, or 0 for none (#712).
+    var maxLength = 0
 }
 
 struct PendingText: Identifiable {
@@ -1387,6 +1391,7 @@ final class ViewerModel: ObservableObject {
             if let sourceURL {
                 await rememberRecent(sourceURL, displayName: displayName)
             }
+            dropTextSelection()
             state = .viewing(displayName: displayName, pageSizes: sizes)
             // A fresh core carries no marks, and the refresh is what says so (#329): the map
             // is what Save reads to decide whether to ask about redaction, so it states the
@@ -1655,6 +1660,13 @@ final class ViewerModel: ObservableObject {
                         showDynamicXfaNotice()
                         return
                     }
+                    // A read-only field is the form author's own fixed text (#712): it does not
+                    // open an editor to type into, and says why instead of doing nothing.
+                    if textField.isReadOnly {
+                        guard document === doc else { return }
+                        showNotice(String(localized: "This field is read-only."))
+                        return
+                    }
                     guard permits(caps.canFillForms) else { return }
                     guard document === doc else { return }
                     formTextDraft = textField.value
@@ -1662,7 +1674,9 @@ final class ViewerModel: ObservableObject {
                                                       x: textField.rect.centerX,
                                                       y: textField.rect.centerY,
                                                       name: textField.name,
-                                                      original: textField.value)
+                                                      original: textField.value,
+                                                      isMultiline: textField.isMultiline,
+                                                      maxLength: textField.maxLength)
                     return
                 }
                 let fields = try await engine.formFields(doc, pageIndex: index)
@@ -1774,6 +1788,129 @@ final class ViewerModel: ObservableObject {
                 statusMessage = String(localized: "Couldn't change that text.")
             }
         }
+    }
+
+    // MARK: - selecting and copying the document's text (#710)
+
+    /// The selection, if there is one: two carets into one page's snapshot.
+    @Published private(set) var textSelection: PageTextSelection?
+    /// The selection's line rectangles, crop space, kept so the view draws without asking the core.
+    @Published private(set) var selectionRects: [PdfRect] = []
+    /// Bumped to ask the view to show the edit menu over the selection: a counter, not a
+    /// flag, so asking twice in a row shows it twice.
+    @Published private(set) var selectionMenuRequest = 0
+    /// One snapshot per page touched, loaded on the first long-press. Dropped with any change to
+    /// the document, because carets index one snapshot and mean nothing in the next.
+    private var selectables: [Int: PdfSelectableText] = [:]
+    /// A long press is still down, so its menu is not shown yet.
+    private var selectionPressDown = false
+
+    /// Whether Copy may be offered. Selecting is always allowed; only Copy is gated (contract 11).
+    var canCopyText: Bool { capabilities.canCopyText }
+
+    /// A long-press selects only when nothing else has claimed the page: a tool that is armed
+    /// owns the touch.
+    var canSelectText: Bool {
+        document != nil && !redactMode && !whiteoutMode && !isPlacingText && pendingSignature == nil
+    }
+
+    /// Long-press at (`xFraction`, `yFraction`) of the page view, top-left origin: selects the
+    /// word under the finger. A press on blank paper selects nothing; a page with no text at all
+    /// says so.
+    func beginTextSelection(pageIndex: Int, xFraction: Double, yFraction: Double) {
+        guard canSelectText, let doc = document, pageIndex < pageSizes.count else { return }
+        selectionPressDown = true
+        let size = pageSizes[pageIndex]
+        let x = xFraction * size.width
+        let y = (1 - yFraction) * size.height
+        Task {
+            guard let snapshot = await selectable(page: pageIndex, in: doc) else { return }
+            guard document === doc else { return }
+            if snapshot.length == 0 {
+                clearTextSelection()
+                showNotice(String(localized: "This page has no text to select."))
+                return
+            }
+            guard let word = snapshot.word(atX: x, y: y) else {
+                clearTextSelection()
+                return
+            }
+            setTextSelection(PageTextSelection(pageIndex: pageIndex, word: word), snapshot: snapshot)
+            if !canCopyText {
+                showNotice(String(localized: "The owner of this document doesn't allow copying its text."))
+            }
+            // The menu waits for the finger to come up: shown under it, it is taken away again.
+            if !selectionPressDown { selectionMenuRequest += 1 }
+        }
+    }
+
+    /// The long press ended: the menu may show now, if there is a selection to show it over.
+    func endTextSelectionPress() {
+        selectionPressDown = false
+        if textSelection != nil { selectionMenuRequest += 1 }
+    }
+
+    /// Moves one of the selection's handles to the point under the finger (fractions of the page
+    /// view). Synchronous: the snapshot is already loaded and a hit test costs microseconds.
+    func dragSelectionHandle(_ handle: PageTextSelection.Handle, xFraction: Double, yFraction: Double) {
+        guard var selection = textSelection, let snapshot = selectables[selection.pageIndex],
+              selection.pageIndex < pageSizes.count else { return }
+        let size = pageSizes[selection.pageIndex]
+        guard let caret = snapshot.caret(atX: xFraction * size.width,
+                                         y: (1 - yFraction) * size.height) else { return }
+        selection.drag(handle, to: caret, length: snapshot.length)
+        guard selection != textSelection else { return }
+        setTextSelection(selection, snapshot: snapshot)
+    }
+
+    /// The handle was let go: show the menu again.
+    func endSelectionHandleDrag() {
+        if textSelection != nil { selectionMenuRequest += 1 }
+    }
+
+    func clearTextSelection() {
+        guard textSelection != nil else { return }
+        textSelection = nil
+        selectionRects = []
+    }
+
+    /// Everything a change to the document invalidates about selection.
+    private func dropTextSelection() {
+        selectables.removeAll()
+        clearTextSelection()
+    }
+
+    /// The selected text, plain, with a line feed between lines; empty with no selection.
+    var selectedText: String {
+        guard let selection = textSelection, let snapshot = selectables[selection.pageIndex] else { return "" }
+        return snapshot.text(from: selection.start, to: selection.end)
+    }
+
+    /// Puts the selection on the pasteboard as plain text. Refused, with the reason, when the
+    /// document forbids copying: the menu already shows Copy disabled, so this is the backstop.
+    func copyTextSelection() {
+        guard canCopyText else {
+            showNotice(String(localized: "The owner of this document doesn't allow copying its text."))
+            return
+        }
+        let text = selectedText
+        guard !text.isEmpty else { return }
+        UIPasteboard.general.string = text
+    }
+
+    private func setTextSelection(_ selection: PageTextSelection, snapshot: PdfSelectableText) {
+        textSelection = selection
+        selectionRects = snapshot.rects(from: selection.start, to: selection.end)
+    }
+
+    private func selectable(page: Int, in doc: PdfDocument) async -> PdfSelectableText? {
+        if let cached = selectables[page] { return cached }
+        // Off the main thread: the engine is an actor, and a dense page's load is the one
+        // expensive call (about 16 ms at worst).
+        guard let loaded = try? await PdfEngine.shared.loadSelectable(doc, pageIndex: page),
+              document === doc else { return nil }
+        selectables[page] = loaded
+        return loaded
     }
 
     // MARK: - form text fields (#701)
@@ -2128,6 +2265,7 @@ final class ViewerModel: ObservableObject {
     private func afterHistoryChange(_ operation: PdfEditOperation, reverted: Bool) async {
         canUndo = history.canUndo
         canRedo = history.canRedo
+        dropTextSelection()
         selectedStamp = nil
         selectedTextBox = nil
         // A cover's handle is its page-object index, and any change to the page can move it
@@ -3602,6 +3740,7 @@ final class ViewerModel: ObservableObject {
 
     private func closeCurrent() {
         renderTask?.cancel()
+        dropTextSelection()
         pendingBodyEdit = nil
         pendingFormText = nil
         scannedHintShown = false
