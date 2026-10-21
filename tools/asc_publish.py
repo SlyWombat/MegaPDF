@@ -44,6 +44,12 @@ PLATFORM = os.environ.get("ASC_PLATFORM", "IOS")
 LOCALES = ["en-CA", "fr-CA", "fr-FR"]
 REPO_LOCALE = {"en-CA": "en", "fr-FR": "fr"}
 
+# Store URLs (#662). The support page asks the four questions a useful report needs and
+# answers the common ones first; GitHub is the source, not the help desk.
+SUPPORT_URL = "https://electricrv.ca/megapdf/support/"
+MARKETING_URL = "https://electricrv.ca/megapdf/"
+PRIVACY_URL = "https://electricrv.ca/megapdf/privacy/"
+
 # Slot order and file names: tools/store_slots.py (#656).
 # The Mac is a platform of the same record: ASC_PLATFORM=MAC_OS switches the
 # version, the slot types, and where the captures come from (tools/mac-mini.md).
@@ -278,8 +284,8 @@ def cmd_copy():
             continue
         attrs = {"description": fields["Description"], "keywords": fields["Keywords"],
                  "promotionalText": fields.get("Promotional text", ""),
-                 "supportUrl": "https://github.com/SlyWombat/MegaPDF",
-                 "marketingUrl": "https://electricrv.ca/megapdf/"}
+                 "supportUrl": SUPPORT_URL,
+                 "marketingUrl": MARKETING_URL}
         wn = notes.get(locale) or notes.get(REPO_LOCALE.get(locale, locale))
         if wn:
             if len(wn) > 4000:
@@ -306,7 +312,7 @@ def cmd_copy():
         if not fields:
             continue
         attrs = {"name": fields["Name"], "subtitle": fields["Subtitle"],
-                 "privacyPolicyUrl": "https://electricrv.ca/megapdf/privacy/"}
+                 "privacyPolicyUrl": PRIVACY_URL}
         if locale in ilocs:
             api("PATCH", f"/v1/appInfoLocalizations/{ilocs[locale]['id']}", {"data": {
                 "type": "appInfoLocalizations", "id": ilocs[locale]["id"], "attributes": attrs}})

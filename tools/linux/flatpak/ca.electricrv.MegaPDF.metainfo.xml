@@ -88,13 +88,13 @@
   </description>
 
   <url type="homepage">https://electricrv.ca/megapdf/</url>
-  <url type="bugtracker">https://github.com/SlyWombat/MegaPDF/issues</url>
+  <url type="help">https://electricrv.ca/megapdf/support/</url>
+  <url type="bugtracker">https://electricrv.ca/megapdf/support/</url>
   <url type="vcs-browser">https://github.com/SlyWombat/MegaPDF</url>
   <url type="contribute">https://github.com/SlyWombat/MegaPDF</url>
-  <!-- The privacy policy, which is the same page both Apple's and Google's listings
-       point at. AppStream 1.0 has no `privacy` url type, so it goes under `contact` —
-       the type whose description is the page a user reaches the publisher through. -->
-  <url type="contact">https://electricrv.ca/megapdf/privacy/</url>
+  <!-- help, bugtracker and contact are the support page (#662); a software centre shows them
+       to the person who needs help. The source stays on GitHub. -->
+  <url type="contact">https://electricrv.ca/megapdf/support/</url>
 
   <!-- The colours a software centre paints behind the name. Both are already in the
        app's own palette (src/MegaPDF.Avalonia/Brand.axaml): the light one is

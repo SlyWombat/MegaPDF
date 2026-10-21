@@ -9,6 +9,8 @@
 | Version scheme | `versionName` = marketing (0.1.0…), `versionCode` = must increase every upload |
 | Version parity | `versionName` tracks the **iOS public version**, which has no file to bump — iOS takes `MARKETING_VERSION` from the release tag (`ios-v<version>`). Bumping one platform for a shared feature means tagging the other to match: Android 1.1.0 (search/Find) expects `ios-v1.1.0`. |
 | Privacy policy URL | `https://electricrv.ca/megapdf/privacy/` |
+| Contact website (Store settings) | `https://electricrv.ca/megapdf/support/` — set with `tools/play.sh listing contact --website … --commit`, or by hand: Play Console → MegaPDF → Grow users → Store presence → Store settings → Store listing contact details → Website, Save (#662) |
+| Contact email | `info@electricrv.ca` |
 | Data safety | Nothing collected, nothing shared; no ads; zero permissions |
 | Sibling ids for reference | iOS `com.megapdf.ios` (+ diag `ca.electricrv.megapdf`) · SlyLED `ca.electricrv.slyled` · SlyTab `ca.electricrv.slytab` |
 
@@ -272,7 +274,14 @@ ever touches `internal`. `tools/play_listing.py` does it in one edit: the listin
 copy-by-language section above, the phone and 10-inch tablet screenshots from a capture
 folder, and the production release with its notes (`push <captures> --production <vc>`
 validates and discards; add `--commit` to send it), then `readback` compares a fresh
-edit with the sources. By hand, the API calls are:
+edit with the sources. The public contact details are app-level, not per release:
+`tools/play.sh listing contact` reads them and says whether the website is the support page;
+`contact --website https://electricrv.ca/megapdf/support/ --commit` sets it (a details edit needs an email, so the tool fills
+`info@electricrv.ca` in when the read showed it empty). **If the API PATCH is refused, or the
+read-back is still empty after a commit,** do it in the Console: Play Console → MegaPDF →
+**Grow users → Store presence → Store settings → Store listing contact details** → **Website** =
+`https://electricrv.ca/megapdf/support/`, **Email** = `info@electricrv.ca`, Save, then read back with `tools/play.sh listing contact`
+(#662). By hand, the API calls are:
 create an edit, `PUT /edits/{id}/tracks/production` with
 `{"releases":[{"versionCodes":["<vc>"],"status":"completed","releaseNotes":[…]}]}`,
 then `POST /edits/{id}:commit`. Service-account key at

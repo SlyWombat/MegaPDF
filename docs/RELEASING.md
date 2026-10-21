@@ -343,6 +343,7 @@ tools/play.sh listing status
 tools/play.sh listing push artifacts/store/captures-<x.y.z> --production <versionCode> --phone-only
 tools/play.sh listing push artifacts/store/captures-<x.y.z> --production <versionCode> --phone-only --commit
 tools/play.sh listing readback artifacts/store/captures-<x.y.z> --production <versionCode> --phone-only
+tools/play.sh listing contact                       # says "(the support page)"; the first time add --website https://electricrv.ca/megapdf/support/ --commit (#662)
 ```
 
 **Linux** — `tools/Linux-Packaging.md` § The day. Not a store: the tag build makes a
@@ -423,6 +424,7 @@ curl -s -o /dev/null -w '%{http_code}\n' 'https://play.google.com/store/apps/det
 curl -s https://electricrv.ca/megapdf/apt/dists/stable/InRelease | head -5
 curl -s https://electricrv.ca/megapdf/apt/dists/stable/main/binary-amd64/Packages | grep -A1 '^Package: megapdf'
 curl -s -H 'Snap-Device-Series: 16' 'https://api.snapcraft.io/v2/snaps/info/megapdf?fields=version,revision,private,publisher'
+curl -s -H 'Snap-Device-Series: 16' 'https://api.snapcraft.io/v2/snaps/info/megapdf?fields=links'   # contact and issues are the support page (#662)
 gh release view linux-v<x.y.z> --json assets -q '.assets[].name'      # and the two CLI tags
 ```
 

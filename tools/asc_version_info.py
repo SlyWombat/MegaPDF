@@ -16,4 +16,11 @@ if b:
           f"nonExemptEncryption={ba.get('usesNonExemptEncryption')}")
 for loc in a.paged(f"/v1/appStoreVersions/{v['id']}/appStoreVersionLocalizations?limit=50"):
     la = loc["attributes"]
-    print(f"  {la['locale']}: whatsNew {len(la.get('whatsNew') or '')}, description {len(la.get('description') or '')}")
+    mark = "" if la.get("supportUrl") == a.SUPPORT_URL else "  <-- NOT the support page"
+    print(f"  {la['locale']}: whatsNew {len(la.get('whatsNew') or '')}, description {len(la.get('description') or '')}, "
+          f"support {la.get('supportUrl')}, marketing {la.get('marketingUrl')}{mark}")
+# Privacy is on the app info, not the version; same appInfos choice as asc_publish.cmd_copy.
+infos = a.api("GET", f"/v1/apps/{a.APP_ID}/appInfos")["data"]
+info = next((i for i in infos if i["attributes"].get("appStoreState") not in ("READY_FOR_SALE",)), infos[0])
+for l in a.paged(f"/v1/appInfos/{info['id']}/appInfoLocalizations?limit=50"):
+    print(f"  {l['attributes']['locale']}: privacy {l['attributes'].get('privacyPolicyUrl')}")

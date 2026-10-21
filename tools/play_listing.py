@@ -9,7 +9,8 @@ by-hand production step that android/RELEASING.md describes.
 
     play_listing.py status                          read-only: listings, images, tracks
     play_listing.py push <captures> [--production <vc>] [--commit]
-    play_listing.py contact [--phone <number>|--phone ''] [--commit]   the public contact details (#417)
+    play_listing.py contact [--phone <number>|--phone ''] [--website <url>] [--commit]
+                                                    the public contact details (#417, #662)
                                                     one edit: text, screenshots, and
                                                     optionally a production release;
                                                     validated always, committed only
@@ -42,6 +43,8 @@ UPLOAD = f"/upload/androidpublisher/v3/applications/{ps.PACKAGE}"
 LOCALES = {"en-CA": "en", "fr-CA": "fr-CA", "fr-FR": "fr-FR"}   # Play -> capture folder
 IMAGE_TYPES = {"phone": "phoneScreenshots", "tablet": "tenInchScreenshots"}
 LIMITS = {"title": 30, "shortDescription": 80, "fullDescription": 4000, "notes": 500}
+CONTACT_WEBSITE = "https://electricrv.ca/megapdf/support/"   # #662: Play shows it under "App support"
+CONTACT_EMAIL = "info@electricrv.ca"
 
 
 def copy_by_language():
@@ -113,26 +116,40 @@ def cmd_status():
         e.discard()
 
 
-def cmd_contact(phone=None, commit=False):
+def cmd_contact(phone=None, website=None, commit=False):
     """The store listing's public contact details (Play Console -> Store settings).
 
-    Prints the email and website as they are and only whether a phone is set and
-    whether it is the agreed placeholder -- the number itself is never printed
-    (#417). With --phone, sets it; committed only with --commit.
+    Prints the email and website as they are, with a verdict on the website, and
+    only whether a phone is set and whether it is the agreed placeholder -- the
+    number itself is never printed (#417). With --phone / --website, sets them in
+    one PATCH (and the email too when the read showed it empty, since Play rejects
+    a details edit without one); committed only with --commit.
     """
     e = Edit()
     try:
         d = e.call("GET", "/details")
         cur = d.get("contactPhone") or ""
         digits = re.sub(r"\D", "", cur)
-        print(f"contact email: {d.get('contactEmail')}  website: {d.get('contactWebsite')}")
+        verdict = "the support page" if d.get("contactWebsite") == CONTACT_WEBSITE else "NOT the support page"
+        print(f"contact email: {d.get('contactEmail')}  website: {d.get('contactWebsite')}  ({verdict})")
         print("contact phone: " + ("not set" if not cur else
               ("the 888 555 placeholder" if digits.endswith("5551222") or digits.endswith("5551212")
                else f"SET, {len(digits)} digits, NOT the placeholder")))
+        body = {}
         if phone is not None:
-            d["contactPhone"] = phone
-            e.call("PATCH", "/details", body={"contactPhone": phone})
-            print("contact phone <- " + ("(cleared)" if phone == "" else "the given number"))
+            body["contactPhone"] = phone
+        if website is not None:
+            body["contactWebsite"] = website
+        if body and not d.get("contactEmail"):
+            body["contactEmail"] = CONTACT_EMAIL
+        if body:
+            e.call("PATCH", "/details", body=body)
+            if phone is not None:
+                print("contact phone <- " + ("(cleared)" if phone == "" else "the given number"))
+            if website is not None:
+                print(f"contact website <- {website}")
+            if "contactEmail" in body:
+                print(f"contact email <- {CONTACT_EMAIL} (the read showed it empty)")
             if commit:
                 e.call("POST", ":commit")
                 print("edit committed")
@@ -237,7 +254,10 @@ def main(argv):
         phone = None
         if "--phone" in argv:
             phone = argv[argv.index("--phone") + 1]
-        cmd_contact(phone, "--commit" in argv)
+        website = None
+        if "--website" in argv:
+            website = argv[argv.index("--website") + 1]
+        cmd_contact(phone, website, "--commit" in argv)
     elif argv[0] == "readback":
         sys.exit(1 if cmd_readback(captures, vc, "--phone-only" in argv) else 0)
     else:
