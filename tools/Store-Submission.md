@@ -107,9 +107,20 @@ does not change that. A whole afternoon of RC testing can then run against the p
 (2026-09-17, #146): remove the package first, or bump the version.
 
 ```
-Get-AppxPackage ElectricRV.MegaPDF | Remove-AppxPackage
-Add-AppxPackage -Path <package>.msix
+. D:\Projects\MegaPDF\tools\windows-qa\qa-safety.ps1
+$watch = Start-QaUserDataWatch 'rc install'      # copies the person's MegaPDF data aside first
+Install-QaTestPackage <package>.msix             # removes only a test build it installed itself
+# ... the RC pass ...
+Remove-QaTestPackage; Stop-QaUserDataWatch $watch
 ```
+
+⚠️ **Never `Get-AppxPackage ElectricRV.MegaPDF | Remove-AppxPackage` (#717).** Removing a
+package deletes its data folder under `%LOCALAPPDATA%\Packages\`, and the Store install and every
+test build share the one identity (the test certificate's subject is the Store publisher), so the
+one folder. If the installed package is the Store's (`SignatureKind` `Store`), it is the person's
+own MegaPDF, and that pipe deletes their settings, recents and signatures with it.
+`Remove-QaTestPackage` refuses a Store package, and refuses any package `Install-QaTestPackage` did
+not record installing.
 
 ⚠️ **Build the package from a clean output, never on top of an unpackaged build.** An
 unpackaged Release build (`WindowsPackageType=None`, what the dev loop and the capture
@@ -245,7 +256,8 @@ improve crash-report readability in Partner Center. Not a reason to install VS.
   shell that then exits can go with it. So the launcher is a *non-elevated* scheduled task,
   registered without admin rights, whose only action raises the prompt:
   `powershell.exe -NoProfile -WindowStyle Hidden -Command "Start-Process powershell.exe -Verb RunAs -ArgumentList '-NoProfile -ExecutionPolicy Bypass -Command & C:\temp\rc20\wack-run.ps1'"`
-  (a copy of `artifacts/store/wack-run.ps1` in a path with no spaces). Register it with
+  (a copy of `tools/windows-qa/wack-run.ps1` in a path with no spaces; `wack-register.ps1` and
+  `wack-launch.ps1` now do all of this). Register it with
   `Register-ScheduledTask -TaskName 'MegaPDF WACK'`, `-LogonType Interactive -RunLevel Limited`,
   and start it with `Start-ScheduledTask -TaskName 'MegaPDF WACK'` only when someone will
   click Yes. The report lands at `artifacts/store/wack-report.xml`, and `wack-done.marker`
@@ -253,8 +265,11 @@ improve crash-report readability in Partner Center. Not a reason to install VS.
   Delete the task afterwards.
 - To re-run WACK headlessly: build, sign a copy with the CurrentUser cert
   `CN=AF0F2AB7-…` (thumbprint `606D40BABE571A55D85E2C0BD26AA17A40B5D9F3`), then run
-  `artifacts/store/wack-run.ps1` elevated (it temporarily trusts the cert + enables
-  sideloading, runs appcert, reverts both).
+  `tools/windows-qa/wack-run.ps1` elevated (it temporarily trusts the cert + enables
+  sideloading, runs appcert, reverts both). It used to live untracked in `artifacts/store/` and
+  began by removing whatever MegaPDF package was installed; since #717 it backs up the person's
+  data first, stops if the installed package is the Store's, and removes only a test build the
+  QA tooling installed (`qa-safety.ps1`).
 - `runFullTrust` (the only declared capability) is allowed for packaged desktop apps;
   expect to briefly justify it during submission — standard for WinUI 3 desktop apps.
 

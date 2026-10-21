@@ -149,6 +149,15 @@ jobs:
       - name: Fill-check-sign self-test
         run: |
           xvfb-run -a "$RUNNER_TEMP/app/MegaPDF/bin/MegaPDF" --self-test "$RUNNER_TEMP/fixtures"
+          # #717: the self-test (and the launch of itself it makes) keeps its data in a folder
+          # of its own and checks the real one is untouched; this is the same claim from
+          # outside the process. Before #717 this run wrote ~/.local/share/MegaPDF/recent.json.
+          if [ -e "$HOME/.local/share/MegaPDF" ]; then
+            echo "::error::the self-test created or wrote ~/.local/share/MegaPDF, the real user's data folder:"
+            find "$HOME/.local/share/MegaPDF" | head -20
+            exit 1
+          fi
+          echo "the real user-data folder was never created"
 
       # Printing is CUPS through lp. What can be wrong is the lpstat parsing that
       # decides which queues exist and which is the default — checked against a
@@ -755,6 +764,22 @@ jobs:
           # gen_test_fixtures.py copies into the fixtures directory.
           Run-Check "select-copy" 60 "$env:RUNNER_TEMP/fixtures/selection.pdf"
           Run-Check "about" 45
+
+          # #717: every state above checks, from inside, that it kept its data in a folder of
+          # its own and left %LOCALAPPDATA%\MegaPDF byte-identical. This is the same claim from
+          # outside: on a fresh runner that folder must never have been created, and every
+          # state's own folder must have been deleted as it exited.
+          $realData = Join-Path $env:LOCALAPPDATA 'MegaPDF'
+          if (Test-Path $realData) {
+            Write-Output "::error::a self-test state created $realData, the real user's data folder"
+            Get-ChildItem -Recurse $realData | Select-Object -First 20 | ForEach-Object { "  $($_.FullName)" }
+            $failed += 'user-data'
+          }
+          $left = @(Get-ChildItem $env:TEMP -Directory -Filter 'megapdf-userdata-*' -ErrorAction SilentlyContinue)
+          if ($left.Count -gt 0) {
+            Write-Output "::error::$($left.Count) state(s) left their own user-data folder behind in %TEMP%"
+            $failed += 'user-data-cleanup'
+          }
 
           if ($failed.Count -gt 0) {
             Write-Output "FAILED: $($failed -join ', ')"

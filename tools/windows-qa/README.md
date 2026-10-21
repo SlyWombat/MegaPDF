@@ -8,13 +8,31 @@ read one before running it.
 
 - `common.ps1`: shared helpers (UI Automation, window activation, clicks).
   Every script dot-sources it from beside itself.
+- `qa-safety.ps1` (#717): the two rules every script here keeps. **A QA script never
+  loses the person's MegaPDF data:** `Start-QaUserDataWatch` copies
+  `%LOCALAPPDATA%\MegaPDF` and `%LOCALAPPDATA%\Packages\ElectricRV.MegaPDF_fba94j4nmgb9y`
+  to `D:\megapdf-qa\backup-<timestamp>\` before anything else, and
+  `Stop-QaUserDataWatch` compares them at the end, deletes the backup if nothing
+  changed, and prints every difference in red and keeps the backup if anything did.
+  `common.ps1` (and every script that does not use it) starts the watch, and it is
+  checked when PowerShell exits. **A QA script never removes a package it did not
+  install:** `Install-QaTestPackage` / `Remove-QaTestPackage` refuse a Store-signed
+  package (`SignatureKind` `Store` is Dave's own install, and removing a package deletes
+  its data folder) and any package not recorded in `D:\megapdf-qa\qa-installed-package.txt`.
+  Never pipe `Get-AppxPackage` into `Remove-AppxPackage`.
+- **An unpackaged `MegaPDF.exe` launched by a script** with no automation argument is
+  a person's launch as far as the app knows, and keeps its data in the real folder. Set
+  `MEGAPDF_USER_DATA` to a scratch folder first (`redirect-toolbar-check.ps1` does); the
+  app inherits it. Launches with `--screenshot`, `--screenshot-state`, `--engine-check`
+  and the rest isolate themselves.
 - `nvda.ps1` / `nvda268.ps1`: screen-reader checks. NVDA with debug logging
   writes every utterance to `%TEMP%\nvda.log`, and these slice it per step,
   so no one has to listen.
 - `xrefcheck.py`: reads a saved file's cross-reference table and reports
   negative or out-of-range offsets (#267).
-- `wack-prep.ps1` / `wack-launch.ps1`: register and raise the elevated
-  "MegaPDF WACK" scheduled task. The UAC prompt must be answered within about
+- `wack-prep.ps1` / `wack-register.ps1` / `wack-launch.ps1` / `wack-run.ps1`: stage the
+  package, register and raise the elevated "MegaPDF WACK" scheduled task, and the run
+  itself (tracked here since #717; it lived untracked in `artifacts/store/`). The UAC prompt must be answered within about
   2 minutes, so only run it with someone at the console.
   `tools/Store-Submission.md` has the full recipe.
 - `redirect-toolbar-check.ps1` (#427): a standalone regression check, not tied to the

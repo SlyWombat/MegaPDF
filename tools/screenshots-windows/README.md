@@ -328,3 +328,14 @@ Screenshots must contain no real user data:
 What a session leaves behind, all under `%LOCALAPPDATA%\MegaPDF\`: `recent.json`
 (write `[]` to clear), `Signatures\` (including anything added for the shoot), and
 `Recovery\` (crash-recovery journals of unsaved edits).
+
+**That folder is the person's (#717).** Every script here (through `lib.ps1`, and
+`Shoot-Set.ps1`, `Set-Language.ps1` and `Reset-SignatureLibrary.ps1` directly) starts
+`tools/windows-qa/qa-safety.ps1`'s watch: `%LOCALAPPDATA%\MegaPDF` and the package's data
+folder are copied to `D:\megapdf-qa\backup-<timestamp>\` first and compared when
+PowerShell exits, with every difference printed in red and the backup kept. The posed
+files are set aside and put back with `-Restore`; until they are, the watch says so.
+`Shoot-Set.ps1`'s reset deletes only the journals its own kills wrote, never one from
+before the run: a journal is someone's unsaved work. Driving an unpackaged build
+(`MEGAPDF_EXE`), set `MEGAPDF_USER_DATA` to a scratch folder as well, and the posing
+scripts write there instead of the real folder.

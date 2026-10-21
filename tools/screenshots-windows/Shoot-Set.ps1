@@ -63,6 +63,10 @@ param(
 )
 $ErrorActionPreference = 'Continue'
 $H = $PSScriptRoot
+# #717: back up the person's MegaPDF data first, and compare it when this PowerShell exits.
+. (Join-Path $H '..\windows-qa\qa-safety.ps1')
+Watch-QaUserDataUntilExit (Split-Path -Leaf $MyInvocation.PSCommandPath)
+$runStarted = Get-Date
 $repo = (Resolve-Path (Join-Path $H '..\..')).Path
 $shots = Join-Path $repo "artifacts\store\screenshots\$Dir"
 $env:MEGAPDF_SHOTDIR = $shots
@@ -109,7 +113,12 @@ Write-Host "staged: $folder"
 function Reset-App {
     Get-Process MegaPDF -ErrorAction SilentlyContinue | Stop-Process -Force
     Start-Sleep 2
-    Get-ChildItem (Join-Path $env:LOCALAPPDATA 'MegaPDF\Recovery') -Filter *.journal -ErrorAction SilentlyContinue |
+    # The journals this run's own kills left, after the kill (the app writes them on the
+    # way down) -- and only those. Every journal used to go, and a journal from before the
+    # run is the person's unsaved work (#717).
+    $data = if ($env:MEGAPDF_USER_DATA) { $env:MEGAPDF_USER_DATA } else { Join-Path $env:LOCALAPPDATA 'MegaPDF' }
+    Get-ChildItem (Join-Path $data 'Recovery') -Filter *.journal -ErrorAction SilentlyContinue |
+        Where-Object { $_.CreationTime -ge $runStarted } |
         Remove-Item -Force -ErrorAction SilentlyContinue
 }
 

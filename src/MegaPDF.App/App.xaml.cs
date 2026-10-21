@@ -75,7 +75,7 @@ public partial class App : Application
             var code = pdf is null
                 ? 2
                 : EngineCheck.Run(pdf, Screenshot.ArgumentAfter("--term") ?? "CANARY-42-XYZ", report);
-            Environment.Exit(code);
+            Environment.Exit(FinishAutomation(code));
             return;
         }
 
@@ -192,6 +192,18 @@ public partial class App : Application
             ok = await Screenshot.CaptureAsync(mainWindow, path);
         }
 
-        Environment.Exit(ok ? 0 : 1);
+        Environment.Exit(FinishAutomation(ok ? 0 : 1));
+    }
+
+    /// <summary>
+    /// The #717 guard, last thing before an automation launch exits: the data folder in use
+    /// was not the person's, and the person's is byte-identical to what it was at launch.
+    /// Either one failing fails the launch, whatever the state itself found.
+    /// </summary>
+    private static int FinishAutomation(int code)
+    {
+        var finished = AutomationUserData.Current?.Finish(code, Console.Error) ?? code;
+        Console.Error.Flush();
+        return finished;
     }
 }

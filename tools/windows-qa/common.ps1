@@ -1,3 +1,6 @@
+# #717: back up the person's MegaPDF data first, and compare it when this PowerShell exits.
+. (Join-Path $PSScriptRoot 'qa-safety.ps1')
+Watch-QaUserDataUntilExit (Split-Path -Leaf $MyInvocation.PSCommandPath)
 $env:MEGAPDF_SHOTDIR = 'D:\megapdf-qa\rc2\shots'
 . 'D:\megapdf-qa\pkg.ps1'
 $global:SHOTDIR = $env:MEGAPDF_SHOTDIR

@@ -8,7 +8,14 @@ param(
     [ValidateSet('Light', 'Dark')][string]$Theme = 'Light'
 )
 $ErrorActionPreference = 'Stop'
-$path = Join-Path $env:LOCALAPPDATA 'MegaPDF\settings.json'
+# #717: back up the person's MegaPDF data first, and compare it when this PowerShell exits.
+. (Join-Path $PSScriptRoot '..\windows-qa\qa-safety.ps1')
+Watch-QaUserDataUntilExit (Split-Path -Leaf $MyInvocation.PSCommandPath)
+# The app's data folder: MEGAPDF_USER_DATA's when it is set (an unpackaged build driven
+# through MEGAPDF_EXE reads it, #717), otherwise the real one, which only a packaged run
+# needs -- the package cannot be handed an environment variable.
+$data = if ($env:MEGAPDF_USER_DATA) { $env:MEGAPDF_USER_DATA } else { Join-Path $env:LOCALAPPDATA 'MegaPDF' }
+$path = Join-Path $data 'settings.json'
 if (-not (Test-Path $path)) { Write-Host "!! no settings at $path -- run the app once"; exit 1 }
 
 $json = Get-Content $path -Raw | ConvertFrom-Json

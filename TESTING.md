@@ -2421,6 +2421,44 @@ So the per-move cost is three to four orders of magnitude under a 16.7 ms frame,
 the call to keep off a per-move path. Not measured: a phone. The load there will be slower by the
 phone's factor; the contract says to load once per page, off the UI thread if needed.
 
+## Automation launches leave the person's data alone (#717), 2026-10-21
+
+Every automation launch on both desktops (the Windows `--screenshot`/`--screenshot-state`/
+`--engine-check`/`--hold`/... launches, and every Avalonia self-test, screenshot, capture and
+diagnostic entry point, including `--open-check` and `--window-tabs-check`) now keeps its
+settings, recents, signatures and recovery journal in a fresh `megapdf-userdata-*` folder under
+the temporary folder, deleted at exit, or in the folder `MEGAPDF_USER_DATA` names. At exit it
+checks that the folder it used was not the real one and that the real one is byte-identical
+(SHA-256 of every file) to what it was at launch, and the launch fails if either is not so.
+
+| where | what ran | real data folder | other traces |
+|---|---|---|---|
+| GPD-DAVE, `wip/717-isolated-user-data` | all 20 CI self-test states and `--engine-check`, under the UI lock | byte-identical, 9 entries, hashes, sizes and mtimes, before and after; also against a copy taken before the first run | Explorer Recent `.lnk` and `AutomaticDestinations`/`CustomDestinations`: unchanged. Clipboard sequence number 306 before and after. 0 isolation folders left in `%TEMP%` |
+| kdocker3, `origin/main` (51ed986) | Linux `--self-test` against a stand-in user folder | **`recent.json` rewritten** | |
+| kdocker3, the branch | `--self-test`, `--screenshot` with and without a state, `--render-check`, `--install-kind` | unchanged, every one | 0 isolation folders left |
+| kdocker3, the branch, `MEGAPDF_USER_DATA` = the real folder (what every launch did before) | `--self-test`, `--screenshot-state find` | the self-test rewrote `recent.json` | the guard **failed both**, exit 1: the data folder in use is the real one |
+| Mac mini, `origin/main` | `--self-test` | **`recent.json` rewritten** (restored from a copy afterwards) | |
+| Mac mini, the branch | `--self-test`, `--screenshot-state find`, `--window-tabs-check`, `--render-check` | unchanged, every one | Saved Application State, Preferences and LaunchServices recent documents unchanged; pasteboard `changeCount` 14 before and after |
+
+The guard's own failure cases (a recents row, a rewritten settings file, a new journal, a removed
+signature index, a real folder that appears, the real folder in use) are
+`tests/MegaPDF.Core.Tests/AutomationUserDataTests.cs`, which also holds a journal open through
+the end of the run, as a state's document does, and checks the run's folder still goes.
+
+Windows `select-copy` no longer writes the real clipboard at all: in an automation launch Copy
+keeps the package it would have handed to `Clipboard.SetContent` and the state reads it there.
+Saving and restoring every format is not possible faithfully (clipboard history and the cloud
+clipboard keep each write; delay-rendered formats and file lists do not round-trip). What this
+does not exercise is the final `SetContent`/`Flush` call itself. The Avalonia self-test runs on
+Avalonia's headless platform, whose clipboard is in memory, so it never reached the real one.
+
+The QA scripts (`tools/windows-qa`, `tools/screenshots-windows`) start with
+`tools/windows-qa/qa-safety.ps1`'s watch, which copies `%LOCALAPPDATA%\MegaPDF` and the package's
+data folder to `D:\megapdf-qa\backup-<timestamp>\` and compares them when PowerShell exits, and
+install and remove packages only through it: a Store-signed package is never removed. Its own
+checks were run on GPD-DAVE against stand-in folders and stand-in package objects (no package
+was installed or removed).
+
 ## Reporting
 
 For each issue: what you clicked, what you expected, what happened, and the PDF

@@ -37,15 +37,81 @@ public static class UserDataPaths
     public const string AppFolderName = "MegaPDF";
 
     /// <summary>
-    /// <paramref name="parts"/> joined onto the app's folder in the user-data root, which
-    /// is created if it is not there. The parts themselves are not created — a caller that
+    /// <paramref name="parts"/> joined onto the app's folder (<see cref="AppFolder"/>: the
+    /// one in the user-data root, or the one <see cref="OverrideVariable"/> names). The root,
+    /// or the named folder, is created if it is not there. The parts themselves are not created — a caller that
     /// wants a directory still creates it, and a caller that wants a file still writes it.
     /// </summary>
     /// <exception cref="UserDataUnavailableException">
     /// There is no folder to keep user data in, or it could not be created.
     /// </exception>
     public static string InAppFolder(params string[] parts) =>
-        Path.Combine([Root(), AppFolderName, .. parts]);
+        Path.Combine([AppFolder(), .. parts]);
+
+    /// <summary>
+    /// The environment variable that moves the app's whole folder somewhere else (#717): set
+    /// to an absolute path, that path *is* the folder settings, recents, signatures and the
+    /// recovery journal are kept in, on every platform, for this process and every process it
+    /// starts. Unset or empty, the folder is the ordinary one in the user-data root.
+    ///
+    /// Every automation launch sets it for itself (<see cref="AutomationUserData"/>), so a
+    /// self-test or a capture run never reads or writes the real user's data. A person or a
+    /// script can set it too, to seed a run with data of their own.
+    /// </summary>
+    public const string OverrideVariable = "MEGAPDF_USER_DATA";
+
+    /// <summary>
+    /// The app's folder: <see cref="OverrideVariable"/>'s, when it is set, and otherwise
+    /// <c>MegaPDF</c> in the user-data root. An overriding folder is created if it is not
+    /// there; the ordinary one is left to its first writer, as it always was.
+    /// </summary>
+    /// <exception cref="UserDataUnavailableException">
+    /// There is no folder to keep user data in, or it could not be created, or the override
+    /// is not an absolute path.
+    /// </exception>
+    public static string AppFolder()
+    {
+        if (OverridingFolder() is { } overriding)
+            return Ensure(overriding);
+        return Path.Combine(Root(), AppFolderName);
+    }
+
+    /// <summary>True when <see cref="OverrideVariable"/> moves the app's folder for this process.</summary>
+    public static bool IsOverridden => OverridingFolder() is not null;
+
+    private static string? OverridingFolder()
+    {
+        var value = Environment.GetEnvironmentVariable(OverrideVariable);
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+        // A relative path here would land beside the working directory — the very thing this
+        // class exists to prevent — and quietly falling back to the real folder would defeat
+        // the reason it was set. Neither: say so.
+        if (!Path.IsPathFullyQualified(value))
+            throw new UserDataUnavailableException(
+                $"{OverrideVariable} must name an absolute folder, not '{value}'.");
+        return Path.TrimEndingDirectorySeparator(value);
+    }
+
+    /// <summary>
+    /// Where the app's folder would be with no override, worked out without creating anything,
+    /// or null when there is nowhere it could be. The automation guard compares against this:
+    /// it is the real user's data, which an automation launch must leave exactly as it found it.
+    /// </summary>
+    public static string? DefaultAppFolder()
+    {
+        var root = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData,
+                                             Environment.SpecialFolderOption.DoNotVerify);
+        if (root.Length == 0 && !OperatingSystem.IsWindows())
+        {
+            var xdg = Environment.GetEnvironmentVariable("XDG_DATA_HOME");
+            var home = Environment.GetEnvironmentVariable("HOME");
+            root = xdg is { Length: > 0 } && Path.IsPathFullyQualified(xdg) ? xdg
+                 : home is { Length: > 0 } && Path.IsPathFullyQualified(home) ? Path.Combine(home, ".local", "share")
+                 : "";
+        }
+        return root.Length > 0 && Path.IsPathFullyQualified(root) ? Path.Combine(root, AppFolderName) : null;
+    }
 
     /// <summary>
     /// The user-data root, created if it is not there: <c>%LOCALAPPDATA%</c> on Windows,

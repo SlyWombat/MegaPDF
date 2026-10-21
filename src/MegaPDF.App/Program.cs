@@ -18,6 +18,9 @@ namespace MegaPDF.App;
 /// capture rig and CI self-tests must be able to run standalone at any time, including while
 /// a person's own window is already open (plan §6 item 10). This is load-bearing: redirecting
 /// one of these into a running instance would silently break every screenshot and self-test.
+///
+/// They also never touch the person's own data (#717): see
+/// <see cref="Core.Services.AutomationUserData"/>, which every one of them begins with.
 /// </summary>
 public static class Program
 {
@@ -41,6 +44,13 @@ public static class Program
     private static void Main(string[] args)
     {
         WinRT.ComWrappersSupport.InitializeComWrappers();
+
+        // #717: an automation launch keeps its settings, recents, signatures and recovery
+        // journal in a folder of its own, made fresh under %TEMP% and deleted at exit, never
+        // in %LOCALAPPDATA%\MegaPDF. First, before App's field initialisers build a single
+        // service; MEGAPDF_USER_DATA, if set, names the folder instead.
+        if (IsAutomationLaunch(args))
+            Core.Services.AutomationUserData.Begin();
 
         if (!IsAutomationLaunch(args))
         {

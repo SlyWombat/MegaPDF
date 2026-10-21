@@ -26,8 +26,12 @@ param(
 )
 . (Join-Path $PSScriptRoot "lib.ps1")
 
-$recent = Join-Path $env:LOCALAPPDATA 'MegaPDF\recent.json'
-$saved = Join-Path $env:LOCALAPPDATA 'MegaPDF\recent.before-capture.json'
+# The app's data folder: MEGAPDF_USER_DATA's when it is set (an unpackaged build driven
+# through MEGAPDF_EXE reads it, #717), otherwise the real one, which only a packaged run
+# needs -- the package cannot be handed an environment variable.
+$data = if ($env:MEGAPDF_USER_DATA) { $env:MEGAPDF_USER_DATA } else { Join-Path $env:LOCALAPPDATA 'MegaPDF' }
+$recent = Join-Path $data 'recent.json'
+$saved = Join-Path $data 'recent.before-capture.json'
 
 if ($Restore) {
     if (Test-Path $saved) {

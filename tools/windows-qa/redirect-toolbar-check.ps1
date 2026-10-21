@@ -21,9 +21,11 @@
 #       -Exe D:\Projects\MegaPDF\src\MegaPDF.App\bin\x64\Release\net8.0-windows10.0.19041.0\win-x64\MegaPDF.exe
 #
 # Exits 0 with "PASS" iff every attempt lands with all four editing buttons enabled;
-# exits 1 with a per-attempt report otherwise. Kills any MegaPDF process it finds first
-# (this is a fresh-instance test) and again when it's done; writes its two scratch PDFs
-# under $env:TEMP and removes them at the end.
+# exits 1 with a per-attempt report otherwise. Kills the build under test before each
+# attempt (this is a fresh-instance test) and again when it's done, and refuses to start
+# while any other MegaPDF is running: that one is the person's, and a launch here would be
+# redirected into it. Writes its two scratch PDFs and the app's user data (#717,
+# MEGAPDF_USER_DATA) under $env:TEMP and removes them at the end.
 
 param(
     [string]$Exe = $env:MEGAPDF_EXE,
@@ -42,11 +44,26 @@ Add-Type -AssemblyName UIAutomationTypes
 $AE = [System.Windows.Automation.AutomationElement]
 $TS = [System.Windows.Automation.TreeScope]
 
+# Only the build under test: a MegaPDF the person has open is not this script's to kill.
+$exeFull = (Resolve-Path $Exe).Path
+if (Get-Process -Name MegaPDF -ErrorAction SilentlyContinue | Where-Object { $_.Path -ne $exeFull }) {
+    Write-Host "STOP: another MegaPDF is running. It is not this script's to close, and the launches below would be redirected into it."
+    exit 2
+}
 # Two distinct, real fixtures from the repo's own test corpus -- neither open yet, which is
 # what a redirect needs to land as a genuinely new tab rather than just activating one.
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..\..")
 $dir = Join-Path $env:TEMP "megapdf-427-check-$([Guid]::NewGuid().ToString('N').Substring(0,8))"
 New-Item -ItemType Directory -Force $dir | Out-Null
+# #717: the launches below are a person's launches as far as the app knows -- no automation
+# argument -- so without this they kept their recents and recovery journals in the real
+# %LOCALAPPDATA%\MegaPDF, and every attempt's kill left a journal there that the next
+# ordinary launch offered to recover. MEGAPDF_USER_DATA moves the whole folder; the app
+# inherits it from this PowerShell.
+$userDataWas = $env:MEGAPDF_USER_DATA
+$env:MEGAPDF_USER_DATA = Join-Path $dir 'user-data'
+. (Join-Path $PSScriptRoot 'qa-safety.ps1')
+$watch = Start-QaUserDataWatch 'redirect-toolbar-check'
 $a = Join-Path $dir "a.pdf"
 $b = Join-Path $dir "b.pdf"
 Copy-Item (Join-Path $repoRoot "tests\MegaPDF.Core.Tests\Fixtures\cid-font.pdf") $a
@@ -59,12 +76,17 @@ function BtnEnabled($root, $id) {
     return $el.Current.IsEnabled
 }
 
+function Stop-BuildUnderTest {
+    Get-Process -Name MegaPDF -ErrorAction SilentlyContinue |
+        Where-Object { $_.Path -eq $exeFull } | Stop-Process -Force
+}
+
 $ids = 'SignaturesButton', 'AddTextButton', 'WhiteoutButton', 'RedactButton'
 $failures = 0
 
 try {
     for ($attempt = 1; $attempt -le $Attempts; $attempt++) {
-        Get-Process -Name MegaPDF -ErrorAction SilentlyContinue | Stop-Process -Force
+        Stop-BuildUnderTest
         Start-Sleep -Milliseconds 800
 
         Start-Process -FilePath $Exe -ArgumentList "`"$a`""
@@ -96,8 +118,11 @@ try {
         if (-not $ok) { $failures++ }
     }
 } finally {
-    Get-Process -Name MegaPDF -ErrorAction SilentlyContinue | Stop-Process -Force
+    Stop-BuildUnderTest
+    Start-Sleep -Milliseconds 800   # the kill writes a journal on the way down; delete after it
     Remove-Item -Recurse -Force $dir -ErrorAction SilentlyContinue
+    $env:MEGAPDF_USER_DATA = $userDataWas
+    if (-not (Stop-QaUserDataWatch $watch)) { $failures++ }
 }
 
 if ($failures -eq 0) {

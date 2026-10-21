@@ -168,7 +168,7 @@ other name) for the primary argument.
 
 | Platform | Where | Build under test | Version read-back |
 |---|---|---|---|
-| Windows | GPD-DAVE | `gh run download <run> -n MegaPDF-store-packages` → `python3 tools/check-native-arch.py x64/arm64 <msix>`, identity and resource-map checks (`tools/Store-Submission.md` § Verify) → `Get-AppxPackage ElectricRV.MegaPDF \| Remove-AppxPackage; Add-AppxPackage <x64 msix>` | About; `Get-AppxPackage ElectricRV.MegaPDF` |
+| Windows | GPD-DAVE | `gh run download <run> -n MegaPDF-store-packages` → `python3 tools/check-native-arch.py x64/arm64 <msix>`, identity and resource-map checks (`tools/Store-Submission.md` § Verify) → `tools/windows-qa/qa-safety.ps1`: `Start-QaUserDataWatch`, then `Install-QaTestPackage <x64 msix>` (never a bare `Remove-AppxPackage`: it would take a Store install's data with it, #717) | About; `Get-AppxPackage ElectricRV.MegaPDF` |
 | Mac | Mac mini | `tools/build-macos-app.sh osx-arm64 ~/app-macos`, `--self-test`, then the real app (`tools/mac-mini.md` § Recipes) | `Contents/Info.plist` CFBundleShortVersionString |
 | iOS | Mac mini | `xcodebuild test` then a simulator run of the app; Files → share sheet → MegaPDF | built `Info.plist` |
 | Android | emulator (Pixel 6 / API 33 was used) | the release build; Files → Open with | `aapt dump badging` |
@@ -427,7 +427,7 @@ Terse, with the date each one bit.
 - **glibc / GLIBCXX ceiling** (2026-09-26, #397). The Ubuntu 24.04 runner builds against glibc 2.39 / GCC 13; the .deb promises `libc6 >= 2.35` and Debian 12 has `GLIBCXX_3.4.30`. `megapdf-cli` quietly imported `GLIBC_2.38` and died on install. `build-linux-app.sh` now refuses any ELF above 2.35 / 3.4.30 and `check-apt-repo.sh` runs the CLI in every container.
 - **ASC 500 on inherited screenshots, 409 on the review detail** (2026-09-26). A version created from the last inherits both; deleting the screenshots one by one got 500 for minutes, creating the detail got 409. `asc_publish.py` now drops and recreates the set, and updates the detail on 409.
 - **ITMS-90788** (2026-09-26). A `CFBundleDocumentTypes` entry without `LSHandlerRank` is a warning on upload; `Alternate` is in `ios/project.yml` now. It cost a second build (33 for 32).
-- **`Add-AppxPackage` on the same version is a no-op** (2026-09-17, #146). It reports success and leaves the old build installed; `-ForceUpdateFromAnyVersion` does not help. `Remove-AppxPackage` first.
+- **`Add-AppxPackage` on the same version is a no-op** (2026-09-17, #146). It reports success and leaves the old build installed; `-ForceUpdateFromAnyVersion` does not help. Remove first, through `Install-QaTestPackage` (`tools/windows-qa/qa-safety.ps1`), which removes only a test build it installed and stops at a Store install (#717).
 - **`Shoot-Set.ps1` refuses unless the installed package is its `-Version`** (2026-09-20). Right, but it means the Store set cannot be shot until the release package is installed, which is after §2.3.
 - **The picker over OneDrive** (2026-09-26). On GPD-DAVE the Open dialog opens on Dave's OneDrive. Fine in test evidence, never in a public capture; drive the picker off-frame or at the demo folder, and read every image.
 - **PowerShell heredocs truncate** (2026-09-26). A long script fed to `powershell.exe -Command -` lost its tail and ran half. Write a `.ps1` under `D:\megapdf-qa\` and dot-source it from a short heredoc (`-File` is blocked by the secrets hook).

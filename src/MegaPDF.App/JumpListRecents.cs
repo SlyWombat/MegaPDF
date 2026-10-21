@@ -1,3 +1,4 @@
+using MegaPDF.Core.Services;
 using Windows.Storage;
 using Windows.Storage.AccessCache;
 using Windows.UI.StartScreen;
@@ -21,6 +22,12 @@ internal static class JumpListRecents
     {
         try
         {
+            // #717: an automation launch is nobody's session, and nor is a launch whose data a
+            // script has moved with MEGAPDF_USER_DATA. MostRecentlyUsedList with AppAndSystem
+            // visibility is also the system's Recent list: a shortcut in Explorer's Recent
+            // folder and a row in the taskbar jump list, for a test file the person never opened.
+            if (AutomationUserData.IsActive || Core.Services.UserDataPaths.IsOverridden)
+                return;
             if (!JumpList.IsSupported())
                 return;
             var file = await StorageFile.GetFileFromPathAsync(path);

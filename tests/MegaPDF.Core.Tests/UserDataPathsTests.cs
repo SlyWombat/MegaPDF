@@ -25,11 +25,16 @@ public class UserDataPathsTests : IDisposable
     private readonly string _dir = Directory.CreateTempSubdirectory("megapdf-userdata-").FullName;
     private readonly string? _xdg = Environment.GetEnvironmentVariable("XDG_DATA_HOME");
     private readonly string? _home = Environment.GetEnvironmentVariable("HOME");
+    private readonly string? _override = Environment.GetEnvironmentVariable(UserDataPaths.OverrideVariable);
+
+    // These are about the ordinary folder, so the #717 override must not be moving it.
+    public UserDataPathsTests() => Environment.SetEnvironmentVariable(UserDataPaths.OverrideVariable, null);
 
     public void Dispose()
     {
         Environment.SetEnvironmentVariable("XDG_DATA_HOME", _xdg);
         Environment.SetEnvironmentVariable("HOME", _home);
+        Environment.SetEnvironmentVariable(UserDataPaths.OverrideVariable, _override);
         try { Directory.Delete(_dir, recursive: true); } catch (IOException) { /* left in temp */ }
     }
 
