@@ -23,7 +23,8 @@ leaves the 10-inch set on Play exactly as it is, for a release that shot no new 
 <captures> may be `--text-only` instead: the listing text and the release notes
 are set or compared, and the screenshots on Play are left exactly as they are.
 
-<captures> holds {phone,tablet}/{en,fr-CA,fr-FR}/android-<pose>.png.
+<captures> holds {phone,tablet}/{en,fr-CA,fr-FR}/android-<pose>.png; the poses and their
+order are in tools/store_slots.py.
 Key: PLAY_SA_PATH (a file) or PLAY_SA_JSON, as play_submit.py takes it.
 """
 import hashlib
@@ -33,25 +34,12 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import play_submit as ps  # noqa: E402
+import store_slots  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BASE = f"/androidpublisher/v3/applications/{ps.PACKAGE}"
 UPLOAD = f"/upload/androidpublisher/v3/applications/{ps.PACKAGE}"
 LOCALES = {"en-CA": "en", "fr-CA": "fr-CA", "fr-FR": "fr-FR"}   # Play -> capture folder
-# Listing order. The source of truth is the capture gate's play profile,
-# tools/capture-gate/stores.py -> "order", and this list must stay equal to its
-# first eight entries (the gate keeps `viewer` and `draw` behind them because the
-# QA matrix still shoots both, but Play takes eight and neither is a listing slot
-# since #613).
-#
-# Keeping a second copy here has already cost a release: when #613 renamed the
-# slots, this list still read ["viewer", "text-edit", "text", "search", "sign",
-# "draw", "home", "redact"] and `listing push` died on "missing
-# .../android-viewer.png" during the 2.2.0 submission. The same stale-copy bug hit
-# tools/asc_publish.py at the same time, where it was worse: it uploaded 1 of 7
-# screenshots to the Mac listing and exited 0. If you change the slots, change
-# them here too - or better, see #656 and make this read from the profile.
-ORDER = ["reading", "text-edit", "sign", "pages", "text", "search", "redact", "home"]
 IMAGE_TYPES = {"phone": "phoneScreenshots", "tablet": "tenInchScreenshots"}
 LIMITS = {"title": 30, "shortDescription": 80, "fullDescription": 4000, "notes": 500}
 
@@ -78,7 +66,8 @@ def copy_by_language():
 
 
 def shots(captures, device, folder):
-    files = [os.path.join(captures, device, folder, f"android-{p}.png") for p in ORDER]
+    files = [os.path.join(captures, device, folder, f)
+             for f in store_slots.listing_files("play", device)]
     for f in files:
         if not os.path.isfile(f):
             raise SystemExit(f"missing {f}")

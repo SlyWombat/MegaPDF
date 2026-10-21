@@ -15,7 +15,12 @@ one line in `slots`.
 """
 from __future__ import annotations
 
+import os
 import re
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import store_slots  # noqa: E402
 
 # The brand accent, from src/MegaPDF.Avalonia/Brand.axaml and
 # src/MegaPDF.App/Themes/Brand.xaml. Selection borders, the armed-mode banner
@@ -85,19 +90,8 @@ STORES: dict[str, dict] = {
         # 1.7 listing went up at 2482x1541 — not 16:9, and accepted. A size
         # inside this floor passes; only the frame above is measured as a window.
         "min_size": (1366, 768),
-        # Listing order is the file numbers (docs/microsoft-store-listing.md);
-        # the poses are the file names with the number taken off. Re-cut for 2.2
-        # (#613, Dave 2026-10-01): reading and the page tools are what the listing
-        # copy now opens with, redaction moves back, and reading replaces the old
-        # front slot rather than joining it. Applying that to Windows would have
-        # retired `checkbox`, `shrink` and `add-text` too, which the approved list
-        # did not say because it was drawn up against the Mac set; Dave settled it
-        # the same day at **eight** slots — checkbox back, between fixing the
-        # document and signing it, shrink and add-text retired, and the ninth slot
-        # the Store allows deliberately left empty. See Shoot-Set.ps1. The two
-        # retired poses are still shot, into the set's work\ folder.
-        "order": ["reading", "text", "checkbox", "sign", "pages", "search",
-                  "redact", "home"],
+        # Listing order and the rationale for it: tools/store_slots.py (#656).
+        "order": store_slots.gate_order("microsoft"),
         "parse": _pose(r"(?:\d+[-_])?(?P<pose>[a-z][a-z0-9-]*)\.png$"),
         # Shoot-Set.ps1 files every probe and in-between frame here at the end of
         # a run. They are the record of the run, not the set, and are not uploaded.
@@ -187,12 +181,8 @@ STORES: dict[str, dict] = {
     "mac": {
         "title": "Mac App Store",
         "slots": {"desktop": [(1440, 900), (2880, 1800), (2560, 1600), (1280, 800)]},
-        # The seven listing slots since #613. `viewer` is behind them because it
-        # is no longer one — reading replaced it at the front — but the Mac
-        # screen inventory still shoots it, and a pose this list does not name
-        # sorts to the end of the sheet rather than beside its siblings.
-        "order": ["reading", "text", "sign", "pages", "search", "redact",
-                  "home", "viewer"],
+        # Listing order and the rationale for it: tools/store_slots.py (#656).
+        "order": store_slots.gate_order("mac"),
         "parse": _pose(r"(?:light-|dark-)?(?:\d+[-_])?(?P<pose>[a-z][a-z0-9-]*)\.png$"),
         # The find bar is a legitimate second row, and only in the search pose
         # (#144 left one row of commands; Find opens its own bar under it).
@@ -247,38 +237,10 @@ STORES: dict[str, dict] = {
             "iphone-6_5": [(1242, 2688), (1284, 2778)],
             "ipad-13": [(2064, 2752), (2048, 2732)],
         },
-        # Re-cut for 2.2 (#613, PR #651), and — unlike every other store in this file —
-        # **two sequences, not one**, because Dave's call on the iPad was to lead on what
-        # only that device has rather than repeat the iPhone's case. A `{device: [...]}`
-        # dict rather than a flat list, so the two orders are two things to look at side
-        # by side, not one list with an iPad exception threaded through it; `order_key`
-        # in gate.py reads whichever one matches the shot's own device, and a pose a
-        # device's list does not name still sorts to the end of that device's run of the
-        # sheet (the same rule every other profile's flat `order` already gives an
-        # unlisted pose — `viewer` on this store, `viewer`'s Mac counterpart).
-        #
-        # `text-edit` and `text` both keep their own slot on both devices, as Android's
-        # 8-slot set did — correcting existing body text (#113) and adding a new line
-        # (#43) are different stories — and `draw` keeps its slot on both too (Dave, PR
-        # #651): the App Store takes up to ten images, so the Play-only squeeze that cut
-        # `draw` there (#613 §draw) never applied here.
-        #
-        # **iPhone** reads as the #613 argument in sequence: read it, fix it, sign it
-        # (twice), organise it, fill it, find it, take something out, nothing leaves the
-        # device.
-        #
-        # **iPad** leads on the sidebar and the 2.2 toolbar (#172) instead (Dave, PR
-        # #651): `pages` and `reading` swap to the front — the workspace, then the same
-        # workspace taken away, which is the strongest argument that the toolbar in slot
-        # 1 is real — and the other seven keep the iPhone's order and the iPhone's
-        # captions (`tools/gen_listing_copy.py`'s `captions_ipad`), because nothing about
-        # *them* is an iPad story.
-        "order": {
-            "iphone-6_9": ["reading", "text-edit", "sign", "draw", "pages", "text",
-                          "search", "redact", "home"],
-            "ipad-13": ["pages", "reading", "text-edit", "sign", "draw", "text",
-                       "search", "redact", "home"],
-        },
+        # Two sequences, not one (the iPad leads on the sidebar). Listing order and the
+        # rationale for it: tools/store_slots.py (#656). `order_key` in gate.py reads
+        # whichever one matches the shot's own device.
+        "order": store_slots.gate_order("ios"),
         "parse": _pose(r"(?:[a-z]-)?(?:(?P<lang>[a-z]{2}(?:-[A-Za-z]{2})?)-)?"
                        r"(?P<device>iphone-[0-9_]+|ipad-[0-9]+)-"
                        r"(?P<pose>[a-z][a-z0-9-]*)\.png$"),
@@ -339,13 +301,8 @@ STORES: dict[str, dict] = {
             # was never meant for a store.
             "small": [(720, 1440)], "large": [(1440, 3200)],
         },
-        # The eight listing slots since #613, in listing order. `viewer` and
-        # `draw` are behind them because they are no longer listing slots —
-        # reading replaced the first and the second came out at Play's limit of
-        # eight — but the QA matrix still shoots both, and a pose this list does
-        # not name sorts to the end of the sheet rather than beside its siblings.
-        "order": ["reading", "text-edit", "sign", "pages", "text", "search",
-                  "redact", "home", "viewer", "draw"],
+        # Listing order and the rationale for it: tools/store_slots.py (#656).
+        "order": store_slots.gate_order("play"),
         "parse": _pose(
             r"(?P<device>small|tablet|large)__(?P<lang>en|fr-CA|fr-FR)__"
             r"(?:light|dark)__t\d+__(?P<pose>[A-Za-z0-9-]+)\.png$",
