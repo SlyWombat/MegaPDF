@@ -38,6 +38,15 @@ unsaved changes in two tabs and you should be asked about each; answer Cancel on
 second and the first must still be there, edits and all. Kill the app with three tabs
 open and the next launch should offer to restore each of them, into its own tab.
 
+**Moving a tab to another window** (#711, Windows) — drag a tab down off the strip and it
+opens in a window of its own where you let go; drag it onto another MegaPDF window's strip
+and it moves there. Right-click a tab (or Shift+F10 on it) for **Move tab to new window**,
+which is greyed out when it is the window's only tab. Make an unsaved edit and zoom in
+first: the edit, Undo, the zoom, the scroll position and any open find must all come with
+the tab, both windows must draw, and the window a tab leaves must close if it was the last
+one there. A real drag cannot be automated, so this is by hand; `--screenshot-state
+tab-move` covers everything after the pointer lets go.
+
 **Tabs on the Mac and Linux** (#711) — on the **Mac** every document is a window of its
 own, and macOS decides whether they open as tabs, the way it does for Preview: System
 Settings ▸ Desktop & Dock ▸ **Prefer tabs when opening documents**. Set to **Always**, open

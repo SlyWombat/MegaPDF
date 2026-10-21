@@ -1134,6 +1134,14 @@ Enregistrée sous {2}, prête pour l'e-mail.</value>
     <value>{0}, modifications non enregistrées, onglet</value>
     <comment>#348 — new French, for francophone review</comment>
   </data>
+  <data name="MoveTabToNewWindowItem.Text" xml:space="preserve">
+    <value>Déplacer l'onglet vers une nouvelle fenêtre</value>
+    <comment>FR-REVIEW #711 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="TabMoved" xml:space="preserve">
+    <value>Onglet {0} déplacé dans une autre fenêtre</value>
+    <comment>FR-REVIEW #711 — new, not yet read by the reviewer.</comment>
+  </data>
   <data name="ReadingMode" xml:space="preserve">
     <value>Mode lecture</value>
     <comment>FR-REVIEW #504 — new with reading mode, not yet read by the reviewer. Glossary entry from #505</comment>

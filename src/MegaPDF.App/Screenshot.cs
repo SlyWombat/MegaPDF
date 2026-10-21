@@ -26,7 +26,7 @@ namespace MegaPDF.App;
 /// This renders the XAML tree instead, so it needs no input, no focus, and no
 /// desktop to itself.
 /// </summary>
-internal static class Screenshot
+internal static partial class Screenshot
 {
     /// <summary>The busy operation a `busy` capture holds open until the process exits (#145).</summary>
     private static IDisposable? _heldBusy;
@@ -254,6 +254,12 @@ internal static class Screenshot
             // touched Active. Needs a document; the exit code is the test.
             case "launch-toolbar":
                 return CheckLaunchToolbar(window, vm);
+
+            // #711: a tab moved to a window of its own and back, through the one code path a
+            // drag, the context menu and a drop all share. Needs a document; the exit code is
+            // the test.
+            case "tab-move":
+                return await CheckTabMoveAsync(window);
 
             default:
                 Console.Error.WriteLine($"unknown --screenshot-state '{state}'");
@@ -1098,7 +1104,7 @@ internal static class Screenshot
         SynchronizationContext.SetSynchronizationContext(null);
         try
         {
-            return new DocumentViewModel(window, shell.Settings, shell.RecentFiles, shell.SignatureLibrary);
+            return new DocumentViewModel(() => window, shell.Settings, shell.RecentFiles, shell.SignatureLibrary);
         }
         finally
         {

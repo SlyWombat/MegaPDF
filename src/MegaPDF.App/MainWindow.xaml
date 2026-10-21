@@ -501,7 +501,12 @@
                 SelectedItem="{x:Bind Shell.Active, Mode=TwoWay}"
                 CanReorderTabs="True"
                 CanDragTabs="True"
+                CanTearOutTabs="False"
                 IsAddTabButtonVisible="False"
+                TabTearOutWindowRequested="OnTabTearOutWindowRequested"
+                TabTearOutRequested="OnTabTearOutRequested"
+                ExternalTornOutTabsDropping="OnExternalTornOutTabsDropping"
+                ExternalTornOutTabsDropped="OnExternalTornOutTabsDropped"
                 TabCloseRequested="OnTabCloseRequested"
                 SelectionChanged="OnDocumentsTabViewSelectionChanged">
                 <TabView.TabItemTemplate>
@@ -515,7 +520,20 @@
                             Header="{x:Bind TabTitle, Mode=OneWay}"
                             IsClosable="True"
                             AutomationProperties.Name="{x:Bind TabAccessibleName, Mode=OneWay}"
-                            Content="{x:Bind TabContent}" />
+                            Content="{x:Bind TabContent}">
+                            <!-- Move tab to new window (#711): the keyboard and Narrator's way to
+                                 what dragging a tab off the strip does. Shift+F10 or the Menu key
+                                 on a focused tab opens it. Tag carries the tab's document. -->
+                            <TabViewItem.ContextFlyout>
+                                <MenuFlyout Opening="OnTabContextMenuOpening">
+                                    <MenuFlyoutItem
+                                        x:Uid="MoveTabToNewWindowItem"
+                                        Tag="{x:Bind}"
+                                        Click="OnMoveTabToNewWindowClicked"
+                                        AutomationProperties.AutomationId="MoveTabToNewWindowItem" />
+                                </MenuFlyout>
+                            </TabViewItem.ContextFlyout>
+                        </TabViewItem>
                     </DataTemplate>
                 </TabView.TabItemTemplate>
             </TabView>

@@ -74,6 +74,78 @@ public sealed partial class DocumentView : UserControl
     private bool _wired;
 
     /// <summary>
+    /// Undoes every subscription this view made on its document (#711). A document can outlive
+    /// the view that showed it: dragged to another window it gets a new view, and the old one
+    /// must stop answering the document's events or each would run twice — once into a view
+    /// that is no longer on screen.
+    /// </summary>
+    private readonly List<Action> _unhook = [];
+
+    /// <summary>Stops this view reacting to its document. Called when the document gets a new view.</summary>
+    internal void Detach()
+    {
+        foreach (var undo in _unhook)
+            undo();
+        _unhook.Clear();
+        _findDebounce?.Stop();
+        _nudgeTimer?.Stop();
+        _barTimer?.Stop();
+    }
+
+    /// <summary>
+    /// What a find in progress looks like, so the view that replaces this one can show the same
+    /// bar (#711). The matches themselves live on the document and travel with it.
+    /// </summary>
+    internal (bool Open, string Query) FindBarState => (IsFindBarOpen, FindQuery.Text);
+
+    private bool _restoringFind;
+
+    /// <summary>For the tab-move self-test (#711): the view is in a window and has pages to show.</summary>
+    internal bool DrawsPagesForTest =>
+        IsLoaded && PagesScroll.ExtentHeight > 0 && PagesScroll.ViewportHeight > 0
+        && ViewModel.Pages.Any(p => p.Source is not null);
+
+    /// <summary>
+    /// Brings a view that was made for a document already in use up to what the document is
+    /// showing (#711): the page-focus ring, the redaction overlays, the page spinner and the
+    /// pages pane's selection are all drawn from events, and a document that has moved window
+    /// raised none of them for the new view.
+    /// </summary>
+    internal void SyncFromDocument() => DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+    {
+        UpdateFocusRing();
+        RefreshRedactionOverlays();
+        UpdatePageBusyIndicator();
+        PullTileSelectionFromViewModel();
+        TextStyleContextChanged?.Invoke(this, EventArgs.Empty);
+    });
+
+    /// <summary>Reopens the find bar the way <paramref name="state"/> left it, without searching again.</summary>
+    internal void RestoreFindBar((bool Open, string Query) state)
+    {
+        if (!state.Open)
+            return;
+        _restoringFind = true;
+        try
+        {
+            FindBar.Visibility = Visibility.Visible;
+            FindQuery.Text = state.Query;
+        }
+        finally
+        {
+            _restoringFind = false;
+        }
+    }
+
+    /// <summary>
+    /// Puts the page scroller back where the document says it was, once the pages have a size
+    /// (#711): a new view starts at the top, and the offset the old one reported is on the document.
+    /// </summary>
+    internal void RestoreScrollOffset(double offset) =>
+        DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
+            () => PagesScroll.ChangeView(null, offset, null, disableAnimation: true));
+
+    /// <summary>
     /// The zoom the last correction (or this view's own construction) ran from (#528)
     /// — the "before" value <see cref="OnDocumentViewLoaded"/>'s <c>ZoomPercent</c>
     /// branch reads to correct from, since <see cref="System.ComponentModel.PropertyChangedEventArgs"/>
@@ -101,19 +173,28 @@ public sealed partial class DocumentView : UserControl
         ViewModel.View = this;
         InitializePagesPane();   // #174
         _lastKnownZoomFactor = ViewModel.ZoomFactor;
-        ViewModel.ScrollRestoreRequested += offset =>
+        var vm = ViewModel;
+        Action<double> onScrollRestore = offset =>
             DispatcherQueue.TryEnqueue(() => PagesScroll.ChangeView(null, offset, null, disableAnimation: true));
-        ViewModel.SearchScrollRequested += target =>
+        vm.ScrollRestoreRequested += onScrollRestore;
+        _unhook.Add(() => vm.ScrollRestoreRequested -= onScrollRestore);
+        Action<DocumentViewModel.SearchScrollTarget> onSearchScroll = target =>
             DispatcherQueue.TryEnqueue(() => ScrollMatchIntoView(target));
+        vm.SearchScrollRequested += onSearchScroll;
+        _unhook.Add(() => vm.SearchScrollRequested -= onSearchScroll);
         // A mark lives in the core and is never drawn into the page (#329), so nothing else
         // tells the view the overlays are stale: placed, undone, redone and cleared marks all
         // arrive here.
-        ViewModel.RedactionMarksChanged += (_, _) => DispatcherQueue.TryEnqueue(RefreshRedactionOverlays);
+        EventHandler onMarks = (_, _) => DispatcherQueue.TryEnqueue(RefreshRedactionOverlays);
+        vm.RedactionMarksChanged += onMarks;
+        _unhook.Add(() => vm.RedactionMarksChanged -= onMarks);
         // The page-level spinner (#145): on the line the text-edit check is about, or at the
         // top of the page a change waits on.
-        ViewModel.Busy.PropertyChanged += (_, _) => UpdatePageBusyIndicator();
+        System.ComponentModel.PropertyChangedEventHandler onBusy = (_, _) => UpdatePageBusyIndicator();
+        vm.Busy.PropertyChanged += onBusy;
+        _unhook.Add(() => vm.Busy.PropertyChanged -= onBusy);
 
-        ViewModel.PropertyChanged += (_, ev) =>
+        System.ComponentModel.PropertyChangedEventHandler onVmChanged = (_, ev) =>
         {
             // A different document means the matches are gone — close the stale bar.
             if (ev.PropertyName is nameof(DocumentViewModel.DocumentPath) && FindBar.Visibility == Visibility.Visible)
@@ -140,6 +221,8 @@ public sealed partial class DocumentView : UserControl
                 _lastKnownZoomFactor = ViewModel.ZoomFactor;
             }
         };
+        vm.PropertyChanged += onVmChanged;
+        _unhook.Add(() => vm.PropertyChanged -= onVmChanged);
 
         InitializePageKeyboard();
 
@@ -1642,6 +1725,8 @@ public sealed partial class DocumentView : UserControl
     /// <summary>Search as you type — a small debounce keeps big documents responsive.</summary>
     private void OnFindQueryChanged(object sender, TextChangedEventArgs e)
     {
+        if (_restoringFind)
+            return;
         if (_findDebounce is null)
         {
             _findDebounce = DispatcherQueue.CreateTimer();
