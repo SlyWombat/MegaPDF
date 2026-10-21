@@ -1,7 +1,9 @@
 package com.megapdf.android
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.drag
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
@@ -20,6 +22,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
@@ -103,22 +106,24 @@ internal fun TextSelectionOverlay(
                         // A tag, not a label: the handle has no words, and the instrumented test drags it.
                         .testTag(if (isStart) SELECTION_START_HANDLE_TAG else SELECTION_END_HANDLE_TAG)
                         .pointerInput(isStart) {
-                            var finger = Offset.Zero
-                            var lineHeightPx = 0f
-                            detectDragGestures(
-                                onDragStart = {
-                                    android.util.Log.d("MegaPDFSel", "drag start isStart=$isStart")
-                                    dragging = true
-                                    val rect = currentRects.let { if (isStart) it.first() else it.last() }
-                                    finger = Offset(
-                                        (if (isStart) rect.left else rect.right).toFloat() * sx,
-                                        (pageSize.heightPoints - rect.bottom).toFloat() * sy,
-                                    )
-                                    lineHeightPx = ((rect.top - rect.bottom) * sy).toFloat()
-                                },
-                                onDrag = { change, delta ->
+                            // Not detectDragGestures: that leaves the down event unconsumed, so the
+                            // page's own detector, further up, goes on timing a long-press and
+                            // re-selects the word under a finger that is only resting on a handle.
+                            // Consuming the down takes this touch away from it, and a handle should
+                            // answer at once rather than after the touch slop.
+                            awaitEachGesture {
+                                val down = awaitFirstDown(requireUnconsumed = true)
+                                down.consume()
+                                dragging = true
+                                val rect = currentRects.let { if (isStart) it.first() else it.last() }
+                                var finger = Offset(
+                                    (if (isStart) rect.left else rect.right).toFloat() * sx,
+                                    (pageSize.heightPoints - rect.bottom).toFloat() * sy,
+                                )
+                                val lineHeightPx = ((rect.top - rect.bottom) * sy).toFloat()
+                                drag(down.id) { change ->
                                     change.consume()
-                                    finger += delta
+                                    finger += change.positionChange()
                                     // The handle hangs under its line, so the caret is looked for a
                                     // half line above the tip, on the line being pointed at.
                                     val xPt = (finger.x / sx).toDouble()
@@ -128,12 +133,10 @@ internal fun TextSelectionOverlay(
                                         selectable.caretAt(xPt, yPt), isStart, now, selectable.length,
                                     )
                                     val next = now.withHandleAt(isStart, caret)
-                                    android.util.Log.d("MegaPDFSel", "drag xPt=$xPt yPt=$yPt caret=$caret next=$next")
                                     if (next != now) onChange(next)
-                                },
-                                onDragEnd = { dragging = false },
-                                onDragCancel = { dragging = false },
-                            )
+                                }
+                                dragging = false
+                            }
                         },
                 ) {
                     val radius = size.width * 0.28f
