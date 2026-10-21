@@ -51,6 +51,6 @@ Dave's go-ahead: <quote and date>. Live before this release: Windows <>, iOS <>,
 - [ ] APT: `InRelease` and `Packages` at https://electricrv.ca/megapdf/apt/ name <ver>; a clean container installs it from the live page's commands.
 - [ ] GitHub: `gh release view` for `linux-v<ver>`, `windows-cli-v<ver>`, `macos-cli-v<ver>` lists every asset with its `.sha256`.
 - [ ] Last comment here: what went live where, ids and hashes.
-- [ ] Milestone closed; anything left moved to the next one first.
+- [ ] Milestone handed to Dave: he closes it and decides where anything left goes (milestones are his alone; an agent never closes, creates or moves one).
 - [ ] Handoff memory written.
 - [ ] Machines as found: WACK task deleted, nothing left installed or open on GPD-DAVE, `~/megapdf-work/<task>/` gone on kdocker2 and the Mac mini, worktrees pruned (`git cherry origin/main <branch>` before deleting), `D:\megapdf-qa\` emptied of this release's scratch.
