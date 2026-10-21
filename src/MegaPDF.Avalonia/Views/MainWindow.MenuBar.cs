@@ -58,6 +58,8 @@ public partial class MainWindow
     private static KeyGesture RedoGesture => OperatingSystem.IsMacOS() ? Shortcut(Key.Z, KeyModifiers.Shift) : Shortcut(Key.Y);
 
     private static KeyGesture FindGesture => Shortcut(Key.F);
+    private static KeyGesture CopyGesture => Shortcut(Key.C);
+    private static KeyGesture SelectAllGesture => Shortcut(Key.A);
     private static KeyGesture ZoomInGesture => Shortcut(Key.OemPlus);
     private static KeyGesture ZoomOutGesture => Shortcut(Key.OemMinus);
     private static KeyGesture ActualSizeGesture => Shortcut(Key.D0);
@@ -249,6 +251,18 @@ public partial class MainWindow
             else
                 Active?.RedoCommand.Execute(null);
         }));
+        // Copy and Select All (#710), where every Mac app keeps them. A text field with focus
+        // copies and selects its own text through these too, since the key equivalent answers
+        // before the field sees the key.
+        edit.Items.Add(new NativeMenuItemSeparator());
+        edit.Items.Add(Command("CopyText", Strings.TextCopy, CopyGesture,
+            () => ActiveMainWindow().FocusManager?.GetFocusedElement() is TextBox or SelectableTextBlock
+                  || ActiveMainWindow().Active?.CanCopySelection == true,
+            () => _ = ActiveMainWindow().CopyCommandAsync()));
+        edit.Items.Add(Command("SelectAllText", Strings.TextSelectAll, SelectAllGesture,
+            () => ActiveMainWindow().FocusManager?.GetFocusedElement() is TextBox or SelectableTextBlock
+                  || ActiveMainWindow().Active?.IsDocumentOpen == true,
+            () => ActiveMainWindow().SelectAllCommand()));
         edit.Items.Add(new NativeMenuItemSeparator());
         edit.Items.Add(Command("Find", Strings.FindInDocument, FindGesture,
             () => Active?.IsDocumentOpen == true, OpenFind));

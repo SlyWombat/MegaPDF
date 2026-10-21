@@ -701,6 +701,7 @@ public partial class DocumentViewModel(Func<Window> host, AppSettings settings, 
         DisposeDocument(); // the document this tab held until now (#543) — same path Dispose() uses
         _document = doc;
         _scanSearcher = CreateScanSearcher(doc);
+        OpenSelectableText(doc); // #710: and its text, for selecting
 
         // Permissions first, so nothing bound to the new path sees the old document's (#131).
         Capabilities = DocumentCapabilities.From(doc.Security);
@@ -819,6 +820,7 @@ public partial class DocumentViewModel(Func<Window> host, AppSettings settings, 
     {
         _scanSearcher?.Clear();
         _scanSearcher = null;
+        CloseSelectableText(); // #710
         _document?.Dispose();
         _document = null;
         _cappedRenders.Clear();
@@ -1218,6 +1220,7 @@ public partial class DocumentViewModel(Func<Window> host, AppSettings settings, 
             return;
         // A cover, a stamp or a text box changes what the page shows: what was read from it is stale (#676).
         _scanSearcher?.PageChanged(pageIndex);
+        _selectableText?.PageChanged(pageIndex); // and so is its selectable text (#710)
         _cappedRenders.Remove(pageIndex); // the edit changed what the page looks like
         _keyboardMaps.TryRemove(pageIndex, out _); // and what is on it (#2)
         Pages[pageIndex] = await RenderPageAsync(_document, pageIndex);
@@ -2460,8 +2463,9 @@ public partial class DocumentViewModel(Func<Window> host, AppSettings settings, 
             _undoStack.Clear();
             UndoCommand.NotifyCanExecuteChanged();
             RedoCommand.NotifyCanExecuteChanged();
-            // Text a redaction removed must not stay findable (#676).
+            // Text a redaction removed must not stay findable (#676), or selectable (#710).
             _scanSearcher?.Clear();
+            _selectableText?.Clear();
             RefreshRedactionMarks();
             await RefreshPagesAfterRedactionAsync();
             RedactionSummaryText = DescribeRedaction(report.Counts);
@@ -2623,6 +2627,7 @@ public partial class DocumentViewModel(Func<Window> host, AppSettings settings, 
         UndoCommand.NotifyCanExecuteChanged();
         RedoCommand.NotifyCanExecuteChanged();
         _keyboardMaps.Clear(); // stamps are page content now (#2)
+        _selectableText?.Clear(); // and so is any text box's text (#710)
         for (var i = 0; i < Pages.Count; i++)
         {
             if (Pages[i].Source is not null)
@@ -3045,6 +3050,7 @@ public partial class DocumentViewModel(Func<Window> host, AppSettings settings, 
         _editCount++;
         HasUnsavedChanges = applied > 0;
         _keyboardMaps.Clear(); // the replay changed what is on the pages (#2)
+        _selectableText?.Clear(); // #710
         // Drop any already-rendered bitmaps (they predate the replay) and re-render the viewport.
         for (var i = 0; i < Pages.Count; i++)
         {

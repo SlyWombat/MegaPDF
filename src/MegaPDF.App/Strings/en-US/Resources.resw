@@ -1404,4 +1404,16 @@ Saved as {2} — ready to email.</value>
     <value>Cancelled.</value>
     <comment>An extract that was stopped before it finished (#174)</comment>
   </data>
+  <data name="TextCopy" xml:space="preserve">
+    <value>Copy</value>
+    <comment>#710: the page's context menu (and the Mac's Edit menu): copies the selected text</comment>
+  </data>
+  <data name="TextSelectAll" xml:space="preserve">
+    <value>Select all</value>
+    <comment>#710: the page's context menu: selects the whole document's text</comment>
+  </data>
+  <data name="CopyWithheld" xml:space="preserve">
+    <value>The author of this document asked that nothing be copied out of it.</value>
+    <comment>#710: why Copy is unavailable on a document without the copy permission; #558's extraction-class wording. Selecting still works</comment>
+  </data>
 </root>

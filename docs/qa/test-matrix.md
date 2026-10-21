@@ -17,7 +17,7 @@ Each cell says two things and both are checked against the code:
 | `GAP` | the feature is **missing** where it should exist — the #571 shape |
 | `+m` | a by-hand step in `TESTING.md` / `docs/RELEASING.md` covers it too |
 
-235 pairings: 137 UI, 60 eng, 14 —, 14 n/a, 10 GAP.
+235 pairings: 140 UI, 60 eng, 14 —, 14 n/a, 7 GAP.
 
 This map is about *what is covered*, not whether the covering tests pass — that is the
 other jobs' business — and it does not replace the by-hand pass in `docs/RELEASING.md`
@@ -28,7 +28,7 @@ other jobs' business — and it does not replace the by-hand pass in `docs/RELEA
 This is the part worth reading. A map that only restated what passes would not be
 worth checking in.
 
-### Missing feature — absent where it should exist (10)
+### Missing feature — absent where it should exist (7)
 
 Nothing is failing; nothing is looking. #571 (Linux had an About window with no route to it) and #3 (Android had no whiteout at all) were both this.
 
@@ -41,9 +41,6 @@ Nothing is failing; nothing is looking. #571 (Linux had an About window with no 
 | Shrink for email (`shrink`) | android | no shrink on Android either, for the same reason and with the same silence. | — |
 | Shrink for email (`shrink`) | ios | no shrink on iOS. Nothing in the source says it was decided against, and a phone mailing a scan is the case it exists for. | — |
 | Select text and copy it (`select-copy`) | android | megapdf_select.cpp is in the engine's CMake build; the JNI binding and the long-press UI are not yet built. | #710 |
-| Select text and copy it (`select-copy`) | linux | same as macOS. | #710 |
-| Select text and copy it (`select-copy`) | macos | as Windows: MegaPDF.Core's PdfSelectableText and PdfTextSelection are ready, the Avalonia UI and its headless check are not. | #710 |
-| Select text and copy it (`select-copy`) | windows | the core (contract 11) and the shared .NET binding are in, tested by core_tests.cpp's test_selection_* and TextSelectionTests.cs; the press-and-drag UI and its self-test state are not yet built. | #710 |
 
 ### Present, nothing automated (14)
 
@@ -152,7 +149,7 @@ The shared core proves the operation. Nothing proves this platform reaches it co
 | **A small side indicator of scroll position, including in reading mode** | UI | UI | UI | — | eng |
 | **Zoom (buttons, keyboard, wheel, pinch) and fit** | UI | UI | UI | UI | UI |
 | **Find in document** | eng+m | UI+m | UI+m | eng | eng |
-| **Select text and copy it** | GAP | GAP | GAP | UI | GAP |
+| **Select text and copy it** | UI | UI | UI | UI | GAP |
 | **Reading mode** | UI | UI | UI | UI | UI |
 | **Page colours (normal / sepia / night)** | UI | UI | UI | eng | UI |
 | **Page thumbnails pane** | UI | UI | UI | UI | UI |
@@ -319,9 +316,9 @@ others are the proof that nothing was needed.
 
 ### Select text and copy it (`select-copy`)
 
-- **Windows** — GAP. absent (gap). the core (contract 11) and the shared .NET binding are in, tested by core_tests.cpp's test_selection_* and TextSelectionTests.cs; the press-and-drag UI and its self-test state are not yet built. #710.
-- **macOS** — GAP. absent (gap). as Windows: MegaPDF.Core's PdfSelectableText and PdfTextSelection are ready, the Avalonia UI and its headless check are not. #710.
-- **Linux** — GAP. absent (gap). same as macOS. #710.
+- **Windows** — UI. coverage: UI/VM. reachable from `src/MegaPDF.App/DocumentView.xaml.cs::OnPagePointerPressed`. tests: `.github/workflows/ci.yml::Run-Check "select-copy"`, `tests/MegaPDF.Core.Tests/TextSelectionTests.cs::TextSelectionTests`, `core/tests/core_tests.cpp::test_selection_columns`, `core/tests/core_tests.cpp::test_selection_handles_and_permissions`. #710: press and drag selects, a click that does not travel still edits; double-click selects a word (taking back the editor its first click opened), Shift+click and Shift+Left/Right extend, Ctrl+A selects the document, Ctrl+C and the page's context menu copy with CR LF line ends, Escape lets go. `select-copy` opens selection.pdf and feeds synthetic pointer readings to the page's real press, move and release handlers (WinUI cannot synthesise a pointer), so the threshold, hit checks, page walk and tap swallowing are the real ones; it reads the real clipboard back, checks reading order across two columns and a page break, a plain click still opening the editor, armed tools keeping their drags, an edit dropping the selection, and owner-only.pdf selecting but refusing Copy with the reason shown. The key and menu routes themselves (accelerators, the flyout opening) are not driven. TextSelectionTests.cs holds the shared cache, selection and line-end rules both desktops use.
+- **macOS** — UI. coverage: UI/VM. reachable from `src/MegaPDF.Avalonia/Views/MainWindow.axaml.cs::OnPagePointerPressed`. tests: `src/MegaPDF.Avalonia/Program.cs::CheckTextSelection`, `tests/MegaPDF.Core.Tests/TextSelectionTests.cs::TextSelectionTests`, `core/tests/core_tests.cpp::test_selection_columns`. #710: the same gestures in the Mac idiom: Edit > Copy and Select All (Cmd+C, Cmd+A), Copy greyed on a no-copy document with the reason in the status line and the context menu; LF line ends. The press now opens the line editor on release rather than on press, because a press cannot yet know it is a click. CheckTextSelection drives a real MainWindow with real headless mouse and key input over selection.pdf and owner-only.pdf: a drag across the columns, Shift+Right, Escape, a click that still edits, a drag across the page break, Select All, Cover keeping its drag, an edit dropping the selection, reading mode, and the no-copy document. The double-click's second press goes through DoubleClickWordForTest, since headless input gives no reliable click count of two.
+- **Linux** — UI. coverage: UI/VM. reachable from `src/MegaPDF.Avalonia/Views/MainWindow.axaml.cs::OnPagePointerPressed`. tests: `src/MegaPDF.Avalonia/Program.cs::CheckTextSelection`, `tests/MegaPDF.Core.Tests/TextSelectionTests.cs::TextSelectionTests`, `core/tests/core_tests.cpp::test_selection_columns`. same as macOS, with Ctrl+C and Ctrl+A bound on the window (X11 hosts no menu bar).
 - **iOS/iPadOS** — UI. coverage: UI/VM. reachable from `ios/MegaPDF/ViewerModel.swift::beginTextSelection`. tests: `ios/MegaPDFTests/TextSelectionTests.swift::class`, `ios/MegaPDFUITests/SelectCopyUITests.swift::class`, `.github/workflows/ios-ci.yml::MegaPDFUITests/SelectCopyUITests`. #710: a long press selects the word, drawn in the tint at the selection opacity with two draggable handles and the system's UIEditMenuInteraction offering Copy (plain text to UIPasteboard); a tap clears it. One page at a time, not across pages. Copy is disabled with a notice when the document's copy bit is off. TextSelectionTests runs selection.pdf through the Swift binding and the handle logic; SelectCopyUITests long-presses, copies and reads the pasteboard back. iOS reading mode shows page images, not reflowed text, so there is nothing there to make selectable.
 - **Android** — GAP. absent (gap). megapdf_select.cpp is in the engine's CMake build; the JNI binding and the long-press UI are not yet built. #710.
 
@@ -709,7 +706,6 @@ These are the exceptions, each with its reason.
 
 | artefact | why not |
 |---|---|
-| `tests/MegaPDF.Core.Tests/TextSelectionTests.cs` | #710's binding tests, landed ahead of any platform's UI: every select-copy cell is still absent, and an absent cell cannot cite a test. The first desktop cell to turn present cites this file and removes this exemption. |
 | `ios/MegaPDFUITests/DocumentOpening.swift` | the shared wait for a document to open (#599), not a test: it holds no assertion of its own and the eleven suites that call it are each on the map |
 | `ios/MegaPDFTests/ModelOpening.swift` | the same wait for the unit suites (#599), replacing nine identical private copies; a harness, not a test |
 | `android/app/src/androidTest/java/com/megapdf/android/TestPdfs.kt` | fixture builder for the instrumented suite, not a test |

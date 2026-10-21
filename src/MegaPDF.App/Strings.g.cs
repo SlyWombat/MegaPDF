@@ -936,4 +936,13 @@ public static partial class Strings
 
     /// <summary>Cancelled.</summary>
     public static string PagesCancelled => Get("PagesCancelled");
+
+    /// <summary>Copy</summary>
+    public static string TextCopy => Get("TextCopy");
+
+    /// <summary>Select all</summary>
+    public static string TextSelectAll => Get("TextSelectAll");
+
+    /// <summary>The author of this document asked that nothing be copied out of it.</summary>
+    public static string CopyWithheld => Get("CopyWithheld");
 }

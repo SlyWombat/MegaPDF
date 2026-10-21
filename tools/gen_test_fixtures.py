@@ -64,6 +64,7 @@ Deterministic output; both platforms' engine tests assert against these.
 """
 import hashlib
 import os
+import shutil
 import sys
 
 
@@ -1129,6 +1130,20 @@ def main():
         with open(path, "wb") as f:
             f.write(data)
         print("wrote %s (%d bytes)" % (path, len(data)))
+
+    # #710: the text selection checks (the Windows `select-copy` state, the Avalonia
+    # self-test's CheckTextSelection) use two fixtures that are committed rather than made
+    # here: selection.pdf needs fontTools to build (tools/gen_selection_fixture.py), and
+    # owner-only.pdf needs qpdf (tools/gen_security_fixtures.sh). Copied beside the rest, so
+    # every job that runs a self-test has them, including the sandboxed macOS ones that
+    # cannot read the checkout.
+    committed = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "tests",
+                             "MegaPDF.Core.Tests", "Fixtures")
+    for sub, name in (("structure", "selection.pdf"), ("security", "owner-only.pdf")):
+        source = os.path.join(committed, sub, name)
+        path = os.path.join(outdir, name)
+        shutil.copyfile(source, path)
+        print("copied %s (%d bytes)" % (path, os.path.getsize(path)))
 
 
 if __name__ == "__main__":

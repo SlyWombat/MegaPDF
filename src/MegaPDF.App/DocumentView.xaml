@@ -270,6 +270,15 @@
                     <Button x:Uid="UnlockButton" Click="OnUnlockClicked" />
                 </InfoBar.ActionButton>
             </InfoBar>
+            <!-- #710: Copy on a document whose author asked that nothing be copied out of it.
+                 Selecting still works; only Copy is off, and this says why. -->
+            <InfoBar
+                AutomationProperties.AutomationId="CopyWithheldNoticeBar"
+                Message="{x:Bind CopyWithheldMessage}"
+                Background="{ThemeResource SolidBackgroundFillColorSecondaryBrush}"
+                IsOpen="{x:Bind ViewModel.IsCopyWithheldNoticeOpen, Mode=TwoWay}"
+                Severity="Informational"
+                IsClosable="True" />
             <InfoBar
                 x:Uid="RecoveryOffNoticeBar"
                 Background="{ThemeResource SolidBackgroundFillColorSecondaryBrush}"

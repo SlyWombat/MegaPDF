@@ -123,6 +123,7 @@ public partial class MainWindow : Window
         WireReadingMode();
         WireZoom();
         WirePages();
+        WireTextSelection(); // #710
 
         // Only realised pages rasterise. ContainerPrepared/ContainerClearing are the
         // virtualization hooks — this is where "render what you can see" happens, and
@@ -133,6 +134,7 @@ public partial class MainWindow : Window
                 return;
 
             page.EnsureRendered(RenderScaling);
+            PrepareContainerForText(e.Container, page); // #710: its text read ahead, its selection drawn
             e.Container.PointerPressed -= OnPagePointerPressed;
             e.Container.PointerPressed += OnPagePointerPressed;
             e.Container.PointerMoved -= OnPagePointerMoved;
@@ -368,6 +370,7 @@ public partial class MainWindow : Window
         // the cross-tab corruption a switch must not cause.
         DismissInlineEditor();
         CancelBand();
+        CancelTextPress(); // #710: a selection drag belongs to the tab it started on
         RemoveChrome();
         RemoveFocusRing();
         // The find box is one shared control across every tab: its typed text and
@@ -457,6 +460,12 @@ public partial class MainWindow : Window
     /// </summary>
     private void OnPreviewKeyDown(object? sender, KeyEventArgs e)
     {
+        // Shift+Left/Right move the end of selected text (#710), before page traversal sees an arrow.
+        if (e.Key is Key.Left or Key.Right && HandleTextSelectionKey(e))
+        {
+            e.Handled = true;
+            return;
+        }
         if (HandlePageKey(e))
             e.Handled = true;
     }
@@ -512,6 +521,13 @@ public partial class MainWindow : Window
         if (e.Key == Key.Escape && Active is { Selection: not null } hasSelection)
         {
             hasSelection.ClearSelection();
+            e.Handled = true;
+            return;
+        }
+
+        // Selected text lets go on Escape (#710).
+        if (e.Key == Key.Escape && HandleTextSelectionKey(e))
+        {
             e.Handled = true;
             return;
         }
@@ -1104,6 +1120,9 @@ public partial class MainWindow : Window
 
     private PdfFormField? _inlineEditorField;
 
+    /// <summary>The text the open editor started with: a double-click takes back only an editor nothing was typed in (#710).</summary>
+    private string? InlineEditorStartText { get; set; }
+
     /// <summary>Whether a whiteout/redaction drag is in progress, for the self-test.</summary>
     internal bool HasBandInProgress => _band is not null;
 
@@ -1235,6 +1254,7 @@ public partial class MainWindow : Window
         {
             overlay.Children.Add(editor);
             _inlineEditor = editor;
+            InlineEditorStartText = initialText;
             _inlineEditorOwner = vm;
             _inlineEditorField = formField;
             editor.Focus();
@@ -1363,6 +1383,9 @@ public partial class MainWindow : Window
     private void ShowLineEditor(int pageIndex, PdfTextLine line)
     {
         if (Active is not { } vm)
+            return;
+        // A double-click selecting a word took this click back while its line was being checked (#710).
+        if (LineEditWasTakenBack(pageIndex))
             return;
 
         var container = ContainerFor(pageIndex);
@@ -1658,7 +1681,19 @@ public partial class MainWindow : Window
         // do not come through a pointer. Not marked handled: the scroller underneath
         // still gets the press, so dragging to scroll keeps working.
         if (IsReadingMode)
+        {
+            // Selecting and copying are reading, not editing (#710): a drag selects here too,
+            // and a click still does nothing.
+            if (sender is Control readingContainer && readingContainer.DataContext is PageViewModel readingPage
+                && Active is { } readingVm && e.GetCurrentPoint(readingContainer).Properties.IsLeftButtonPressed)
+            {
+                var at = e.GetPosition(SurfaceOf(readingContainer));
+                var scale = 1.0 / (PageBitmap.PointsToPixels * readingVm.Zoom);
+                TryBeginTextPress(readingContainer, readingPage, at, new PdfPoint(at.X * scale, at.Y * scale),
+                                  e.Pointer, e.KeyModifiers, readingMode: true);
+            }
             return;
+        }
         if (sender is not Control container || container.DataContext is not PageViewModel page)
             return;
         if (Active is not { } vm)
@@ -1715,6 +1750,11 @@ public partial class MainWindow : Window
                     vm.ClearSelection();
                     break;
                 }
+                // #710: a press on the document's text, or on blank paper, may become a text
+                // selection. It is a click only once it is released without travelling, so the
+                // click itself — the editor opening — waits for the release (EndTextPress).
+                if (TryBeginTextPress(container, page, position, pagePoint, e.Pointer, e.KeyModifiers, readingMode: false))
+                    break;
                 vm.HandlePageClick(page.Index, pagePoint);
                 break;
         }
@@ -1807,9 +1847,12 @@ public partial class MainWindow : Window
         // (SDD §2.2), and the mode is "looking".
         if (IsReadingMode)
         {
+            TrackTextPress(e);
             ShowReadingPill();
             return;
         }
+        if (TrackTextPress(e))
+            return; // a text selection drag (#710), or a press still deciding whether it is one
         OnSelectionPointerMoved(e);
         UpdateCursor(sender, e);
 
@@ -1826,6 +1869,8 @@ public partial class MainWindow : Window
 
     private void OnPagePointerReleased(object? sender, PointerReleasedEventArgs e)
     {
+        if (EndTextPress(e))
+            return; // the end of a text selection drag, or the click a press turned out to be (#710)
         if (IsReadingMode)
             return;
         OnSelectionPointerReleased(e);
@@ -2345,6 +2390,10 @@ public partial class MainWindow : Window
         // Ctrl+Right to rotate and Alt+Up / Alt+Down to reorder are the Linux desktop's own
         // conventions, and the menu bar that would otherwise carry them is not hosted on X11.
         KeyBindings.Add(new KeyBinding { Gesture = PagesGesture, Command = new RelayCommand(TogglePageStrip) });
+        // Copy and Select All on selected text (#710), for the same reason: on the Mac they are
+        // Edit menu items. A text field that has focus handles both keys itself first.
+        KeyBindings.Add(new KeyBinding { Gesture = CopyGesture, Command = new RelayCommand(() => _ = CopyCommandAsync()) });
+        KeyBindings.Add(new KeyBinding { Gesture = SelectAllGesture, Command = new RelayCommand(SelectAllCommand) });
         KeyBindings.Add(new KeyBinding { Gesture = RotateLeftGesture, Command = new RelayCommand(() => Run(Active?.RotatePagesLeftCommand)) });
         KeyBindings.Add(new KeyBinding { Gesture = RotateRightGesture, Command = new RelayCommand(() => Run(Active?.RotatePagesRightCommand)) });
         KeyBindings.Add(new KeyBinding { Gesture = MovePageUpGesture, Command = new RelayCommand(() => Run(Active?.MovePageUpCommand)) });
