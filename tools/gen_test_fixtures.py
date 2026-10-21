@@ -11,6 +11,14 @@ Writes:
                 rect (100,600)-(300,620), initially empty. Separate from
                 forms.pdf so that shared fixture (and its committed copy under
                 android/) does not drift for a desktop-only test.
+  formflow.pdf- 2 pages for #709/#712, the Tab-between-fields and multi-line cases.
+                Page 1: a single-line text field "first" (150,700)-(350,720), a printed
+                label "Last name:" and then a text field "last" (150,660)-(350,680), a
+                multi-line text field "notes" (Ff bit 13) at (150,540)-(450,620), a
+                checkbox "agree" at (150,500)-(165,515). Page 2: a text field "second"
+                at (150,700)-(350,720). Widget order is the order named; every field has
+                a printed label before it, which a Tab that follows reading order would
+                stop on and one that follows form fields must skip.
   stamped.pdf - 1 page with two MegaPDF-style stamp annots (the SDD 6.2
                 MegaPDF_Id contract): "sig:interop-1" at (100,500)-(190,560)
                 and "mark:interop-2" at (72,600)-(84,612), each with an /AP
@@ -168,6 +176,60 @@ def gen_formtext():
     add(b"<< /Type /Catalog /Pages %d 0 R /AcroForm << /Fields [%d 0 R] "
         b"/DA (/Helv 12 Tf 0 g) /DR << /Font << /Helv %d 0 R >> >> >> >>"
         % (pages, widget, font))
+    return build(objs)
+
+
+def gen_formflow():
+    """The #709/#712 fixture: labelled single-line, multi-line, checkbox, then a second page.
+
+    Separate from formtext.pdf and forms.pdf for the same reason formtext.pdf is
+    separate from forms.pdf: those two are shared with the phones' committed copies.
+    """
+    objs = []
+    add = lambda b: (objs.append(b), len(objs))[1]
+
+    font = add(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>")
+    box_ap = lambda w, h: stream(
+        b"/Type /XObject /Subtype /Form /BBox [0 0 %d %d]" % (w, h),
+        b"0.13 0.13 0.13 RG 1 w 0.5 0.5 %d %d re S\n" % (w - 1, h - 1))
+    ap_line = add(box_ap(200, 20))
+    ap_notes = add(box_ap(300, 80))
+    ap_yes = add(stream(
+        b"/Type /XObject /Subtype /Form /BBox [0 0 15 15]",
+        b"0.13 0.13 0.13 RG 1 w 0.5 0.5 14 14 re S 1.6 w 3 3 m 12 12 l S 3 12 m 12 3 l S\n"))
+    ap_off = add(box_ap(15, 15))
+    content1 = add(stream(b"", (
+        b"BT /F1 12 Tf 72 706 Td (First name:) Tj ET\n"
+        b"BT /F1 12 Tf 72 666 Td (Last name:) Tj ET\n"
+        b"BT /F1 12 Tf 72 596 Td (Comments:) Tj ET\n"
+        b"BT /F1 12 Tf 72 504 Td (Agree:) Tj ET\n")))
+    content2 = add(stream(b"", b"BT /F1 12 Tf 72 706 Td (Second page:) Tj ET\n"))
+    # Objects still to come: page1, page2, then the five widgets, then Pages and Catalog.
+    page1 = len(objs) + 1
+    page2 = len(objs) + 2
+    w_first, w_last, w_notes, w_agree, w_second = (len(objs) + 3 + i for i in range(5))
+    pages_num = len(objs) + 8
+    add(b"<< /Type /Page /Parent %d 0 R /MediaBox [0 0 612 792] "
+        b"/Resources << /Font << /F1 %d 0 R >> >> /Contents %d 0 R "
+        b"/Annots [%d 0 R %d 0 R %d 0 R %d 0 R] >>"
+        % (pages_num, font, content1, w_first, w_last, w_notes, w_agree))
+    add(b"<< /Type /Page /Parent %d 0 R /MediaBox [0 0 612 792] "
+        b"/Resources << /Font << /F1 %d 0 R >> >> /Contents %d 0 R "
+        b"/Annots [%d 0 R] >>" % (pages_num, font, content2, w_second))
+    text = (b"<< /Type /Annot /Subtype /Widget /FT /Tx /T (%s) /V () %s"
+            b"/DA (/Helv 12 Tf 0 g) /Rect [%s] /F 4 /P %d 0 R /AP << /N %d 0 R >> >>")
+    assert add(text % (b"first", b"", b"150 700 350 720", page1, ap_line)) == w_first
+    assert add(text % (b"last", b"", b"150 660 350 680", page1, ap_line)) == w_last
+    assert add(text % (b"notes", b"/Ff 4096 ", b"150 540 450 620", page1, ap_notes)) == w_notes
+    assert add(b"<< /Type /Annot /Subtype /Widget /FT /Btn /T (agree) /V /Off /AS /Off "
+               b"/Rect [150 500 165 515] /F 4 /P %d 0 R "
+               b"/AP << /N << /Yes %d 0 R /Off %d 0 R >> >> >>" % (page1, ap_yes, ap_off)) == w_agree
+    assert add(text % (b"second", b"", b"150 700 350 720", page2, ap_line)) == w_second
+    pages = add(b"<< /Type /Pages /Kids [%d 0 R %d 0 R] /Count 2 >>" % (page1, page2))
+    assert pages == pages_num
+    add(b"<< /Type /Catalog /Pages %d 0 R /AcroForm << /Fields [%d 0 R %d 0 R %d 0 R %d 0 R %d 0 R] "
+        b"/DA (/Helv 12 Tf 0 g) /DR << /Font << /Helv %d 0 R >> >> >> >>"
+        % (pages, w_first, w_last, w_notes, w_agree, w_second, font))
     return build(objs)
 
 
@@ -1052,6 +1114,7 @@ def main():
                        ("demo-fr-blank.pdf", gen_demo("fr", filled=False)),
                        ("demo-fr-FR-blank.pdf", gen_demo("fr-FR", filled=False)),
                        ("formtext.pdf", gen_formtext()),
+                       ("formflow.pdf", gen_formflow()),
                        ("cropped.pdf", gen_cropped()),
                        ("userunit.pdf", gen_userunit()),
                        ("textbox.pdf", gen_textbox()),

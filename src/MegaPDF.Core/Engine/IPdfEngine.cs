@@ -715,7 +715,14 @@ public enum FormFieldKind
     Other,
 }
 
-public sealed record PdfFormField(string Name, FormFieldKind Kind, PdfRect Bounds, string Value, bool IsChecked = false);
+/// <summary>
+/// One AcroForm widget. <paramref name="IsMultiline"/> is the text field's own multi-line flag
+/// (Ff bit 13, #712), which is what decides whether Shift+Enter may put a break in its value
+/// and how tall its editor is. <paramref name="IsReadOnly"/> fields are skipped by Tab (#709).
+/// <paramref name="MaxLength"/> is 0 when the widget carries no /MaxLen of its own.
+/// </summary>
+public sealed record PdfFormField(string Name, FormFieldKind Kind, PdfRect Bounds, string Value, bool IsChecked = false,
+                                  bool IsMultiline = false, bool IsReadOnly = false, bool IsComb = false, int MaxLength = 0);
 
 /// <summary>How a body-text edit was performed (SDD §3.1 tiers 1 and 2).</summary>
 public enum TextEditOutcome

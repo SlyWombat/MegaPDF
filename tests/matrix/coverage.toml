@@ -725,21 +725,32 @@ entry = "src/MegaPDF.App/DocumentView.xaml.cs::OnPageTapped"
 coverage = "ui"
 tests = [
   ".github/workflows/ci.yml::Run-Check \"fill\"",
+  ".github/workflows/ci.yml::Run-Check \"form-flow\"",
   "tests/MegaPDF.Core.Tests/AcroFormTests.cs::Field",
+  "tests/MegaPDF.Core.Tests/FormFieldOrderTests.cs::FormFieldOrder",
+  "core/tests/core_tests.cpp::test_form_field_flags",
 ]
 manual = "TESTING.md::**Form fields**"
-note = "#590: `fill` opens formtext.pdf's real AcroForm text widget (fixture.pdf has none), types into it and checks the value survives save and reopen. `click` ticks fixture.pdf's drawn square, not a form field — the row's old note crediting it for this was wrong (#590)."
+note = "#590: `fill` opens formtext.pdf's real AcroForm text widget (fixture.pdf has none), types into it and checks the value survives save and reopen. `click` ticks fixture.pdf's drawn square, not a form field — the row's old note crediting it for this was wrong (#590). #709/#712: `form-flow` opens formflow.pdf (labels between fields, a multi-line field, a checkbox, a second page), clicks the first field, and walks the form with Tab, Shift+Tab, Shift+Enter and Space, then reads every value back from the saved file. WinUI cannot synthesize a key into a TextBox, so keys go through PressEditorKeyForTest, which runs the editor's own key decision; the routed event reaching it is not shown."
 [feature.macos]
 presence = "present"
 entry = "src/MegaPDF.Avalonia/ViewModels/DocumentViewModel.cs::HandlePageClick"
 coverage = "ui"
-tests = ["tests/MegaPDF.Core.Tests/AcroFormTests.cs::Field"]
-note = "the self-test's fill-check-sign block drives the view model's hit test and round-trips the value through PDFium."
+tests = [
+  "tests/MegaPDF.Core.Tests/AcroFormTests.cs::Field",
+  "tests/MegaPDF.Core.Tests/FormFieldOrderTests.cs::FormFieldOrder",
+  "src/MegaPDF.Avalonia/Program.cs::CheckFormFlow",
+]
+note = "the self-test's fill-check-sign block drives the view model's hit test and round-trips the value through PDFium. #709/#712: CheckFormFlow drives a real MainWindow with real headless pointer and key events over formflow.pdf: a click opens the first field, Tab and Shift+Tab step field to field past the printed labels, Shift+Enter breaks a line in the multi-line field, Space ticks a checkbox Tab reached, and the values are read back from the saved file."
 [feature.linux]
 presence = "present"
 entry = "src/MegaPDF.Avalonia/ViewModels/DocumentViewModel.cs::HandlePageClick"
 coverage = "ui"
-tests = ["tests/MegaPDF.Core.Tests/AcroFormTests.cs::Field"]
+tests = [
+  "tests/MegaPDF.Core.Tests/AcroFormTests.cs::Field",
+  "tests/MegaPDF.Core.Tests/FormFieldOrderTests.cs::FormFieldOrder",
+  "src/MegaPDF.Avalonia/Program.cs::CheckFormFlow",
+]
 note = "same as macOS."
 [feature.ios]
 presence = "present"
@@ -752,7 +763,7 @@ tests = [
   "ios/MegaPDFUITests/FormTextUITests.swift::class",
   ".github/workflows/ios-ci.yml::MegaPDFUITests/FormTextUITests",
 ]
-note = "#701: a tap on a text widget opens FormTextSheet; Done writes through megapdf_form_set_text as one undo step (FormTextOperation), gated on fill-forms. FormTextTests fills formtext.pdf through the model, saves, reopens and undoes; FormTextUITests types into the real sheet. Multi-line, maximum-length and comb behaviour is whatever PDFium does with the written value; the core does not report those flags, so the sheet does not enforce them."
+note = "#701: a tap on a text widget opens FormTextSheet; Done writes through megapdf_form_set_text as one undo step (FormTextOperation), gated on fill-forms. FormTextTests fills formtext.pdf through the model, saves, reopens and undoes; FormTextUITests types into the real sheet. Multi-line, maximum-length and comb behaviour is whatever PDFium does with the written value; the core now reports multi-line, comb and maximum length (#712, megapdf_form_field_flags) but the sheet does not use them yet."
 [feature.android]
 presence = "present"
 entry = "android/app/src/main/java/com/megapdf/android/ViewerViewModel.kt::commitFormText"
@@ -762,7 +773,7 @@ tests = [
   "android/app/src/test/java/com/megapdf/android/FormTextFieldTest.kt::class",
   "android/app/src/test/java/com/megapdf/android/DocumentCapabilitiesTest.kt::class",
 ]
-note = "#701: a tap on a text widget opens a Compose dialog on its value; Done is one FormTextOperation (megapdf_form_set_text), gated on fill-forms. FormTextTest fills formtext.pdf through the real screen, saves, reopens and reads the value back, undoes, and ticks forms.pdf's checkbox. Multi-line is a heuristic (the core reports no flag) and max length / comb are not applied by the editor."
+note = "#701: a tap on a text widget opens a Compose dialog on its value; Done is one FormTextOperation (megapdf_form_set_text), gated on fill-forms. FormTextTest fills formtext.pdf through the real screen, saves, reopens and reads the value back, undoes, and ticks forms.pdf's checkbox. Multi-line is still a heuristic: the core now reports the flag (#712, megapdf_form_field_flags) but the editor does not use it yet, and max length / comb are not applied."
 
 [[feature]]
 id = "checkboxes"
