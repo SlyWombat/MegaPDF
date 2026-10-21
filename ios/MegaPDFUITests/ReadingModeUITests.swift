@@ -41,7 +41,9 @@ final class ReadingModeUITests: XCTestCase {
         app = XCUIApplication()
         app.launchArguments = ["-screenshot", "viewer",
                                "-AppleLanguages", "(en)", "-AppleLocale", "en_US",
-                               "-uiTestZoomProbes"]
+                               "-uiTestZoomProbes",
+                               // So `DocumentOpening.wait` waits for the open to finish (#681).
+                               PageInput.launchArgument]
     }
 
     // MARK: - reading what the app says about itself
@@ -160,11 +162,11 @@ final class ReadingModeUITests: XCTestCase {
     }
 
     private func enterReadingMode() {
-        let more = app.buttons["viewerMore"].firstMatch
-        XCTAssertTrue(appears(more), dump("no More menu"))
-        more.tap()
         let row = app.buttons["viewerReadingMode"].firstMatch
-        XCTAssertTrue(appears(row, timeout: 5), dump("the ⋯ menu has no Reading mode row"))
+        if let failure = PageInput.openMoreMenu(in: app, for: row) {
+            XCTFail(dump(failure))
+            return
+        }
         row.tap()
         waitForProbe("reading on")
     }
@@ -363,14 +365,19 @@ final class ReadingModeUITests: XCTestCase {
         app.launch()
         _ = page()
 
-        app.buttons["viewerMore"].firstMatch.tap()
         let row = app.buttons["viewerSettings"].firstMatch
-        XCTAssertTrue(appears(row, timeout: 5), dump("the ⋯ menu has no Settings row"))
+        if let failure = PageInput.openMoreMenu(in: app, for: row) {
+            XCTFail(dump(failure))
+            return
+        }
         row.tap()
 
+        // Thirty seconds for a sheet to come up, not five: run 39328881517 tapped the row and
+        // gave up 3.6 s later on a runner where tapping it had taken 2 s on its own. The wait is
+        // for the sheet; its contents are then checked at once.
         let pageColours = app.descendants(matching: .any)
             .matching(NSPredicate(format: "label CONTAINS 'Page colours'")).firstMatch
-        XCTAssertTrue(appears(pageColours, timeout: 5),
+        XCTAssertTrue(appears(pageColours, timeout: 30),
                       dump("Settings has no Page colours control"))
         XCTAssertTrue(app.switches["settingsOpenInReadingMode"].firstMatch.exists,
                       dump("Settings has no Open documents in reading mode toggle"))

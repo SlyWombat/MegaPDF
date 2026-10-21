@@ -19,6 +19,8 @@ final class FormTextUITests: XCTestCase {
         continueAfterFailure = false
         app = XCUIApplication()
         app.launchArguments += ["-AppleLanguages", "(en)", "-AppleLocale", "en_US", "-uiTestPinNotices"]
+        // What became of each tap, by the app's account (#681): see `PageInput`.
+        app.launchArguments += [PageInput.launchArgument]
     }
 
     override func tearDown() {
@@ -34,14 +36,23 @@ final class FormTextUITests: XCTestCase {
         return page
     }
 
-    /// Taps the middle of the widget, given in PDF points (origin bottom-left).
+    private var editorField: XCUIElement {
+        app.descendants(matching: .any).matching(identifier: "formTextField").firstMatch
+    }
+
+    /// Taps the middle of the widget, given in PDF points (origin bottom-left), until the editor
+    /// is up — by the app's account of the tap (#681, `PageInput.tap`). A hosted run lost this
+    /// tap once (run 39535767433) and the test said only "did not open the editor".
     private func tapField(_ page: XCUIElement) {
-        page.coordinate(withNormalizedOffset: CGVector(dx: 200.0 / 612.0, dy: (792.0 - 610.0) / 792.0)).tap()
+        let point = page.coordinate(withNormalizedOffset: CGVector(dx: 200.0 / 612.0, dy: (792.0 - 610.0) / 792.0))
+        if let failure = PageInput.tap(point, in: app, until: editorField) {
+            XCTFail("tapping the form field did not open the editor: \(failure)")
+        }
     }
 
     private func editor() -> XCUIElement {
-        let field = app.descendants(matching: .any).matching(identifier: "formTextField").firstMatch
-        XCTAssertTrue(field.waitForExistence(timeout: 15), "tapping the form field did not open the editor")
+        let field = editorField
+        XCTAssertTrue(PageInput.appears(field, timeout: 30), "tapping the form field did not open the editor")
         return field
     }
 
@@ -50,9 +61,7 @@ final class FormTextUITests: XCTestCase {
         tapField(page)
 
         let field = editor()
-        field.tap()
-        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 15),
-                      "the keyboard never came up for the form editor")
+        XCTAssertTrue(PageInput.focus(field), "the form editor's field never took the keyboard's focus")
         field.typeText("Dave Plumber")
         app.buttons["formTextDone"].tap()
         XCTAssertTrue(app.buttons["Undo"].waitForExistence(timeout: 15), "the fill is on the undo stack")
@@ -72,8 +81,7 @@ final class FormTextUITests: XCTestCase {
         let page = launch()
         tapField(page)
         let field = editor()
-        field.tap()
-        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 15))
+        XCTAssertTrue(PageInput.focus(field), "the form editor's field never took the keyboard's focus")
         field.typeText("Dave Plumber\n")
         XCTAssertTrue(app.buttons["Undo"].waitForExistence(timeout: 15),
                       "the return did not submit the field")
@@ -89,8 +97,7 @@ final class FormTextUITests: XCTestCase {
         let page = launch()
         tapField(page)
         let field = editor()
-        field.tap()
-        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 15))
+        XCTAssertTrue(PageInput.focus(field), "the form editor's field never took the keyboard's focus")
         field.typeText("discard me")
         app.buttons["formTextCancel"].tap()
 

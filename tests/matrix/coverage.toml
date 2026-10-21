@@ -1760,11 +1760,12 @@ entry = "src/MegaPDF.App/MainWindow.xaml::ShrinkButton"
 coverage = "ui"
 tests = [
   ".github/workflows/ci.yml::Run-Check \"progress\"",
+  ".github/workflows/ci.yml::Run-Check \"shrink-notice\"",
   "tests/MegaPDF.Core.Tests/ImageShrinkerTests.cs::Shrink",
   "tests/MegaPDF.Core.Tests/ImageCompressionTests.cs::Compress",
 ]
 manual = "TESTING.md::**Shrink for email**"
-note = "progress and a deterministic in-loop Stop, with no partial file left behind."
+note = "progress and a deterministic in-loop Stop, with no partial file left behind. #632: the outcome is an InfoBar (ShrinkNoticeBar), never a dialog — shrink-notice drives the real command on a picture-less document and raises the success bar without the picker."
 [feature.macos]
 presence = "present"
 entry = "src/MegaPDF.Avalonia/Views/MainWindow.Toolbar.cs::CommandEntry(Strings.Shrink"
@@ -2498,6 +2499,10 @@ note = "CI assembles a debug APK and tests it; the release AAB is only verified 
 [[exempt]]
 ref = "ios/MegaPDFUITests/DocumentOpening.swift"
 why = "the shared wait for a document to open (#599), not a test: it holds no assertion of its own and the eleven suites that call it are each on the map"
+
+[[exempt]]
+ref = "ios/MegaPDFUITests/PageInput.swift"
+why = "the shared page taps, ⋯ menu and export sheet for the UI suites (#681, #706), driven by the app's -uiTestInputProbe: a harness with no assertion of its own, and every suite that calls it is on the map"
 
 [[exempt]]
 ref = "ios/MegaPDFTests/ModelOpening.swift"
