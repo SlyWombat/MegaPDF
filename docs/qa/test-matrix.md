@@ -536,7 +536,7 @@ show*: each one has a working refusal, so no test fails — they are walls that 
 
 ### Shrink for email (`shrink`)
 
-- **Windows** — UI+m. coverage: UI/VM. reachable from `src/MegaPDF.App/MainWindow.xaml::ShrinkButton`. tests: `.github/workflows/ci.yml::Run-Check "progress"`, `tests/MegaPDF.Core.Tests/ImageShrinkerTests.cs::Shrink`, `tests/MegaPDF.Core.Tests/ImageCompressionTests.cs::Compress`. by hand: `TESTING.md::**Shrink for email**`. progress and a deterministic in-loop Stop, with no partial file left behind.
+- **Windows** — UI+m. coverage: UI/VM. reachable from `src/MegaPDF.App/MainWindow.xaml::ShrinkButton`. tests: `.github/workflows/ci.yml::Run-Check "progress"`, `.github/workflows/ci.yml::Run-Check "shrink-notice"`, `tests/MegaPDF.Core.Tests/ImageShrinkerTests.cs::Shrink`, `tests/MegaPDF.Core.Tests/ImageCompressionTests.cs::Compress`. by hand: `TESTING.md::**Shrink for email**`. progress and a deterministic in-loop Stop, with no partial file left behind. #632: the outcome is an InfoBar (ShrinkNoticeBar), never a dialog — shrink-notice drives the real command on a picture-less document and raises the success bar without the picker.
 - **macOS** — UI+m. coverage: UI/VM. reachable from `src/MegaPDF.Avalonia/Views/MainWindow.Toolbar.cs::CommandEntry(Strings.Shrink`. tests: `src/MegaPDF.Avalonia/Program.cs::CheckProgressAndCancel`, `tests/MegaPDF.Core.Tests/ImageShrinkerTests.cs::Shrink`, `tests/MegaPDF.Core.Tests/ImageCompressionTests.cs::Compress`. by hand: `TESTING.md::**Shrink for email**`. stoppability and the rule that the open document is never what shrink was working on.
 - **Linux** — UI+m. coverage: UI/VM. reachable from `src/MegaPDF.Avalonia/Views/MainWindow.Toolbar.cs::CommandEntry(Strings.Shrink`. tests: `src/MegaPDF.Avalonia/Program.cs::CheckProgressAndCancel`, `tests/MegaPDF.Core.Tests/ImageShrinkerTests.cs::Shrink`, `tests/MegaPDF.Core.Tests/ImageCompressionTests.cs::Compress`. by hand: `TESTING.md::**Shrink for email**`. same as macOS.
 - **iOS/iPadOS** — GAP. absent (gap). no shrink on iOS. Nothing in the source says it was decided against, and a phone mailing a scan is the case it exists for.
@@ -706,6 +706,7 @@ These are the exceptions, each with its reason.
 | artefact | why not |
 |---|---|
 | `ios/MegaPDFUITests/DocumentOpening.swift` | the shared wait for a document to open (#599), not a test: it holds no assertion of its own and the eleven suites that call it are each on the map |
+| `ios/MegaPDFUITests/PageInput.swift` | the shared page taps, ⋯ menu and export sheet for the UI suites (#681, #706), driven by the app's -uiTestInputProbe: a harness with no assertion of its own, and every suite that calls it is on the map |
 | `ios/MegaPDFTests/ModelOpening.swift` | the same wait for the unit suites (#599), replacing nine identical private copies; a harness, not a test |
 | `android/app/src/androidTest/java/com/megapdf/android/TestPdfs.kt` | fixture builder for the instrumented suite, not a test |
 | `android/app/src/androidTest/java/com/megapdf/android/ViewerHarness.kt` | Compose harness for the instrumented suite, not a test |

@@ -182,7 +182,10 @@ The note says what was measured. Open the image, and:
 
 ## Adding a store, or a device
 
-`stores.py`, and nothing else. A profile holds what cannot be measured: the
+`stores.py`, and nothing else (plus the store's entry in `tools/store_slots.py`, which
+holds the listing order and file names; the profile's `order` is derived from it, and
+`python3 tools/test_store_slots.py` fails if a capture rig or a submission tool
+disagrees). A profile holds what cannot be measured: the
 slot sizes, the listing languages and their demo person, the order the images
 appear in on the listing, the file-name shape, and the few facts about the
 app's own chrome — how tall the toolbar is, what the zoom is pinned to, where

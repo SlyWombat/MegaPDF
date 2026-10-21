@@ -36,6 +36,8 @@ final class PageToolsUITests: XCTestCase {
         app = XCUIApplication()
         app.launchArguments = ["-AppleLanguages", "(en)", "-AppleLocale", "en_US",
                                "-uiTestZoomProbes", "-uiTestPinNotices",
+                               // So `DocumentOpening.wait` waits for the open to finish (#681).
+                               PageInput.launchArgument,
                                // The tiles are not drag sources here, and `PageTileDrag` says
                                // why at length (#599): a tile that is both a drag source and a
                                // context-menu host leaves a *synthesised* long press with a
@@ -257,11 +259,13 @@ final class PageToolsUITests: XCTestCase {
             XCTAssertTrue(appears(button), dump("no Pages button on the strip"))
             tap(button, "the strip's Pages button")
         } else {
-            let more = app.buttons["viewerMore"].firstMatch
-            XCTAssertTrue(appears(more), dump("no More menu"))
-            tap(more, "the ⋯ menu")
+            // Run 39291554032 lost the ⋯ tap itself: five seconds later there was no menu on
+            // screen at all. `openMoreMenu` taps again only when the menu is visibly not open.
             let row = app.buttons["viewerPages"].firstMatch
-            XCTAssertTrue(appears(row, timeout: 5), dump("the ⋯ menu has no Pages row"))
+            if let failure = PageInput.openMoreMenu(in: app, for: row) {
+                XCTFail(dump(failure))
+                return
+            }
             tap(row, "the ⋯ menu's Pages row")
         }
         waitFor("pages on")

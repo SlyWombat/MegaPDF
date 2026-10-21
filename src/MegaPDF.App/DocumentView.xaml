@@ -334,6 +334,18 @@
                 Message="{x:Bind ViewModel.RedactionSummaryText, Mode=OneWay}"
                 Severity="Success"
                 IsClosable="True" />
+            <!-- What Shrink for email finished with (#632): the smaller copy's before and
+                 after sizes (Success), or that the pictures were already small
+                 (Informational). It used to be a ContentDialog, which made a person
+                 dismiss good news. Also spoken through Narrator. -->
+            <InfoBar
+                AutomationProperties.AutomationId="ShrinkNoticeBar"
+                Background="{ThemeResource SolidBackgroundFillColorSecondaryBrush}"
+                IsOpen="{x:Bind ViewModel.IsShrinkNoticeOpen, Mode=TwoWay}"
+                Title="{x:Bind ViewModel.ShrinkNoticeTitle, Mode=OneWay}"
+                Message="{x:Bind ViewModel.ShrinkNotice, Mode=OneWay}"
+                Severity="{x:Bind ViewModel.ShrinkNoticeSeverity, Mode=OneWay}"
+                IsClosable="True" />
         </StackPanel>
 
         <StackPanel Grid.Column="1" VerticalAlignment="Top" HorizontalAlignment="Center" Margin="24,12" Spacing="{ThemeResource SpaceS}">

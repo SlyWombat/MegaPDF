@@ -35,7 +35,18 @@ jobs:
       - name: The coverage map resolves against the tree, and the matrix is not stale
         run: python3 tools/qa/check-matrix.py --check
 
+      # #656: each store's screenshot slots live in tools/store_slots.py. The gate, the
+      # submission tools and the caption tables import it; the capture rigs are read and
+      # compared. A slot renamed in one place and not another fails here, not at submission.
+      - name: Store slot order agrees across the gate, the rigs and the submission tools
+        run: python3 tools/test_store_slots.py
+
       # Printed into the log on purpose: the gap list is the point of the map, and a run
       # whose gaps nobody reads is a run that only proves a file parses.
       - name: The gaps it names
         run: python3 tools/qa/check-matrix.py --gaps
+
+      # #668: deploy.py finds its login file from a worktree as well as the shared checkout,
+      # and --dry-run reports it without ever opening it.
+      - name: website/deploy.py finds its login file from a worktree
+        run: python3 website/test_deploy.py -v
