@@ -638,11 +638,15 @@ tests = [
 ]
 note = "#710: a long press selects the word, drawn in the tint at the selection opacity with two draggable handles and the system's UIEditMenuInteraction offering Copy (plain text to UIPasteboard); a tap clears it. One page at a time, not across pages. Copy is disabled with a notice when the document's copy bit is off. TextSelectionTests runs selection.pdf through the Swift binding and the handle logic; SelectCopyUITests long-presses, copies and reads the pasteboard back. iOS reading mode shows page images, not reflowed text, so there is nothing there to make selectable."
 [feature.android]
-presence = "absent"
-coverage = "n/a"
-absence = "gap"
-issue = 710
-note = "megapdf_select.cpp is in the engine's CMake build; the JNI binding and the long-press UI are not yet built."
+presence = "present"
+entry = "android/app/src/main/java/com/megapdf/android/ViewerViewModel.kt::onPageLongPressed"
+coverage = "ui"
+tests = [
+  "android/app/src/androidTest/java/com/megapdf/android/TextSelectCopyTest.kt::class",
+  "android/engine/src/androidTest/java/com/megapdf/engine/TextSelectionEngineTest.kt::class",
+  "android/app/src/test/java/com/megapdf/android/TextSelectionTest.kt::class",
+]
+note = "#710: long-press on page text selects the word (it was unused on the page); the highlight is LocalTextSelectionColors, the two handles are drawn and dragged in Compose, and Copy is the system's floating text toolbar (LocalTextToolbar), which a Compose test cannot see, so TextSelectCopyTest calls ViewerViewModel.copySelectedText, the toolbar's own callback, and reads the real clipboard back. One page only: a handle stops at the page's last character. A tap with a selection only releases it. Copy follows DocumentCapabilities.canCopyText (the copy permission); a document that forbids it still selects. Reading mode is a tint of the same page, so it selects there too and has no reflowed text to wrap in a SelectionContainer."
 
 [[feature]]
 id = "reading-mode"
@@ -825,8 +829,9 @@ tests = [
   "android/app/src/androidTest/java/com/megapdf/android/FormTextTest.kt::class",
   "android/app/src/test/java/com/megapdf/android/FormTextFieldTest.kt::class",
   "android/app/src/test/java/com/megapdf/android/DocumentCapabilitiesTest.kt::class",
+  "android/engine/src/androidTest/java/com/megapdf/engine/FormFieldFlagsTest.kt::class",
 ]
-note = "#701: a tap on a text widget opens a Compose dialog on its value; Done is one FormTextOperation (megapdf_form_set_text), gated on fill-forms. FormTextTest fills formtext.pdf through the real screen, saves, reopens and reads the value back, undoes, and ticks forms.pdf's checkbox. Multi-line is still a heuristic: the core now reports the flag (#712, megapdf_form_field_flags) but the editor does not use it yet, and max length / comb are not applied."
+note = "#701: a tap on a text widget opens a Compose dialog on its value; Done is one FormTextOperation (megapdf_form_set_text), gated on fill-forms. FormTextTest fills formtext.pdf through the real screen, saves, reopens and reads the value back, undoes, and ticks forms.pdf's checkbox. #712: the editor is multi-line exactly when the core's own flag says so (the 30 pt height guess is gone), a read-only field opens no dialog and says so, and /MaxLen caps the typed text; FormFieldFlagsTest reads the flags off formflow.pdf across JNI and FormTextTest taps its single-line and multi-line fields. Comb and masked are read but not yet applied, and no fixture has a read-only or /MaxLen field, so those two paths are covered by the pure FormTextFieldTest only."
 
 [[feature]]
 id = "checkboxes"
