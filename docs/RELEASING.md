@@ -350,14 +350,17 @@ against `origin/main` before any `deploy.py` call below — a checkout even a fe
 behind can pass its own `--dry-run` while still being behind the live site, and a real
 deploy from it then regresses the live site rather than advancing it.
 
+The dry run comes **before** `gh release edit --draft=false`. Publishing cannot be taken
+back, and the rehearsal exists to fail while failing is free (#668).
+
 ```
 git tag -a linux-v$(tools/linux/package-version.sh <x.y.z>) <sha> -m "MegaPDF <x.y.z> for Linux" && git push origin linux-v<x.y.z>
-gh release edit linux-v<x.y.z> --draft=false
 gh run download <run> -n MegaPDF-apt-repository -D <scratch>/apt   # NOT straight into website/megapdf/apt: the artifact also carries
                                                                      # the tracked megapdf.asc/.gpg/.sources and a direct download collides on them
 diff <scratch>/apt/megapdf.asc website/megapdf/apt/megapdf.asc     # confirm the signing key is unchanged (and the other tracked key files), then
 cp -r <scratch>/apt/dists <scratch>/apt/pool website/megapdf/apt/  # only dists/ and pool/ — both gitignored; the tracked key files are untouched
-python3 website/deploy.py --dry-run --linux --privacy               # read the last three lines, not just that it ran
+python3 website/deploy.py --dry-run --linux --privacy               # read the last four lines: "Login file ... - found" must be one of them; then, and only then, publish
+gh release edit linux-v<x.y.z> --draft=false
 python3 website/deploy.py --linux --privacy
 ```
 
@@ -403,7 +406,7 @@ server until it runs. `--privacy` and `--support` stay opt-in as before;
 `--support` refuses without `--privacy` (#418 is Dave's, not shipped).
 
 ```
-python3 website/deploy.py --dry-run --linux --privacy    # add --snap once promoted
+python3 website/deploy.py --dry-run --linux --privacy    # add --snap once promoted; its "Login file ... - found" line must be there
 python3 website/deploy.py --linux --privacy              # add --snap once promoted
 ```
 
@@ -452,6 +455,7 @@ Terse, with the date each one bit.
 - **WACK can silently do nothing, and it looks exactly like not having started** (2026-10-01). `wack-launch.ps1` wrote its log to `D:\megapdf-qa\` as its first statement; an agent's routine scratch cleanup had deleted that directory, so the script threw before it ever raised the UAC prompt. Symptom: "no WACK on screen". Diagnose with `Get-ScheduledTaskInfo -TaskName 'MegaPDF WACK'` — `LastTaskResult 267011` with a 1999 `LastRunTime` means it has never run. The launcher now creates the directory. Also move the **done-marker** aside with the report, not just the report — a stale marker can make the gate look finished when it is not.
 - **Windows PowerShell reads a BOM-less `.ps1` as ANSI** (2026-10-01). A non-ASCII character in a *comment* broke string parsing with a misleading `Missing closing '}'` pointing at an unrelated line. Keep the `tools/windows-qa` scripts ASCII-only.
 - **Renaming capture slots silently breaks `tools/asc_publish.py`** (2026-10-01, #655). It hardcodes slot names. After the 2.2 capture work renamed them, `screenshots` uploaded **1 of 7** on Mac — only `02-text` survived the rename — and would have uploaded **0** on iOS, whose captures sit in a `listing/` subdirectory the tool did not read. It printed "1 screenshots" and exited 0. Fixed in #655 to fail loudly on a short set. Since #656 the slots live in `tools/store_slots.py` alone; change them there, update the capture rig the test names, and run `python3 tools/test_store_slots.py`. iPhone and iPad have **different** orders by decision.
+- **`deploy.py` from a worktree (#668).** Fixed: it finds the login file beside the main checkout. If its dry run says `Login file ... - NOT FOUND`, set `MEGAPDF_DEPLOY_ENV_DIR` to the folder that holds it; never symlink a folder into `.claude/worktrees/` (2.2.1's workaround). The rehearsal is run before the release is published; only the real deploy follows publishing.
 - **Publish the release before deploying the website** (2026-10-02). Deploying first left the live Linux page offering 2.2.0 `.deb` and tarball links that **404'd**, because the GitHub release was still a draft. `gh release edit linux-v<x.y.z> --draft=false` first, then deploy — §3's Linux sequence already has this order; this is the concrete failure that order prevents.
 - **Deploying from a stale checkout silently regresses the live site** (2026-10-02). A `--dry-run` from a tree 63 commits behind reported "`linux/index.html` offers 2.1.1" against a repository holding 2.1.1 — passed, because both sides were stale the same way — but a real deploy from that tree would have rolled the live Linux section **back** from 2.2.0. §3's Linux step now opens with the `git log` check this would have caught.
 - **`deploy.py --linux`'s refusal is correct; a direct download into `website/megapdf/apt` is not** (2026-10-02). "`linux/index.html` offers X, but the repository holds Y" means run the tag build and download its `MegaPDF-apt-repository` artifact — but downloading straight into `website/megapdf/apt` fails "file exists" and can abort part-way, because the artifact also carries the **tracked** `megapdf.asc`/`.gpg`/`.sources`. §3's Linux step now extracts to a scratch directory and copies in only `dists/` and `pool/`.
