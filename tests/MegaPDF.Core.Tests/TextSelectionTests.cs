@@ -2,6 +2,7 @@ using MegaPDF.Core.Engine;
 using MegaPDF.Core.Engine.Core;
 using MegaPDF.Core.Engine.Pdfium;
 using MegaPDF.Core.Services;
+using MegaPDF.Core.Viewing;
 using Xunit;
 
 namespace MegaPDF.Core.Tests;
@@ -188,4 +189,121 @@ public sealed class TextSelectionTests : IDisposable
             }
         }
     }
+
+    // --- What both desktops hold on top of the binding (#710): the cache, the selection, the clipboard ---
+
+    [Fact]
+    public void TheCacheLoadsOnce_AndDropsAPageThatChanged()
+    {
+        using var doc = _engine.Open(Structure("selection"));
+        using var cache = new SelectableTextCache(doc);
+        var dropped = new List<int?>();
+        cache.Invalidated += dropped.Add;
+
+        Assert.Null(cache.Peek(0));
+        var first = cache.LoadAsync(0).GetAwaiter().GetResult();
+        Assert.NotNull(first);
+        Assert.Same(first, cache.Peek(0));
+        Assert.Same(first, cache.Get(0));
+
+        cache.PageChanged(0);
+        Assert.Equal([0], dropped);
+        Assert.Null(cache.Peek(0));
+        var second = cache.Get(0);
+        Assert.NotSame(first, second);
+        Assert.Equal(first!.Length, second.Length);
+
+        cache.Get(1);
+        cache.Renumbered();
+        Assert.Null(cache.Peek(0));
+        Assert.Null(cache.Peek(1));
+        Assert.Equal([0, null], dropped);
+    }
+
+    [Fact]
+    public void TheCacheRefusesOnceItsDocumentHasClosed()
+    {
+        var doc = _engine.Open(Structure("selection"));
+        var cache = new SelectableTextCache(doc);
+        doc.Dispose();
+        Assert.Null(cache.LoadAsync(0).GetAwaiter().GetResult());
+        cache.Dispose();
+        Assert.Throws<ObjectDisposedException>(() => cache.Get(0));
+    }
+
+    [Fact]
+    public void ASelectionAcrossTheColumns_ReadsInReadingOrder_AndSelectAllIsTheWholeDocument()
+    {
+        using var doc = _engine.Open(Structure("selection"));
+        using var cache = new SelectableTextCache(doc);
+        var page = cache.Get(0);
+        var lines = page.GetRects(0, page.Length);
+
+        var selection = new TextSelectionState();
+        var changes = 0;
+        selection.Changed += (_, _) => changes++;
+        Assert.True(selection.IsEmpty);
+        Assert.Equal("", selection.GetText(cache));
+
+        selection.Begin(new PdfTextPosition(0, page.CaretAt(new PdfPoint(lines[4].X + 0.2, Centre(lines[4]).Y), 4)!.Value));
+        Assert.True(selection.IsEmpty);
+        selection.ExtendTo(new PdfTextPosition(0, page.CaretAt(new PdfPoint(lines[7].Right + 30, Centre(lines[7]).Y))!.Value));
+        Assert.Equal("Left four delta\nLeft five echo\nRight one golf\nRight two hotel", selection.GetText(cache));
+        Assert.Equal((0, 0), selection.Pages);
+
+        selection.SelectAll(doc.PageCount);
+        var all = selection.GetText(cache);
+        Assert.StartsWith("Selection Columns\nLeft one alpha", all, StringComparison.Ordinal);
+        Assert.Contains("Right five kilo\nThe final flow test", all, StringComparison.Ordinal);
+        Assert.EndsWith("known word.", all, StringComparison.Ordinal);
+        Assert.Equal((0, 1), selection.Pages);
+
+        selection.Clear();
+        Assert.True(selection.IsEmpty);
+        Assert.Null(selection.Pages);
+        Assert.Equal(4, changes);
+    }
+
+    [Fact]
+    public void ShiftArrowStepsOneCharacter_AndOverAPageBreak()
+    {
+        using var doc = _engine.Open(Structure("selection"));
+        using var cache = new SelectableTextCache(doc);
+        int Length(int i) => cache.Get(i).Length;
+        var selection = new TextSelectionState();
+
+        selection.Begin(new PdfTextPosition(1, 0));
+        selection.Step(+3, doc.PageCount, Length);
+        Assert.Equal("The", selection.GetText(cache));
+        selection.Step(-3, doc.PageCount, Length);
+        Assert.True(selection.IsEmpty);
+
+        // Back over the break: the first step already takes a character of page 1's last line,
+        // because a page's end and the next one's start are the same place.
+        selection.Step(-1, doc.PageCount, Length);
+        Assert.Equal(new PdfTextPosition(0, Length(0) - 1), selection.Focus);
+        Assert.Equal("o", selection.GetText(cache));
+        selection.Step(-3, doc.PageCount, Length);
+        Assert.Equal("kilo", selection.GetText(cache));
+        // And forward again over it: the join comes back with the first character after it.
+        selection.Select(new PdfTextPosition(0, Length(0) - 4), new PdfTextPosition(0, Length(0)));
+        selection.Step(+1, doc.PageCount, Length);
+        Assert.Equal("kilo\nT", selection.GetText(cache));
+
+        // Select All's open end is clamped to the page before it steps.
+        selection.SelectAll(doc.PageCount);
+        selection.Step(-1, doc.PageCount, Length);
+        Assert.Equal(new PdfTextPosition(1, Length(1) - 1), selection.Focus);
+        selection.Step(+5, doc.PageCount, Length);
+        Assert.Equal(new PdfTextPosition(1, Length(1)), selection.Focus);
+    }
+
+    [Theory]
+    [InlineData("a\nb\n", "\r\n", "a\r\nb\r\n")]
+    [InlineData("a\nb", "\n", "a\nb")]
+    [InlineData("a\r\nb\rc", "\r\n", "a\r\nb\r\nc")]
+    [InlineData("a\r\nb", "\n", "a\nb")]
+    [InlineData("", "\r\n", "")]
+    public void TheClipboardGetsThePlatformsLineEnds(string text, string newline, string expected) =>
+        Assert.Equal(expected, PdfTextSelection.WithLineEnds(text, newline));
 }

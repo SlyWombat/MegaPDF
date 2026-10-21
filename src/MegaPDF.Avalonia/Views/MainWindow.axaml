@@ -757,6 +757,25 @@
                   </ItemsControl.ItemTemplate>
                 </ItemsControl>
 
+                <!-- Selected text (#710): the system's accent, translucent, over the raster — the
+                     page is a picture, and the words have to show through. TextSelectionFill is
+                     set by the window from the platform's own colours. -->
+                <ItemsControl ItemsSource="{Binding TextSelectionRects}" IsHitTestVisible="False">
+                  <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                      <Panel />
+                    </ItemsPanelTemplate>
+                  </ItemsControl.ItemsPanel>
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="vm:SelectionRect">
+                      <Rectangle Width="{Binding Width}" Height="{Binding Height}"
+                                 Margin="{Binding Margin}"
+                                 HorizontalAlignment="Left" VerticalAlignment="Top"
+                                 Fill="{DynamicResource TextSelectionFill}" />
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
                 <!-- Page-level work (#145): the #139 check before a change, and the change. -->
                 <Border Name="PageBusyBadge" IsVisible="{Binding ShowsBusyOnPage}" IsHitTestVisible="False"
                         HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,12,0,0"

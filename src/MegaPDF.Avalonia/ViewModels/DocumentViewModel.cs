@@ -633,6 +633,7 @@ public sealed partial class DocumentViewModel : ObservableObject, IDisposable
     {
         _document = document;
         _scanSearcher = CreateScanSearcher(document);
+        OpenSelectableText(document); // #710: and its text, for selecting
         _changesDiscarded = false;
         // Permissions before IsDocumentOpen, so no tool is enabled for a moment it should
         // not be (#131).
@@ -1394,6 +1395,7 @@ public sealed partial class DocumentViewModel : ObservableObject, IDisposable
 
         _editCount++;
         IsDirty = applied > 0;
+        _selectableText?.Clear(); // #710: and so does every page's text
         // Every rendered page predates the replay.
         foreach (var page in Pages)
             if (page.IsRealised)
@@ -2550,8 +2552,9 @@ public sealed partial class DocumentViewModel : ObservableObject, IDisposable
             DiscardHeldPages();
             _undoStack.Clear();
             RaiseUndoRedo();
-            // Text a redaction removed must not stay findable (#676).
+            // Text a redaction removed must not stay findable (#676), or selectable (#710).
             _scanSearcher?.Clear();
+            _selectableText?.Clear();
             if (DocumentPath is { Length: > 0 } path)
                 _journal.MarkSaved(path);
             // Every mark is gone, and so is whatever was selected — a chrome around a mark
@@ -3137,6 +3140,7 @@ public sealed partial class DocumentViewModel : ObservableObject, IDisposable
         _undoStack.Clear();
         Selection = null;
         RaiseUndoRedo();
+        _selectableText?.Clear(); // #710: stamps and text boxes are page text now
 
         foreach (var page in Pages)
             if (page.IsRealised)
@@ -3528,6 +3532,7 @@ public sealed partial class DocumentViewModel : ObservableObject, IDisposable
     {
         // A cover, a stamp, a text box or a turn changes what the page shows: what was read from it is stale (#676).
         _scanSearcher?.PageChanged(pageIndex);
+        _selectableText?.PageChanged(pageIndex); // and so is its selectable text (#710)
         var page = Pages.FirstOrDefault(p => p.Index == pageIndex);
         // Only if the view has it on screen; an off-screen page re-renders when it
         // scrolls back in, and will pick up the edit then.
@@ -3558,6 +3563,7 @@ public sealed partial class DocumentViewModel : ObservableObject, IDisposable
 
         _scanSearcher?.Clear();
         _scanSearcher = null;
+        CloseSelectableText(); // #710
         _document?.Dispose();
         _document = null;
         DocumentPath = null;

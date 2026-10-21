@@ -17,6 +17,11 @@
           AllowDrop="True" DragOver="OnDocumentAreaDragOver" Drop="OnDocumentAreaDrop">
         <Grid.KeyboardAccelerators>
             <KeyboardAccelerator Modifiers="Control" Key="F" Invoked="OnFindAccelerator" />
+            <!-- Selected text (#710). A text box that has focus answers these itself, first: its
+                 own KeyDown claims them before an accelerator is looked for, and the handlers
+                 step aside for any text control regardless. -->
+            <KeyboardAccelerator Modifiers="Control" Key="C" Invoked="OnCopyTextAccelerator" />
+            <KeyboardAccelerator Modifiers="Control" Key="A" Invoked="OnSelectAllTextAccelerator" />
             <!-- Tab/window commands (#348 phase 1, plan §1 decision): closes the active tab,
                  or the window when it is the last one — TabView's own Ctrl+Tab, Ctrl+Shift+Tab,
                  Ctrl+1…9 and Ctrl+F4 are left as built-in. -->

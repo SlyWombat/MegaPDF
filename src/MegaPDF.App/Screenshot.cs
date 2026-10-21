@@ -269,6 +269,14 @@ internal static partial class Screenshot
             case "tab-move":
                 return await CheckTabMoveAsync(window);
 
+            // #710: selecting text across two columns and a page break, copying it with CR LF line
+            // ends, a plain click still editing, a double-click taking back the click before it,
+            // armed tools keeping their drags, and a no-copy document that selects but will not
+            // copy. Needs selection.pdf as the document and owner-only.pdf beside it, which
+            // tools/gen_test_fixtures.py copies from the committed fixtures. The exit code is the test.
+            case "select-copy":
+                return await CheckTextSelectionAsync(window);
+
             default:
                 Console.Error.WriteLine($"unknown --screenshot-state '{state}'");
                 return false;
