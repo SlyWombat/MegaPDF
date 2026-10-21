@@ -3,7 +3,6 @@ package com.megapdf.android
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.drag
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
@@ -22,6 +21,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.changedToUpIgnoreConsumed
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
@@ -122,9 +122,14 @@ internal fun TextSelectionOverlay(
                                     (pageSize.heightPoints - rect.bottom).toFloat() * sy,
                                 )
                                 val lineHeightPx = ((rect.top - rect.bottom) * sy).toFloat()
-                                drag(down.id) { change ->
+                                while (true) {
+                                    val event = awaitPointerEvent()
+                                    val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                                    if (change.changedToUpIgnoreConsumed()) break
+                                    val moved = change.positionChange()
+                                    if (moved == Offset.Zero) continue
                                     change.consume()
-                                    finger += change.positionChange()
+                                    finger += moved
                                     // The handle hangs under its line, so the caret is looked for a
                                     // half line above the tip, on the line being pointed at.
                                     val xPt = (finger.x / sx).toDouble()
@@ -134,6 +139,7 @@ internal fun TextSelectionOverlay(
                                         selectable.caretAt(xPt, yPt), isStart, now, selectable.length,
                                     )
                                     val next = now.withHandleAt(isStart, caret)
+                                    android.util.Log.d("MegaPDFSel", "drag moved=$moved caret=$caret next=$next now=$now")
                                     if (next != now) onChange(next)
                                 }
                                 dragging = false
