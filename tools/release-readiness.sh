@@ -323,7 +323,7 @@ if [ $STORES = 1 ]; then
   code=$(curl -s -m 20 -o /dev/null -w '%{http_code}' 'https://play.google.com/store/apps/details?id=ca.electricrv.megapdf')
   if [ "$code" = 200 ]; then ok "Google Play listing: HTTP 200 (public; the page does not state the version, see tools/play.sh listing status)"
   else attn "Google Play listing: HTTP $code (404 until public; tools/play.sh listing status for the track)"; fi
-  l=$(curl -s -m 20 https://electricrv.ca/megapdf/apt/dists/stable/main/binary-amd64/Packages | awk '/^Package: megapdf$/{f=1} f&&/^Version:/{print $2; exit}')
+  l=$(curl -s -m 20 https://electricrv.ca/megapdf/apt/dists/stable/main/binary-amd64/Packages | awk '/^Version:/{print $2}' | sort -V | tail -1)   # the pool keeps the newest three; the newest must be the shipped one
   cmp_ver "APT repository (Linux)" "${l%-*}"
   s=$(curl -s -m 20 -H 'Snap-Device-Series: 16' 'https://api.snapcraft.io/v2/snaps/info/megapdf?fields=version,revision' | python3 -I -c 'import json,sys; c=json.load(sys.stdin)["channel-map"]; print(" ".join(sorted({x["channel"]["name"]+"="+x["version"] for x in c})))' 2>/dev/null)
   if [ -n "$s" ]; then
