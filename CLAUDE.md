@@ -172,6 +172,9 @@ checking that a specific argument combination is a real overload.**
 - Milestones are **Dave's alone**. Never create one, never move an issue between them. Deferred
   work is filed **unmilestoned**.
 - A label that does not exist makes `gh issue create` fail. Run `gh label list` first.
+- **The repo is kept always ready to release** (Dave, 2026-10-21). `tools/release-readiness.sh` lists what
+  stands between it and the next `docs/RELEASING.md` run; merge or delete your branch and worktree,
+  and fix whatever it flags that you caused. `--machines` and `--stores` are opt-in.
 - Write closing comments for someone reading in six months who will not open the PR: what was
   verified, where, and what remains elsewhere.
 - **A secrets hook blocks some shell text** on words like `credentials`, `process` and `history`,
