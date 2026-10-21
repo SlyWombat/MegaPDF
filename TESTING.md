@@ -2459,6 +2459,33 @@ install and remove packages only through it: a Store-signed package is never rem
 checks were run on GPD-DAVE against stand-in folders and stand-in package objects (no package
 was installed or removed).
 
+## The huge-image cache check counts bytes, not milliseconds (#698), 2026-10-21
+
+`test_huge_image_render_cache` (`core/tests/core_tests.cpp`) asserted that a cache hit rendered at
+least 4x faster than the decode. That failed on two hosted runners at once (Windows missed by
+2 ms: 28 x 4 = 112 against 110), and the ratio has a floor, because a hit still resamples and
+composites the kept copy. It now opens its fixture with `megapdf_open_file` and asserts on
+`megapdf_testing_bytes_read()`, the bytes PDFium read through the core's file callback during
+each render. PDFium patch 0024 keeps the image's 1.2 MB stream in the file, so a render that
+decodes reads it all and one drawn from the page's image cache reads none. Threshold 64 KiB
+(0024's own boundary). Timings are printed, never asserted. No PDFium change.
+
+The printed line, `PDFium patches 33` (`pdfium-7934-megapdf-2b3b415e86b1`), Debug build, whole
+core suite green on both:
+
+| machine | first | again (2nd/3rd) | larger | zoom out | zoom in again | ms (same order) |
+|---|---|---|---|---|---|---|
+| kdocker3, Ubuntu 24.04 container, ASan | 1,200,001 | 0 / 0 | 1,200,001 | 0 | 0 | 63, 2/1, 128, 8, 21 |
+| Mac mini, Apple silicon, no ASan | 1,200,001 | 0 / 0 | 1,200,001 | 0 | 0 | 37, 1/1, 69, 5, 12 |
+
+So the cache is not missing on the Mac (the hosted macOS run's 61 ms had raised that question):
+every hit read 0 bytes. Negative control, a local edit never committed: render `second` through
+a second `Page` of the same document (each page has its own image cache). On both machines
+"rendering the page again does not decode the image again" failed with `1200001, 0 bytes read`
+and nothing else in the test failed on the Mac. (The kdocker3 negative run was in a container
+without the fixtures directory, so it also printed 135 unrelated "opens" failures; the
+positive run there, with fixtures, was green.)
+
 ## Reporting
 
 For each issue: what you clicked, what you expected, what happened, and the PDF
