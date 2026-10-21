@@ -26,17 +26,33 @@ internal static class Program
         // document (#193, #195). Linux only; it returns at once anywhere else.
         Platform.LinuxPaths.PrepareUserDirectories();
 
+        // #717: every automation launch — the self-test and the launches it makes of itself,
+        // the screenshot states, the capture rigs, every diagnostic — keeps its settings,
+        // recents, signatures and recovery journal in a folder of its own, made fresh under
+        // the temporary folder and deleted at exit (or the folder MEGAPDF_USER_DATA names).
+        // Never the person's. Before anything builds a service; after PrepareUserDirectories,
+        // which on Linux moves the temporary folder off a RAM-backed /tmp.
+        var isolation = args.Any(App.IsAutomationArgument) ? AutomationUserData.Begin() : null;
+
         // Before anything reads a string: the toolbar labels are resolved when the
         // window is built, and the diagnostics below print Strings.* too.
         ApplyLanguage(args);
 
-        return args.Contains("--render-check") ? RenderCheck(args)
-             : args.Contains("--self-test") ? SelfTest(args)
-             : args.Contains("--portal-print-check") ? PortalPrintCheck(args)
-             : args.Contains("--print-check") ? PrintCheck(args)
-             : args.Contains("--language-check") ? LanguageCheck()
-             : args.Contains("--install-kind") ? InstallKind()
-             : RunDesktopApp(args);
+        var code = args.Contains("--render-check") ? RenderCheck(args)
+                 : args.Contains("--self-test") ? SelfTest(args)
+                 : args.Contains("--portal-print-check") ? PortalPrintCheck(args)
+                 : args.Contains("--print-check") ? PrintCheck(args)
+                 : args.Contains("--language-check") ? LanguageCheck()
+                 : args.Contains("--install-kind") ? InstallKind()
+                 : RunDesktopApp(args);
+
+        // The guard: the folder in use was not the person's, and the person's is byte-identical
+        // to what it was at launch. Said in full where a person reads the output (the self-test,
+        // the screenshot states, the launch checks); elsewhere only if it fails, because
+        // scripts compare some diagnostics' output whole.
+        var verbose = args.Contains("--self-test") || args.Contains("--screenshot")
+                      || args.Contains("--open-check") || args.Contains("--window-tabs-check");
+        return isolation?.Finish(code, verbose ? Console.Out : Console.Error, quietWhenClean: !verbose) ?? code;
     }
 
     /// <summary>

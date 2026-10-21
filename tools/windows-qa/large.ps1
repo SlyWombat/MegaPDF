@@ -1,5 +1,8 @@
 # RC sweep: the 2.5 GB file, once — open, scroll, search, edit, save.
 $env:MEGAPDF_SHOTDIR = 'D:\megapdf-qa\rc2\large'
+# #717: back up the person's MegaPDF data first, and compare it when this PowerShell exits.
+. (Join-Path $PSScriptRoot 'qa-safety.ps1')
+Watch-QaUserDataUntilExit (Split-Path -Leaf $MyInvocation.PSCommandPath)
 . 'D:\megapdf-qa\pkg.ps1'
 New-Item -ItemType Directory -Force $env:MEGAPDF_SHOTDIR | Out-Null
 $global:SHOTDIR = $env:MEGAPDF_SHOTDIR

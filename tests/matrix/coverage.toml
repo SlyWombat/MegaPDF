@@ -2002,9 +2002,10 @@ tests = [
   "tests/MegaPDF.Core.Tests/RecoveryJournalTests.cs::Journal",
   "tests/MegaPDF.Core.Tests/HiddenCopyTests.cs::HiddenCopy",
   "tests/MegaPDF.Core.Tests/LaunchedDocumentTests.cs::Launched",
+  "tests/MegaPDF.Core.Tests/AutomationUserDataTests.cs::AutomationUserData",
 ]
 manual = "TESTING.md::**Sturdiness**"
-note = "the journal and its replay are well covered; the restore dialog is never shown in CI, and the three-tabs-restored case TESTING.md describes is by hand only."
+note = "the journal and its replay are well covered; the restore dialog is never shown in CI, and the three-tabs-restored case TESTING.md describes is by hand only. #717: every self-test state keeps its journals in a folder of its own and fails if the person's Recovery folder changed, which is what stopped test journals being offered for recovery on the next real launch."
 [feature.macos]
 presence = "present"
 entry = "src/MegaPDF.Avalonia/Views/MainWindow.axaml.cs::AskAboutRecoveryAsync"
@@ -2013,6 +2014,7 @@ tests = [
   "src/MegaPDF.Avalonia/Program.cs::CheckLaunchAfterCrash",
   "tests/MegaPDF.Core.Tests/RecoveryJournalTests.cs::Journal",
   "tests/MegaPDF.Core.Tests/HiddenCopyTests.cs::HiddenCopy",
+  "tests/MegaPDF.Core.Tests/AutomationUserDataTests.cs::AutomationUserData",
 ]
 manual = "TESTING.md::**Sturdiness**"
 [feature.linux]
@@ -2023,6 +2025,7 @@ tests = [
   "src/MegaPDF.Avalonia/Program.cs::CheckLaunchAfterCrash",
   "tests/MegaPDF.Core.Tests/RecoveryJournalTests.cs::Journal",
   "tests/MegaPDF.Core.Tests/HiddenCopyTests.cs::HiddenCopy",
+  "tests/MegaPDF.Core.Tests/AutomationUserDataTests.cs::AutomationUserData",
 ]
 manual = "TESTING.md::**Sturdiness**"
 [feature.ios]

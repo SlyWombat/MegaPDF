@@ -430,6 +430,12 @@ public sealed partial class DocumentView
     }
 
     /// <summary>
+    /// What the last copy in an automation launch put where the clipboard would have been
+    /// (#717); null in a person's launch, whose copies go on the real clipboard.
+    /// </summary>
+    internal static DataPackage? AutomationClipboard { get; private set; }
+
+    /// <summary>
     /// Ctrl+C and the menu's Copy. The text goes on the clipboard with CR LF line ends. On a
     /// document that asked not to be copied from, nothing is copied and the notice says why.
     /// </summary>
@@ -447,6 +453,16 @@ public sealed partial class DocumentView
             return false;
         var package = new DataPackage { RequestedOperation = DataPackageOperation.Copy };
         package.SetText(PdfTextSelection.WithLineEnds(text, "\r\n"));
+        if (MegaPDF.Core.Services.AutomationUserData.IsActive)
+        {
+            // #717: an automation launch never writes the person's clipboard. Saving and
+            // restoring it is not the same thing: clipboard history and the cloud clipboard
+            // keep every write, and a file list or a delay-rendered format does not survive a
+            // round trip. The package that would have gone on it is kept here instead, and
+            // the self-test reads it back from here.
+            AutomationClipboard = package;
+            return true;
+        }
         try
         {
             Clipboard.SetContent(package);

@@ -12,7 +12,7 @@ New-Item -ItemType Directory -Force -Path (Split-Path $log) | Out-Null
 try {
     Start-Process -FilePath 'powershell.exe' -Verb RunAs -ArgumentList @(
         '-NoProfile', '-ExecutionPolicy', 'Bypass',
-        '-File', 'D:\Projects\MegaPDF\artifacts\store\wack-run.ps1') -ErrorAction Stop
+        '-File', 'D:\Projects\MegaPDF\tools\windows-qa\wack-run.ps1') -ErrorAction Stop
     "$(Get-Date -Format s) approved; wack-run.ps1 started elevated" | Out-File $log -Append
 }
 catch {

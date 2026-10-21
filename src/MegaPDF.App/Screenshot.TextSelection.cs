@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using MegaPDF.Core.Engine;
 using Windows.ApplicationModel.DataTransfer;
 
@@ -14,9 +15,14 @@ internal static partial class Screenshot
     /// WinUI cannot synthesise a pointer, so the press, the moves and the release are fed to the
     /// page's own three pointer handlers as readings (<see cref="DocumentView.DragForTest"/>) —
     /// the drag threshold, the hit checks, the walk across pages and the tap swallowing are the
-    /// real ones. What reaches the clipboard is read back from the real clipboard.
+    /// real ones.
     ///
-    /// The clipboard is the person's: whatever text was on it before is put back at the end.
+    /// The clipboard is the person's, so this never touches it (#717). In an automation launch
+    /// Copy keeps the package it would have put on the clipboard
+    /// (<see cref="DocumentView.AutomationClipboard"/>), built by the same code a person's Copy
+    /// runs, and the checks read that. Only the final hand-over, <c>Clipboard.SetContent</c>
+    /// and <c>Flush</c>, is not exercised here. The system clipboard's sequence number, which
+    /// Windows bumps on every write by anyone, is read before and after to prove it.
     /// </summary>
     private static async Task<bool> CheckTextSelectionAsync(MainWindow window)
     {
@@ -38,7 +44,7 @@ internal static partial class Screenshot
                 failed++;
         }
 
-        var before = await SaveClipboardAsync();
+        var sequenceBefore = GetClipboardSequenceNumber();
         try
         {
             await RunTextSelectionChecksAsync(window, tab, path, Check);
@@ -55,8 +61,10 @@ internal static partial class Screenshot
                 other.HasUnsavedChanges = false;
                 await window.CloseTabAsync(other);
             }
-            RestoreClipboard(before);
         }
+        var sequenceAfter = GetClipboardSequenceNumber();
+        Console.Error.WriteLine($"  the system clipboard's sequence number: {sequenceBefore} before, {sequenceAfter} after");
+        Check("the person's clipboard was never written (#717)", sequenceAfter == sequenceBefore);
 
         // For the photograph: the same two-column selection, on the first page at the top.
         if (failed == 0 && tab.View is { } shown && tab.SelectableText is { } text)
@@ -86,28 +94,14 @@ internal static partial class Screenshot
             }
             return true;
         }
-        // The clipboard is shared with every other app and answers asynchronously: a read straight
-        // after a write can still see the old content, so a read waits, briefly, for it to settle.
+        // What Copy put where the clipboard would have been (#717): the package itself, read the
+        // way a paste would read it.
         static async Task<string?> ClipboardText()
         {
-            string? last = null;
-            for (var attempt = 0; attempt < 20; attempt++)
-            {
-                try
-                {
-                    var content = Clipboard.GetContent();
-                    if (content.Contains(StandardDataFormats.Text))
-                        return await content.GetTextAsync();
-                }
-                catch (Exception ex)
-                {
-                    last = ex.Message;
-                }
-                await Task.Delay(100);
-            }
-            if (last is not null)
-                Console.Error.WriteLine($"  the clipboard could not be read: {last}");
-            return null;
+            if (DocumentView.AutomationClipboard is not { } package)
+                return null;
+            var content = package.GetView();
+            return content.Contains(StandardDataFormats.Text) ? await content.GetTextAsync() : null;
         }
         static string Shown(string? s) => s is null ? "(none)" : s.Replace("\r", "\\r").Replace("\n", "\\n");
 
@@ -228,6 +222,7 @@ internal static partial class Screenshot
         }
         await view.CopySelectedTextAsync(); // a known clipboard to compare against
         var knownClipboard = await ClipboardText();
+        var knownPackage = DocumentView.AutomationClipboard;
         var restricted = await window.Shell.OpenInTabAsync(noCopy);
         Check("the no-copy document opens in a tab of its own", await UntilAsync(() => restricted.View is not null && restricted.IsDocumentOpen));
         if (restricted.View is not { } restrictedView || restricted.SelectableText is not { } restrictedText)
@@ -243,41 +238,12 @@ internal static partial class Screenshot
         Check("its text still selects", restrictedDrag && restrictedView.HasTextSelection);
         Check("  the menu's Copy is off, and says why", restrictedView.TextMenuStateForTest() == (false, true));
         Check("  Copy copies nothing", !await restrictedView.CopySelectedTextAsync());
-        Check("  and the clipboard is as it was", (await ClipboardText()) == knownClipboard);
+        Check("  and the clipboard is as it was",
+              ReferenceEquals(DocumentView.AutomationClipboard, knownPackage) && (await ClipboardText()) == knownClipboard);
         Check("  the notice saying why is open", restricted.IsCopyWithheldNoticeOpen);
     }
 
-    /// <summary>The text on the clipboard before the check, to put back: the clipboard is the person's.</summary>
-    private static async Task<string?> SaveClipboardAsync()
-    {
-        try
-        {
-            var content = Clipboard.GetContent();
-            return content.Contains(StandardDataFormats.Text) ? await content.GetTextAsync() : null;
-        }
-        catch (Exception)
-        {
-            return null;
-        }
-    }
-
-    private static void RestoreClipboard(string? text)
-    {
-        try
-        {
-            if (text is null)
-            {
-                Clipboard.Clear();
-                return;
-            }
-            var package = new DataPackage();
-            package.SetText(text);
-            Clipboard.SetContent(package);
-            Clipboard.Flush();
-        }
-        catch (Exception ex)
-        {
-            Console.Error.WriteLine($"note: the clipboard could not be put back: {ex.Message}");
-        }
-    }
+    /// <summary>Windows bumps this on every change to the clipboard, by any app (#717).</summary>
+    [DllImport("user32.dll")]
+    private static extern uint GetClipboardSequenceNumber();
 }

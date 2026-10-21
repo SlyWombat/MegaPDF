@@ -27,6 +27,9 @@ public sealed class RecoveryJournal : IDisposable
     /// <summary>How many sibling names a session tries before it gives up journaling.</summary>
     private const int MaxSiblings = 16;
 
+    /// <summary>Every journal with a file open, so an automation launch can let go of them all at exit (#717).</summary>
+    private static readonly HashSet<RecoveryJournal> OpenJournals = [];
+
     private readonly string _directory;
     private string? _journalPath;
     private StreamWriter? _writer;
@@ -87,6 +90,8 @@ public sealed class RecoveryJournal : IDisposable
             _writer = new StreamWriter(stream);
             _writer.WriteLine(JsonSerializer.Serialize(new Header(documentPath)));
             _writer.Flush();
+            lock (OpenJournals)
+                OpenJournals.Add(this);
             return;
         }
         // Every name is held: the document is open in that many other instances. Its edits
@@ -120,6 +125,8 @@ public sealed class RecoveryJournal : IDisposable
             // The final flush failed; the file is being removed anyway.
         }
         _writer = null;
+        lock (OpenJournals)
+            OpenJournals.Remove(this);
         if (_journalPath is not null)
             TryDelete(_journalPath);
         _journalPath = null;
@@ -207,6 +214,27 @@ public sealed class RecoveryJournal : IDisposable
         {
         }
         _writer = null;
+        lock (OpenJournals)
+            OpenJournals.Remove(this);
+    }
+
+    /// <summary>
+    /// Lets go of every open journal under <paramref name="folder"/> without deleting any
+    /// (#717): what an automation launch does last, so the folder it kept its data in can be
+    /// deleted. On Windows a file held open cannot be, and a run that exits with a document
+    /// open otherwise left its folder behind with the journal in it. Journals anywhere else
+    /// are not touched.
+    /// </summary>
+    public static void ReleaseAllUnder(string folder)
+    {
+        var prefix = Path.TrimEndingDirectorySeparator(Path.GetFullPath(folder)) + Path.DirectorySeparatorChar;
+        var comparison = OperatingSystem.IsLinux() ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
+        List<RecoveryJournal> open;
+        lock (OpenJournals)
+            open = OpenJournals.Where(j => j._journalPath is { } path
+                                           && Path.GetFullPath(path).StartsWith(prefix, comparison)).ToList();
+        foreach (var journal in open)
+            journal.Dispose();
     }
 
     /// <summary>

@@ -16,9 +16,16 @@ param(
     [switch]$Restore
 )
 $ErrorActionPreference = 'Stop'
+# #717: back up the person's MegaPDF data first, and compare it when this PowerShell exits.
+. (Join-Path $PSScriptRoot '..\windows-qa\qa-safety.ps1')
+Watch-QaUserDataUntilExit (Split-Path -Leaf $MyInvocation.PSCommandPath)
+# The app's data folder: MEGAPDF_USER_DATA's when it is set (an unpackaged build driven
+# through MEGAPDF_EXE reads it, #717), otherwise the real one, which only a packaged run
+# needs -- the package cannot be handed an environment variable.
+$data = if ($env:MEGAPDF_USER_DATA) { $env:MEGAPDF_USER_DATA } else { Join-Path $env:LOCALAPPDATA 'MegaPDF' }
 
-$dir   = Join-Path $env:LOCALAPPDATA 'MegaPDF\Signatures'
-$saved = Join-Path $env:LOCALAPPDATA 'MegaPDF\Signatures.before-capture'
+$dir   = Join-Path $data 'Signatures'
+$saved = Join-Path $data 'Signatures.before-capture'
 
 if ($Restore) {
     if (-not (Test-Path $saved)) { Write-Host "nothing set aside at $saved"; exit 0 }

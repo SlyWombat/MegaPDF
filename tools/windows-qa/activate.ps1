@@ -1,6 +1,9 @@
 # Launch the installed MegaPDF package for a file, the way Explorer's "Open with" does
 # (IApplicationActivationManager.ActivateForFile) — the machine's default PDF app is not
 # MegaPDF, so opening through the association would start another program.
+# #717: back up the person's MegaPDF data first, and compare it when this PowerShell exits.
+. (Join-Path $PSScriptRoot 'qa-safety.ps1')
+Watch-QaUserDataUntilExit (Split-Path -Leaf $MyInvocation.PSCommandPath)
 if (-not ('MegaActivate2' -as [type])) {
 Add-Type -TypeDefinition @'
 using System;

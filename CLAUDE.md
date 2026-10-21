@@ -45,8 +45,16 @@ Dave's; only touch `/data/megapdf-work`.
 system one has no SDK); no Visual Studio; `gh.exe` not `gh`; `sleep` is blocked; `grep` is a
 shell function, not the binary. Use a `.ps1` file, never inline `-Command` — quoting and
 redirection get mangled through bash. Stage scripts in `C:\temp`, read output back from there,
-clean up after. **Killing the app writes a crash-recovery journal on the way down, so delete it
-*after* the kill, not alongside it.**
+clean up after.
+
+**An automation launch never touches `%LOCALAPPDATA%\MegaPDF`, and a QA script never removes a
+Store-signed package (#717).** Every `--screenshot`/`--screenshot-state`/`--engine-check`/
+`--self-test`/… launch keeps its settings, recents, signatures and recovery journal in a fresh
+folder under `%TEMP%` (or wherever `MEGAPDF_USER_DATA` points), deleted at exit, and fails if the
+real folder changed. A launch with no automation argument is a person's launch: give it
+`MEGAPDF_USER_DATA` first. QA scripts start with `Start-QaUserDataWatch` and install and remove
+packages only through `tools/windows-qa/qa-safety.ps1`; never pipe `Get-AppxPackage` into
+`Remove-AppxPackage`, which deletes a Store install's data with it.
 
 **Leave every machine as you found it.** No leftover processes, no toggled settings, no open
 windows, no scratch. This is explicit and repeated.

@@ -2,6 +2,9 @@
 # Dot-source this from the step scripts; see README.md for the run order.
 # Buttons all carry AutomationProperties.Name since d250120, so plain
 # Name+ControlType matching works -- no TreeWalker climb needed.
+# #717: back up the person's MegaPDF data first, and compare it when this PowerShell exits.
+. (Join-Path $PSScriptRoot '..\windows-qa\qa-safety.ps1')
+Watch-QaUserDataUntilExit (Split-Path -Leaf $MyInvocation.PSCommandPath)
 Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
 Add-Type -AssemblyName System.Drawing
