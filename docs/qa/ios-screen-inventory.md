@@ -376,17 +376,37 @@ gate on this platform (#570, and the section above), so no CI lane ever drove it
   first fast run failed with `Failed to synthesize event: Not hittable: Button, …, identifier:
   'pageTile-2'` — the sidebar puts its tiles in the tree as it *begins* sliding in, and the old
   waits had been covering that by accident. Wait for `isHittable` before a gesture.
-- **One tile intermittently will not call itself hittable, and it is worth a look of its
-  own.** Measured over twenty-four openings of the iPad sidebar, `pageTile-2` — the first tile
-  of the grid's second row — reports `isHittable == false` for ten seconds and more in about
-  one opening in eight. Its frame is right, its subtree is unchanged, nothing is over it, it is
-  only ever that one tile, and the rate is the same with the tile drag on (3 of 12) as off
-  (1 of 12), so it is not the test's doing. A gesture sent in that state usually lands —
-  `PageToolsUITests` pressed that tile twelve times out of twelve before #599 touched it — so
-  the suite treats hittability as a *settle* and lets XCUITest refuse the gesture itself if it
-  really must. **But a page tile that will not take a touch is a user's problem as well as a
-  test's**, and nothing here has yet looked at whether a finger on that tile is ignored too.
-  Found 2026-10-01 under #599; not diagnosed.
+- **The first opening of the iPad panel after a launch leaves `pageTile-2` not hittable about
+  one launch in six, and a finger is not affected (#640).** `pageTile-2` — the first tile of the
+  grid's second row — reports `isHittable == false` and stays that way for more than 15 s,
+  unless a touch lands on it, which ends it 1.5-2 s later. Measured 2026-10-22 on the Mac mini
+  (iPad Pro 13-inch (M5) simulator, iOS 26.5), a fresh simulator per run, polled every 0.1 s,
+  with a coordinate tap at the tile's centre as the finger and the tile's own tap count read
+  back from the app (`-uiTestGridTrace`):
+  - **Only the first opening of a process.** Relaunching per opening: 31 episodes in 180
+    openings with the test probes off (17 %), 11 in 72 with them on (15 %). Toggling the panel
+    on one launch: **0 in 48**. A healthy tile 2 is hittable 0.5-1.5 s after the tap on the
+    strip (1.0-2.6 s when toggling).
+  - **A finger lands.** 12 of 12 touches sent during an episode were counted by the tile, 30
+    of 30 after 15 s of one, and all 258 on healthy openings. This is XCUITest's accessibility
+    hit-test verdict and not a lost first tap, so the suite's reading of hittability as a
+    *settle* stands, and `PagesGridTouchUITests` asserts the touch instead.
+  - **Not the probes, not a cover.** The same rate with `-uiTestZoomProbes` off and on; a
+    whole-app snapshot at the tile's centre lists only the tile and its ancestors (and two
+    full-screen unlabelled containers, through which a touch passes).
+  - **Not the thumbnail-window pushes.** The triage's theory (re-entrant `onAppear` pushes)
+    was measured and is not it: every opening, healthy or not, pushed the window four times
+    and created tile 2 once; pushing once per settled change (`.task(id: visible)`, kept
+    because it is correct) left the rate where it was, 11 in 48 before and 15 in 48 after.
+  - **A touch ends it; a screenshot or a snapshot does not.** Left alone, 18 of 18 episodes
+    were still there at 15 s, and so were 7 of 7 with a screenshot and 5 of 5 with a
+    whole-app snapshot; 6 of 6 ended 1.5-2 s after a tap. What it is underneath (a stale
+    accessibility hit-test for the first realisation of the grid, apparently) is **not
+    diagnosed**.
+  - `PageToolsUITests` therefore still presses tile 1, and tile 2 comes back only when a
+    relaunch measurement of 48 openings shows no episode.
+  - The mini is three to four times faster than a hosted runner; these figures say nothing
+    about how the hosted lane behaves.
 - **`XCUIElement.waitForExistence` costs a flat second even when the element is already
   there.** Measured against the pages probe: 1.049 s asked for a one-second timeout, 1.067 s
   asked for thirty, against 0.021 s to read the same element through `snapshot()`. That is
