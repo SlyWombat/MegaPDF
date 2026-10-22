@@ -67,7 +67,7 @@ enum {
     MEGAPDF_ERR_NO_FONT = -4,     /* no font could render the text, not even a standard substitute (tier 2 failed) */
     MEGAPDF_ERR_LAYOUT = -5,      /* PDFium would change how the page looks if it rewrote this text (#118) */
     MEGAPDF_ERR_RESTRICTED = -6,  /* the document's security does not allow it; its owner password would (#131) */
-    MEGAPDF_ERR_CANCELLED = -7,   /* a page check stopped early: its cancel flag was raised or its document is closing (#145) */
+    MEGAPDF_ERR_CANCELLED = -7,   /* a page check (#145) or a shrink (#593) stopped early: its cancel flag was raised or its document is closing */
     MEGAPDF_ERR_NOT_JUDGED = -8,  /* megapdf_page_regeneration_verdict_cached(): the page has no answer yet (#145) */
     MEGAPDF_ERR_FILE = -9,        /* a file could not be created, read or written (#147) */
     MEGAPDF_ERR_REDACT = -10,     /* a redaction could not remove everything it had to, so it removed nothing (#173) */
@@ -1035,6 +1035,32 @@ typedef void (*megapdf_jpeg_release_fn)(void* context, unsigned char* jpeg);
  */
 MEGAPDF_API int megapdf_shrink_images(const megapdf_document* document, megapdf_jpeg_encode_fn encode,
                                       megapdf_jpeg_release_fn release, void* context, int* out_replaced);
+
+/** Told how many images have been considered, out of how many, after each one, and once with
+    0 before the first. Called WITHOUT the core lock held, on the thread that called the shrink. */
+typedef void (*megapdf_progress_fn)(void* context, int done, int total);
+
+/** Slots of megapdf_shrink_images_cancellable()'s out_counts. Grown by new values, never reordered (#6 adds more). */
+enum {
+    MEGAPDF_SHRINK_CONSIDERED = 0,   /* images looked at, whatever became of them */
+    MEGAPDF_SHRINK_REPLACED = 1,     /* images re-encoded and replaced */
+    MEGAPDF_SHRINK_COUNTS = 2        /* how many slots this build fills */
+};
+
+/**
+ * megapdf_shrink_images() with progress, a cancel flag, and the core lock let go while `encode`
+ * runs, so a long shrink does not hold up renders of other documents (#593). The rules are
+ * megapdf_shrink_images()'s. `progress`, `cancel` and `out_counts` may be NULL. The first
+ * min(count_slots, MEGAPDF_SHRINK_COUNTS) slots of out_counts are zeroed on entry and filled on
+ * every return. `context` goes to encode, release and progress alike. Returns MEGAPDF_OK;
+ * MEGAPDF_ERR_CANCELLED when `cancel` was raised or the document began closing (the document
+ * is then part-shrunk: callers run this on a copy and discard it); MEGAPDF_ERR_ARGUMENT,
+ * MEGAPDF_ERR_MEMORY; or, as before, the status of the last replacement that failed.
+ */
+MEGAPDF_API int megapdf_shrink_images_cancellable(const megapdf_document* document, megapdf_jpeg_encode_fn encode,
+                                                  megapdf_jpeg_release_fn release, megapdf_progress_fn progress,
+                                                  void* context, const megapdf_cancel* cancel,
+                                                  int* out_counts, size_t count_slots);
 
 /* --------------------------------------------------------------------------
  * Contract 7: render policy (#111, #93). Bitmap allocation and presentation stay
