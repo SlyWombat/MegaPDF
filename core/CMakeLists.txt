@@ -29,6 +29,7 @@ set(MEGAPDF_PDFIUM_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../libs/pdfium/linux-x64" CA
 
 option(MEGAPDF_CORE_TESTS "Build and register the core test target (#104)" OFF)
 option(MEGAPDF_ASAN "AddressSanitizer for the core and its tests (GCC/Clang only)" OFF)
+option(MEGAPDF_SHRINK_SURVEY "Build tools/shrink-survey (#6); needs libjpeg-turbo" OFF)
 
 add_library(megapdf_core SHARED megapdf_core.cpp megapdf_structure.cpp megapdf_write_text.cpp megapdf_select.cpp megapdf_core.h
     megapdf_core_internal.h)
@@ -312,4 +313,22 @@ if(MEGAPDF_CORE_TESTS)
         COMMAND megapdf_core_tests ${MEGAPDF_FIXTURES_DIR} ${MEGAPDF_SCHEMATIC} ${MEGAPDF_TEXT_EXPECTED}
             ${MEGAPDF_STRUCTURE_EXPECTED_DIR} $<TARGET_FILE:megapdf_cli>
         WORKING_DIRECTORY $<TARGET_FILE_DIR:megapdf_core_tests>)
+endif()
+
+# The #6 shrink-for-email measurement tool: what shrink does to real documents and what the
+# candidate bilevel / grey / transparency rules would do instead. A measuring tool only; built on
+# request because it needs libjpeg-turbo, which nothing else in the core does.
+if(MEGAPDF_SHRINK_SURVEY)
+    find_package(JPEG REQUIRED)
+    add_executable(megapdf_shrink_survey ${REPO}/tools/shrink-survey/shrink_survey.cpp)
+    target_include_directories(megapdf_shrink_survey PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${MEGAPDF_PDFIUM_HEADERS})
+    target_link_libraries(megapdf_shrink_survey PRIVATE megapdf_core ${PDFIUM_LINK} JPEG::JPEG)
+    add_dependencies(megapdf_shrink_survey megapdf_pdfium_runtime)
+    if(APPLE)
+        set_target_properties(megapdf_shrink_survey PROPERTIES BUILD_RPATH "@loader_path")
+        add_custom_command(TARGET megapdf_shrink_survey POST_BUILD
+            COMMAND install_name_tool -change ./libpdfium.dylib @loader_path/libpdfium.dylib $<TARGET_FILE:megapdf_shrink_survey>)
+    elseif(UNIX)
+        set_target_properties(megapdf_shrink_survey PROPERTIES BUILD_RPATH "$ORIGIN")
+    endif()
 endif()
