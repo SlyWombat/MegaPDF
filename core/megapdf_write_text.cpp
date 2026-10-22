@@ -31,6 +31,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <map>
+#include <new>
 #include <string>
 #include <vector>
 
@@ -670,11 +672,163 @@ const FieldInfo* FindField(const std::vector<FieldInfo>& fields, const megapdf_r
 
 }  // namespace
 
+// #683: text a device's recogniser read from scanned pages, handed to the writer through an opaque
+// handle so megapdf_write_options (mirrored by hand in C#) does not grow. The structure pass never
+// sees it (contract 9 is the document's own text); the writer substitutes it at render time for the
+// PAGE_IMAGE block it replaces.
+struct megapdf_recognised {
+    struct Line {
+        std::string utf8;
+        double left = 0, bottom = 0, right = 0, top = 0;
+    };
+    std::map<int, std::vector<Line>> pages;
+};
+
+namespace {
+
+// Trims ASCII whitespace, U+00A0 and U+3000 from both ends, and turns any line break or tab inside
+// the text into a space (a break inside a line would end a block quote's line without its "> ").
+std::string TrimRecognised(const std::string& in) {
+    std::string t;
+    t.reserve(in.size());
+    for (char c : in) t.push_back((c == '\n' || c == '\r' || c == '\t' || c == '\v' || c == '\f') ? ' ' : c);
+    auto is_space_at = [&](size_t i, size_t* width) {
+        const unsigned char c = static_cast<unsigned char>(t[i]);
+        if (c == ' ') { *width = 1; return true; }
+        if (c == 0xC2 && i + 1 < t.size() && static_cast<unsigned char>(t[i + 1]) == 0xA0) { *width = 2; return true; }
+        if (c == 0xE3 && i + 2 < t.size() && static_cast<unsigned char>(t[i + 1]) == 0x80 &&
+            static_cast<unsigned char>(t[i + 2]) == 0x80) { *width = 3; return true; }
+        return false;
+    };
+    size_t begin = 0;
+    for (size_t w = 0; begin < t.size() && is_space_at(begin, &w);) begin += w;
+    size_t end = t.size();
+    while (end > begin) {
+        if (t[end - 1] == ' ') { end--; continue; }
+        if (end - begin >= 2 && static_cast<unsigned char>(t[end - 2]) == 0xC2 &&
+            static_cast<unsigned char>(t[end - 1]) == 0xA0) { end -= 2; continue; }
+        if (end - begin >= 3 && static_cast<unsigned char>(t[end - 3]) == 0xE3 &&
+            static_cast<unsigned char>(t[end - 2]) == 0x80 && static_cast<unsigned char>(t[end - 1]) == 0x80) {
+            end -= 3;
+            continue;
+        }
+        break;
+    }
+    return t.substr(begin, end - begin);
+}
+
+// The recognition note, and the page's recognised lines grouped into paragraphs by a fixed
+// geometric rule (design D8): a line starts a new paragraph when a gap of more than 0.8 x the
+// median line height lies below the previous line, or when it sits more than half a line height
+// above the previous line's top (a new column or region). The recogniser's own order is kept.
+std::string RecognisedPage(int page, const std::vector<megapdf_recognised::Line>& lines, bool is_markdown,
+                           bool keep_lines) {
+    std::vector<double> heights;
+    heights.reserve(lines.size());
+    for (const auto& l : lines) heights.push_back(l.top - l.bottom);
+    std::sort(heights.begin(), heights.end());
+    double h = heights.empty() ? 1.0 : heights[heights.size() / 2];
+    if (heights.size() % 2 == 0 && heights.size() >= 2) h = (heights[heights.size() / 2 - 1] + heights[heights.size() / 2]) / 2;
+    if (!(h > 0)) h = 1.0;
+
+    std::vector<std::vector<const std::string*>> paragraphs;
+    for (size_t i = 0; i < lines.size(); i++) {
+        bool fresh = i == 0;
+        if (!fresh) {
+            const auto& prev = lines[i - 1];
+            const auto& cur = lines[i];
+            fresh = (prev.bottom - cur.top > 0.8 * h) || (cur.top > prev.top + 0.5 * h);
+        }
+        if (fresh) paragraphs.emplace_back();
+        paragraphs.back().push_back(&lines[i].utf8);
+    }
+
+    std::string note = "[Page " + std::to_string(page + 1) +
+                       " is a scanned image, read by text recognition: the text may contain mistakes]";
+    std::string out = is_markdown ? "*" + note + "*" : note;
+    out += "\n\n";
+    for (size_t p = 0; p < paragraphs.size(); p++) {
+        if (p > 0) out += is_markdown ? "\n>\n" : "\n\n";
+        // Physical lines of this paragraph: one joined line, or one per recognised line.
+        std::vector<std::string> physical;
+        if (keep_lines) {
+            for (const std::string* l : paragraphs[p]) physical.push_back(*l);
+        } else {
+            std::string joined;
+            for (const std::string* l : paragraphs[p]) {
+                if (!joined.empty()) joined += " ";
+                joined += *l;
+            }
+            physical.push_back(joined);
+        }
+        for (size_t k = 0; k < physical.size(); k++) {
+            if (k > 0) out += "\n";
+            if (is_markdown) {
+                // Escaped as the start of a line, so a recognised "# 5" cannot become a heading
+                // inside the quote, nor "1. x" a list.
+                out += "> ";
+                bool at_line_start = true;
+                AppendEscaped(&out, physical[k], &at_line_start);
+            } else {
+                out += physical[k];
+            }
+        }
+    }
+    return out;
+}
+
+const std::vector<megapdf_recognised::Line>* RecognisedLines(const megapdf_recognised* recognised, int page) {
+    if (recognised == nullptr) return nullptr;
+    const auto it = recognised->pages.find(page);
+    return it == recognised->pages.end() || it->second.empty() ? nullptr : &it->second;
+}
+
+}  // namespace
+
 extern "C" {
+
+MEGAPDF_API megapdf_recognised* megapdf_recognised_new(void) {
+    return new (std::nothrow) megapdf_recognised();
+}
+
+MEGAPDF_API int megapdf_recognised_add_line(megapdf_recognised* recognised, int page_index,
+                                            const unsigned short* text, size_t length, double left, double bottom,
+                                            double right, double top) {
+    if (recognised == nullptr || page_index < 0 || (text == nullptr && length > 0)) return MEGAPDF_ERR_ARGUMENT;
+    try {
+        std::string utf8 = TrimRecognised(Utf16ToUtf8(U16(text, text + length)));
+        if (utf8.empty()) return MEGAPDF_OK;
+        megapdf_recognised::Line line;
+        line.utf8 = std::move(utf8);
+        line.left = left;
+        line.bottom = bottom;
+        line.right = right;
+        line.top = top;
+        recognised->pages[page_index].push_back(std::move(line));
+    } catch (const std::bad_alloc&) {
+        return MEGAPDF_ERR_MEMORY;
+    }
+    return MEGAPDF_OK;
+}
+
+MEGAPDF_API void megapdf_recognised_free(megapdf_recognised* recognised) {
+    delete recognised;
+}
 
 MEGAPDF_API int megapdf_write_text(megapdf_document* document, int first_page, int page_count, int format,
                                    const megapdf_write_options* options, megapdf_write_fn write, void* context,
                                    const megapdf_cancel* cancel) {
+    return megapdf_write_text_recognised(document, first_page, page_count, format, options, nullptr, nullptr, 0,
+                                         nullptr, write, context, cancel);
+}
+
+MEGAPDF_API int megapdf_write_text_recognised(megapdf_document* document, int first_page, int page_count,
+                                              int format, const megapdf_write_options* options,
+                                              const megapdf_recognised* recognised, int* out_pages_to_read,
+                                              size_t capacity, size_t* out_pages_to_read_count,
+                                              megapdf_write_fn write, void* context, const megapdf_cancel* cancel) {
+    if (out_pages_to_read_count != nullptr) *out_pages_to_read_count = 0;
+    std::vector<int> pages_to_read;
     if (document == nullptr || write == nullptr || page_count <= 0 ||
         (format != MEGAPDF_WRITE_TEXT && format != MEGAPDF_WRITE_MARKDOWN)) {
         return MEGAPDF_ERR_ARGUMENT;
@@ -830,9 +984,19 @@ MEGAPDF_API int megapdf_write_text(megapdf_document* document, int first_page, i
                         line = "*" + ImageNote(b, image) + "*";
                         break;
                     }
-                    case MEGAPDF_BLOCK_PAGE_IMAGE:
-                        line = "*" + PageImageNote(b, BlockImage(s, bi)) + "*";
+                    case MEGAPDF_BLOCK_PAGE_IMAGE: {
+                        // #683: a scanned page (at least one image) the caller read is written as
+                        // a recognition note and the text; one it did not is reported back.
+                        const megapdf_block_image_info image = BlockImage(s, bi);
+                        const std::vector<megapdf_recognised::Line>* read = RecognisedLines(recognised, b.page);
+                        if (image.count >= 1 && read != nullptr) {
+                            line = RecognisedPage(b.page, *read, /*is_markdown=*/true, keep_lines);
+                        } else {
+                            line = "*" + PageImageNote(b, image) + "*";
+                            if (image.count >= 1) pages_to_read.push_back(b.page);
+                        }
                         break;
+                    }
                     default:
                         skip = true;
                         break;
@@ -879,9 +1043,17 @@ MEGAPDF_API int megapdf_write_text(megapdf_document* document, int first_page, i
                         line = ImageNote(b, image);
                         break;
                     }
-                    case MEGAPDF_BLOCK_PAGE_IMAGE:
-                        line = PageImageNote(b, BlockImage(s, bi));
+                    case MEGAPDF_BLOCK_PAGE_IMAGE: {
+                        const megapdf_block_image_info image = BlockImage(s, bi);
+                        const std::vector<megapdf_recognised::Line>* read = RecognisedLines(recognised, b.page);
+                        if (image.count >= 1 && read != nullptr) {
+                            line = RecognisedPage(b.page, *read, /*is_markdown=*/false, keep_lines);
+                        } else {
+                            line = PageImageNote(b, image);
+                            if (image.count >= 1) pages_to_read.push_back(b.page);
+                        }
                         break;
+                    }
                     default:
                         skip = true;
                         break;
@@ -907,6 +1079,11 @@ MEGAPDF_API int megapdf_write_text(megapdf_document* document, int first_page, i
     megapdf_structure_free(s);
 
     if (cancelled) return MEGAPDF_ERR_CANCELLED;
+
+    if (out_pages_to_read_count != nullptr) *out_pages_to_read_count = pages_to_read.size();
+    if (out_pages_to_read != nullptr) {
+        for (size_t i = 0; i < pages_to_read.size() && i < capacity; i++) out_pages_to_read[i] = pages_to_read[i];
+    }
 
     if (!out.empty() && !write(context, out.data(), out.size())) {
         SetLastError(0, "the write callback aborted the extraction");
