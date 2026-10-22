@@ -2338,6 +2338,328 @@ void RunGarbageOnDoc(const std::string& pdf, const std::string& dump_dir, const 
 }
 
 
+// ---------------------------------------------------------------------------
+// hyphendiag mode (#496 investigation only -- not part of the #354 battery/gate)
+//
+// Where does the Spanish edition of one UN document lose its last 0.006 of measure 1? The
+// reference side (JoinLineWrapHyphens) walks PDFium's raw character stream for the whole page
+// and knows nothing about blocks, while the engine joins a wrap hyphen only inside one block
+// (core/megapdf_structure.cpp, BuildPieces). A wrapped word whose halves the engine puts in
+// DIFFERENT blocks is therefore one reference token and two engine tokens. This mode measures
+// that, from the public API only (no core change):
+//   (a) bb_hyphen: consecutive content blocks A, B on a page where A's text ends in U+002D or
+//       U+2010 right after a word code point and B's text begins with an ASCII lowercase letter
+//       (what JoinLineWrapHyphens would have joined). Bucketed by kind pair, the left-edge
+//       difference in body-size ems (rounded to 0.5), whether A is a single line, whether B is
+//       below A and whether the two overlap horizontally.
+//   (b) fid_if_joined: measure 1's F1 for the page after rewriting the engine's token stream so
+//       every such pair is joined. Diagnosis only; never fed to the battery.
+//   (c) the remaining multiset difference after (b), classified as split (a reference token
+//       equal to the concatenation of 2-3 engine-only tokens: the engine cut a word PDFium kept
+//       whole), merge (the reverse) or other. For a split, the font of the span holding it is
+//       recorded as a per-document small integer (first seen = 0), never as a name.
+// Output is numbers only. With --dump <dir> --dump-id <id> the actual token pairs go to
+// <dir>/<id>-hyphendiag.txt, and <dir>/PRIVATE is created as RunCheck's --dump does: that file is
+// for reading by eye on the machine that holds the corpus, never copied off it.
+// ---------------------------------------------------------------------------
+bool IsHyphenCpHd(unsigned int c) { return c == 0x2D || c == 0x2010; }
+
+std::string TokenToUtf8Hd(const Token& t) {
+    std::string out;
+    for (char32_t c : t) {
+        if (c < 0x80) {
+            out.push_back(static_cast<char>(c));
+        } else if (c < 0x800) {
+            out.push_back(static_cast<char>(0xC0 | (c >> 6)));
+            out.push_back(static_cast<char>(0x80 | (c & 0x3F)));
+        } else {
+            out.push_back(static_cast<char>(0xE0 | (c >> 12)));
+            out.push_back(static_cast<char>(0x80 | ((c >> 6) & 0x3F)));
+            out.push_back(static_cast<char>(0x80 | (c & 0x3F)));
+        }
+    }
+    return out;
+}
+
+const char* BlockKindShortHd(int k) {
+    switch (k) {
+        case MEGAPDF_BLOCK_HEADING: return "H";
+        case MEGAPDF_BLOCK_PARAGRAPH: return "P";
+        case MEGAPDF_BLOCK_LIST_ITEM: return "LI";
+        case MEGAPDF_BLOCK_TABLE_ROW: return "TR";
+        case MEGAPDF_BLOCK_FIGURE: return "FIG";
+        case MEGAPDF_BLOCK_PAGE_IMAGE: return "PI";
+        case MEGAPDF_BLOCK_FURNITURE: return "FURN";
+        default: return "?";
+    }
+}
+
+bool TakeOneHd(std::map<Token, int>& m, const Token& t) {
+    auto it = m.find(t);
+    if (it == m.end() || it->second <= 0) return false;
+    if (--it->second == 0) m.erase(it);
+    return true;
+}
+
+// Finds a way to write `whole` as the concatenation of 2 (then 3) tokens that `pool` holds, takes
+// them out of `pool` and returns the pieces in order; empty when there is none.
+std::vector<Token> TakeConcatPiecesHd(std::map<Token, int>& pool, const Token& whole) {
+    const size_t n = whole.size();
+    for (size_t k = 1; k < n; k++) {
+        const Token p1 = whole.substr(0, k), p2 = whole.substr(k);
+        if (!TakeOneHd(pool, p1)) continue;
+        if (TakeOneHd(pool, p2)) return {p1, p2};
+        pool[p1]++;
+    }
+    for (size_t k1 = 1; k1 + 1 < n; k1++) {
+        for (size_t k2 = k1 + 1; k2 < n; k2++) {
+            const Token p1 = whole.substr(0, k1), p2 = whole.substr(k1, k2 - k1), p3 = whole.substr(k2);
+            if (!TakeOneHd(pool, p1)) continue;
+            if (!TakeOneHd(pool, p2)) { pool[p1]++; continue; }
+            if (TakeOneHd(pool, p3)) return {p1, p2, p3};
+            pool[p1]++;
+            pool[p2]++;
+        }
+    }
+    return {};
+}
+
+int RunHyphenDiag(const std::string& pdf, const std::string& dump_dir, const std::string& dump_id) {
+    megapdf_document* doc = megapdf_open_file(pdf.c_str(), nullptr);
+    if (doc == nullptr) { std::printf("result=%s\n", OpenOutcome(megapdf_last_error())); return 0; }
+    const int pages = megapdf_page_count(doc);
+    if (pages <= 0) { std::printf("result=format pages=0\n"); megapdf_close(doc); return 0; }
+    megapdf_structure* s = megapdf_structure_load(
+        doc, 0, pages, MEGAPDF_STRUCTURE_KEEP_FURNITURE | MEGAPDF_STRUCTURE_ALL_FIELDS, nullptr);
+    if (s == nullptr) { std::printf("result=format pages=%d\n", pages); megapdf_close(doc); return 0; }
+    const double body_size = megapdf_structure_body_size(s);
+    FPDF_DOCUMENT raw = FPDF_LoadDocument(pdf.c_str(), nullptr);
+
+    struct HdBlock {
+        megapdf_block b{};
+        size_t index = 0;
+        std::vector<Token> tokens;            // marker + text, exactly as RunCheck counts them
+        std::vector<unsigned int> text;       // the TEXT field alone, trailing whitespace trimmed
+        bool has_marker = false;
+    };
+    std::vector<std::vector<HdBlock>> by_page(static_cast<size_t>(pages));
+    const size_t n_blocks = megapdf_block_count(s);
+    for (size_t i = 0; i < n_blocks; i++) {
+        HdBlock hb;
+        if (megapdf_block_get(s, i, &hb.b) != MEGAPDF_OK) continue;
+        if (hb.b.page < 0 || hb.b.page >= pages || hb.b.kind == MEGAPDF_BLOCK_FIELD) continue;
+        hb.index = i;
+        hb.tokens = Tokenize(Utf16ToCodepoints(BlockContentString(s, i, hb.b.kind)));
+        hb.text = Utf16ToCodepoints(BlockString(s, i, MEGAPDF_BLOCK_TEXT));
+        while (!hb.text.empty() && IsWhitespaceCpLocal(hb.text.back())) hb.text.pop_back();
+        hb.has_marker = hb.b.kind == MEGAPDF_BLOCK_LIST_ITEM && !BlockString(s, i, MEGAPDF_BLOCK_MARKER).empty();
+        by_page[static_cast<size_t>(hb.b.page)].push_back(std::move(hb));
+    }
+
+    std::ofstream dump;
+    if (!dump_dir.empty() && !dump_id.empty()) {
+        const std::string marker = dump_dir + "/PRIVATE";
+        std::ifstream check_marker(marker);
+        if (!check_marker.good()) {
+            std::ofstream m(marker);
+            m << "Token pairs from a document's text (#496). Not committed, uploaded or pasted anywhere:\n"
+                 "these are Dave's own documents. Delete this directory when you are done reading it.\n";
+        }
+        dump.open(dump_dir + "/" + dump_id + "-hyphendiag.txt", std::ios::binary);
+    }
+
+    std::map<std::string, long long> bb_hist;     // kind pair + geometry -> count
+    std::map<int, long long> split_by_font;       // per-document font index (-1: the pieces straddle spans)
+    std::map<std::string, int> font_index;        // font name -> small integer, first seen = 0; the name never leaves here
+    long long bb_total = 0, split_total = 0, merge_total = 0, other_a = 0, other_b = 0;
+    long long gap_a_only = 0, gap_b_only = 0;
+    FidelityCounts now, joined;
+    std::vector<std::string> page_lines;
+
+    for (int p = 0; p < pages; p++) {
+        const std::vector<HdBlock>& blocks = by_page[static_cast<size_t>(p)];
+        FPDF_PAGE raw_page = raw != nullptr ? FPDF_LoadPage(raw, p) : nullptr;
+        FPDF_TEXTPAGE tp = raw_page != nullptr ? FPDFText_LoadPage(raw_page) : nullptr;
+        if (tp == nullptr) { if (raw_page != nullptr) FPDF_ClosePage(raw_page); continue; }
+        const std::vector<Token> ref = Tokenize(JoinLineWrapHyphens(tp, FPDFText_CountChars(tp)));
+
+        std::vector<std::vector<Token>> toks;
+        for (const HdBlock& hb : blocks) toks.push_back(hb.tokens);
+        std::vector<Token> engine;
+        for (const auto& t : toks) engine.insert(engine.end(), t.begin(), t.end());
+        const FidelityCounts fc_now = MultisetF1(engine, ref);
+        now.matched += fc_now.matched; now.a += fc_now.a; now.b += fc_now.b;
+
+        // (a) block-boundary wrap hyphens, and (b) the engine stream with each one joined.
+        long long page_bb = 0;
+        for (size_t i = 0; i + 1 < blocks.size(); i++) {
+            const HdBlock& A = blocks[i];
+            const HdBlock& B = blocks[i + 1];
+            if (A.text.size() < 2 || B.text.empty() || B.has_marker) continue;
+            if (A.b.kind == MEGAPDF_BLOCK_FIGURE || A.b.kind == MEGAPDF_BLOCK_PAGE_IMAGE) continue;
+            if (B.b.kind == MEGAPDF_BLOCK_FIGURE || B.b.kind == MEGAPDF_BLOCK_PAGE_IMAGE) continue;
+            if (!IsHyphenCpHd(A.text.back()) || !IsWordCodepoint(A.text[A.text.size() - 2])) continue;
+            if (!IsAsciiLowerCp(B.text.front())) continue;
+            if (toks[i].empty() || toks[i + 1].empty()) continue;
+            page_bb++;
+            const double ld = body_size > 0 ? (A.b.bounds.left - B.b.bounds.left) / body_size : 0;
+            const double ld_r = (std::max)(-10.0, (std::min)(10.0, std::round(ld * 2.0) / 2.0));
+            const double a_h = A.b.bounds.top - A.b.bounds.bottom;
+            const bool single = a_h < 1.5 * body_size;
+            const bool below = B.b.bounds.top < A.b.bounds.top;
+            const double ov = (std::min)(A.b.bounds.right, B.b.bounds.right) - (std::max)(A.b.bounds.left, B.b.bounds.left);
+            const double minw = (std::min)(A.b.bounds.right - A.b.bounds.left, B.b.bounds.right - B.b.bounds.left);
+            const bool overlap = minw > 0 && ov > 0.3 * minw;
+            char key[96];
+            std::snprintf(key, sizeof key, "%s>%s ldelta_em=%+.1f a_single=%d below=%d overlap=%d",
+                          BlockKindShortHd(A.b.kind), BlockKindShortHd(B.b.kind), ld_r, single ? 1 : 0, below ? 1 : 0,
+                          overlap ? 1 : 0);
+            bb_hist[key]++;
+            if (dump.good()) {
+                char geo[160];
+                std::snprintf(geo, sizeof geo, " [A l=%.1f r=%.1f t=%.1f b=%.1f; B l=%.1f r=%.1f t=%.1f b=%.1f; body=%.1f]",
+                              A.b.bounds.left, A.b.bounds.right, A.b.bounds.top, A.b.bounds.bottom, B.b.bounds.left,
+                              B.b.bounds.right, B.b.bounds.top, B.b.bounds.bottom, body_size);
+                dump << "bb p=" << p << " " << key << geo << " : " << TokenToUtf8Hd(toks[i].back()) << " | "
+                     << TokenToUtf8Hd(toks[i + 1].front()) << "\n";
+            }
+            // The join: A's last token and B's first become one.
+            toks[i].back() += toks[i + 1].front();
+            toks[i + 1].erase(toks[i + 1].begin());
+        }
+        bb_total += page_bb;
+        std::vector<Token> engine_joined;
+        for (const auto& t : toks) engine_joined.insert(engine_joined.end(), t.begin(), t.end());
+        const FidelityCounts fc_joined = MultisetF1(engine_joined, ref);
+        joined.matched += fc_joined.matched; joined.a += fc_joined.a; joined.b += fc_joined.b;
+
+        // The gap before any join, for scale.
+        gap_a_only += fc_now.a - fc_now.matched;
+        gap_b_only += fc_now.b - fc_now.matched;
+
+        // (c) classify what is left after (b).
+        std::map<Token, int> ca, cb;
+        for (const Token& t : engine_joined) ca[t]++;
+        for (const Token& t : ref) cb[t]++;
+        std::map<Token, int> a_only, b_only;
+        for (const auto& kv : ca) {
+            auto it = cb.find(kv.first);
+            const int d = kv.second - (it == cb.end() ? 0 : (std::min)(kv.second, it->second));
+            if (d > 0) a_only[kv.first] = d;
+        }
+        for (const auto& kv : cb) {
+            auto it = ca.find(kv.first);
+            const int d = kv.second - (it == ca.end() ? 0 : (std::min)(kv.second, it->second));
+            if (d > 0) b_only[kv.first] = d;
+        }
+
+        // Adjacent-token pairs inside one span -> that span's font index, for locating a split.
+        std::unordered_map<std::u32string, int> pair_font;
+        for (const HdBlock& hb : blocks) {
+            const size_t spans = megapdf_block_span_count(s, hb.index);
+            for (size_t sp = 0; sp < spans; sp++) {
+                const size_t fn = megapdf_block_span_font(s, hb.index, sp, nullptr, 0);
+                std::string name;
+                if (fn > 0) {
+                    std::vector<unsigned short> f(fn);
+                    megapdf_block_span_font(s, hb.index, sp, f.data(), fn);
+                    for (unsigned short c : f) name.push_back(static_cast<char>(c < 128 ? c : '?'));
+                }
+                auto fit = font_index.find(name);
+                if (fit == font_index.end()) fit = font_index.emplace(name, static_cast<int>(font_index.size())).first;
+                const size_t sn = megapdf_block_span_string(s, hb.index, sp, nullptr, 0);
+                std::vector<unsigned short> sbuf(sn);
+                if (sn > 0) megapdf_block_span_string(s, hb.index, sp, sbuf.data(), sn);
+                const std::vector<Token> st = Tokenize(Utf16ToCodepoints(sbuf));
+                for (size_t k = 0; k + 1 < st.size(); k++) {
+                    std::u32string key = st[k];
+                    key.push_back(U'\x01');
+                    key += st[k + 1];
+                    pair_font.emplace(key, fit->second);
+                }
+            }
+        }
+
+        long long page_split = 0, page_merge = 0;
+        const std::vector<std::pair<Token, int>> b_list(b_only.begin(), b_only.end());
+        for (const auto& kv : b_list) {
+            for (int c = 0; c < kv.second; c++) {
+                const std::vector<Token> pcs = TakeConcatPiecesHd(a_only, kv.first);
+                if (pcs.empty()) break;
+                TakeOneHd(b_only, kv.first);
+                page_split++;
+                std::u32string key = pcs[0];
+                key.push_back(U'\x01');
+                key += pcs[1];
+                auto pf = pair_font.find(key);
+                const int fidx = pf == pair_font.end() ? -1 : pf->second;
+                split_by_font[fidx]++;
+                if (dump.good()) {
+                    dump << "split p=" << p << " " << TokenToUtf8Hd(kv.first) << " <- ";
+                    for (const Token& t : pcs) dump << TokenToUtf8Hd(t) << "+";
+                    dump << " font=" << fidx << "\n";
+                }
+            }
+        }
+        const std::vector<std::pair<Token, int>> a_list(a_only.begin(), a_only.end());
+        for (const auto& kv : a_list) {
+            for (int c = 0; c < kv.second; c++) {
+                const std::vector<Token> pcs = TakeConcatPiecesHd(b_only, kv.first);
+                if (pcs.empty()) break;
+                TakeOneHd(a_only, kv.first);
+                page_merge++;
+                if (dump.good()) {
+                    dump << "merge p=" << p << " " << TokenToUtf8Hd(kv.first) << " <- ";
+                    for (const Token& t : pcs) dump << TokenToUtf8Hd(t) << "+";
+                    dump << "\n";
+                }
+            }
+        }
+        long long pa = 0, pb = 0;
+        for (const auto& kv : a_only) {
+            pa += kv.second;
+            if (dump.good()) dump << "other_a p=" << p << " x" << kv.second << " " << TokenToUtf8Hd(kv.first) << "\n";
+        }
+        for (const auto& kv : b_only) {
+            pb += kv.second;
+            if (dump.good()) dump << "other_b p=" << p << " x" << kv.second << " " << TokenToUtf8Hd(kv.first) << "\n";
+        }
+        split_total += page_split;
+        merge_total += page_merge;
+        other_a += pa;
+        other_b += pb;
+
+        char line[320];
+        std::snprintf(line, sizeof line,
+                      "page=%d bb_hyphen=%lld fid_match=%lld fid_a=%lld fid_b=%lld joined_match=%lld joined_a=%lld "
+                      "joined_b=%lld split=%lld merge=%lld other_a=%lld other_b=%lld",
+                      p, page_bb, fc_now.matched, fc_now.a, fc_now.b, fc_joined.matched, fc_joined.a, fc_joined.b,
+                      page_split, page_merge, pa, pb);
+        page_lines.push_back(line);
+        FPDFText_ClosePage(tp);
+        FPDF_ClosePage(raw_page);
+    }
+
+    std::printf("result=ok pages=%d bb_hyphen=%lld fid_match=%lld fid_a=%lld fid_b=%lld fid_f1=%.6f "
+                "fid_gap_a_only=%lld fid_gap_b_only=%lld fid_if_joined_match=%lld fid_if_joined_a=%lld "
+                "fid_if_joined_b=%lld fid_if_joined_f1=%.6f split=%lld merge=%lld other_a=%lld other_b=%lld\n",
+                pages, bb_total, now.matched, now.a, now.b, F1(now), gap_a_only, gap_b_only, joined.matched, joined.a,
+                joined.b, F1(joined), split_total, merge_total, other_a, other_b);
+    std::vector<std::pair<long long, std::string>> hist;
+    for (const auto& kv : bb_hist) hist.push_back({kv.second, kv.first});
+    std::sort(hist.begin(), hist.end(), [](const auto& x, const auto& y) {
+        return x.first != y.first ? x.first > y.first : x.second < y.second;
+    });
+    for (const auto& h : hist) std::printf("bb_bucket %s n=%lld\n", h.second.c_str(), h.first);
+    for (const auto& kv : split_by_font) std::printf("split_font index=%d n=%lld\n", kv.first, kv.second);
+    for (const std::string& l : page_lines) std::printf("%s\n", l.c_str());
+
+    if (raw != nullptr) FPDF_CloseDocument(raw);
+    megapdf_structure_free(s);
+    megapdf_close(doc);
+    return 0;
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -2402,6 +2724,18 @@ int main(int argc, char** argv) {
         RunGarbageOnDoc(pdf, dump_dir, dump_id);
         return 0;
     }
+    if (argc >= 3 && std::strcmp(argv[1], "hyphendiag") == 0) {
+        // #496 investigation only: structure_check hyphendiag <pdf> [--dump <dir> --dump-id <id>]
+        // Where the wrap hyphens the reference joins and the engine does not sit, and what the
+        // rest of the measure 1 gap is made of (see the hyphendiag comment above).
+        std::string pdf = argv[2];
+        std::string dump_dir, dump_id;
+        for (int i = 3; i < argc; i++) {
+            if (std::strcmp(argv[i], "--dump") == 0 && i + 1 < argc) dump_dir = argv[++i];
+            else if (std::strcmp(argv[i], "--dump-id") == 0 && i + 1 < argc) dump_id = argv[++i];
+        }
+        return RunHyphenDiag(pdf, dump_dir, dump_id);
+    }
     std::printf("usage:\n"
                 "  structure_check check <pdf> [--dump <dir> --dump-id <id>] [--reference <pdftotext-file>]\n"
                 "                              [--cli-reference <megapdf-cli-output-file>]\n"
@@ -2410,6 +2744,7 @@ int main(int argc, char** argv) {
                 "  structure_check diagbaseline <pdf> [<pdf> ...]   (#363 follow-up investigation only)\n"
                 "  structure_check headingdiag <pdf> [<pdf> ...]   (#375 investigation only)\n"
                 "  structure_check bodysizediag <pdf> [<pdf> ...]   (#382 investigation only)\n"
-                "  structure_check garbage <pdf> [--dump-garbage <dir> --dump-id <id>]   (#385 investigation only)\n");
+                "  structure_check garbage <pdf> [--dump-garbage <dir> --dump-id <id>]   (#385 investigation only)\n"
+                "  structure_check hyphendiag <pdf> [--dump <dir> --dump-id <id>]   (#496 investigation only)\n");
     return 64;
 }

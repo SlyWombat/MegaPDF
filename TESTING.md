@@ -2486,6 +2486,112 @@ and nothing else in the test failed on the Mac. (The kdocker3 negative run was i
 without the fixtures directory, so it also printed 135 unrelated "opens" failures; the
 positive run there, with fixtures, was green.)
 
+## Wrap hyphens on a block's first line (#496), 2026-10-22
+
+One UN document scored 0.9935 in its Spanish edition against 0.9996 to 1.0000 in its five siblings
+(#496, after #532 had already taken it from 0.9662). The cause is not Spanish and not the page
+count. A numbered paragraph, or a paragraph whose first line is indented, was cut after its first
+line by `GatherOneBlock`, so a wrap hyphen ending that line sat at a block boundary. `BuildPieces`
+joins a hyphen only to the next line of the same block; measure 1's reference side
+(`JoinLineWrapHyphens`) joins across blocks. One word became two engine tokens and one reference
+token. Spanish wraps with hyphens far more often than the other editions, which is the whole of
+why it alone crossed the gate.
+
+**Machine and build.** kdocker3, a throwaway `megapdf:base` container, the corpora mounted
+read-only, a scratch directory under `/home/claude` removed afterwards. Two builds of the same
+tree, same pinned PDFium (33 patches), same `structure_check`: `base` is `main` at `244849d`,
+`fix` is `main` plus this branch's three commits. Structure battery with `--reference --cli`, and
+the Markdown battery, over all four corpora, base and fix running side by side.
+
+**Step 1, re-baseline.** The base build reproduces the 2026-10-20 re-run exactly on every corpus
+(table below, "base" columns), so #710's 184 lines in `megapdf_structure.cpp` did not move the
+baseline. For the document: Spanish 0.993529 (84,516 matched of 85,250 engine and 84,883
+reference tokens), the five siblings 1.000000 (Arabic), 0.999626 (Chinese), 0.999742 (English),
+0.999933 (French), 1.000000 (Russian). 20.1 content blocks per page (not the 85,544 blocks of the
+`Tf`/`Tm` bug, so #532 has not regressed). Spanish engine tokens exceed the reference's by 367 and
+exactly 734 engine tokens have no match: the two-for-one shape of a split word.
+
+**Steps 2 and 3, `structure_check hyphendiag`.** New diagnostic mode (numbers only; `--dump`
+writes token pairs to a `PRIVATE`-marked directory). Self-check on generated one-page documents:
+`bb_hyphen=1` on each of the three fixtures of the new unit test, `bb_hyphen=0` on
+`tm-scaled-size.pdf`. On the document's Spanish edition:
+
+| block-boundary wrap hyphens (A ends in a hyphen, B begins lowercase) | count | share of 367 |
+|---|---:|---:|
+| `LIST_ITEM` > `PARAGRAPH`, B's left = A's left (continuation under the number) | 179 | 48.8% |
+| `LIST_ITEM` > `PARAGRAPH`, B 2.5 em left of A (indented number, continuation at the margin) | 144 | 39.2% |
+| `PARAGRAPH` > `PARAGRAPH`, B 2.5 em left of A (indented first line) | 44 | 12.0% |
+
+Every one has A a single line, B below A and the two overlapping horizontally, so none is a column
+or page break (H1 prime) and none has a heading as B. `fid_if_joined` is 1.000000 for the Spanish
+edition with `split`, `merge` and `other` all 0: the 367 are the whole gap, none of it justified
+text (H2), one font (H3) or the literal-hyphen fallback (H4). English has 13 such hyphens
+(0.999742 to 0.999979 if joined) and French 4 (0.999933 to 1.000000).
+
+**Steps 4 and 5, three commits, each measured on its own** (UN corpus, structure battery):
+
+| build | Spanish | English | French | UN aggregate |
+|---|---:|---:|---:|---:|
+| base | 0.993529 | 0.999742 | 0.999933 | 0.999136 |
+| + a list item also continues at its number's left edge; a paragraph's second line may sit up to 4 em left of an indented first line | 0.997457 | 1.000000 | 1.000000 | 0.999555 |
+| + the same allowance for an indented list item's second line | **1.000000** | 1.000000 | 1.000000 | **0.999801** |
+
+Arabic, Chinese and Russian do not move. Content blocks per page for the Spanish edition: 20.1
+(base), 16.4, 14.1.
+
+The design's 4a (the marker's own left edge) and 4b (the indented first line) are the first
+commit and together explain 223 of 367 (60.8%), which meets the design's "at least half" rule but
+reaches only 0.997457, short of the 0.998 gate. The other 144 are the indented-number shape the
+design's own H1 row anticipates (`LIST_ITEM` > `PARAGRAPH`, `ldelta_em` above 1) but its 4a text
+does not cover; commit three is the same first-line allowance applied to the number. It is kept
+as a separate commit so it can be dropped.
+
+`kFirstLineIndentMaxEm` is 4.0, the design's default. The design's rule for setting it (the
+largest `PARAGRAPH` > `PARAGRAPH` bucket, 2.5, rounded up to a whole em) would give 3.0, but the
+design's own test fixture indents the first line 36 pt at 10 pt, 3.6 em, so 3.0 would fail it.
+The document's real indent is 2.4 em and fits either.
+
+**Tests.** `test_structure_wrap_hyphen_across_indent` (`core/tests/core_tests.cpp`), three
+generated fixtures. Without the change the first two fail four checks (3 and 2 blocks, the
+hyphen kept); against the first commit alone the third fails two (3 blocks, the hyphen kept);
+with the branch the whole core suite is green, `test_structure_goldens` included, so no golden
+moved. The design's first fixture put the text at x=108 behind a number at x=72, a 22 pt gap that
+the line split (`kLineSplitFontSizeFactor`, 2 em, 20 pt) cuts into two lines before any block
+rule sees it; the fixture here puts the text at x=100.
+
+**The gate, four corpora, base against fix** (`--reference --cli`; F1 identical through
+`megapdf-cli`):
+
+| corpus | F1 base | F1 fix | tau (vs tree) | pages F1 < 0.9 | crashes / hangs / bad CLI exits | Markdown extracted / cmark failures |
+|---|---:|---:|---:|---:|---|---|
+| private | 0.998997 | 0.999004 | 0.951 = 0.951 | 33 = 33 | 0 / 0 / 0 | 2,982 = 2,982 / 0 |
+| public | 0.980019 | 0.980576 | 0.978 = 0.978 | 53 to 52 | 0 / 0 / 0 | 937 = 937 / 0 |
+| Canadian | 0.999932 | 0.999932 | 0.994 = 0.994 | 0 = 0 | 0 / 0 / 0 | 134 = 134 / 0 |
+| UN | 0.999136 | 0.999801 | 0.967 = 0.967 | 8 = 8 | 0 / 0 / 0 | 83 = 83 / 0 |
+
+Nothing fell on any measure the gate reads. The public corpus still fails the F1 gate for its
+known reason (#498); it moved up, not down. Opened counts and the Markdown output counts are
+identical to the 2026-10-20 re-run.
+
+**One informational number did move, and is stated here rather than left to be found.** Measure
+3, agreement with `pdftotext -layout`, is not gated. Its median fell by 0.001 on the UN corpus
+(0.999 to 0.998) and on the public corpus (0.990 to 0.989); private (0.992) and Canadian (0.996)
+did not move. The likely cause, not separately measured, is a list item now reading as one block where it
+was two, which changes the token order a little against poppler's. UN: 92 of 3,752 pages changed, 85 of them
+down, the largest by 0.022. Public: 3,964 of 22,942 pages, 3,681 down, the largest by 0.031.
+Private: 16 of 17,379 pages. No page crosses 0.9 in either direction (the count of pages under
+0.9 is identical on every corpus). The order against the document's own structure tree moved on
+4 pages in all.
+
+**Not run.** The pages and redaction batteries: they do not read block grouping. Hosted CI, and
+the Windows, Mac, iOS and Android builds: the change is in `core/`, which every platform links,
+but only the Linux build was exercised here.
+
+**Spanish wrap hyphens before an accented letter** (`compa-` / `ñía`) are never joined by the
+engine or the reference, because both test the next letter against ASCII lowercase. The measure
+cannot see it, so it does not explain any of this; widening one side alone would move the gate
+for an unrelated reason. Left for its own issue, as the design says.
+
 ## Shrink-for-email survey, baseline (#6), 2026-10-21
 
 The measurement step of #6, taken before any policy change: what `megapdf_shrink_images` does to the
