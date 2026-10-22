@@ -43,7 +43,7 @@ is the authority, and measured:
 | platform | es-419 | es-ES | reading |
 |---|---|---|---|
 | Android | **Configuración** | **Ajustes** | AOSP Settings app `settings_label`: `res/values-es-rUS/strings.xml` says "Configuración", `res/values-es/strings.xml` says "Ajustes" (read 2026-10-21 from android.googlesource.com, `platform/packages/apps/Settings`, branch main) |
-| iOS | **Configuración** | **Ajustes** | (iOS reading pending: Settings app title on the simulator under -AppleLanguages es-MX and es-ES) |
+| iOS | **Configuración** | **Ajustes** | iOS 26.5 simulator runtime on the Mac mini (read 2026-10-22): the Settings app's own `Preferences.app/es_419.lproj/InfoPlist.strings` has `CFBundleDisplayName` "Configuración", and `es.lproj/InfoPlist.strings` has "Ajustes". Read as files from the runtime, without booting a device; the app was not launched under `-AppleLanguages "(es-MX)"` / `"(es-ES)"` as the design suggested, so the title bar itself was not read |
 | Windows | **Configuración** | **Configuración** | Windows says *Configuración* in both variants |
 | macOS, Linux | no Settings string in the catalogue | | |
 
@@ -113,7 +113,7 @@ refers to the same row in the French file.
 | OK | Aceptar | es el botón del sistema en ambas variantes |
 | Close | Cerrar |  |
 | Done | Listo |  |
-| Add | Agregar | Android de España dice *Añadir*; no hay fila de derivación, queda para la revisión de Fable |
+| Add | Agregar | Spain says *Añadir* (Apple's own Spanish, read in the iOS 26.5 Settings app's strings: `es_419` "agregar", `es` "añadir"; Android's es-ES too). The design's derivation table has no row for it, so es-ES currently reads *Agregar*: an open decision for Fable's review, see #724 |
 | Clear | Borrar |  |
 | Delete | Eliminar |  |
 | Delete (the key) | Supr (Windows) / Suprimir (Mac) | el nombre de la tecla en cada teclado |
