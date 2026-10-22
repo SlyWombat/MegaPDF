@@ -14,19 +14,19 @@ final class SaveACopyAdoptionTests: XCTestCase {
 
     // MARK: - helpers
 
-    private func fixtureBytes() throws -> Data {
+    private func fixtureBytes(named name: String = "fixture") throws -> Data {
         let bundle = Bundle(for: Self.self)
-        guard let url = bundle.url(forResource: "fixture", withExtension: "pdf") else {
-            throw XCTSkip("fixture.pdf missing from test bundle")
+        guard let url = bundle.url(forResource: name, withExtension: "pdf") else {
+            throw XCTSkip("\(name).pdf missing from test bundle")
         }
         return try Data(contentsOf: url)
     }
 
     /// A document open from a writable temporary file, the way `openPicked` opens a picked one.
-    private func openModel() async throws -> (ViewerModel, URL) {
+    private func openModel(fixtureNamed name: String = "fixture") async throws -> (ViewerModel, URL) {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("572-opened-\(UUID().uuidString).pdf")
-        try fixtureBytes().write(to: url)
+        try fixtureBytes(named: name).write(to: url)
         let model = ViewerModel()
         model.openPicked(url: url)
         try await ModelOpening.waitForTheDocument(model)
@@ -89,6 +89,18 @@ final class SaveACopyAdoptionTests: XCTestCase {
         return destination
     }
 
+    /// Marks the longest text line on the first page and applies the redaction the way the
+    /// export rows do, holding the summary for the save or copy that follows (#631).
+    private func markAndApply(_ model: ViewerModel) async throws {
+        let doc = try XCTUnwrap(model.document)
+        let lines = try await PdfEngine.shared.textLines(doc, pageIndex: 0)
+        let line = try XCTUnwrap(lines.max { $0.text.count < $1.text.count })
+        model.markForRedaction(pageIndex: 0, rect: line.rect)
+        try await waitUntil("the mark lands") { model.redactionMarkCount > 0 }
+        let applied = await model.applyRedactions(reportWithSave: true)
+        XCTAssertTrue(applied, "the redaction was applied")
+    }
+
     // MARK: - the copy becomes the document
 
     func testSaveACopyPointsTheAppAtTheCopy() async throws {
@@ -130,8 +142,9 @@ final class SaveACopyAdoptionTests: XCTestCase {
         model.save()
         try await waitUntil("the save finishes") { !model.isSaving && !model.busy.isBlocked }
         XCTAssertFalse(model.isDirty)
-        XCTAssertEqual(model.statusMessage, String(localized: "Saved"),
+        XCTAssertEqual(model.notice, String(localized: "Saved"),
                        "the save reported success, not a refusal to write where it now points")
+        XCTAssertNil(model.statusMessage, "and said so with a notice, not an alert (#631)")
 
         let pagesInCopy = try await pagesOnDisk(copy)
         let pagesInOpened = try await pagesOnDisk(opened)
@@ -176,5 +189,104 @@ final class SaveACopyAdoptionTests: XCTestCase {
         XCTAssertEqual(displayName(model), opened.lastPathComponent)
         XCTAssertTrue(model.isDirty, "nothing was written, so the edits are still unsaved")
         model.close()
+    }
+
+    // MARK: - the confirmation is a notice, unless a redaction summary rides along (#631)
+
+    func testSaveACopyConfirmsWithANoticeAndNoAlert() async throws {
+        let (model, opened) = try await openModel()
+        defer { try? FileManager.default.removeItem(at: opened) }
+        try await insertAPage(into: model)
+
+        let copy = try await saveACopy(model, as: "Notice copy.pdf")
+        defer { try? FileManager.default.removeItem(at: copy.deletingLastPathComponent()) }
+
+        // Asserted straight away: a notice clears itself four seconds after it is set.
+        XCTAssertEqual(model.notice, String(localized: "Saved"))
+        XCTAssertNil(model.statusMessage, "nothing to tap OK on")
+        XCTAssertNil(model.statusDetail)
+        model.close()
+    }
+
+    func testASaveAfterARedactionKeepsTheSavedAlertWithItsSummary() async throws {
+        let (model, opened) = try await openModel(fixtureNamed: "demo")
+        defer { try? FileManager.default.removeItem(at: opened) }
+        try await markAndApply(model)
+
+        model.save()
+        try await waitUntil("the save finishes") { !model.isSaving && !model.busy.isBlocked }
+        XCTAssertEqual(model.statusMessage, String(localized: "Saved"))
+        let detail = try XCTUnwrap(model.statusDetail, "the summary rides on the alert")
+        XCTAssertFalse(detail.isEmpty)
+        XCTAssertNil(model.notice, "a summary is not left to a four-second capsule")
+        model.close()
+    }
+
+    func testSaveACopyAfterARedactionKeepsTheSavedAlertWithItsSummary() async throws {
+        let (model, opened) = try await openModel(fixtureNamed: "demo")
+        defer { try? FileManager.default.removeItem(at: opened) }
+        try await markAndApply(model)
+
+        let copy = try await saveACopy(model, as: "Redacted copy.pdf")
+        defer { try? FileManager.default.removeItem(at: copy.deletingLastPathComponent()) }
+
+        XCTAssertEqual(model.statusMessage, String(localized: "Saved"))
+        XCTAssertNotNil(model.statusDetail, "the summary rides on the alert")
+        XCTAssertNil(model.notice)
+        model.close()
+    }
+
+    /// The path the triage missed: the redaction dialog's "Export as Markdown" row holds the
+    /// summary, and `finishMarkdownExport` never read it. It failed on main.
+    func testAMarkdownExportAfterARedactionSaysWhatWasRemoved() async throws {
+        let (model, opened) = try await openModel(fixtureNamed: "demo")
+        defer { try? FileManager.default.removeItem(at: opened) }
+        try await markAndApply(model)
+
+        let staged = try XCTUnwrap(await model.exportMarkdownFile(named: "Redacted.md"))
+        let written = try sheetWrites(staged, as: "Redacted.md")
+        defer { try? FileManager.default.removeItem(at: written.deletingLastPathComponent()) }
+        model.finishMarkdownExport(saved: true)
+
+        XCTAssertEqual(model.statusMessage, String(localized: "Exported"))
+        XCTAssertNotNil(model.statusDetail, "what the redaction removed is said at the export")
+        XCTAssertNil(model.notice)
+        model.close()
+    }
+
+    func testACancelledMarkdownExportAfterARedactionStillSaysWhatWasRemoved() async throws {
+        let (model, opened) = try await openModel(fixtureNamed: "demo")
+        defer { try? FileManager.default.removeItem(at: opened) }
+        try await markAndApply(model)
+
+        _ = try XCTUnwrap(await model.exportMarkdownFile(named: "Redacted.md"))
+        model.finishMarkdownExport(saved: false)
+
+        XCTAssertNotNil(model.redactionSummary, "the redaction happened, so it is reported")
+        XCTAssertNil(model.statusMessage)
+        XCTAssertNil(model.notice)
+        model.close()
+    }
+
+    func testAMarkdownExportWithoutARedactionConfirmsWithANotice() async throws {
+        let (model, opened) = try await openModel()
+        defer { try? FileManager.default.removeItem(at: opened) }
+
+        let staged = try XCTUnwrap(await model.exportMarkdownFile(named: "Plain.md"))
+        let written = try sheetWrites(staged, as: "Plain.md")
+        defer { try? FileManager.default.removeItem(at: written.deletingLastPathComponent()) }
+        model.finishMarkdownExport(saved: true)
+
+        XCTAssertEqual(model.notice, String(localized: "Exported"))
+        XCTAssertNil(model.statusMessage)
+        model.close()
+    }
+
+    func testANoticeIsSpokenToVoiceOver() {
+        let model = ViewerModel()
+        var said: [String] = []
+        model.speakNotice = { said.append($0) }
+        model.showNotice("x")
+        XCTAssertEqual(said, ["x"])
     }
 }
