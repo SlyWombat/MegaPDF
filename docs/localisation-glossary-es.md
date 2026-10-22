@@ -113,7 +113,7 @@ refers to the same row in the French file.
 | OK | Aceptar | es el botón del sistema en ambas variantes |
 | Close | Cerrar |  |
 | Done | Listo |  |
-| Add | Agregar | Spain says *Añadir* (Apple's own Spanish, read in the iOS 26.5 Settings app's strings: `es_419` "agregar", `es` "añadir"; Android's es-ES too). The design's derivation table has no row for it, so es-ES currently reads *Agregar*: an open decision for Fable's review, see #724 |
+| Add | Agregar | Spain says *Añadir* (Apple's own Spanish, read in the iOS 26.5 Settings app's strings: `es_419` "agregar", `es` "añadir"; Android's es-ES too). Fable's call (#724): the derivation table has a row for each inflection of *agregar* the catalogues and store copy use (*Agregar* → *Añadir*, *agrega* → *añade*, *agregada* → *añadida*, and the rest), so es-ES reads *Añadir*; es-419 keeps *agregar*. Dave can override |
 | Clear | Borrar |  |
 | Delete | Eliminar |  |
 | Delete (the key) | Supr (Windows) / Suprimir (Mac) | el nombre de la tecla en cada teclado |
@@ -141,7 +141,7 @@ refers to the same row in the French file.
 | Your signatures | Tus firmas |  |
 | Sign | Firmar |  |
 | Draw | Dibujar |  |
-| Draw your signature | Dibuja tu firma |  |
+| Draw your signature | Dibuja tu firma | iOS only: *Tu firma* (the sheet title beside Cancel/Clear/Save has room for about eleven characters, #724 Fable); Windows and Android keep *Dibuja tu firma* |
 | Type your signature | Escribe tu firma |  |
 | Add from image… | Agregar desde una imagen… |  |
 | Photos | Fotos | selector de iOS |
@@ -256,7 +256,7 @@ refers to the same row in the French file.
 | The signer gave this reason: “{0}” | El firmante dio este motivo: “{0}” |  |
 | This document has {0} digital signatures. | Este documento tiene {0} firmas digitales. |  |
 | Also remove the signature, which will no longer be valid | Quitar también la firma, que ya no será válida |  |
-| Left in, it travels with the file being saved and goes on claiming to describe a file it no longer describes, so MegaPDF and other readers report that file as signed. The document you opened is not changed either way — this reaches only the file being written. And a digital signature says a file has not changed since it was signed: it has never kept anyone from opening this document, so a file saved without it is readable by exactly the same people. | Si se deja, viaja con el archivo guardado y sigue afirmando que describe un archivo que ya no describe, de modo que MegaPDF y otros lectores informan de ese archivo como firmado. El documento que abriste no cambia en ningún caso: esto solo afecta al archivo que se escribe. Y una firma digital indica que un archivo no ha cambiado desde que se firmó: nunca ha impedido que alguien abra este documento, así que un archivo guardado sin ella lo puede leer exactamente la misma gente. | nunca “cifrado”: una firma digital no cifra nada |
+| Left in, it travels with the file being saved and goes on claiming to describe a file it no longer describes, so MegaPDF and other readers report that file as signed. The document you opened is not changed either way — this reaches only the file being written. And a digital signature says a file has not changed since it was signed: it has never kept anyone from opening this document, so a file saved without it is readable by exactly the same people. | Si se deja, viaja con el archivo guardado y sigue afirmando que describe un archivo que ya no describe, de modo que MegaPDF y otros lectores indican que ese archivo está firmado. El documento que abriste no cambia en ningún caso: esto solo afecta al archivo que se escribe. Y una firma digital indica que un archivo no ha cambiado desde que se firmó: nunca ha impedido que alguien abra este documento, así que un archivo guardado sin ella pueden leerlo exactamente las mismas personas. | nunca “cifrado”: una firma digital no cifra nada |
 | ~~The signature on the original doesn't carry over to this copy.~~ | ~~La firma del original no pasa a esta copia.~~ |  |
 | ~~The original's digital signature doesn't carry over to this copy.~~ | ~~La firma digital del original no pasa a esta copia.~~ |  |
 | The copy carries the original's digital signature, and it is no longer valid. | La copia lleva la firma digital del original, y ya no es válida. |  |
@@ -301,7 +301,7 @@ refers to the same row in the French file.
 | Couldn't print | No se pudo imprimir |  |
 | Couldn't make that change | No se pudo hacer ese cambio |  |
 | The change could not be made. | No se pudo hacer el cambio. |  |
-| Couldn't restore your edits | No se pudo restaurar tus ediciones |  |
+| Couldn't restore your edits | No se pudieron restaurar tus ediciones |  |
 | Couldn't search this document. | No se pudo buscar en este documento. |  |
 | Couldn't move this signature | No se pudo mover esta firma |  |
 | PDF document | Documento PDF |  |
@@ -392,7 +392,7 @@ Spain's Spanish is not translated separately: `tools/gen_strings.py es-es`
 derives it from the Latin American catalogues with the table below. There is
 no punctuation pass. Add a row here **and** to `ES_419_TO_ES_ES` in the
 script when a new Latin American term needs a Spain counterpart; never edit a
-derived file. Whole words only, so *videoteca* and *llenarlo* are left alone.
+derived file. Whole words only, so *videoteca* and *llenarlos* are left alone.
 
 | Español (Latinoamérica) | Español (España) | ámbito |
 |---|---|---|
@@ -422,6 +422,28 @@ derived file. Whole words only, so *videoteca* and *llenarlo* are left alone.
 | llena | rellena | any string |
 | llenado | rellenado | any string |
 | llenada | rellenada | any string |
+| llenarse | rellenarse | any string |
+| llenarlo | rellenarlo | any string |
+| presionada | pulsada | any string |
+| presionado | pulsado | any string |
+| ingresaste | introdujiste | the store copy's "los valores que ingresaste" |
+| ingresados | introducidos | the store copy's "los valores ingresados" |
+| Agregar | Añadir | any string |
+| agregar | añadir | any string |
+| AGREGAR | AÑADIR | the all-caps store heading AGREGAR TEXTO |
+| Agregando | Añadiendo | any string |
+| Agrega | Añade | any string |
+| agrega | añade | any string |
+| agregas | añades | any string |
+| agregues | añadas | any string |
+| agreguen | añadan | any string |
+| Agrégalo | Añádelo | any string |
+| agregó | añadió | any string |
+| agregará | añadirá | any string |
+| agregaron | añadieron | any string |
+| agregadas | añadidas | any string |
+| agregada | añadida | any string |
+| agregado | añadido | any string |
 | Sofía Ramírez | Lucía Fernández | the demo person in the store captures (D7) |
 | demo-es | demo-es-ES | the demo document the phones open: demo-es.pdf and demo-es-ES.pdf |
 | arrendamiento | alquiler | the demo document's rental word, so the captures search a word Spain's page contains |

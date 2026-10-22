@@ -217,7 +217,7 @@
     <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
     <string name="signed_overwrite_remove_signature">Quitar también la firma, que ya no será válida</string>
     <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
-    <string name="signed_overwrite_remove_offer">Si se deja, viaja con el archivo guardado y sigue afirmando que describe un archivo que ya no describe, de modo que MegaPDF y otros lectores reportan ese archivo como firmado. El documento que abriste no cambia en ningún caso: esto solo afecta al archivo que se escribe. Y una firma digital indica que un archivo no ha cambiado desde que se firmó: nunca ha impedido que alguien abra este documento, así que un archivo guardado sin ella lo pueden leer exactamente las mismas personas.</string>
+    <string name="signed_overwrite_remove_offer">Si se deja, viaja con el archivo guardado y sigue afirmando que describe un archivo que ya no describe, de modo que MegaPDF y otros lectores indican que ese archivo está firmado. El documento que abriste no cambia en ningún caso: esto solo afecta al archivo que se escribe. Y una firma digital indica que un archivo no ha cambiado desde que se firmó: nunca ha impedido que alguien abra este documento, así que un archivo guardado sin ella pueden leerlo exactamente las mismas personas.</string>
     <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
     <string name="signed_copy_notice">Guardado. La copia lleva la firma digital del documento, y ya no es válida.</string>
     <!-- #576: shown once, quietly, after a Save a copy that removed the signature instead. -->

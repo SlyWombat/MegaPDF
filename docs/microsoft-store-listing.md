@@ -439,7 +439,7 @@ LEER — Pulsa Ctrl+H y las herramientas desaparecen de la pantalla, dejando sol
 
 EDITAR TEXTO — Haz clic en el texto del documento y escribe, como al editar un archivo de Word. Corrige un error tipográfico, cambia una fecha, actualiza un número. MegaPDF conserva la fuente del propio documento siempre que puede, y si un cambio desplazara el resto de la página, te lo dice en lugar de mover cosas en silencio.
 
-AGREGAR TEXTO — Haz clic en una línea en blanco y escribe sobre ella. Elige el tamaño y el tipo de fuente (sans, serif o monoespaciada) para que lo que agregues combine con el resto del formulario. Arrástralo a su lugar, o haz doble clic en él más tarde para cambiarlo.
+AÑADIR TEXTO — Haz clic en una línea en blanco y escribe sobre ella. Elige el tamaño y el tipo de fuente (sans, serif o monoespaciada) para que lo que añadas combine con el resto del formulario. Arrástralo a su lugar, o haz doble clic en él más tarde para cambiarlo.
 
 CENSURAR — Arrastra sobre un nombre, una dirección o una imagen, o selecciona el texto, y MegaPDF lo quita del archivo en lugar de taparlo. Lo que había debajo desaparece: ninguna otra aplicación puede copiarlo ni buscarlo. Corrector, que solo cubre, lo advierte.
 
@@ -447,9 +447,9 @@ CASILLAS — Haz clic en un cuadro vacío y se convierte en una casilla marcada.
 
 COLOCAR FIRMAS — Guarda una pequeña biblioteca personal de imágenes de firma. Elige una y haz clic donde va. Muévela, ajústala con pequeños desplazamientos y cámbiale el tamaño hasta que quede justo en su lugar.
 
-GUARDAR — Guardar sobrescribe, Guardar como crea una copia. Sin asistentes de exportación, sin diálogos para “aplanar”, sin sorpresas. Guardar como también puede escribir el texto del documento (títulos, listas, los valores que ingresaste) como archivo Markdown, sin tocar el PDF.
+GUARDAR — Guardar sobrescribe, Guardar como crea una copia. Sin asistentes de exportación, sin diálogos para “aplanar”, sin sorpresas. Guardar como también puede escribir el texto del documento (títulos, listas, los valores que introdujiste) como archivo Markdown, sin tocar el PDF.
 
-PÁGINAS — El panel Páginas es un lugar para trabajar, no solo para mirar. Gira una página que se escaneó de lado, elimina una, arrastra las páginas para cambiar su orden, inserta una página en blanco, agrega las páginas de otro PDF o guarda las páginas que elegiste como un archivo aparte. Cada acción es un solo paso, y un solo Deshacer devuelve el documento a como estaba.
+PÁGINAS — El panel Páginas es un lugar para trabajar, no solo para mirar. Gira una página que se escaneó de lado, elimina una, arrastra las páginas para cambiar su orden, inserta una página en blanco, añade las páginas de otro PDF o guarda las páginas que elegiste como un archivo aparte. Cada acción es un solo paso, y un solo Deshacer devuelve el documento a como estaba.
 
 También incluye, porque los documentos reales lo necesitan: busca cualquier palabra con Ctrl+F (todas las coincidencias resaltadas, Enter para recorrerlas), imprime tu PDF y reduce los escaneos demasiado pesados para enviarlos por correo electrónico con un clic (reducción de resolución de las imágenes y recompresión JPEG). Los documentos se abren como pestañas en una sola ventana, y un PDF al que haces doble clic en el Explorador de archivos se une a la ventana que ya tienes abierta.
 
@@ -461,16 +461,16 @@ MegaPDF es de código abierto (Apache-2.0): github.com/SlyWombat/MegaPDF
 **App features** — one line per box, 14 boxes
 ```
 El modo de lectura (Ctrl+H) oculta las herramientas y deja la página, con colores de página normal, sepia y noche
-Gira, elimina y reordena páginas, inserta una página en blanco, agrega páginas de otro PDF o guarda una selección: cada acción es un paso de Deshacer
+Gira, elimina y reordena páginas, inserta una página en blanco, añade páginas de otro PDF o guarda una selección: cada acción es un paso de Deshacer
 Edita el texto del propio documento haciendo clic y escribiendo, como en un documento de Word
 Censura nombres, direcciones e imágenes: se quitan del archivo, no solo se tapan
-Agrega texto en cualquier línea en blanco, con el tamaño y el tipo de fuente que combinan con el formulario
+Añade texto en cualquier línea en blanco, con el tamaño y el tipo de fuente que combinan con el formulario
 Haz clic en los cuadros vacíos para marcar casillas en cualquier formulario
 Coloca con un clic una firma de tu biblioteca personal y luego ajústala y cámbiale el tamaño
 Busca cualquier palabra del documento con Ctrl+F: todas las coincidencias resaltadas, y Enter para recorrerlas
 Guardar sobrescribe, Guardar como crea una copia: sin asistentes de exportación ni diálogos para aplanar
 Abre varios PDF como pestañas en una sola ventana: un PDF al que haces doble clic en el Explorador de archivos se une a la ventana que ya tienes
-Guardar como escribe el texto del documento como Markdown: títulos, listas y valores ingresados, sin tocar el PDF
+Guardar como escribe el texto del documento como Markdown: títulos, listas y valores introducidos, sin tocar el PDF
 Reduce los escaneos demasiado pesados para enviarlos por correo electrónico con un clic
 Imprime directamente desde la aplicación
 Procesamiento 100 % local: sin cuenta, sin nube, sin suscripción, sin telemetría

@@ -439,7 +439,7 @@ Rellena, marca y firma PDF
 ¿Te enviaron un PDF para firmar? Ábrelo, toca las casillas, coloca tu firma y guarda. Listo en menos de un minuto, sin cuenta ni suscripción.
 ```
 
-**Description** [4000] (3783)
+**Description** [4000] (3781)
 ```
 Abrir. Corregir. Guardar. Listo.
 
@@ -449,7 +449,7 @@ Marca cualquier casilla
 Toca una casilla y queda marcada, tanto en campos de formulario interactivos reales como en simples cuadros impresos. MegaPDF reconoce las casillas dibujadas que otras aplicaciones tratan como simple decoración.
 
 Escribe en cualquier línea
-Toca donde va la respuesta y escríbela. Elige el tamaño y el tipo de fuente (sans, serif o monoespaciada) para que lo que agregues combine con el formulario que estás completando. Arrástralo a su lugar, o tócalo de nuevo para corregir un error. Todo lo que agregas es texto real en el que se puede buscar, no un adhesivo pegado sobre la página.
+Toca donde va la respuesta y escríbela. Elige el tamaño y el tipo de fuente (sans, serif o monoespaciada) para que lo que añadas combine con el formulario que estás completando. Arrástralo a su lugar, o tócalo de nuevo para corregir un error. Todo lo que añades es texto real en el que se puede buscar, no un adhesivo pegado sobre la página.
 
 Corrige el texto del propio documento
 ¿Fecha equivocada? ¿Nombre mal escrito? Toca la línea y vuelve a escribirla. MegaPDF conserva la fuente del propio documento siempre que puede y te avisa cuando tuvo que usar una parecida. Si un cambio alterara el resto de la página, te lo dice en lugar de mover cosas en silencio. Deshacer devuelve el original exactamente como estaba.
@@ -461,7 +461,7 @@ Firma con convicción
 Dibuja tu firma con el dedo o fotografía la que tienes en papel; el fondo blanco desaparece automáticamente. Tus firmas se quedan en una biblioteca privada en tu dispositivo; coloca una en un documento y muévela y cámbiale el tamaño hasta que quede justo sobre la línea.
 
 Guarda sin miedo
-Guardar escribe sobre el archivo original, de forma segura. MegaPDF verifica cada documento antes de tocar tu original, así que un guardado fallido nunca puede corromper el archivo que alguien te envió. O conserva el original y guarda una copia. Exportar como Markdown escribe el texto del documento (títulos, listas, los valores que ingresaste) como archivo Markdown y deja el PDF tal como estaba.
+Guardar escribe sobre el archivo original, de forma segura. MegaPDF verifica cada documento antes de tocar tu original, así que un guardado fallido nunca puede corromper el archivo que alguien te envió. O conserva el original y guarda una copia. Exportar como Markdown escribe el texto del documento (títulos, listas, los valores que introdujiste) como archivo Markdown y deja el PDF tal como estaba.
 
 Encuentra cualquier palabra
 Busca en todo el documento mientras escribes: cada coincidencia se ilumina y el contador dice cuántas hay, así que la única cláusula que necesitas en un contrato de alquiler de cuarenta páginas está a unos toques de distancia.
@@ -470,7 +470,7 @@ Lee el documento, no la aplicación
 El modo de lectura quita las barras de herramientas de la pantalla y deja solo la página. Con él vienen los colores de página: Sepia para una lectura larga, Noche para una habitación a oscuras; y Noche invierte también las imágenes, deliberadamente. MegaPDF puede abrir todos los documentos de esa forma.
 
 Pon las páginas en orden
-Gira una página que llegó de lado, elimina una, arrastra las páginas al orden correcto, inserta una página en blanco, agrega las páginas de otro PDF o guarda algunas páginas como su propio archivo. Cada acción es un solo paso, y un solo Deshacer la revierte.
+Gira una página que llegó de lado, elimina una, arrastra las páginas al orden correcto, inserta una página en blanco, añade las páginas de otro PDF o guarda algunas páginas como su propio archivo. Cada acción es un solo paso, y un solo Deshacer la revierte.
 
 Privado por diseño
 MegaPDF no solicita ningún permiso y no realiza ninguna conexión de red. Tus documentos y tu firma nunca salen de tu dispositivo: no hay ningún servidor al que puedan ir. La aplicación es de código abierto, así que cualquiera puede verificarlo.
@@ -679,7 +679,7 @@ MegaPDF est volontairement simple : il ne vous noie pas sous les barres d'outil
 ¿Te enviaron un PDF para firmar? Ábrelo, haz clic en las casillas, coloca tu firma y guarda. Listo en menos de un minuto, sin cuenta ni suscripción.
 ```
 
-**Description** [4000] (3861)
+**Description** [4000] (3856)
 ```
 Abrir. Corregir. Guardar. Listo.
 
@@ -715,7 +715,7 @@ La barra lateral Miniaturas ahora es un lugar para trabajar: gira una página qu
 Privado por diseño
 MegaPDF no realiza ninguna conexión de red (su sandbox ni siquiera las permite) y solo abre los archivos que tú eliges. Tus documentos y tu firma nunca salen de tu Mac. La aplicación es de código abierto, así que cualquiera puede verificarlo.
 
-Como en casa en el Mac
+Hecho para el Mac
 Cada comando está en la barra de menús con el atajo que esperas, los documentos se abren como pestañas en una sola ventana, y un PDF abierto desde el Finder se une al que ya tienes. VoiceOver lee la barra de herramientas y la página, la aplicación sigue tu apariencia clara u oscura, y lo que firmas aquí es un PDF estándar que se abre en Vista Previa y en cualquier otro lugar.
 
 MegaPDF es deliberadamente simple: no te entierra en barras de herramientas. Abre, corrige, guarda. Listo.
@@ -730,7 +730,7 @@ MegaPDF es deliberadamente simple: no te entierra en barras de herramientas. Abr
 ¿Te enviaron un PDF para firmar? Ábrelo, haz clic en las casillas, coloca tu firma y guarda. Listo en menos de un minuto, sin cuenta ni suscripción.
 ```
 
-**Description** [4000] (3858)
+**Description** [4000] (3852)
 ```
 Abrir. Corregir. Guardar. Listo.
 
@@ -740,7 +740,7 @@ Marca cualquier casilla
 Haz clic en una casilla y queda marcada, tanto en campos de formulario reales como en simples cuadros impresos. MegaPDF reconoce las casillas dibujadas que otras aplicaciones tratan como simple decoración.
 
 Escribe en cualquier línea
-Haz clic donde va la respuesta y escríbela, con el tamaño y el tipo de fuente (sans, serif o monoespaciada) que combinan con el formulario. Arrástralo a su lugar, o haz doble clic en él para corregir un error. Todo lo que agregas es texto real en el que se puede buscar, no un adhesivo pegado sobre la página.
+Haz clic donde va la respuesta y escríbela, con el tamaño y el tipo de fuente (sans, serif o monoespaciada) que combinan con el formulario. Arrástralo a su lugar, o haz doble clic en él para corregir un error. Todo lo que añades es texto real en el que se puede buscar, no un adhesivo pegado sobre la página.
 
 Corrige el texto del propio documento
 ¿Fecha equivocada? ¿Nombre mal escrito? Haz clic en la línea y vuelve a escribirla. MegaPDF conserva la fuente del propio documento siempre que puede y lo dice cuando tuvo que usar una parecida. Si un cambio alterara la página, te lo dice en lugar de mover cosas en silencio, y Deshacer devuelve el original exactamente como estaba.
@@ -766,7 +766,7 @@ La barra lateral Miniaturas ahora es un lugar para trabajar: gira una página qu
 Privado por diseño
 MegaPDF no realiza ninguna conexión de red (su sandbox ni siquiera las permite) y solo abre los archivos que tú eliges. Tus documentos y tu firma nunca salen de tu Mac. La aplicación es de código abierto, así que cualquiera puede verificarlo.
 
-Como en casa en el Mac
+Hecho para el Mac
 Cada comando está en la barra de menús con el atajo que esperas, los documentos se abren como pestañas en una sola ventana, y un PDF abierto desde el Finder se une al que ya tienes. VoiceOver lee la barra de herramientas y la página, la aplicación sigue tu apariencia clara u oscura, y lo que firmas aquí es un PDF estándar que se abre en Vista Previa y en cualquier otro lugar.
 
 MegaPDF es deliberadamente simple: no te entierra en barras de herramientas. Abre, corrige, guarda. Listo.
