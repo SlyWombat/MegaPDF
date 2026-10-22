@@ -197,6 +197,17 @@ public interface IPdfDocument : IDisposable
     /// </summary>
     int WriteMarkdown(Stream target, int firstPage = 0, int? pageCount = null, DocumentWriteOptions? options = null);
 
+    /// <summary>
+    /// #683: the whole document as <see cref="WriteMarkdown"/> writes it, with <paramref name="recognised"/>
+    /// (what a recogniser read, keyed by page index) written in place of the "has no text layer" note
+    /// of the scanned pages it covers: an English note that the text was read by text recognition and
+    /// may contain mistakes, then the text as a block quote. With null, or an empty dictionary, the
+    /// bytes are exactly <see cref="WriteMarkdown"/>'s. <see cref="MarkdownWithScans.UnreadScannedPages"/>
+    /// are the pages (0-based, ascending) still written as a note although they carry a picture --
+    /// the pages worth offering to read. The recognised text is never added to the document's own.
+    /// </summary>
+    MarkdownWithScans WriteMarkdownWithScans(IReadOnlyDictionary<int, Viewing.OcrPage>? recognised, DocumentWriteOptions? options = null);
+
     // --- Page tools (#174, core contract 10) ---------------------------------
     //
     // Every one of these throws <see cref="PageToolException"/> with a typed
@@ -815,3 +826,6 @@ public enum TextEditFailure
     /// </summary>
     LayoutWouldChange,
 }
+
+/// <summary>#683: Markdown as <see cref="IPdfDocument.WriteMarkdown"/> writes it, and the scanned pages it still has as a note.</summary>
+public sealed record MarkdownWithScans(byte[] Markdown, IReadOnlyList<int> UnreadScannedPages);

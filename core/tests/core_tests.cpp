@@ -18,6 +18,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <functional>
+#include <future>
 #include <mutex>
 #include <thread>
 #include <cctype>
@@ -1667,6 +1668,44 @@ std::vector<unsigned char> image_pdf(int px, double pt) {
     char content[128];
     std::snprintf(content, sizeof content, "q %.0f 0 0 %.0f 100 600 cm /Im1 Do Q", pt, pt);
     add("<< /Length " + std::to_string(std::strlen(content)) + " >>\nstream\n" + content + "\nendstream");
+    const size_t xref = pdf.size();
+    pdf += "xref\n0 " + std::to_string(offsets.size() + 1) + "\n0000000000 65535 f \n";
+    for (size_t off : offsets) { char line[32]; std::snprintf(line, sizeof line, "%010zu 00000 n \n", off); pdf += line; }
+    pdf += "trailer\n<< /Size " + std::to_string(offsets.size() + 1) + " /Root 1 0 R >>\nstartxref\n" + std::to_string(xref) + "\n%%EOF\n";
+    return std::vector<unsigned char>(pdf.begin(), pdf.end());
+}
+
+// #593: `pages` pages, each drawing `per_page` raw RGB images of `px` × `px` at `pt` × `pt`
+// points, every image its own XObject (so each is stored at px × px × 3 bytes).
+std::vector<unsigned char> images_pdf(int pages, int px, double pt, int per_page = 1) {
+    std::string pdf = "%PDF-1.4\n";
+    std::vector<size_t> offsets;
+    auto add = [&](const std::string& body) { offsets.push_back(pdf.size()); pdf += std::to_string(offsets.size()) + " 0 obj\n" + body + "\nendobj\n"; };
+    const int stride = 2 + per_page;   // page, its images, its content
+    auto page_obj = [&](int k) { return 3 + k * stride; };
+    add("<< /Type /Catalog /Pages 2 0 R >>");
+    std::string kids;
+    for (int k = 0; k < pages; k++) kids += std::to_string(page_obj(k)) + " 0 R ";
+    add("<< /Type /Pages /Kids [" + kids + "] /Count " + std::to_string(pages) + " >>");
+    std::string pixels(static_cast<size_t>(px) * px * 3, '\0');
+    for (size_t i = 0; i < pixels.size(); i += 3) { pixels[i] = static_cast<char>(40); pixels[i + 1] = static_cast<char>(80); pixels[i + 2] = static_cast<char>(200); }
+    for (int k = 0; k < pages; k++) {
+        std::string xobjects;
+        std::string content;
+        for (int i = 0; i < per_page; i++) {
+            xobjects += "/Im" + std::to_string(i + 1) + " " + std::to_string(page_obj(k) + 1 + i) + " 0 R ";
+            char draw[128];
+            std::snprintf(draw, sizeof draw, "q %.0f 0 0 %.0f %d 600 cm /Im%d Do Q ", pt, pt, 100 + i * 150, i + 1);
+            content += draw;
+        }
+        add("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /XObject << " + xobjects + ">> >> /Contents " +
+            std::to_string(page_obj(k) + 1 + per_page) + " 0 R >>");
+        for (int i = 0; i < per_page; i++) {
+            add("<< /Type /XObject /Subtype /Image /Width " + std::to_string(px) + " /Height " + std::to_string(px) +
+                " /ColorSpace /DeviceRGB /BitsPerComponent 8 /Length " + std::to_string(pixels.size()) + " >>\nstream\n" + pixels + "\nendstream");
+        }
+        add("<< /Length " + std::to_string(content.size()) + " >>\nstream\n" + content + "\nendstream");
+    }
     const size_t xref = pdf.size();
     pdf += "xref\n0 " + std::to_string(offsets.size() + 1) + "\n0000000000 65535 f \n";
     for (size_t off : offsets) { char line[32]; std::snprintf(line, sizeof line, "%010zu 00000 n \n", off); pdf += line; }
@@ -3435,6 +3474,183 @@ struct OpenDoc {
     OpenDoc(const OpenDoc&) = delete;
     OpenDoc& operator=(const OpenDoc&) = delete;
 };
+
+// #593: megapdf_shrink_images_cancellable. The rules are megapdf_shrink_images()'s (tested in
+// test_save_flatten_images, which now runs through this function as a wrapper); here, progress,
+// the cancel flag, the lock let go during the encode, a close mid-run, and the stale-index guard.
+struct ShrinkProbe {
+    int encodes = 0;
+    int releases = 0;
+    std::vector<std::pair<int, int>> progress;
+    std::function<void(int)> on_encode;            // given the encode's 1-based number
+    std::function<void(int, int)> on_progress;
+    std::function<void()> on_release;
+};
+
+int probe_encode(void* ctx, const unsigned char*, int, int, double, unsigned char** out, size_t* len) {
+    auto* probe = static_cast<ShrinkProbe*>(ctx);
+    probe->encodes++;
+    if (probe->on_encode) probe->on_encode(probe->encodes);
+    *out = const_cast<unsigned char*>(kTinyJpeg);
+    *len = sizeof kTinyJpeg;
+    return 1;
+}
+
+void probe_release(void* ctx, unsigned char*) {
+    auto* probe = static_cast<ShrinkProbe*>(ctx);
+    probe->releases++;
+    if (probe->on_release) probe->on_release();
+}
+
+void probe_progress(void* ctx, int done, int total) {
+    auto* probe = static_cast<ShrinkProbe*>(ctx);
+    probe->progress.emplace_back(done, total);
+    if (probe->on_progress) probe->on_progress(done, total);
+}
+
+std::string pairs(const std::vector<std::pair<int, int>>& v) {
+    std::string s;
+    for (const auto& p : v) s += "(" + std::to_string(p.first) + "," + std::to_string(p.second) + ")";
+    return s;
+}
+
+void test_shrink_progress_and_cancel() {
+    // 64 px drawn at 20 pt: oversized (target 42 px) and 12,288 bytes stored, so every image is
+    // re-encoded, and the 632-byte JPEG is far under 90% of it.
+    const auto three = images_pdf(3, 64, 20);
+
+    // (a) Progress before the first image and after each one; both counts filled.
+    {
+        OpenDoc d(three);
+        ShrinkProbe probe;
+        int counts[MEGAPDF_SHRINK_COUNTS] = {-1, -1};
+        const int status = megapdf_shrink_images_cancellable(d.doc, probe_encode, probe_release, probe_progress, &probe, nullptr,
+                                                             counts, MEGAPDF_SHRINK_COUNTS);
+        const std::vector<std::pair<int, int>> expected{{0, 3}, {1, 3}, {2, 3}, {3, 3}};
+        check(status == MEGAPDF_OK, "shrink (#593): a three-image run returns OK", std::to_string(status));
+        check(probe.progress == expected, "shrink (#593): progress is (0,3) then one call per image", pairs(probe.progress));
+        check(counts[MEGAPDF_SHRINK_CONSIDERED] == 3 && counts[MEGAPDF_SHRINK_REPLACED] == 3, "shrink (#593): considered 3, replaced 3",
+              std::to_string(counts[0]) + " " + std::to_string(counts[1]));
+        check(probe.encodes == 3 && probe.releases == 3, "shrink (#593): every encoded buffer is released",
+              std::to_string(probe.encodes) + " " + std::to_string(probe.releases));
+    }
+
+    // (b) A flag raised during the second progress call (after the first image) stops the run.
+    {
+        OpenDoc d(three);
+        ShrinkProbe probe;
+        megapdf_cancel* cancel = megapdf_cancel_new();
+        probe.on_progress = [&](int done, int) { if (done == 1) megapdf_cancel_raise(cancel); };
+        int counts[MEGAPDF_SHRINK_COUNTS] = {-1, -1};
+        const int status = megapdf_shrink_images_cancellable(d.doc, probe_encode, probe_release, probe_progress, &probe, cancel,
+                                                             counts, MEGAPDF_SHRINK_COUNTS);
+        check(status == MEGAPDF_ERR_CANCELLED, "shrink (#593): a raised flag returns CANCELLED", std::to_string(status));
+        check(counts[MEGAPDF_SHRINK_CONSIDERED] == 1 && probe.encodes == 1, "shrink (#593): it stops before the second image",
+              std::to_string(counts[0]) + " considered, " + std::to_string(probe.encodes) + " encodes");
+        megapdf_cancel_free(cancel);
+    }
+
+    // (c) The lock is let go during the encode: a call on another document completes meanwhile.
+    // With the lock held for the whole run it could not return until the shrink did. The future
+    // lives outside the encode, so against a whole-run lock this fails rather than deadlocks.
+    {
+        OpenDoc d(images_pdf(1, 64, 20));
+        OpenDoc other(images_pdf(2, 16, 20));
+        ShrinkProbe probe;
+        std::future<int> pages;
+        bool completed = false;
+        probe.on_encode = [&](int) {
+            pages = std::async(std::launch::async, [&] { return megapdf_page_count(other.doc); });
+            completed = pages.wait_for(std::chrono::seconds(2)) == std::future_status::ready;
+        };
+        const int status = megapdf_shrink_images_cancellable(d.doc, probe_encode, probe_release, nullptr, &probe, nullptr, nullptr, 0);
+        check(status == MEGAPDF_OK && completed && pages.valid() && pages.get() == 2,
+              "shrink (#593): another document's call completes while the encode runs", std::to_string(status));
+    }
+
+    // (d) Its document closed during the encode: the close waits for the run, which then stops,
+    // and nothing is used after it is freed (ASan on Linux).
+    {
+        std::vector<unsigned char> copy = three;
+        megapdf_document* doc = megapdf_open(copy.data(), copy.size(), nullptr);
+        ShrinkProbe probe;
+        std::atomic<bool> started{false};
+        std::atomic<bool> closed{false};
+        bool closed_during_encode = true;
+        bool closed_at_release = true;
+        probe.on_release = [&] { closed_at_release = closed.load(); };
+        std::thread close_thread;
+        probe.on_encode = [&](int n) {
+            if (n != 1) return;
+            close_thread = std::thread([&] {
+                started = true;
+                megapdf_close(doc);
+                closed = true;
+            });
+            for (int i = 0; i < 200 && !started; i++) std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            std::this_thread::sleep_for(std::chrono::milliseconds(200));
+            closed_during_encode = closed.load();
+        };
+        int counts[MEGAPDF_SHRINK_COUNTS] = {-1, -1};
+        const int status = megapdf_shrink_images_cancellable(doc, probe_encode, probe_release, probe_progress, &probe, nullptr,
+                                                             counts, MEGAPDF_SHRINK_COUNTS);
+        if (close_thread.joinable()) close_thread.join();
+        check(status == MEGAPDF_ERR_CANCELLED, "shrink (#593): closing its document mid-run stops it", std::to_string(status));
+        // The release on the stopping path runs after the run saw the close and before it
+        // returned: the close must still be waiting then.
+        check(!closed_during_encode && !closed_at_release && closed.load(),
+              "shrink (#593): the close waits until the run has stopped");
+        check(counts[MEGAPDF_SHRINK_CONSIDERED] == 1 && counts[MEGAPDF_SHRINK_REPLACED] == 0 && probe.releases == 1,
+              "shrink (#593): a run stopped after an encode replaces nothing and still releases the buffer",
+              std::to_string(counts[0]) + " " + std::to_string(counts[1]) + " " + std::to_string(probe.releases));
+    }
+
+    // (e) Every page regenerated during the first encode: the list's object indices may name other
+    // objects now, so nothing is replaced, and the run still ends OK.
+    {
+        OpenDoc d(three);
+        ShrinkProbe probe;
+        int flattened = MEGAPDF_ERR_ARGUMENT;
+        probe.on_encode = [&](int n) { if (n == 1) flattened = megapdf_flatten_all(d.doc); };
+        int counts[MEGAPDF_SHRINK_COUNTS] = {-1, -1};
+        const int status = megapdf_shrink_images_cancellable(d.doc, probe_encode, probe_release, probe_progress, &probe, nullptr,
+                                                             counts, MEGAPDF_SHRINK_COUNTS);
+        check(flattened == MEGAPDF_OK && status == MEGAPDF_OK && counts[MEGAPDF_SHRINK_REPLACED] == 0 &&
+                  counts[MEGAPDF_SHRINK_CONSIDERED] == 3 && probe.encodes == 1 && probe.releases == 1,
+              "shrink (#593): pages changed mid-run are skipped, not written at stale indices",
+              std::to_string(status) + " " + std::to_string(counts[0]) + " " + std::to_string(counts[1]) + " " + std::to_string(probe.encodes));
+    }
+
+    // (g) Two pictures on one page: our own replacement of the first regenerates the page, which
+    // must not make the second look changed by someone else.
+    {
+        OpenDoc d(images_pdf(1, 64, 20, 2));
+        ShrinkProbe probe;
+        int counts[MEGAPDF_SHRINK_COUNTS] = {-1, -1};
+        const int status = megapdf_shrink_images_cancellable(d.doc, probe_encode, probe_release, nullptr, &probe, nullptr,
+                                                             counts, MEGAPDF_SHRINK_COUNTS);
+        check(status == MEGAPDF_OK && counts[MEGAPDF_SHRINK_CONSIDERED] == 2 && counts[MEGAPDF_SHRINK_REPLACED] == 2,
+              "shrink (#593): both pictures on one page are replaced",
+              std::to_string(status) + " " + std::to_string(counts[0]) + " " + std::to_string(counts[1]));
+    }
+
+    // Arguments and the slot contract: only min(count_slots, MEGAPDF_SHRINK_COUNTS) slots are
+    // written, and they are zeroed even when the call is refused.
+    {
+        int counts[3] = {7, 7, 7};
+        check(megapdf_shrink_images_cancellable(nullptr, probe_encode, nullptr, nullptr, nullptr, nullptr, counts, 3) == MEGAPDF_ERR_ARGUMENT &&
+                  counts[0] == 0 && counts[1] == 0 && counts[2] == 7,
+              "shrink (#593): a null document is refused, the known slots zeroed, the rest untouched");
+        OpenDoc d(three);
+        check(megapdf_shrink_images_cancellable(d.doc, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0) == MEGAPDF_ERR_ARGUMENT,
+              "shrink (#593): a null encoder is refused");
+        ShrinkProbe probe;
+        int one[2] = {-1, 7};
+        megapdf_shrink_images_cancellable(d.doc, probe_encode, probe_release, nullptr, &probe, nullptr, one, 1);
+        check(one[0] == 3 && one[1] == 7, "shrink (#593): one slot asked for, one slot written",
+              std::to_string(one[0]) + " " + std::to_string(one[1]));
+    }
+}
 
 int first_line_object(const megapdf_page* page, size_t line = 0) {
     megapdf_text* t = megapdf_text_load(page, MEGAPDF_TEXT_ALL);
@@ -8134,6 +8350,207 @@ void test_write_markdown_goldens(const std::string& repo, const std::string& exp
 }
 
 // --------------------------------------------------------------------------
+// #683: megapdf_write_text_recognised(). Scanned pages the caller has read are written as a
+// recognition note and a block quote (Markdown) or the plain paragraphs (text); everything else
+// is byte-for-byte what megapdf_write_text() writes. The goldens scan-recognised.md/.txt are
+// written by hand from the design, not generated from the writer.
+// --------------------------------------------------------------------------
+
+std::string read_text_file(const std::string& path) {
+    std::ifstream in(path, std::ios::binary);
+    return std::string((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+}
+
+void add_recognised(megapdf_recognised* r, int page, const std::u16string& text, double bottom, double top) {
+    const int rc = megapdf_recognised_add_line(r, page, reinterpret_cast<const unsigned short*>(text.data()),
+                                               text.size(), 72, bottom, 540, top);
+    check(rc == MEGAPDF_OK, "recognised: add_line succeeds", std::to_string(rc));
+}
+
+struct RecognisedWrite {
+    int rc = 0;
+    std::string text;
+    std::vector<int> unread;
+    size_t unread_count = 0;
+    int callbacks = 0;
+};
+
+int count_text_sink(void* context, const void* data, size_t size) {
+    auto* r = static_cast<std::pair<TextSink*, int*>*>(context);
+    (*r->second)++;
+    return write_to_text_sink(r->first, data, size);
+}
+
+RecognisedWrite write_recognised(const std::string& path, int format, const megapdf_recognised* rec,
+                                 const megapdf_write_options* opt = nullptr, const megapdf_cancel* cancel = nullptr) {
+    RecognisedWrite w;
+    Doc d(path);
+    if (d.doc == nullptr) { w.rc = MEGAPDF_ERR_ARGUMENT; return w; }
+    TextSink sink;
+    int callbacks = 0;
+    std::pair<TextSink*, int*> ctx(&sink, &callbacks);
+    int pages[64] = {};
+    w.rc = megapdf_write_text_recognised(d.doc, 0, megapdf_page_count(d.doc), format, opt, rec, pages, 64,
+                                         &w.unread_count, count_text_sink, &ctx, cancel);
+    w.text = sink.text;
+    w.callbacks = callbacks;
+    for (size_t i = 0; i < w.unread_count && i < 64; i++) w.unread.push_back(pages[i]);
+    return w;
+}
+
+void test_write_text_recognised(const std::string& repo, const std::string& expected_dir) {
+    const std::string scan = repo + "/structure/scan.pdf";
+    const char* const same_as_plain[] = {"columns", "furniture", "lists",  "headings",        "symbol-bullets",
+                                         "symbol-bullets-document", "tabular-headings", "xobject-text", "scan",
+                                         "empty-page", "mixed",     "tagged", "tagged-wrong", "tiny-font-size"};
+    // (a) With nothing recognised, every case is megapdf_write_text()'s output byte for byte, in both
+    // formats, with and without keep_lines.
+    for (const char* name : same_as_plain) {
+        const std::string path = repo + "/structure/" + name + ".pdf";
+        for (int format : {MEGAPDF_WRITE_TEXT, MEGAPDF_WRITE_MARKDOWN}) {
+            for (int keep : {0, 1}) {
+                Doc d(path);
+                if (d.doc == nullptr) { check(false, std::string("recognised ") + name + ": opens", path); continue; }
+                megapdf_write_options opt{};
+                opt.keep_lines = keep;
+                TextSink plain;
+                const int prc = megapdf_write_text(d.doc, 0, megapdf_page_count(d.doc), format, &opt,
+                                                   write_to_text_sink, &plain, nullptr);
+                megapdf_recognised* empty = megapdf_recognised_new();
+                for (const megapdf_recognised* rec : {static_cast<const megapdf_recognised*>(nullptr),
+                                                      static_cast<const megapdf_recognised*>(empty)}) {
+                    const RecognisedWrite w = write_recognised(path, format, rec, &opt);
+                    check(w.rc == prc && w.text == plain.text,
+                          std::string("recognised ") + name + ": nothing recognised is megapdf_write_text() byte for byte",
+                          w.text);
+                }
+                megapdf_recognised_free(empty);
+            }
+        }
+    }
+
+    // (b) Which pages are still scanned pages.
+    {
+        const RecognisedWrite w = write_recognised(scan, MEGAPDF_WRITE_MARKDOWN, nullptr);
+        check(w.unread_count == 1 && w.unread == std::vector<int>{0}, "recognised scan.pdf: reports page 0 to read",
+              std::to_string(w.unread_count));
+        const RecognisedWrite mixed = write_recognised(repo + "/structure/mixed.pdf", MEGAPDF_WRITE_TEXT, nullptr);
+        check(mixed.unread == std::vector<int>{1}, "recognised mixed.pdf: reports only the scanned middle page");
+        for (const char* name : {"empty-page", "headings"}) {
+            const RecognisedWrite e = write_recognised(repo + "/structure/" + name + ".pdf", MEGAPDF_WRITE_MARKDOWN,
+                                                       nullptr);
+            check(e.unread_count == 0 && e.unread.empty(), std::string("recognised ") + name + ".pdf: nothing to read");
+        }
+        // A capacity of 0 still reports the count, and nothing is written past the array.
+        Doc d(scan);
+        TextSink sink;
+        size_t n = 99;
+        const int rc = megapdf_write_text_recognised(d.doc, 0, 1, MEGAPDF_WRITE_MARKDOWN, nullptr, nullptr, nullptr, 0,
+                                                     &n, write_to_text_sink, &sink, nullptr);
+        check(rc == 0 && n == 1, "recognised scan.pdf: capacity 0 still counts", std::to_string(n));
+    }
+
+    // (c) Three lines: two adjacent, then one after a gap, make two paragraphs.
+    megapdf_recognised* rec = megapdf_recognised_new();
+    check(rec != nullptr, "recognised: handle allocates");
+    add_recognised(rec, 0, u"First line", 700, 712);
+    add_recognised(rec, 0, u"second line", 686, 698);
+    add_recognised(rec, 0, u"Third line", 600, 612);
+    {
+        const RecognisedWrite md = write_recognised(scan, MEGAPDF_WRITE_MARKDOWN, rec);
+        check(md.rc == 0, "recognised scan.pdf md: a recognised page is not a text layer", std::to_string(md.rc));
+        check(md.unread_count == 0, "recognised scan.pdf md: nothing left to read");
+        const std::string golden = read_text_file(expected_dir + "/scan-recognised.md");
+        check(!golden.empty() && md.text == golden, "recognised scan.pdf md: matches scan-recognised.md", md.text);
+        const RecognisedWrite tx = write_recognised(scan, MEGAPDF_WRITE_TEXT, rec);
+        const std::string tgolden = read_text_file(expected_dir + "/scan-recognised.txt");
+        check(!tgolden.empty() && tx.text == tgolden, "recognised scan.pdf txt: matches scan-recognised.txt", tx.text);
+        megapdf_write_options keep{};
+        keep.keep_lines = 1;
+        const RecognisedWrite kl = write_recognised(scan, MEGAPDF_WRITE_MARKDOWN, rec, &keep);
+        check(kl.text.find("> First line\n> second line\n>\n> Third line\n") != std::string::npos,
+              "recognised scan.pdf md: keep_lines keeps the recogniser's lines", kl.text);
+        // The scanned page sits between two text pages and leaves them alone.
+        megapdf_recognised* mid = megapdf_recognised_new();
+        add_recognised(mid, 1, u"Read me", 700, 712);
+        const RecognisedWrite m = write_recognised(repo + "/structure/mixed.pdf", MEGAPDF_WRITE_MARKDOWN, mid);
+        check(m.text == "First page has text.\n\n*[Page 2 is a scanned image, read by text recognition: the text may "
+                        "contain mistakes]*\n\n> Read me\n\nThird page has text too.\n",
+              "recognised mixed.pdf md: only the scanned page changes", m.text);
+        // Lines for a page that has its own text, or no image, are ignored.
+        megapdf_recognised* wrong = megapdf_recognised_new();
+        add_recognised(wrong, 0, u"ignored", 700, 712);
+        const RecognisedWrite ignored = write_recognised(repo + "/structure/mixed.pdf", MEGAPDF_WRITE_MARKDOWN, wrong);
+        const RecognisedWrite plain_mixed = write_recognised(repo + "/structure/mixed.pdf", MEGAPDF_WRITE_MARKDOWN, nullptr);
+        check(ignored.text == plain_mixed.text, "recognised mixed.pdf: lines for a page with text are ignored");
+        const RecognisedWrite blank = write_recognised(repo + "/structure/empty-page.pdf", MEGAPDF_WRITE_MARKDOWN, wrong);
+        check(blank.text == "*[Page 1 has no text layer]*\n", "recognised empty-page.pdf: a blank page is never read",
+              blank.text);
+        megapdf_recognised_free(wrong);
+        megapdf_recognised_free(mid);
+    }
+    megapdf_recognised_free(rec);
+
+    // (d) Recognised text is escaped as the start of a line inside the quote.
+    {
+        megapdf_recognised* esc = megapdf_recognised_new();
+        add_recognised(esc, 0, u"# 5 apples", 700, 712);
+        add_recognised(esc, 0, u"1. x", 686, 698);
+        add_recognised(esc, 0, u"a*b_c", 672, 684);
+        const RecognisedWrite md = write_recognised(scan, MEGAPDF_WRITE_MARKDOWN, esc);
+        check(md.text.find("> \\# 5 apples 1. x a\\*b\\_c\n") != std::string::npos,
+              "recognised md: only the start of the joined paragraph is a line start", md.text);
+        megapdf_write_options keep{};
+        keep.keep_lines = 1;
+        const RecognisedWrite kl = write_recognised(scan, MEGAPDF_WRITE_MARKDOWN, esc, &keep);
+        check(kl.text.find("> \\# 5 apples\n> 1\\. x\n> a\\*b\\_c\n") != std::string::npos,
+              "recognised md: # and 1. are escaped at each line start inside the quote", kl.text);
+        megapdf_recognised_free(esc);
+    }
+
+    // (e) Whitespace-only lines are ignored: the page keeps today's note and is still reported.
+    {
+        megapdf_recognised* blank = megapdf_recognised_new();
+        add_recognised(blank, 0, u"", 700, 712);
+        add_recognised(blank, 0, u"  \u00A0\u3000 ", 686, 698);
+        const RecognisedWrite w = write_recognised(scan, MEGAPDF_WRITE_MARKDOWN, blank);
+        const RecognisedWrite plain = write_recognised(scan, MEGAPDF_WRITE_MARKDOWN, nullptr);
+        check(w.text == plain.text && w.unread == std::vector<int>{0},
+              "recognised scan.pdf: whitespace lines leave today's note and the page still to read", w.text);
+        megapdf_recognised_free(blank);
+    }
+
+    // Handle argument checks.
+    {
+        const unsigned short x = 'x';
+        megapdf_recognised* h = megapdf_recognised_new();
+        check(megapdf_recognised_add_line(nullptr, 0, &x, 1, 0, 0, 1, 1) == MEGAPDF_ERR_ARGUMENT,
+              "recognised: a NULL handle is refused");
+        check(megapdf_recognised_add_line(h, -1, &x, 1, 0, 0, 1, 1) == MEGAPDF_ERR_ARGUMENT,
+              "recognised: a negative page is refused");
+        check(megapdf_recognised_add_line(h, 0, nullptr, 1, 0, 0, 1, 1) == MEGAPDF_ERR_ARGUMENT,
+              "recognised: NULL text with a length is refused");
+        check(megapdf_recognised_add_line(h, 0, nullptr, 0, 0, 0, 1, 1) == MEGAPDF_OK,
+              "recognised: NULL text with length 0 is accepted and ignored");
+        megapdf_recognised_free(h);
+        megapdf_recognised_free(nullptr);
+    }
+
+    // (f) A raised cancel writes nothing.
+    {
+        megapdf_recognised* one = megapdf_recognised_new();
+        add_recognised(one, 0, u"text", 700, 712);
+        megapdf_cancel* cancel = megapdf_cancel_new();
+        megapdf_cancel_raise(cancel);
+        const RecognisedWrite w = write_recognised(scan, MEGAPDF_WRITE_MARKDOWN, one, nullptr, cancel);
+        check(w.rc == MEGAPDF_ERR_CANCELLED && w.callbacks == 0 && w.text.empty(),
+              "recognised: a raised cancel returns CANCELLED and never calls write", std::to_string(w.rc));
+        megapdf_cancel_free(cancel);
+        megapdf_recognised_free(one);
+    }
+}
+
+// --------------------------------------------------------------------------
 // #671: an export must say that a picture was there. Before this, an alt-less figure was
 // dropped from both writers entirely -- a page reading "as the chart below shows" exported with
 // no chart and no mention of one -- and a scanned page's note was byte-identical to a blank
@@ -10333,6 +10750,7 @@ int main(int argc, char** argv) {
     test_stamps(argv[1]);
     test_whiteouts_and_text_boxes(argv[1]);
     test_save_flatten_images(argv[1]);
+    test_shrink_progress_and_cancel();
     test_protected_save(argv[1]);
     test_security(argv[1]);
     test_remove_protection();
@@ -10388,6 +10806,7 @@ int main(int argc, char** argv) {
     test_write_text_goldens(std::string(MEGAPDF_REPO_FIXTURES), argv[4]);
     test_write_text_findability(argv[2]);
     test_write_markdown_goldens(std::string(MEGAPDF_REPO_FIXTURES), argv[4]);
+    test_write_text_recognised(std::string(MEGAPDF_REPO_FIXTURES), argv[4]);
     test_image_notes(std::string(MEGAPDF_REPO_FIXTURES), argv[1]);
     test_image_jpx_not_decoded(std::string(MEGAPDF_REPO_FIXTURES));
     test_markdown_round_trips(std::string(MEGAPDF_REPO_FIXTURES), argv[4]);

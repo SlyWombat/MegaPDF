@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using MegaPDF.Core.Engine.Core;
+using MegaPDF.Core.Viewing;
 
 namespace MegaPDF.Core.Engine.Pdfium;
 
@@ -394,6 +395,16 @@ internal sealed class PdfiumDocument : IPdfDocument
     /// into <see cref="ThroughCore"/>.
     /// </summary>
     private int WriteThroughCore(Stream target, int firstPage, int? pageCount, int format, DocumentWriteOptions? options)
+        => WriteThroughCore(target, firstPage, pageCount, format, options, null, null);
+
+    /// <summary>
+    /// <see cref="WriteThroughCore(Stream,int,int?,int,DocumentWriteOptions?)"/> through
+    /// megapdf_write_text_recognised() (#683): <paramref name="recognised"/> is what the recogniser
+    /// read, keyed by page, and <paramref name="unread"/> receives the scanned pages still written
+    /// as a note. With neither, the bytes are exactly what megapdf_write_text() writes.
+    /// </summary>
+    private int WriteThroughCore(Stream target, int firstPage, int? pageCount, int format, DocumentWriteOptions? options,
+        IReadOnlyDictionary<int, OcrPage>? recognised, List<int>? unread)
     {
         var resolvedCount = pageCount ?? Math.Max(0, PageCount - firstPage);
         var opt = options ?? DocumentWriteOptions.Default;
@@ -424,8 +435,21 @@ internal sealed class PdfiumDocument : IPdfDocument
         }
 
         var callback = new CoreNative.WriteDelegate(Write);
-        var status = CoreNative.megapdf_write_text(_core, firstPage, resolvedCount, format, ref nativeOptions,
-            callback, IntPtr.Zero, IntPtr.Zero);
+        int status;
+        var handle = recognised is null ? IntPtr.Zero : BuildRecognised(recognised);
+        try
+        {
+            var pagesToRead = new int[Math.Max(PageCount, 1)];
+            status = CoreNative.megapdf_write_text_recognised(_core, firstPage, resolvedCount, format, ref nativeOptions,
+                handle, pagesToRead, (nuint)pagesToRead.Length, out var unreadCount, callback, IntPtr.Zero, IntPtr.Zero);
+            if (status >= 0 && unread is not null)
+                unread.AddRange(pagesToRead.Take((int)Math.Min(unreadCount, (nuint)pagesToRead.Length)));
+        }
+        finally
+        {
+            if (handle != IntPtr.Zero)
+                CoreNative.megapdf_recognised_free(handle);
+        }
         GC.KeepAlive(callback);
 
         if (writeError is not null)
@@ -435,6 +459,62 @@ internal sealed class PdfiumDocument : IPdfDocument
         if (status < 0)
             throw new IOException("The core could not write the document's text.");
         return status;
+    }
+
+    /// <summary>
+    /// The recogniser's lines as a core handle (#683). A recognised word's rectangle is top-left
+    /// origin (what <see cref="ScanReader.Read"/> handed the recogniser); the core wants bottom-left,
+    /// so each line's box is the union of its words flipped about the page's height. A missed flip
+    /// makes every line "move up", and every line its own paragraph.
+    /// </summary>
+    private IntPtr BuildRecognised(IReadOnlyDictionary<int, OcrPage> recognised)
+    {
+        var handle = CoreNative.megapdf_recognised_new();
+        if (handle == IntPtr.Zero)
+            throw new OutOfMemoryException("The core could not allocate the recognised text.");
+        try
+        {
+            foreach (var entry in recognised.OrderBy(e => e.Key))
+            {
+                var pageIndex = entry.Key;
+                if (pageIndex < 0 || pageIndex >= PageCount)
+                    continue;
+                double pageHeight;
+                using (var page = GetPage(pageIndex))
+                    pageHeight = page.Height;
+                foreach (var line in entry.Value.Lines)
+                {
+                    double left = 0, right = 0, top = 0, bottom = 0;
+                    if (line.Words.Count > 0)
+                    {
+                        var box = line.Words.Skip(1).Aggregate(line.Words[0].Rect, (a, w) => OcrPage.Union(a, w.Rect));
+                        left = box.X;
+                        right = box.X + box.Width;
+                        top = pageHeight - box.Y;
+                        bottom = pageHeight - (box.Y + box.Height);
+                    }
+                    var status = CoreNative.megapdf_recognised_add_line(handle, pageIndex, line.Text, (nuint)line.Text.Length,
+                        left, bottom, right, top);
+                    if (status < 0)
+                        throw new IOException("The core could not take the recognised text.");
+                }
+            }
+            return handle;
+        }
+        catch
+        {
+            CoreNative.megapdf_recognised_free(handle);
+            throw;
+        }
+    }
+
+    public MarkdownWithScans WriteMarkdownWithScans(IReadOnlyDictionary<int, OcrPage>? recognised, DocumentWriteOptions? options = null)
+    {
+        ThrowIfDisposed();
+        using var buffer = new MemoryStream();
+        var unread = new List<int>();
+        WriteThroughCore(buffer, 0, null, CoreNative.WriteFormatMarkdown, options, recognised, unread);
+        return new MarkdownWithScans(buffer.ToArray(), unread);
     }
 
     /// <summary>MEGAPDF_ERR_ARGUMENT (#386): a NULL handle, a bad page range, or an unknown options value.</summary>
