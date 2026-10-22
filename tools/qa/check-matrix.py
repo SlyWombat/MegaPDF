@@ -45,6 +45,9 @@ import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import ios_ui_lanes  # noqa: E402  (the manifest reader ios-ci.yml also uses)
 MATRIX = ROOT / "tests" / "matrix" / "coverage.toml"
 DOC = ROOT / "docs" / "qa" / "test-matrix.md"
 
@@ -109,6 +112,14 @@ def resolve(ref: str, problems: Problems, where: str) -> str | None:
     if text is None:
         problems.add(where, f"{path} does not exist")
         return None
+    if path == IOS_LANES and needle is not None:
+        # Never a substring match here: the needle is `<lane>/<unit>` and it resolves only if
+        # that lane really runs the unit (#598). A substring of the file would let the iPhone
+        # line vouch for an iPad claim, which is the lane-blindness this exists to end.
+        if not lane_unit_runs(needle):
+            lane, _, unit = needle.partition("/")
+            problems.add(where, f"{IOS_LANES}: the {lane} lane does not run {unit}")
+        return path
     if needle is not None and needle not in text:
         problems.add(where, f"{path} does not contain {needle!r}")
     return path
@@ -147,18 +158,34 @@ def windows_selftest_states() -> list[str]:
     return sorted(set(re.findall(r'^\s*Run-Check\s+"([a-z-]+)"', text, re.MULTILINE)))
 
 
-# #598: ios-ci.yml names each UI suite it runs as its own `-only-testing` line, split
-# across an iPhone lane (broad) and an iPad lane (narrow, width-class differences only),
-# and both lanes are two branches away from an add/add conflict that drops a line and
-# keeps the job green. Windows cells survive that shape because they cite the workflow
-# *line* (`.github/workflows/ci.yml::Run-Check "..."`) — delete the line and the citation
-# stops resolving. iOS cells used to cite only the test *file*, which the conflict never
-# touches, so the drop was invisible here too (#598's live instance: the open-picker cell
-# claimed `ui` citing FilesEndToEndUITests, which ios-ci.yml has never run). So an iOS
-# `coverage = "ui"` cell citing a `ios/MegaPDFUITests/*.swift` file must also cite the
-# ios-ci.yml text that actually runs it, the way Windows cites Run-Check.
+# #598: which iOS UI tests CI runs is written once, in ios/ui-test-lanes.txt, and read by
+# both ios-ci.yml (through tools/qa/ios_ui_lanes.py) and this script. It used to be two
+# hand-written `-only-testing` lists in ios-ci.yml (an iPhone lane and a narrower iPad lane),
+# each two branches away from an add/add conflict that drops a line and keeps the job green.
+# Windows cells survive that shape because they cite the workflow *line*
+# (`.github/workflows/ci.yml::Run-Check "..."`); iOS cells cited only the test *file*, which a
+# conflict never touches. Citing the ios-ci.yml text was the first fix, and it was lane-blind:
+# six suites appeared in both lanes, so a substring match let the iPhone line vouch for an iPad
+# claim. So an iOS cell now cites `ios/ui-test-lanes.txt::<lane>/<Suite>[/<test>]`, which
+# resolves only if that lane really runs the unit, and the reverse check below requires every
+# unit a lane runs to be cited by some cell (or exempted), the counterpart of
+# windows_selftest_states().
 IOS_WORKFLOW = ".github/workflows/ios-ci.yml"
+IOS_LANES = ios_ui_lanes.MANIFEST
 IOS_UI_TEST_GLOB = "ios/MegaPDFUITests/*.swift"
+
+_lane_units: dict[str, set[str]] = {}
+
+
+def lane_unit_runs(needle: str) -> bool:
+    """Does `<lane>/<Suite>[/<test>]` name something that lane runs? A bare `Suite` needs the
+    whole suite to run there, so a partially run suite has to be cited by test."""
+    lane, _, unit = needle.partition("/")
+    if lane not in ios_ui_lanes.LANES or not unit:
+        return False
+    if lane not in _lane_units:
+        _lane_units[lane] = ios_ui_lanes.units(ROOT, lane)
+    return unit in _lane_units[lane]
 
 
 def ios_ui_suite(path: str) -> str | None:
@@ -307,25 +334,29 @@ def validate(data: dict, problems: Problems) -> None:
                     if needle:
                         cited_needles.add((path, needle))
 
-            # #598: see the note above ios_ui_suite — a `ui` claim on an iOS UI test
-            # suite must also cite the ios-ci.yml text that runs it, or it can go
-            # stale exactly the way the open-picker cell already had.
+            # #598: see the note above IOS_LANES — a `ui` claim on an iOS UI test suite must
+            # also cite the lane that runs it, in ios/ui-test-lanes.txt, lane by lane.
             if pid == "ios" and coverage == "ui":
                 lane_citations = [
                     needle for path, needle in (split_ref(ref) for ref in tests)
-                    if path == IOS_WORKFLOW and needle
+                    if path == IOS_LANES and needle
                 ]
                 suites = {s for s in (ios_ui_suite(split_ref(ref)[0]) for ref in tests) if s}
                 for suite in sorted(suites):
-                    if not any(suite in citation for citation in lane_citations):
+                    if not any(
+                        len(parts := c.split("/")) > 1
+                        and parts[0] in ios_ui_lanes.LANES
+                        and parts[1] == suite
+                        for c in lane_citations
+                    ):
                         problems.add(
                             cwhere,
                             f"coverage ui cites ios/MegaPDFUITests/{suite}.swift but does not "
-                            f"also cite the ios-ci.yml lane that runs it — add a `tests` entry "
-                            f'like "{IOS_WORKFLOW}::MegaPDFUITests/{suite}" naming the actual '
-                            "-only-testing line, the way Windows cells cite Run-Check lines "
-                            "(and if no such line exists, this suite does not run in CI and "
-                            "the cell should say so instead of claiming `ui`)",
+                            f"also cite the lane that runs it — add a `tests` entry "
+                            f'"{IOS_LANES}::iphone/{suite}" (and "::ipad/{suite}" if the iPad '
+                            "lane runs it), the way Windows cells cite Run-Check lines; if no "
+                            "lane runs it, this suite does not run in CI and the cell should "
+                            "say so instead of claiming `ui`",
                         )
 
             if coverage in ("none", "engine") and not cell.get("note"):
@@ -372,6 +403,33 @@ def validate(data: dict, problems: Problems) -> None:
         if (workflow, needle) not in cited_needles and ref not in exempt:
             unmapped.append(f"Windows UI self-test state: {ref}")
 
+    # #598: every unit an iOS UI lane runs must be cited by a cell (as
+    # `ios/ui-test-lanes.txt::<lane>/<unit>`) or exempted. A new `run` line, or a new suite on
+    # the iPhone lane, cannot land without a place on the map.
+    for lane in ios_ui_lanes.LANES:
+        for unit in sorted(ios_ui_lanes.units(ROOT, lane)):
+            needle = f"{lane}/{unit}"
+            ref = f"{IOS_LANES}::{needle}"
+            if (IOS_LANES, needle) not in cited_needles and ref not in exempt:
+                unmapped.append(f"iOS UI lane unit: {ref}")
+
+    # #598: the manifest parses and names real suites and tests, and the workflow reads it
+    # rather than carrying a hand-written list that a merge could resurrect.
+    _, lane_problems = ios_ui_lanes.load(ROOT)
+    for message in lane_problems:
+        problems.add("ios-ui-lanes", message)
+    workflow_text = file_text(IOS_WORKFLOW) or ""
+    if "-only-testing:MegaPDFUITests/" in workflow_text:
+        problems.add(
+            IOS_WORKFLOW,
+            "has a hand-written `-only-testing:MegaPDFUITests/...` line; the lanes live in "
+            f"{IOS_LANES} and the workflow reads them (a merge resurrected the old list?)",
+        )
+    for lane in ios_ui_lanes.LANES:
+        call = f"ios_ui_lanes.py xcodebuild-args {lane}"
+        if call not in workflow_text:
+            problems.add(IOS_WORKFLOW, f"does not read the {lane} lane: expected `{call}`")
+
     for item in unmapped:
         problems.add(
             "unmapped",
@@ -385,6 +443,9 @@ def validate(data: dict, problems: Problems) -> None:
         text = file_text(path)
         if text is None:
             problems.add(f"exempt {ref}", f"{path} does not exist — stale exemption")
+        elif path == IOS_LANES and needle:
+            if not lane_unit_runs(needle):
+                problems.add(f"exempt {ref}", f"{needle} is not run by that lane any more — stale exemption")
         elif needle and needle not in text:
             problems.add(f"exempt {ref}", f"{path} no longer contains {needle!r} — stale exemption")
 
