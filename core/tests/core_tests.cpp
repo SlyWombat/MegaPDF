@@ -8158,7 +8158,7 @@ void test_write_text_recognised(const std::string& repo, const std::string& expe
     {
         megapdf_recognised* blank = megapdf_recognised_new();
         add_recognised(blank, 0, u"", 700, 712);
-        add_recognised(blank, 0, u"   　 ", 686, 698);
+        add_recognised(blank, 0, u"  \u00A0\u3000 ", 686, 698);
         const RecognisedWrite w = write_recognised(scan, MEGAPDF_WRITE_MARKDOWN, blank);
         const RecognisedWrite plain = write_recognised(scan, MEGAPDF_WRITE_MARKDOWN, nullptr);
         check(w.text == plain.text && w.unread == std::vector<int>{0},
