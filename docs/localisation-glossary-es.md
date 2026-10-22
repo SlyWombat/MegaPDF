@@ -385,6 +385,8 @@ refers to the same row in the French file.
 | Copy (selected text) | Copiar |  |
 | Select all / Select All | Seleccionar todo | el inglés distingue “Select all” y “Select All” (título del menú del Mac); en español es la misma frase |
 | The author of this document asked that nothing be copied out of it. (Copy unavailable) | El autor de este documento pidió que no se copie nada de él. (Copiar no disponible) |  |
+| Selected: {0} (announced) | Seleccionado: {0} | #710, las aplicaciones de escritorio: lo que dice el lector de pantalla cuando una selección de texto queda fija; {0} son los primeros 80 caracteres. Solo se oye. Sin espacio antes de los dos puntos |
+| Copied (announced) | Copiado | #710, lo que se oye tras copiar con éxito; igual que la confirmación de Android (*select_copied*) |
 
 ## Español (España)
 

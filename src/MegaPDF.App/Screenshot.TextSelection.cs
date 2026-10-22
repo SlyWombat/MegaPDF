@@ -126,7 +126,14 @@ internal static partial class Screenshot
         Check("  no editor opened", !view.HasActiveEditorForTest);
         Check("  it is drawn: one highlight per line selected", view.SelectionRectsShownForTest(0) == 6);
         Check("  and the menu's Copy is on, with no reason shown", view.TextMenuStateForTest() == (true, false));
+        // Narrator is told what was selected, once the release has settled it (#710).
+        await view.TextAnnouncementForTest;
+        Check("the release announces the selection: \"Selected: \" and its first 80 characters",
+              view.LastAnnouncement == Strings.TextSelectionAnnounced(
+                  "Left two bravo and more Left three charlie Left four delta Left five echo Right\u2026"));
+        Console.Error.WriteLine($"  announced: {view.LastAnnouncement}");
         Check("Copy succeeds", await view.CopySelectedTextAsync());
+        Check("  and the copy announces \"Copied\"", view.LastAnnouncement == Strings.TextCopiedAnnounced);
         var copied = await ClipboardText();
         Console.Error.WriteLine($"  clipboard: {Shown(copied)}");
         Check("the clipboard runs down the left column and then the right, with CR LF line ends",
@@ -136,6 +143,11 @@ internal static partial class Screenshot
 
         // --- the keyboard: Shift+Right one character, Escape lets go ---
         Check("Shift+Right extends the selection by a character", view.StepTextSelectionForTest(+1));
+        Check("  and says nothing yet: the keys are debounced", view.LastAnnouncement == Strings.TextCopiedAnnounced);
+        Check("  then, 300 ms after the last key, it announces the selection",
+              await UntilAsync(() => view.LastAnnouncement != Strings.TextCopiedAnnounced, 3)
+              && view.LastAnnouncement == Strings.TextSelectionAnnounced(
+                  "Left two bravo and more Left three charlie Left four delta Left five echo Right\u2026"));
         await view.CopySelectedTextAsync();
         var stepped = await ClipboardText();
         Console.Error.WriteLine($"  clipboard: {Shown(stepped)}");
@@ -161,6 +173,8 @@ internal static partial class Screenshot
         await view.ClickForTest(0, charlie);
         Console.Error.WriteLine($"  the first click's editor took {Environment.TickCount64 - clickStarted} ms to open (open: {view.HasActiveEditorForTest})");
         Check("a double-click on a word selects it", view.DoubleClickForTest(0, charlie) && view.HasTextSelection);
+        await view.TextAnnouncementForTest;
+        Check("  and announces the word", view.LastAnnouncement == Strings.TextSelectionAnnounced("charlie"));
         Check("  and the editor its first click opened is gone, with nothing changed", !view.HasActiveEditorForTest && !tab.HasUnsavedChanges);
         await view.CopySelectedTextAsync();
         Check("  the clipboard holds that word", (await ClipboardText()) == "charlie");
@@ -187,12 +201,44 @@ internal static partial class Screenshot
         Check("  and both pages show their share of it", view.SelectionRectsShownForTest(0) == 1 && view.SelectionRectsShownForTest(1) >= 1);
 
         Check("Ctrl+A selects the whole document", view.SelectAllText() && view.HasTextSelection);
+        await view.TextAnnouncementForTest;
+        Check("  and announces its first 80 characters",
+              view.LastAnnouncement == Strings.TextSelectionAnnounced(
+                  "Selection Columns Left one alpha Left two bravo and more Left three charlie Left\u2026"));
         await view.CopySelectedTextAsync();
         var all = await ClipboardText() ?? "";
         Check("  and copies both pages, ligatures expanded and line-end hyphens kept",
               all.StartsWith("Selection Columns\r\nLeft one alpha\r\n", StringComparison.Ordinal)
               && all.Contains("Right five kilo\r\nThe final flow test\r\nWe test hyphen-\r\nation here.", StringComparison.Ordinal)
               && all.EndsWith("known word.", StringComparison.Ordinal));
+
+        // --- a drag held still past the bottom edge goes on scrolling and selecting (#710) ---
+        // The pointer sends nothing while it is still, so only a timer can do it. The moves that
+        // brought the pointer there scrolled once each; the baseline is taken after the last of
+        // them, and what happens over the next 500 ms with NO further sample is the timer's.
+        view.PressSelectionKeyForTest(Windows.System.VirtualKey.Escape);
+        view.ScrollPagesToTopForTest();
+        await Task.Delay(300);
+        Check($"the pages can scroll (room: {view.PagesScrollableHeightForTest:0} DIP)", view.PagesScrollableHeightForTest > 200);
+        Check("a drag taken 40 DIP below the pages is a selection",
+              await view.HoldDragPastBottomForTest(0, new PdfPoint(lines[2].X + 0.5, Mid(lines[2]).Y), belowViewportDip: 40));
+        await Task.Delay(100);
+        var heldBaseline = view.PagesScrollOffsetForTest;
+        await Task.Delay(500);
+        var heldAfter = view.PagesScrollOffsetForTest;
+        Console.Error.WriteLine($"  held still for 500 ms: offset {heldBaseline:0} -> {heldAfter:0} DIP; the selection ends on page {(view.TextSelectionFocusPageForTest ?? -1) + 1}");
+        Check("  held still for 500 ms, the pages kept scrolling", heldAfter > heldBaseline + 20);
+        Check("  and the selection's end moved onto page 2", view.TextSelectionFocusPageForTest == 1);
+        Check("  the release lets go, and the timer with it", view.ReleaseHeldDragForTest() && !view.IsTextAutoScrollRunningForTest);
+        // The last tick's ChangeView may still be on its way to the scroller when the release lands:
+        // let that one settle, then nothing else may move the pages.
+        await Task.Delay(150);
+        var stopped = view.PagesScrollOffsetForTest;
+        await Task.Delay(250);
+        Check("  and the pages stay where they stopped", view.PagesScrollOffsetForTest == stopped);
+        view.PressSelectionKeyForTest(Windows.System.VirtualKey.Escape);
+        view.ScrollPagesToTopForTest();
+        await Task.Delay(300);
 
         // --- an armed tool keeps its drag ---
         tab.IsWhiteoutMode = true;

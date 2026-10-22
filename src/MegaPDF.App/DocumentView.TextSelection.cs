@@ -35,6 +35,12 @@ namespace MegaPDF.App;
 ///
 /// A document whose author asked that nothing be copied out of it still selects. Copy is
 /// disabled in the menu, which says why, and Ctrl+C raises the notice that says the same.
+///
+/// Narrator is told what was selected (#710): when a selection settles — the pointer released after
+/// a drag, a double-click, Ctrl+A, and a pause of 300 ms after Shift+arrows — "Selected: " and the
+/// first 80 characters, and "Copied" after a copy, both through <see cref="Announce"/>. A drag held
+/// past the top or bottom of the pages goes on scrolling and extending on a 30 ms timer, though the
+/// pointer sends nothing while it is still.
 /// </summary>
 public sealed partial class DocumentView
 {
@@ -89,6 +95,11 @@ public sealed partial class DocumentView
 
     private void InitializeTextSelection()
     {
+        _unhook.Add(() =>
+        {
+            StopTextAutoScroll();
+            _stepAnnounceTimer?.Stop();
+        });
         var vm = ViewModel;
         Action<(int First, int Last)?, (int First, int Last)?> onChanged = (before, after) =>
         {
@@ -230,11 +241,26 @@ public sealed partial class DocumentView
         if (_textPress is not { } press || sample.PointerId != press.PointerId)
             return false;
         _textPress = null;
+        StopTextAutoScroll();
         if (!press.Dragging)
             return false;
         if (sample.Pointer is { } pointer)
             press.Canvas.ReleasePointerCapture(pointer);
+        _ = AnnounceTextSelectionAsync();
         return true;
+    }
+
+    /// <summary>
+    /// The drag lost its pointer capture (another window took it, or the system did): it cannot
+    /// go on, so the auto-scroll stops and what was selected so far is where it settles.
+    /// </summary>
+    private void OnPagePointerCaptureLost(object sender, PointerRoutedEventArgs e)
+    {
+        if (_textPress is not { Dragging: true } press || e.Pointer.PointerId != press.PointerId)
+            return;
+        _textPress = null;
+        StopTextAutoScroll();
+        _ = AnnounceTextSelectionAsync();
     }
 
     /// <summary>
@@ -283,13 +309,82 @@ public sealed partial class DocumentView
         ViewModel.TextSelection.ExtendTo(new PdfTextPosition(page, caret));
     }
 
-    /// <summary>A drag held past the top or bottom of the pages scrolls them, by how far past it is.</summary>
+    /// <summary>How often a held drag scrolls and extends when the pointer sends nothing (#710).</summary>
+    private static readonly TimeSpan AutoScrollInterval = TimeSpan.FromMilliseconds(30);
+
+    private Microsoft.UI.Dispatching.DispatcherQueueTimer? _autoScrollTimer;
+
+    /// <summary>Where the pointer last was, in the scroller's own coordinates: those do not move as the pages scroll under it.</summary>
+    private Point _autoScrollPointer;
+
+    /// <summary>
+    /// How far past the top or bottom of the pages the pointer is, in DIPs (negative above, positive
+    /// below), or 0 inside them.
+    /// </summary>
+    private double OvershootOf(Point inScroller) =>
+        inScroller.Y < 0 ? inScroller.Y
+        : inScroller.Y > PagesScroll.ViewportHeight ? inScroller.Y - PagesScroll.ViewportHeight
+        : 0;
+
+    /// <summary>
+    /// A drag held past the top or bottom of the pages scrolls them, by how far past it is. A
+    /// pointer held still past the edge sends no moves, so the first one that finds it there
+    /// starts a timer which goes on doing the same (#710); it stops when the pointer is back
+    /// inside, on release, on capture loss, and when the pages can scroll no further.
+    /// </summary>
     private void AutoScrollForDrag(PointerSample sample)
     {
-        var y = sample.PositionOn(PagesScroll).Y;
-        var over = y < 0 ? y : y > PagesScroll.ViewportHeight ? y - PagesScroll.ViewportHeight : 0;
-        if (over != 0)
-            PagesScroll.ChangeView(null, PagesScroll.VerticalOffset + over, null, disableAnimation: true);
+        _autoScrollPointer = sample.PositionOn(PagesScroll);
+        var over = OvershootOf(_autoScrollPointer);
+        if (over == 0)
+        {
+            StopTextAutoScroll();
+            return;
+        }
+        PagesScroll.ChangeView(null, PagesScroll.VerticalOffset + over, null, disableAnimation: true);
+        if (_autoScrollTimer is null)
+        {
+            _autoScrollTimer = DispatcherQueue.CreateTimer();
+            _autoScrollTimer.Interval = AutoScrollInterval;
+            _autoScrollTimer.IsRepeating = true;
+            _autoScrollTimer.Tick += (_, _) => OnTextAutoScrollTick();
+        }
+        if (!_autoScrollTimer.IsRunning)
+            _autoScrollTimer.Start();
+    }
+
+    private void StopTextAutoScroll() => _autoScrollTimer?.Stop();
+
+    internal bool IsTextAutoScrollRunningForTest => _autoScrollTimer is { IsRunning: true };
+
+    private void OnTextAutoScrollTick()
+    {
+        if (_textPress is not { Dragging: true } press)
+        {
+            StopTextAutoScroll();
+            return;
+        }
+        var over = OvershootOf(_autoScrollPointer);
+        if (over == 0)
+        {
+            StopTextAutoScroll();
+            return;
+        }
+        // The point under the remembered pointer, as the layout has it now: the pages have moved
+        // under a pointer that has not.
+        var held = _autoScrollPointer;
+        var sample = new PointerSample(element => PagesScroll.TransformToVisual(element).TransformPoint(held),
+                                       press.PointerId, true, false, null);
+        var (page, point) = PagePointUnder(sample, ViewModel.TextSelection.Focus?.PageIndex ?? press.Page);
+        ExtendTextSelectionTo(page, point);
+        var before = PagesScroll.VerticalOffset;
+        var atEnd = over < 0 ? before <= 0.5 : before >= PagesScroll.ScrollableHeight - 0.5;
+        if (atEnd)
+        {
+            StopTextAutoScroll();
+            return;
+        }
+        PagesScroll.ChangeView(null, before + over, null, disableAnimation: true);
     }
 
     /// <summary>
@@ -346,6 +441,7 @@ public sealed partial class DocumentView
         ViewModel.TextSelection.Select(new PdfTextPosition(pageView.Index, word.Start),
                                        new PdfTextPosition(pageView.Index, word.End));
         ParkFocusForSelection();
+        _ = AnnounceTextSelectionAsync();
         return true;
     }
 
@@ -407,6 +503,44 @@ public sealed partial class DocumentView
         ViewModel.TextSelection.Step(delta, ViewModel.Pages.Count, Length);
         if (ViewModel.TextSelection.Focus is { } focus)
             EnsurePageVisible(focus.PageIndex);
+        // Each press of Shift+arrow moves the end by one character; Narrator hears the selection
+        // once the keys pause, not once per character.
+        if (_stepAnnounceTimer is null)
+        {
+            _stepAnnounceTimer = DispatcherQueue.CreateTimer();
+            _stepAnnounceTimer.Interval = StepAnnounceDelay;
+            _stepAnnounceTimer.IsRepeating = false;
+            _stepAnnounceTimer.Tick += (_, _) => _ = AnnounceTextSelectionAsync();
+        }
+        _stepAnnounceTimer.Stop();
+        _stepAnnounceTimer.Start();
+    }
+
+    /// <summary>The pause after the last Shift+arrow before the selection is announced.</summary>
+    private static readonly TimeSpan StepAnnounceDelay = TimeSpan.FromMilliseconds(300);
+
+    private Microsoft.UI.Dispatching.DispatcherQueueTimer? _stepAnnounceTimer;
+
+    private int _textAnnounceGeneration;
+
+    /// <summary>The announcement in flight, for the self-test to wait on.</summary>
+    private Task _textAnnouncement = Task.CompletedTask;
+
+    internal Task TextAnnouncementForTest => _textAnnouncement;
+
+    /// <summary>
+    /// A selection has settled: say "Selected: " and its first 80 characters (#710). The text is
+    /// read off the UI thread; if the selection moved, was let go of, or was copied meanwhile,
+    /// this one is stale and says nothing.
+    /// </summary>
+    private Task AnnounceTextSelectionAsync() => _textAnnouncement = AnnounceTextSelectionCoreAsync();
+
+    private async Task AnnounceTextSelectionCoreAsync()
+    {
+        var generation = ++_textAnnounceGeneration;
+        if (await ViewModel.ReadSelectionPreviewAsync() is not { } preview || generation != _textAnnounceGeneration)
+            return;
+        Announce(Strings.TextSelectionAnnounced(preview));
     }
 
     private void EnsurePageVisible(int page)
@@ -426,6 +560,7 @@ public sealed partial class DocumentView
         Deselect();
         ViewModel.TextSelection.SelectAll(ViewModel.Pages.Count);
         ParkFocusForSelection();
+        _ = AnnounceTextSelectionAsync();
         return true;
     }
 
@@ -461,6 +596,7 @@ public sealed partial class DocumentView
             // round trip. The package that would have gone on it is kept here instead, and
             // the self-test reads it back from here.
             AutomationClipboard = package;
+            AnnounceCopied();
             return true;
         }
         try
@@ -474,7 +610,16 @@ public sealed partial class DocumentView
             // Another app holds the clipboard open; the copy simply did not happen.
             return false;
         }
+        AnnounceCopied();
         return true;
+    }
+
+    /// <summary>"Copied" (#710). It supersedes a selection announcement still being read.</summary>
+    private void AnnounceCopied()
+    {
+        _textAnnounceGeneration++;
+        _stepAnnounceTimer?.Stop();
+        Announce(Strings.TextCopiedAnnounced);
     }
 
     /// <summary>The page's right-click menu: Copy and Select all, and why Copy is off when the document asks.</summary>
@@ -654,6 +799,45 @@ public sealed partial class DocumentView
         var dragged = EndTextPress(At(end, Dip(to), false));
         return dragged;
     }
+
+    /// <summary>
+    /// A press at <paramref name="from"/> on <paramref name="fromPage"/>, then moves that end
+    /// <paramref name="belowViewportDip"/> DIPs below the pages' viewport, and then NOTHING: the
+    /// pointer is held still past the edge, as a hand holds it (#710). The readings are given in
+    /// the scroller's own coordinates, so they stay put as the pages scroll under them. Ends with
+    /// <see cref="ReleaseHeldDragForTest"/>. True when the press became a selection drag.
+    /// </summary>
+    internal async Task<bool> HoldDragPastBottomForTest(int fromPage, PdfPoint from, double belowViewportDip, int steps = 8)
+    {
+        if (FindPageCanvas(fromPage) is not { } start)
+            return Refuse("the page is not on screen");
+        PointerSample Live(Point inScroller, bool pressed) => new(
+            element => PagesScroll.TransformToVisual(element).TransformPoint(inScroller), 1, pressed, false, null);
+
+        var dipPerPoint = 1 / PointsPerDip;
+        var from0 = start.TransformToVisual(PagesScroll).TransformPoint(new Point(from.X * dipPerPoint, from.Y * dipPerPoint));
+        var to0 = new Point(from0.X, PagesScroll.ViewportHeight + belowViewportDip);
+        _textGestureSwallowsTap = false;
+        if (!TryBeginTextPress(start, Live(from0, true), shift: false, out _))
+            return false;
+        for (var i = 1; i <= steps; i++)
+        {
+            var t = (double)i / steps;
+            TrackTextPress(start, Live(new Point(from0.X + (to0.X - from0.X) * t, from0.Y + (to0.Y - from0.Y) * t), true));
+            await Task.Delay(16);
+        }
+        return _textPress is { Dragging: true };
+    }
+
+    /// <summary>The release that ends <see cref="HoldDragPastBottomForTest"/>.</summary>
+    internal bool ReleaseHeldDragForTest() =>
+        _textPress is { } press && EndTextPress(new PointerSample(_ => default, press.PointerId, false, false, null));
+
+    internal double PagesScrollOffsetForTest => PagesScroll.VerticalOffset;
+
+    internal double PagesScrollableHeightForTest => PagesScroll.ScrollableHeight;
+
+    internal int? TextSelectionFocusPageForTest => ViewModel.TextSelection.Focus?.PageIndex;
 
     /// <summary>A plain click as a mouse makes it — press, no movement, release, then the Tapped — for the self-test.</summary>
     internal async Task ClickForTest(int pageIndex, PdfPoint point)
