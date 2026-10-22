@@ -293,4 +293,44 @@ enum ExportSheet {
         }
         return nil
     }
+
+    /// The app's own completion **notice** after a save from the sheet (#631): "Saved" and
+    /// "Exported" are the self-clearing banner now, not an alert to tap OK on. Returns a failure
+    /// message, or nil once the banner says `expected`.
+    ///
+    /// The tests pin notices (`-uiTestPinNotices`), so the banner outlives the poll, and the
+    /// label is what tells one export from the next. An alert is a failure here, not something
+    /// to wait through: "Save failed ..." and "Couldn't ..." are still alerts, and so is "Saved"
+    /// with a redaction summary, which these documents never carry. Answers the sheet's own
+    /// "Keep Both" on the way, as `completionAlert` does.
+    static func completionNotice(in app: XCUIApplication, expected: String,
+                                 timeout: TimeInterval = 60) -> String? {
+        let deadline = Date().addingTimeInterval(timeout)
+        let banner = app.staticTexts["noticeBanner"]
+        let alert = app.alerts.firstMatch
+        var lastBanner: String?
+        while Date() < deadline {
+            if PageInput.present(alert) {
+                let keepBoth = alert.buttons["Keep Both"]
+                if PageInput.present(keepBoth) {
+                    print("PAGE INPUT: the export sheet asked to replace; Keep Both")
+                    keepBoth.tap()
+                    continue
+                }
+                let texts = alert.staticTexts.allElementsBoundByIndex.map(\.label)
+                return "an alert came where the \"\(expected)\" notice was expected: \(texts)"
+            }
+            if let snapshot = try? banner.snapshot() {
+                lastBanner = snapshot.label
+                if snapshot.label == expected { return nil }
+            }
+            let keepBoth = app.buttons["Keep Both"].firstMatch
+            if PageInput.present(keepBoth) { keepBoth.tap() }
+            Thread.sleep(forTimeInterval: 0.25)
+        }
+        if let lastBanner {
+            return "the notice said \"\(lastBanner)\", not \"\(expected)\", in \(Int(timeout)) s"
+        }
+        return "no \"\(expected)\" notice in \(Int(timeout)) s"
+    }
 }

@@ -188,13 +188,20 @@ square → body-text line → empty page (scanned hint).
 | 6.4 | The three layout-refusal notices: moving text elsewhere · making other parts look different · disturbing the layout |
 | 6.5 | "Document unlocked." |
 | 6.6 | "… removed." / "… changed." / "… set." after a protection change |
+| 6.7 | "Saved" — after Save and Save a copy (#631; was a modal alert) |
+| 6.8 | "Signature added" — after a drawn, typed or photographed signature is stored (#631). On the iPhone the library sheet covers the banner; the new card is the visible confirmation, and VoiceOver hears the notice. |
+| 6.19 | "Exported" — after Export as Markdown (#631) |
+
+Every notice is also spoken to VoiceOver as a queued announcement (`ViewerModel.speakNotice`, #631); before that the banner was silent.
+
+**"Saved" and "Exported" stay modal alerts, with OK, when a redaction summary rides along** (#276, #279, #631): what a redaction permanently removed is acknowledged once, with the summary under the title. That covers Save, Save a copy and Export as Markdown after "Mark for redaction"; a cancelled Markdown export after a redaction raises the summary alert on its own.
 
 ### Status messages — these are **modal alerts with OK**, not toasts
 
+Failures (every "Couldn't …" and "Save failed …") and the two tap instructions stay here.
+
 | # | Message |
 |---|---|
-| 6.7 | "Saved" |
-| 6.8 | "Signature added" |
 | 6.9 | "Tap the page where the text should go" |
 | 6.10 | "Tap the page where the signature should go" |
 | 6.11 | "This text was added by an older version and can't be edited here." |

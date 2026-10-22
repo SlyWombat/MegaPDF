@@ -15,6 +15,8 @@ final class MarkdownExportUITests: XCTestCase {
         app.launchArguments += ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
         // So `DocumentOpening.wait` waits for the open to finish, not just for the page (#706).
         app.launchArguments += [PageInput.launchArgument]
+        // The "Exported" confirmation is a self-clearing banner (#631); pinned, it outlives the wait.
+        app.launchArguments += ["-uiTestPinNotices"]
     }
 
     /// One page, one line of real text -- enough for the Markdown writer to have something to
@@ -78,12 +80,8 @@ final class MarkdownExportUITests: XCTestCase {
 
         exportMarkdown()
 
-        guard let alert = ExportSheet.completionAlert(in: app) else {
-            XCTFail(dump("no completion alert"))
-            return
+        if let failure = ExportSheet.completionNotice(in: app, expected: "Exported") {
+            XCTFail(dump(failure))
         }
-        XCTAssertTrue(alert.staticTexts["Exported"].waitForExistence(timeout: 5),
-                      dump("the completion alert did not say \"Exported\""))
-        alert.buttons.firstMatch.tap()
     }
 }

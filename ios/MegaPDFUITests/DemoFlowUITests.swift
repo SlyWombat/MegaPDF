@@ -220,10 +220,10 @@ final class DemoFlowUITests: XCTestCase {
         app.buttons["Draw"].firstMatch.tap(); pause(1.5)
         drawSignature(app); pause(1.0)
         lastButton(app, "Save").tap(); pause(1.0)
-        // Saving closes the library and confirms with a "Signature added" alert;
-        // read it, dismiss it, then open the library again to pick the entry.
-        let added = app.alerts.firstMatch
-        if added.waitForExistence(timeout: 3) { pause(1.2); added.buttons.firstMatch.tap() }
+        // Saving closes the library and confirms with a "Signature added" notice (#631), which
+        // clears itself; give the recording the moment it used to spend on the alert, then open
+        // the library again to pick the entry.
+        pause(1.2)
         pause(0.8)
         app.buttons["Sign"].firstMatch.tap(); pause(1.5)
         let drawn = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Signature'")).firstMatch
