@@ -964,7 +964,9 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                 BusyLabel.SHRINKING, locks = true, cancel = { stoppedByUser = true; cancel.cancel() },
             )
             val source = File(app.cacheDir, "shrink-src-${System.nanoTime()}.pdf")
-            val target = File(shareDirectory(app.cacheDir), shrinkFileName(name, str(R.string.shrink_file_name)))
+            // The raw pattern, through getString's one-argument overload: [str] always formats,
+            // and "%1$s - smaller" formatted with nothing throws MissingFormatArgumentException.
+            val target = File(shareDirectory(app.cacheDir), shrinkFileName(name, app.getString(R.string.shrink_file_name)))
             var copy: PdfDocument? = null
             var offered = false
             try {
