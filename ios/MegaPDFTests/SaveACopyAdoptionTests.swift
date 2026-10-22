@@ -243,7 +243,8 @@ final class SaveACopyAdoptionTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: opened) }
         try await markAndApply(model)
 
-        let staged = try XCTUnwrap(await model.exportMarkdownFile(named: "Redacted.md"))
+        let exported = await model.exportMarkdownFile(named: "Redacted.md")
+        let staged = try XCTUnwrap(exported)
         let written = try sheetWrites(staged, as: "Redacted.md")
         defer { try? FileManager.default.removeItem(at: written.deletingLastPathComponent()) }
         model.finishMarkdownExport(saved: true)
@@ -259,7 +260,8 @@ final class SaveACopyAdoptionTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: opened) }
         try await markAndApply(model)
 
-        _ = try XCTUnwrap(await model.exportMarkdownFile(named: "Redacted.md"))
+        let exported = await model.exportMarkdownFile(named: "Redacted.md")
+        _ = try XCTUnwrap(exported)
         model.finishMarkdownExport(saved: false)
 
         XCTAssertNotNil(model.redactionSummary, "the redaction happened, so it is reported")
@@ -272,7 +274,8 @@ final class SaveACopyAdoptionTests: XCTestCase {
         let (model, opened) = try await openModel()
         defer { try? FileManager.default.removeItem(at: opened) }
 
-        let staged = try XCTUnwrap(await model.exportMarkdownFile(named: "Plain.md"))
+        let exported = await model.exportMarkdownFile(named: "Plain.md")
+        let staged = try XCTUnwrap(exported)
         let written = try sheetWrites(staged, as: "Plain.md")
         defer { try? FileManager.default.removeItem(at: written.deletingLastPathComponent()) }
         model.finishMarkdownExport(saved: true)
