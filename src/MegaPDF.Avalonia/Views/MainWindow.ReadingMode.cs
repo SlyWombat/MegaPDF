@@ -416,7 +416,20 @@ public partial class MainWindow
         if (ReadingAnnouncement.Text == text)
             ReadingAnnouncement.Text = "";
         ReadingAnnouncement.Text = text;
+        // The live region reaches Windows and Linux screen readers and is silent on the Mac:
+        // Avalonia's native layer posts no accessibility notification for it, so VoiceOver never
+        // spoke "Reading mode on" (since 2.2), "Selected: ..." or "Copied" (#778). AppKit's own
+        // announcement request is what VoiceOver listens for.
+        NativeAnnouncer?.Invoke(text);
     }
+
+    /// <summary>
+    /// What <see cref="Announce"/> hands the platform's own announcement path on top of the live
+    /// region: on the Mac, AppKit's announcement request (<c>MacApplication.PostAnnouncement</c>);
+    /// nothing elsewhere. A property so a headless check can see what was handed over (#778).
+    /// </summary>
+    internal Action<string>? NativeAnnouncer { get; set; } =
+        OperatingSystem.IsMacOS() ? text => Platform.MacApplication.PostAnnouncement(text) : null;
 
     // --- Page colours (#511) -------------------------------------------------
 

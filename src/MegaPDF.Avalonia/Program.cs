@@ -5384,6 +5384,8 @@ internal static class Program
                       && window.PageStripHost.IsVisible
                       && !window.IsReadingMode);
 
+                var readingPosted = new List<string>();
+                window.NativeAnnouncer = text => readingPosted.Add(text);
                 window.ToggleReadingMode();
                 Pump();
 
@@ -5401,6 +5403,8 @@ internal static class Program
                 check("  the floating pill is up", window.ReadingPill.IsVisible);
                 check($"  and the change is announced (\"{window.ReadingAnnouncementText}\")",
                       window.ReadingAnnouncementText == Strings.ReadingModeOn);
+                check("  and the platform's own announcement path is handed it too (VoiceOver, #778)",
+                      readingPosted.Count == 1 && readingPosted[0] == Strings.ReadingModeOn);
 
                 // The invariant from the plan's §1: same page, same zoom, same offset.
                 check($"  same zoom ({vm.Zoom:0.##}), same page ({vm.CurrentPage}), same scroll offset",
@@ -5416,6 +5420,8 @@ internal static class Program
                 check("  the pill is gone with it", !window.ReadingPill.IsVisible);
                 check($"  and that is announced too (\"{window.ReadingAnnouncementText}\")",
                       window.ReadingAnnouncementText == Strings.ReadingModeOff);
+                check("  and so is that",
+                      readingPosted.Count == 2 && readingPosted[1] == Strings.ReadingModeOff);
                 check("  still the same zoom, page and offset",
                       Math.Abs(vm.Zoom - zoom) < 0.001 && vm.CurrentPage == page
                       && window.PageScroller.Offset == offset);
@@ -6593,6 +6599,13 @@ internal static class Program
                 return window.AnnouncementForTest;
             }
 
+            // What Announce hands the platform's own announcement path (#778). On the Mac that path is
+            // AppKit's announcement request, the only thing VoiceOver speaks; here it is recorded
+            // instead of posted, so this headless check sees the words that would be spoken. Real
+            // speech is proved separately, with VoiceOver's caption panel.
+            var posted = new List<string>();
+            window.NativeAnnouncer = text => posted.Add(text);
+
             // --- the Mac's own selected-text colour is the fill (#710) ---
             var fill = window.TextSelectionFillForTest;
             Console.WriteLine($"  the selection fill: {fill?.ToString() ?? "(none)"} (alpha {fill?.A})");
@@ -6604,6 +6617,10 @@ internal static class Program
                 check("on the Mac, AppKit gave the selected-text colour", system is not null);
                 check("  and it is the fill, at the usual alpha",
                       system is { } sys && fill is { } f && f.R == sys.R && f.G == sys.G && f.B == sys.B);
+                // The one thing the recorder above cannot see: that AppKit's three constants resolve by
+                // name and the post goes through (#778). Whether VoiceOver then says it is the caption run's.
+                check("on the Mac, AppKit accepts an announcement request, and an empty one is declined",
+                      Platform.MacApplication.PostAnnouncement("MegaPDF self-test") && !Platform.MacApplication.PostAnnouncement(""));
             }
 
             // --- a drag across the two columns ---
@@ -6619,8 +6636,12 @@ internal static class Program
             check("the release announces the selection: \"Selected: \" and its first 80 characters",
                   Announced() == Strings.TextSelectionAnnounced(FirstEighty));
             Console.WriteLine($"  announced: {window.AnnouncementForTest}");
+            check("  and the platform's own announcement path is handed the same words (VoiceOver, #778)",
+                  posted.Count == 1 && posted[0] == Strings.TextSelectionAnnounced(FirstEighty));
             var copied = Copied();
             check("  and the copy announces \"Copied\"", window.AnnouncementForTest == Strings.TextCopiedAnnounced);
+            check("  to the platform's own path too, after the selection and nothing else",
+                  posted.Count == 2 && posted[1] == Strings.TextCopiedAnnounced);
             Console.WriteLine($"  clipboard: {Shown(copied)}");
             check("the clipboard runs down the left column and then the right, with LF line ends",
                   copied == "Left two bravo and more\nLeft three charlie\nLeft four delta\nLeft five echo\nRight one golf\nRight two hotel");
@@ -6678,6 +6699,7 @@ internal static class Program
             SecondPress(0, charlie);
             check("a double-click on a word selects it", vm.HasTextSelection);
             check("  and announces the word", Announced() == Strings.TextSelectionAnnounced("charlie"));
+            check("  to the platform's own path too", posted.LastOrDefault() == Strings.TextSelectionAnnounced("charlie"));
             check("  and the editor its first click opened is gone, nothing changed", !window.HasOpenInlineEditor && !vm.IsDirty);
             check("  the clipboard gets the word", Copied() == "charlie");
             Press(Key.Escape, PhysicalKey.Escape);
@@ -6738,6 +6760,9 @@ internal static class Program
             window.SelectAllCommand();
             check("Select All announces the first 80 characters of the document",
                   Announced() == Strings.TextSelectionAnnounced(
+                      "Selection Columns Left one alpha Left two bravo and more Left three charlie Left\u2026"));
+            check("  to the platform's own path too",
+                  posted.LastOrDefault() == Strings.TextSelectionAnnounced(
                       "Selection Columns Left one alpha Left two bravo and more Left three charlie Left\u2026"));
             var all = Copied() ?? "";
             check("Select All copies the whole document, ligatures expanded and line-end hyphens kept",
