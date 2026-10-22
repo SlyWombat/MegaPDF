@@ -95,6 +95,10 @@ struct FileSource {
 #endif
     unsigned long long length = 0;
     bool open = false;
+    // Bytes PDFium has read through FileSourceGetBlock (megapdf_testing_bytes_read, #698).
+    // Plain, not atomic: every PDFium call, and so every read, holds the core lock, and the
+    // struct is copied by value in megapdf_read_from_copy().
+    unsigned long long bytes_read = 0;
 };
 
 // A redaction mark (#173, contract 8). The core's own: never a page object, so a document
@@ -502,7 +506,9 @@ bool FileSourceRead(FileSource* s, unsigned long long pos, unsigned char* buf, s
 int FileSourceGetBlock(void* param, unsigned long position, unsigned char* buf, unsigned long size) {
     auto* s = static_cast<FileSource*>(param);
     if (s == nullptr || !s->open || buf == nullptr || size == 0) return 0;
-    return FileSourceRead(s, position, buf, static_cast<size_t>(size)) ? 1 : 0;
+    if (!FileSourceRead(s, position, buf, static_cast<size_t>(size))) return 0;
+    s->bytes_read += size;
+    return 1;
 }
 
 // Fills in the length and wires up the callback once the handle is open. False, with
@@ -3235,6 +3241,11 @@ MEGAPDF_API void megapdf_testing_set_page_check_hook(megapdf_page_check_stage_ho
 
 MEGAPDF_API void megapdf_testing_set_max_file_bytes(unsigned long long bytes) {
     g_testing_max_file_bytes.store(bytes);
+}
+
+MEGAPDF_API unsigned long long megapdf_testing_bytes_read(const megapdf_document* doc) {
+    Guard guard(CoreLock());
+    return doc != nullptr ? doc->source.bytes_read : 0;
 }
 
 MEGAPDF_API megapdf_cancel* megapdf_cancel_new(void) {

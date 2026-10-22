@@ -26,6 +26,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <initializer_list>
 #include <iterator>
 #include <map>
 #include <set>
@@ -5008,72 +5009,125 @@ void test_large_image_stand_ins() {
 // image cache in a usable form, so every render of its page inflated the whole stream again,
 // however small the render. The patch keeps a copy reduced towards the render size for the
 // page's life. Renders through the page handle must come out the same each time, show the
-// image's content, and after the first be far faster than decoding it.
+// image's content, and after the first be drawn from the page's image cache, which the test
+// sees as the image's stream not being read from the file again (#698). Counted, never timed:
+// a ratio of two wall-clock times on a shared runner measures the runner as much as the cache.
 void test_huge_image_render_cache() {
-    const int side = 5000;   // 75 MB of RGB decoded, over PDFium's 60 MB "huge image" line
-    OpenDoc d(big_image_pdf("q 612 0 0 792 0 0 cm /Im1 Do Q", 0, false, side));
-    OpenDoc fresh(big_image_pdf("q 612 0 0 792 0 0 cm /Im1 Do Q", 0, false, side));
-    check(d.doc != nullptr && fresh.doc != nullptr, "huge image cache: the page opens");
-    if (d.doc == nullptr || fresh.doc == nullptr) return;
-    Page p(d.doc, 0), q(fresh.doc, 0);
-    auto render = [](const megapdf_page* page, int w, int h, double* ms) {
-        std::vector<unsigned char> px(static_cast<size_t>(w) * h * 4);
-        const auto started = std::chrono::steady_clock::now();
-        const int rc = megapdf_render(page, px.data(), w, h, w * 4, MEGAPDF_RENDER_BGRA);
-        if (ms != nullptr) *ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count();
-        if (rc != MEGAPDF_OK) px.clear();
-        return px;
-    };
-    const int w = 306, h = 396;
-    double first_ms = 0, second_ms = 0, third_ms = 0;
-    const auto first = render(p.page, w, h, &first_ms);
-    const auto second = render(p.page, w, h, &second_ms);
-    const auto third = render(p.page, w, h, &third_ms);
-    check(!first.empty() && first == second && second == third, "huge image cache: repeated renders of the page are identical");
+    namespace fs = std::filesystem;
+    std::error_code ec;
+#if defined(_WIN32)
+    const long long pid = static_cast<long long>(_getpid());
+#else
+    const long long pid = static_cast<long long>(getpid());
+#endif
+    const fs::path dir = fs::temp_directory_path(ec) / ("megapdf-core-huge-image-" + std::to_string(pid));
+    fs::remove_all(dir, ec);
+    fs::create_directories(dir, ec);
+    check(!ec, "huge image cache: a scratch folder", ec.message());
 
-    // What the image holds: eight vertical grey bands, each 30 levels apart, darkening
-    // downwards by one level per 16 image rows (modulo 256).
-    int wrong = 0, sampled = 0;
-    for (int band = 0; band < 8 && !first.empty(); band++) {
-        for (int k = 1; k <= 5; k++) {
-            const int x = static_cast<int>((band + 0.5) * w / 8), y = k * h / 6;
-            const int row = static_cast<int>((y + 0.5) * side / h);
-            const int expected = (band * 30 + row / 16) % 256;
-            if (expected < 12 || expected > 243) continue;   // next to a wrap, where averaging mixes both sides
-            const unsigned char* px = &first[(static_cast<size_t>(y) * w + x) * 4];
-            sampled++;
-            if (std::abs(px[0] - expected) > 10 || std::abs(px[1] - expected) > 10 || std::abs(px[2] - expected) > 10) wrong++;
+    const int side = 5000;   // 75 MB of RGB decoded, over PDFium's 60 MB "huge image" line
+    const auto fixture = big_image_pdf("q 612 0 0 792 0 0 cm /Im1 Do Q", 0, false, side);
+    const fs::path file = dir / "huge-image.pdf";
+    {
+        std::ofstream out(file, std::ios::binary | std::ios::trunc);
+        out.write(reinterpret_cast<const char*>(fixture.data()), static_cast<std::streamsize>(fixture.size()));
+    }
+    {
+        // Opened from the file, not from memory: patch 0024 keeps the image's stream in the
+        // file, and only a document read through the core's own callback has its reads counted.
+        struct FileDoc {
+            megapdf_document* doc = nullptr;
+            explicit FileDoc(const std::string& path) : doc(megapdf_open_file(path.c_str(), nullptr)) {}
+            ~FileDoc() { megapdf_close(doc); }
+        };
+        FileDoc d(file.u8string());
+        OpenDoc fresh(fixture);   // only the pixel reference for large_fresh
+        check(d.doc != nullptr && fresh.doc != nullptr, "huge image cache: the page opens", megapdf_last_error_message());
+        if (d.doc != nullptr && fresh.doc != nullptr) {
+            Page p(d.doc, 0), q(fresh.doc, 0);
+            auto render = [](megapdf_document* doc, const megapdf_page* page, int w, int h, double* ms, unsigned long long* read) {
+                std::vector<unsigned char> px(static_cast<size_t>(w) * h * 4);
+                const unsigned long long before = megapdf_testing_bytes_read(doc);
+                const auto started = std::chrono::steady_clock::now();
+                const int rc = megapdf_render(page, px.data(), w, h, w * 4, MEGAPDF_RENDER_BGRA);
+                if (ms != nullptr) *ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count();
+                if (read != nullptr) *read = megapdf_testing_bytes_read(doc) - before;
+                if (rc != MEGAPDF_OK) px.clear();
+                return px;
+            };
+            const int w = 306, h = 396;
+            double first_ms = 0, second_ms = 0, third_ms = 0;
+            unsigned long long first_read = 0, second_read = 0, third_read = 0;
+            const auto first = render(d.doc, p.page, w, h, &first_ms, &first_read);
+            const auto second = render(d.doc, p.page, w, h, &second_ms, &second_read);
+            const auto third = render(d.doc, p.page, w, h, &third_ms, &third_read);
+            check(!first.empty() && first == second && second == third, "huge image cache: repeated renders of the page are identical");
+
+            // What the image holds: eight vertical grey bands, each 30 levels apart, darkening
+            // downwards by one level per 16 image rows (modulo 256).
+            int wrong = 0, sampled = 0;
+            for (int band = 0; band < 8 && !first.empty(); band++) {
+                for (int k = 1; k <= 5; k++) {
+                    const int x = static_cast<int>((band + 0.5) * w / 8), y = k * h / 6;
+                    const int row = static_cast<int>((y + 0.5) * side / h);
+                    const int expected = (band * 30 + row / 16) % 256;
+                    if (expected < 12 || expected > 243) continue;   // next to a wrap, where averaging mixes both sides
+                    const unsigned char* px = &first[(static_cast<size_t>(y) * w + x) * 4];
+                    sampled++;
+                    if (std::abs(px[0] - expected) > 10 || std::abs(px[1] - expected) > 10 || std::abs(px[2] - expected) > 10) wrong++;
+                }
+            }
+            check(sampled > 20 && wrong == 0, "huge image cache: the render shows the image's bands",
+                  std::to_string(wrong) + " of " + std::to_string(sampled) + " samples off");
+
+            // A larger render afterwards is not drawn from the smaller copy: the same as on a page
+            // that never rendered small.
+            double large_ms = 0;
+            unsigned long long large_read = 0;
+            const auto large = render(d.doc, p.page, 1224, 1584, &large_ms, &large_read);
+            const auto large_fresh = render(fresh.doc, q.page, 1224, 1584, nullptr, nullptr);
+            check(!large.empty() && large == large_fresh, "huge image cache: a larger render matches a page that never rendered small");
+
+            // Zooming out and back in again: the smaller render draws from the larger copy, and
+            // keeps it, so the larger render after it does not decode the image again.
+            double small_again_ms = 0, large_again_ms = 0;
+            unsigned long long small_again_read = 0, large_again_read = 0;
+            const auto small_again = render(d.doc, p.page, w, h, &small_again_ms, &small_again_read);
+            const auto large_again = render(d.doc, p.page, 1224, 1584, &large_again_ms, &large_again_read);
+            check(!small_again.empty() && !large_again.empty() && large_again == large,
+                  "huge image cache: zooming out and in again renders the same");
+
+            // PDFium patch 0024 keeps every stream of 64 KiB or more in the file, and this image's
+            // stream is about 1.2 MB: a render that decodes the image reads it all again, and one
+            // drawn from the page's image cache reads none of it. Counted, never timed (#698): a
+            // ratio of two wall-clock times on a shared runner failed on two runners at once. The
+            // timings below are for the log only; do not assert on them.
+            constexpr unsigned long long kDecodeReads = 64 * 1024;
+            std::printf("huge image cache: bytes read first %llu, again %llu/%llu, larger %llu, out %llu, in again %llu; "
+                        "ms %.0f, %.0f/%.0f, %.0f, %.0f, %.0f (PDFium patches %d)\n",
+                        first_read, second_read, third_read, large_read, small_again_read, large_again_read,
+                        first_ms, second_ms, third_ms, large_ms, small_again_ms, large_again_ms, MEGAPDF_PDFIUM_PATCHES);
+            if (MEGAPDF_PDFIUM_PATCHES >= 25) {
+                const auto read_list = [](std::initializer_list<unsigned long long> reads) {
+                    std::string out;
+                    for (const unsigned long long r : reads) out += (out.empty() ? "" : ", ") + std::to_string(r);
+                    return out + " bytes read";
+                };
+                check(first_read >= kDecodeReads, "huge image cache: the first render decodes the image from the file",
+                      read_list({first_read}));
+                check(second_read < kDecodeReads && third_read < kDecodeReads,
+                      "huge image cache: rendering the page again does not decode the image again (patch 0025)",
+                      read_list({second_read, third_read}));
+                check(large_read >= kDecodeReads,
+                      "huge image cache: a render larger than the kept copy decodes the image again (patch 0025)",
+                      read_list({large_read}));
+                check(small_again_read < kDecodeReads && large_again_read < kDecodeReads,
+                      "huge image cache: zooming out and in again does not decode the image again (patch 0025)",
+                      read_list({small_again_read, large_again_read}));
+            }
         }
     }
-    check(sampled > 20 && wrong == 0, "huge image cache: the render shows the image's bands",
-          std::to_string(wrong) + " of " + std::to_string(sampled) + " samples off");
-
-    // A larger render afterwards is not drawn from the smaller copy: the same as on a page
-    // that never rendered small.
-    double large_ms = 0;
-    const auto large = render(p.page, 1224, 1584, &large_ms);
-    const auto large_fresh = render(q.page, 1224, 1584, nullptr);
-    check(!large.empty() && large == large_fresh, "huge image cache: a larger render matches a page that never rendered small");
-
-    // Zooming out and back in again: the smaller render draws from the larger copy, and
-    // keeps it, so the larger render after it does not decode the image again.
-    double small_again_ms = 0, large_again_ms = 0;
-    const auto small_again = render(p.page, w, h, &small_again_ms);
-    const auto large_again = render(p.page, 1224, 1584, &large_again_ms);
-    check(!small_again.empty() && !large_again.empty() && large_again == large,
-          "huge image cache: zooming out and in again renders the same");
-
-    const double again_ms = std::min(second_ms, third_ms);
-    std::printf("huge image cache: first render %.0f ms, again %.0f ms; larger %.0f ms, out %.0f ms, in again %.0f ms (PDFium patches %d)\n",
-                first_ms, again_ms, large_ms, small_again_ms, large_again_ms, MEGAPDF_PDFIUM_PATCHES);
-    if (MEGAPDF_PDFIUM_PATCHES >= 25) {
-        check(again_ms * 4 < first_ms, "huge image cache: rendering the page again does not decode the image again (patch 0025)",
-              std::to_string(static_cast<int>(first_ms)) + " ms, then " + std::to_string(static_cast<int>(again_ms)) + " ms");
-        check(large_again_ms * 4 < large_ms && small_again_ms * 4 < large_ms,
-              "huge image cache: zooming out and in again does not decode the image again (patch 0025)",
-              std::to_string(static_cast<int>(large_ms)) + " ms, then " + std::to_string(static_cast<int>(small_again_ms)) + " and " +
-                  std::to_string(static_cast<int>(large_again_ms)) + " ms");
-    }
+    fs::remove_all(dir, ec);   // after the documents close, so the file is never deleted while open
 }
 
 // #137: megapdf_text_editable() caches its verdict per object, and a change to the page moves

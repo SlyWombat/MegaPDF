@@ -38,6 +38,14 @@ MEGAPDF_API int megapdf_testing_compare_pages(const megapdf_page* was, const meg
  */
 MEGAPDF_API void megapdf_testing_set_max_file_bytes(unsigned long long bytes);
 
+/**
+ * How many bytes PDFium has read from `doc`'s file since it was opened by megapdf_open_file()
+ * or megapdf_open_fd(); 0 for a document opened from memory, and for NULL. Patch 0024 keeps
+ * every stream of 64 KiB or more in the file, so a render that decodes a large image reads
+ * its whole stream again, and one served from the page's image cache reads none of it (#698).
+ */
+MEGAPDF_API unsigned long long megapdf_testing_bytes_read(const megapdf_document* doc);
+
 #ifdef __cplusplus
 }  /* extern "C" */
 #endif
