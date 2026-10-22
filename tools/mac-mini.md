@@ -207,6 +207,33 @@ recorded on a hosted runner. That duration is the tests' own cost, not runner
 load, so dedicated hardware does not restore their margin and does not close
 #599.
 
+**The standing runner against hosted, measured 2026-10-22 (#614 proof step 16).** Three
+dispatched hosted runs of the same workflow (`gh workflow run ios-ci.yml -f runner=hosted
+--ref main`), spread over one day because hosted timing moves hour to hour, beside every
+`build` job the mini ran in the last forty runs. Not same-SHA pairs: a merged head cannot be
+re-run on the mini after the fact, so the comparison is of the workflow, not of one commit.
+
+| runner | run | dispatched (EDT) | SHA | wait | job | Build and test | iPhone UI lane | iPad UI lane |
+|---|---|---|---|---|---|---|---|---|
+| hosted | [39818409951](https://github.com/SlyWombat/MegaPDF/actions/runs/39818409951) | 12:57 | a3111b4 | 3 s | 55 min 51 s | 364 s | 1090 s | 1000 s |
+| hosted | [39845022875](https://github.com/SlyWombat/MegaPDF/actions/runs/39845022875) | 16:00 | e709ac7 | 3 s | 53 min 33 s, **red** | 423 s | 961 s | 982 s, red |
+| hosted | [39868868578](https://github.com/SlyWombat/MegaPDF/actions/runs/39868868578) | 19:00 | e99d317 | 2 s | 47 min 59 s | 367 s | 925 s | 924 s |
+| mini, median of 29 | since 2026-10-21 15:50 UTC | | | **15 min** (1 s to 76 min) | **15 min 46 s** | 68 s | 421 s | 308 s |
+
+- **The compute is about 3.4 times faster on the mini** (job median 946 s against 3,213 s for
+  the three hosted runs), and the whole job is shorter than the hosted iPhone UI lane alone.
+- **The queue moved rather than vanished.** A dispatched hosted run starts at once; a hosted
+  run for a pull request waited 11 to 18 minutes on 2026-10-21 (two runs). The mini has one
+  slot, so its median wait is 15 minutes. Typical pull request: about 31 minutes on the mini
+  (15 queued, 16 running) against about 60 to 75 hosted.
+- **Hosted was red once in three.** Run 39845022875 failed
+  `ReadingModeUITests.testTheEdgeSwipeClosesTheFindBarFirstAndThenLeavesReadingMode` on the
+  iPad lane ("Find is unreachable from inside reading mode (#506)"); the same tests passed on
+  the mini for the same code. One occurrence, not diagnosed; the mini was green on 28 of its
+  29 jobs.
+- **Not recorded:** the mini's load average at the start of each job (the design asked for
+  it). The mini runs the agents' own builds too, so its numbers include that contention.
+
 **When macOS or Xcode moves (27).** The Mac is held on macOS 26.7.1 and Xcode
 26.6 until 27.2 at the earliest (house-network-ops#426, not before December).
 When that upgrade is scheduled:
