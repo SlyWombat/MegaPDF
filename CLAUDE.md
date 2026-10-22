@@ -127,16 +127,23 @@ registered, last job 2026-10-05. The standing-runner and launchd questions are #
 
 ## Localisation
 
-Three locales: `en`, `fr-CA`, `fr-FR`.
+Five locales: `en`, `fr-CA`, `fr-FR`, `es-419`, `es-ES`.
 
-- **fr-CA is hand-written. fr-FR is derived** by `tools/gen_strings.py`. Edit the Canadian
-  source and regenerate; **never hand-edit fr-FR.**
-- `docs/localisation-glossary.md` is binding. **Glossary merge conflicts are always resolved by
-  keeping BOTH sides' rows** — picking one side has lost real content.
-- Mark every new French string `FR-REVIEW #<issue>` in that platform's own idiom: an XML comment
-  on Android, the `comment` field on iOS (**never** `stringUnit.state`, which parity tests read).
-  Unmarked strings are invisible to the review that gates releases.
-- France needs a non-breaking space before `; ? !`. Verify **by code point** — U+00A0 and a plain
+- **fr-CA and es-419 are hand-written. fr-FR and es-ES are derived** by
+  `tools/gen_strings.py fr-fr es-es`. Edit the hand-written source and regenerate; **never
+  hand-edit a derived catalogue.** Where the files live differs by platform on purpose (desktops:
+  the neutral `es` is Latin American; phones: `es-419` is, and the neutral `es` is Spain).
+  `docs/localisation.md` has the table.
+- `docs/localisation-glossary.md` (French) and `docs/localisation-glossary-es.md` (Spanish) are
+  binding. **Glossary merge conflicts are always resolved by keeping BOTH sides' rows**, in either
+  file — picking one side has lost real content.
+- Mark every new French string `FR-REVIEW #<issue>` and every new Spanish string
+  `ES-REVIEW #<issue>`, in that platform's own idiom: an XML comment on Android, the `comment`
+  field on iOS (**never** `stringUnit.state`, which parity tests read). On iOS both live in the
+  key's one `comment` field; remove only your own sentence. Unmarked strings are invisible to the
+  review that gates releases.
+- France needs a non-breaking space before `; ? !`. **Spanish needs none, before anything,** and
+  opens questions and exclamations with `¿ ¡`. Verify both **by code point** — U+00A0 and a plain
   space are visually identical, which is how a bug survived a full audit.
 
 **The signature vocabulary rule, which has caused repeated rework.** Follow Adobe:
@@ -146,7 +153,9 @@ Three locales: `en`, `fr-CA`, `fr-FR`.
 - **digital signature** / **digital ID** — the certificate-backed kind. We do not implement it;
   we only detect and warn about one already in a document.
 - Never "encrypted" for either. In French never « chiffrement » in this context — two
-  independent authors reached for « celle du chiffrement » and both were wrong.
+  independent authors reached for « celle du chiffrement » and both were wrong. In Spanish the
+  words are **firma electrónica**, **firma digital** and **ID digital**, and never *cifrado*,
+  *cifrar* or *encriptado* for either kind.
 
 ## Testing
 

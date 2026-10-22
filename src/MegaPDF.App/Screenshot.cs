@@ -258,6 +258,13 @@ internal static partial class Screenshot
             case "about":
                 return await CheckAboutAsync(window);
 
+            // #724: every Latin American Spanish tag (es-MX, es-419) resolves, through MRT, to
+            // the neutral es catalogue, es-ES to its own, and the catalogue is really Spanish.
+            // Asks the resource manager directly, so it needs no --language and no packaged
+            // build. Needs a document (ApplyStateAsync's own guard); the exit code is the test.
+            case "language-es":
+                return CheckLanguageEs();
+
             // #696: the toolbar of the one tab opened at launch, before anything else has
             // touched Active. Needs a document; the exit code is the test.
             case "launch-toolbar":
@@ -293,6 +300,80 @@ internal static partial class Screenshot
                 Console.Error.WriteLine($"unknown --screenshot-state '{state}'");
                 return false;
         }
+    }
+
+    /// <summary>
+    /// Spanish on Windows (#724). The hand-written catalogue is the neutral <c>es</c> folder
+    /// and the derived one <c>es-ES</c>, because MRT and .NET fall back from es-MX, es-AR and
+    /// es-US to a neutral <c>es</c> and have no es-419 parent. Nothing but this proves that
+    /// fallback on the real resource manager: if MRT picked es-ES for a Mexican user, or
+    /// English for everybody, no unit test would notice.
+    ///
+    /// For every code key (no dot) in the English catalogue, MRT's answer is held against the
+    /// catalogue FILES, not against itself: es, es-MX and es-419 must read the neutral
+    /// catalogue's value and es-ES the derived one's. Comparing es-MX with es alone would pass
+    /// when both fell back to Spain. Then at least 90 % of what es reads differs from English,
+    /// which a whole-catalogue fallback to English would break, and at least one key differs
+    /// between the two Spanish folders, or the comparison could not tell them apart.
+    /// </summary>
+    private static bool CheckLanguageEs()
+    {
+        string? Find(string folder) => FindUpwards(Path.Combine("src", "MegaPDF.App", "Strings", folder, "Resources.resw"));
+        var englishPath = Find("en-US");
+        var neutralPath = Find("es");
+        var spainPath = Find("es-ES");
+        if (englishPath is null || neutralPath is null || spainPath is null)
+        {
+            Console.Error.WriteLine("language-es: FAIL: the en-US, es and es-ES catalogues were not all found above the executable");
+            return false;
+        }
+
+        static Dictionary<string, string> Read(string path) =>
+            System.Xml.Linq.XDocument.Load(path).Root!.Elements("data")
+                .ToDictionary(d => d.Attribute("name")!.Value, d => d.Element("value")?.Value ?? "");
+
+        var english = Read(englishPath);
+        var neutral = Read(neutralPath);
+        var spain = Read(spainPath);
+        var keys = english.Keys.Where(k => !k.Contains('.')).ToList();
+        var differing = 0;
+        var spainDiffers = 0;
+        foreach (var key in keys)
+        {
+            foreach (var tag in new[] { "es", "es-MX", "es-419" })
+            {
+                var got = AppLanguage.GetStringFor(key, tag);
+                if (got != neutral[key])
+                {
+                    Console.Error.WriteLine($"language-es: FAIL: key {key}: {tag} gave \"{got}\", the neutral es catalogue says \"{neutral[key]}\"");
+                    return false;
+                }
+            }
+            var gotSpain = AppLanguage.GetStringFor(key, "es-ES");
+            if (gotSpain != spain[key])
+            {
+                Console.Error.WriteLine($"language-es: FAIL: key {key}: es-ES gave \"{gotSpain}\", the es-ES catalogue says \"{spain[key]}\"");
+                return false;
+            }
+            if (neutral[key] != english[key])
+                differing++;
+            if (neutral[key] != spain[key])
+                spainDiffers++;
+        }
+
+        if (differing * 10 < keys.Count * 9)
+        {
+            Console.Error.WriteLine($"language-es: FAIL: only {differing} of {keys.Count} keys differ from English for es; a whole-catalogue fallback to English?");
+            return false;
+        }
+        if (spainDiffers == 0)
+        {
+            Console.Error.WriteLine("language-es: FAIL: the es and es-ES catalogues are identical, so this check cannot tell them apart");
+            return false;
+        }
+
+        Console.Error.WriteLine($"language-es: PASS {keys.Count} keys ({differing} differ from English, {spainDiffers} differ between es and es-ES)");
+        return true;
     }
 
     /// <summary>

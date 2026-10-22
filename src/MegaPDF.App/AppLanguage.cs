@@ -25,7 +25,7 @@ namespace MegaPDF.App;
 internal static class AppLanguage
 {
     /// <summary>The languages the Settings flyout offers, in radio order. "" = follow Windows.</summary>
-    public static readonly string[] Choices = ["", "en-US", "fr-CA", "fr-FR"];
+    public static readonly string[] Choices = ["", "en-US", "fr-CA", "fr-FR", "es-419", "es-ES"];
 
     private static readonly ResourceManager Manager = new();
     private static ResourceContext? _context;
@@ -73,6 +73,20 @@ internal static class AppLanguage
             ? Manager.MainResourceMap.TryGetValue("Resources/" + key)
             : Manager.MainResourceMap.TryGetValue("Resources/" + key, _context);
         return candidate?.ValueAsString ?? key;
+    }
+
+    /// <summary>
+    /// A string from Resources.resw as MRT resolves it for <paramref name="tag"/>, whatever
+    /// language the app itself runs in (#724). It asks the resource manager directly, with a
+    /// context of its own, so it works in the unpackaged dev build too, where the x:Uid labels
+    /// stay in Windows' language and a window could not show the answer. Null when the key is
+    /// in no catalogue.
+    /// </summary>
+    internal static string? GetStringFor(string key, string tag)
+    {
+        var context = Manager.CreateResourceContext();
+        context.QualifierValues["Language"] = tag;
+        return Manager.MainResourceMap.TryGetValue("Resources/" + key, context)?.ValueAsString;
     }
 
     public static int ChoiceIndex(string tag)

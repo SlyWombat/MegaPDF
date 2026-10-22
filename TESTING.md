@@ -2486,6 +2486,238 @@ and nothing else in the test failed on the Mac. (The kdocker3 negative run was i
 without the fixtures directory, so it also printed 135 unrelated "opens" failures; the
 positive run there, with fixtures, was green.)
 
+## Wrap hyphens on a block's first line (#496), 2026-10-22
+
+One UN document scored 0.9935 in its Spanish edition against 0.9996 to 1.0000 in its five siblings
+(#496, after #532 had already taken it from 0.9662). The cause is not Spanish and not the page
+count. A numbered paragraph, or a paragraph whose first line is indented, was cut after its first
+line by `GatherOneBlock`, so a wrap hyphen ending that line sat at a block boundary. `BuildPieces`
+joins a hyphen only to the next line of the same block; measure 1's reference side
+(`JoinLineWrapHyphens`) joins across blocks. One word became two engine tokens and one reference
+token. Spanish wraps with hyphens far more often than the other editions, which is the whole of
+why it alone crossed the gate.
+
+**Machine and build.** kdocker3, a throwaway `megapdf:base` container, the corpora mounted
+read-only, a scratch directory under `/home/claude` removed afterwards. Two builds of the same
+tree, same pinned PDFium (33 patches), same `structure_check`: `base` is `main` at `244849d`,
+`fix` is `main` plus this branch's three commits. Structure battery with `--reference --cli`, and
+the Markdown battery, over all four corpora, base and fix running side by side.
+
+**Step 1, re-baseline.** The base build reproduces the 2026-10-20 re-run exactly on every corpus
+(table below, "base" columns), so #710's 184 lines in `megapdf_structure.cpp` did not move the
+baseline. For the document: Spanish 0.993529 (84,516 matched of 85,250 engine and 84,883
+reference tokens), the five siblings 1.000000 (Arabic), 0.999626 (Chinese), 0.999742 (English),
+0.999933 (French), 1.000000 (Russian). 20.1 content blocks per page (not the 85,544 blocks of the
+`Tf`/`Tm` bug, so #532 has not regressed). Spanish engine tokens exceed the reference's by 367 and
+exactly 734 engine tokens have no match: the two-for-one shape of a split word.
+
+**Steps 2 and 3, `structure_check hyphendiag`.** New diagnostic mode (numbers only; `--dump`
+writes token pairs to a `PRIVATE`-marked directory). Self-check on generated one-page documents:
+`bb_hyphen=1` on each of the three fixtures of the new unit test, `bb_hyphen=0` on
+`tm-scaled-size.pdf`. On the document's Spanish edition:
+
+| block-boundary wrap hyphens (A ends in a hyphen, B begins lowercase) | count | share of 367 |
+|---|---:|---:|
+| `LIST_ITEM` > `PARAGRAPH`, B's left = A's left (continuation under the number) | 179 | 48.8% |
+| `LIST_ITEM` > `PARAGRAPH`, B 2.5 em left of A (indented number, continuation at the margin) | 144 | 39.2% |
+| `PARAGRAPH` > `PARAGRAPH`, B 2.5 em left of A (indented first line) | 44 | 12.0% |
+
+Every one has A a single line, B below A and the two overlapping horizontally, so none is a column
+or page break (H1 prime) and none has a heading as B. `fid_if_joined` is 1.000000 for the Spanish
+edition with `split`, `merge` and `other` all 0: the 367 are the whole gap, none of it justified
+text (H2), one font (H3) or the literal-hyphen fallback (H4). English has 13 such hyphens
+(0.999742 to 0.999979 if joined) and French 4 (0.999933 to 1.000000).
+
+**Steps 4 and 5, three commits, each measured on its own** (UN corpus, structure battery):
+
+| build | Spanish | English | French | UN aggregate |
+|---|---:|---:|---:|---:|
+| base | 0.993529 | 0.999742 | 0.999933 | 0.999136 |
+| + a list item also continues at its number's left edge; a paragraph's second line may sit up to 4 em left of an indented first line | 0.997457 | 1.000000 | 1.000000 | 0.999555 |
+| + the same allowance for an indented list item's second line | **1.000000** | 1.000000 | 1.000000 | **0.999801** |
+
+Arabic, Chinese and Russian do not move. Content blocks per page for the Spanish edition: 20.1
+(base), 16.4, 14.1.
+
+The design's 4a (the marker's own left edge) and 4b (the indented first line) are the first
+commit and together explain 223 of 367 (60.8%), which meets the design's "at least half" rule but
+reaches only 0.997457, short of the 0.998 gate. The other 144 are the indented-number shape the
+design's own H1 row anticipates (`LIST_ITEM` > `PARAGRAPH`, `ldelta_em` above 1) but its 4a text
+does not cover; commit three is the same first-line allowance applied to the number. It is kept
+as a separate commit so it can be dropped.
+
+`kFirstLineIndentMaxEm` is 4.0, the design's default. The design's rule for setting it (the
+largest `PARAGRAPH` > `PARAGRAPH` bucket, 2.5, rounded up to a whole em) would give 3.0, but the
+design's own test fixture indents the first line 36 pt at 10 pt, 3.6 em, so 3.0 would fail it.
+The document's real indent is 2.4 em and fits either.
+
+**Tests.** `test_structure_wrap_hyphen_across_indent` (`core/tests/core_tests.cpp`), three
+generated fixtures. Without the change the first two fail four checks (3 and 2 blocks, the
+hyphen kept); against the first commit alone the third fails two (3 blocks, the hyphen kept);
+with the branch the whole core suite is green, `test_structure_goldens` included, so no golden
+moved. The design's first fixture put the text at x=108 behind a number at x=72, a 22 pt gap that
+the line split (`kLineSplitFontSizeFactor`, 2 em, 20 pt) cuts into two lines before any block
+rule sees it; the fixture here puts the text at x=100.
+
+**The gate, four corpora, base against fix** (`--reference --cli`; F1 identical through
+`megapdf-cli`):
+
+| corpus | F1 base | F1 fix | tau (vs tree) | pages F1 < 0.9 | crashes / hangs / bad CLI exits | Markdown extracted / cmark failures |
+|---|---:|---:|---:|---:|---|---|
+| private | 0.998997 | 0.999004 | 0.951 = 0.951 | 33 = 33 | 0 / 0 / 0 | 2,982 = 2,982 / 0 |
+| public | 0.980019 | 0.980576 | 0.978 = 0.978 | 53 to 52 | 0 / 0 / 0 | 937 = 937 / 0 |
+| Canadian | 0.999932 | 0.999932 | 0.994 = 0.994 | 0 = 0 | 0 / 0 / 0 | 134 = 134 / 0 |
+| UN | 0.999136 | 0.999801 | 0.967 = 0.967 | 8 = 8 | 0 / 0 / 0 | 83 = 83 / 0 |
+
+Nothing fell on any measure the gate reads. The public corpus still fails the F1 gate for its
+known reason (#498); it moved up, not down. Opened counts and the Markdown output counts are
+identical to the 2026-10-20 re-run.
+
+**One informational number did move, and is stated here rather than left to be found.** Measure
+3, agreement with `pdftotext -layout`, is not gated. Its median fell by 0.001 on the UN corpus
+(0.999 to 0.998) and on the public corpus (0.990 to 0.989); private (0.992) and Canadian (0.996)
+did not move. The likely cause, not separately measured, is a list item now reading as one block where it
+was two, which changes the token order a little against poppler's. UN: 92 of 3,752 pages changed, 85 of them
+down, the largest by 0.022. Public: 3,964 of 22,942 pages, 3,681 down, the largest by 0.031.
+Private: 16 of 17,379 pages. No page crosses 0.9 in either direction (the count of pages under
+0.9 is identical on every corpus). The order against the document's own structure tree moved on
+4 pages in all.
+
+**Not run.** The pages and redaction batteries: they do not read block grouping. Hosted CI, and
+the Windows, Mac, iOS and Android builds: the change is in `core/`, which every platform links,
+but only the Linux build was exercised here.
+
+**Spanish wrap hyphens before an accented letter** (`compa-` / `ñía`) are never joined by the
+engine or the reference, because both test the next letter against ASCII lowercase. The measure
+cannot see it, so it does not explain any of this; widening one side alone would move the gate
+for an unrelated reason. Left for its own issue, as the design says.
+
+## Shrink-for-email survey, baseline (#6), 2026-10-21
+
+The measurement step of #6, taken before any policy change: what `megapdf_shrink_images` does to the
+corpora today, and what the candidate bilevel / grey / transparency rules would do instead.
+`tools/shrink-survey/` (`shrink_survey.cpp` built with `-DMEGAPDF_SHRINK_SURVEY=ON`, `run.sh`,
+`summarise.py`). Aggregates only; the per-image output lives outside the repo and holds path hashes,
+never a name. kdocker3, `megapdf:base` container with `libjpeg-turbo8-dev`, corpora mounted read-only,
+6 jobs, 300 s per document, PDFium patches 33, `origin/main` 244849d plus this tool. No product code
+changed.
+
+**This is not quite the design's tool.** The design reads each image's outcome from a decision hook
+inside `megapdf_shrink_images_cancellable`; neither exists until #593's core step lands, and this step
+must not touch that engine. So the baseline decision is computed in the tool from the published facts
+(`megapdf_images_load`, then the 150 dpi / 1.2 / 100 KB / 8 KB / 0.9 rules), and the engine's own
+`megapdf_shrink_images` runs on the same document as a cross-check: the two replaced counts agree on
+**every one of the 4,084 + 1,482 documents** (0 disagreements). Sizes are libjpeg-turbo's; WIC and
+ImageIO differ at the same nominal quality, so a gate read here is indicative for Windows and iOS, not
+exact. Image bytes are summed per placement (one shared image drawn twice counts twice, as shrink sees
+it), so they can exceed the file's size.
+
+| | private (`~/pdf-test`) | public (`~/pdf-public`) |
+|---|---|---|
+| documents visited | 4,158 of 4,337 on disk (same population as every other battery: 179 files are named `.PDF` and `find -name '*.pdf'` does not see them) | 1,493 of 1,777 manifest rows (the staged 1,494, less one `.Pdf`; 283 stated exclusions printed by the run) |
+| result | 4,084 ok, 62 unreadable, 12 encrypted | 1,482 ok, 5 encrypted, 4 unreadable, **2 timeouts at 300 s** |
+| images / documents holding any | 177,076 / 3,214 | 11,041 / 251 |
+| inside form XObjects | 4,234 images, 61.1 MB | 40 images, 0.2 MB |
+| stored image bytes | 2,554.2 MB | 670.2 MB |
+| documents with at least one image replaced today | 1,485 (36.4%) | 107 (7.2%) |
+| image bytes saved by today's rules | 1,647.3 MB over 5,774 images | 59.3 MB over 567 images |
+| time per document, median / p90 / max | 28 / 518 / 19,752 ms | 3 / 145 / 228,252 ms |
+| `megapdf_shrink_images` alone, median / p90 / max | 5 / 202 / 10,378 ms | 0 / 16 / 73,620 ms |
+
+Run time was 178 s (private) and 316 s (public). The public max (228 s) is a document that finished just inside
+the 300 s bound. The two timeouts are the two largest staged documents, 1.6 GB and 2.1 GB; the survey's own
+work (a walk that decodes bit depth, a render and five encodes per candidate, a rewrite, the shrink, a second
+rewrite) is what ran past the bound, so a timeout here is not evidence about shrink alone. A re-run of those two at a 3,000 s bound
+is reported in the last paragraph.
+
+**Today's rules by kind**, one row per kind. "Not rendered" means the loop skips the image without rendering it (under
+8 KB, or right-sized and under 100 KB, or under 8 px). "In forms" images are never reached, so they appear in the image
+count and in neither outcome column.
+
+Private:
+
+| kind | images | stored MB | replaced | kept small | JPEG saves under 10%, kept | in forms | saved MB |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| colour DCT | 3,376 | 1,492.1 | 3,023 | 0 | 353 | 0 | 1,072.0 |
+| grey DCT | 1,302 | 496.4 | 1,081 | 0 | 221 | 0 | 315.4 |
+| colour Flate/none/other | 1,139 | 240.0 | 1,004 | 0 | 135 | 0 | 218.0 |
+| not rendered | 126,675 | 142.3 | 0 | 125,093 | 0 | 1,582 | 0.0 |
+| bilevel CCITT | 22,753 | 88.9 | 293 | 20,711 | 827 | 922 | 4.4 |
+| colour JPX | 129 | 30.0 | 22 | 0 | 107 | 0 | 12.9 |
+| grey Flate/none/other | 403 | 30.0 | 304 | 0 | 99 | 0 | 20.9 |
+| bilevel Flate/none/other | 20,630 | 25.3 | 24 | 18,529 | 373 | 1,704 | 0.3 |
+| grey JPX | 21 | 5.5 | 1 | 0 | 20 | 0 | 3.0 |
+| bilevel JBIG2 | 648 | 3.7 | 22 | 498 | 102 | 26 | 0.4 |
+
+Public:
+
+| kind | images | stored MB | replaced | kept small | JPEG saves under 10%, kept | in forms | saved MB |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| colour DCT | 1,494 | 357.9 | 160 | 0 | 1,334 | 0 | 23.0 |
+| colour JPX | 1,031 | 218.8 | 11 | 0 | 1,020 | 0 | 4.6 |
+| bilevel CCITT | 638 | 47.7 | 187 | 100 | 351 | 0 | 20.7 |
+| grey DCT | 253 | 26.9 | 123 | 0 | 130 | 0 | 6.8 |
+| not rendered | 7,510 | 13.0 | 0 | 7,470 | 0 | 40 | 0.0 |
+| colour Flate/none/other | 18 | 3.0 | 17 | 0 | 1 | 0 | 2.8 |
+| grey Flate/none/other | 80 | 2.2 | 69 | 0 | 11 | 0 | 1.4 |
+| bilevel Flate/none/other | 13 | 0.6 | 0 | 9 | 4 | 0 | 0.0 |
+| bilevel JBIG2 | 4 | 0.0 | 0 | 4 | 0 | 0 | 0.0 |
+
+In the public corpus CCITT bilevel is 7.1% of all image bytes (conformance fixtures among them), and today's loop
+replaces 187 of those images for 20.7 MB, 35% of that corpus's savings. In the private corpus "bilevel" images are
+mostly strips and stencil masks: 20,711 of 22,753 CCITT images are under the size gates.
+
+**The five gates, read** (the design's thresholds):
+
+| gate | number | private | public | outcome |
+|---|---|---|---|---|
+| G1 | median `rgb_q80 / rgb_q75` on grey candidates (p90; bytes-weighted) | **1.098** (1.121; 1.108), 1,417 images, 519 MB | **1.047** (1.085; 1.048), 329 images | under 1.25 in both: 0.80 ships. At 0.80 the 10% rule keeps 7 more private images and none public |
+| G2 | median `grey_q75 / rgb_q75` | **0.943** (0.968; 0.955) | **0.947** (0.967; 0.964) | not under 0.85: no single-channel follow-up |
+| G3 | bilevel Flate/none/other bytes, share of all image bytes | **1.0%** (CCITT 3.5%, JBIG2 0.1%) | **0.1%** (CCITT 7.1%) | under 5%: no G4 encoder follow-up |
+| G4 | stored bytes inside form XObjects, share | **2.4%** | **0.0%** | under 5%: no follow-up |
+| G5 | images tripping R5 with no `/SMask`, `/Mask`, `/ImageMask` | **130 of 1,236**: 617 `/SMask`, 87 `/Mask`, 391 `/ImageMask`, 11 inline (not resolvable by dictionary), 130 none | **24 of 29**: 2 `/SMask`, 3 `/ImageMask`, 24 none | **tripped, and the remedy does not apply:** see below |
+
+**G5.** Every R5 trip was checked against its image dictionary (`pikepdf`; 1,236 + 29, not a sample of
+10), matching each to its image by page and drawing order and confirming the width and height. The
+design's remedy is to widen the excluded border to 2 px and re-run. That was done at 2 px and at 4 px:
+private trips 1,236 -> 1,224 -> 1,205, public 29 -> 29 -> 29. The 130 do not move, so the ring is not
+their cause. They are almost entirely transparent (alpha 0, black underneath; median 2.8% of pixels,
+p90 68%, up to 98.7%) and sit in 56 documents. Every one of the 93 pages involved carries a clip (91 a
+path clip, 2 a text-clip render mode); the one dissected (a 600 x 1000 photograph on a page with text
+render mode 7) rendered 356 opaque pixels of 150,000. The rendered bitmap applies the object's clip, and
+the clip is not an image mask. R5 as written (pixel alpha, any source) keeps these images, which is the
+safe direction; the images with alpha off the ring carry 71.6 MB (4.3%) of the private corpus's savings
+and 3.0 MB (5.1%) of the public's. Today's loop encodes such an image's RGB with the alpha thrown away
+(transparent pixels are black); what that does to the page was not looked at here.
+
+**What leaving bilevel alone gives up:** private 339 bilevel images of 5,774 replaced today, 5.11 MB of
+1,647 MB (0.3%), and in 38 of 1,485 documents the bilevel images are the only ones replaced; public 187
+images, 20.7 MB (35.0%), in no document alone. The private "scanned letters" are mostly not bilevel: the
+grey bucket (DCT grey 1,302 images, 496 MB; Flate grey 400, 30 MB) is where scans live.
+
+**D7, "never larger", measured at the file.** A plain `megapdf_save` rewrite of the unshrunk document is
+already as large as or larger than the original in 1,246 of 4,084 private documents (30.5%) and 586 of
+1,482 public (39.5%); public median change among rewritten documents +29%. After shrink, 1,021 private
+documents (231 with at least one image replaced) and 588 public (66 replaced) are not smaller than the
+original; in the private corpus 87 of the 231 replaced-and-larger documents have a rewrite that is
+smaller than the original, so shrink itself made them bigger. For those 87, 70 (80%) draw one image
+object more than once, against 20 of 150 (13%) of documents that shrank normally. That is consistent
+with `megapdf_shrink_images` replacing each placement separately, so a shared image becomes N JPEGs;
+it was shown by association, not by inspecting the output. The whole private corpus goes 3,240 MB ->
+1,827 MB; the public corpus goes 977 MB -> 1,007 MB (up, from rewrite growth on small fixtures).
+
+**The two timed-out documents, alone at a 3,000 s bound.** The 1.6 GB one is a 1,710-page JPEG 2000 scan (the
+export #696 measured). It finished in 2,727 s with the other workload on the machine (one core, 1.4 GB peak): every
+one of its 1,710 images was replaced, the file went from 1,566 MB to 590 MB (62% smaller, a plain rewrite alone is
+1,581 MB), and `megapdf_shrink_images` by itself took **2,391 s, about 40 minutes**, with no progress callback or way
+to stop it. The 2.1 GB one was stopped by the run's owner after about 14 minutes, not at the bound, so it has no
+number.
+
+Not done here, by design: the after-run (needs Phase 2), per-image timing on the phones, and anything
+on Windows or iOS encoders. Rerun with `tools/shrink-survey/run.sh <megapdf_shrink_survey> <corpus>
+<out> --jobs 6` then `summarise.py <out>/survey.jsonl --md`; build `cmake -S core -B build
+-DMEGAPDF_SHRINK_SURVEY=ON`.
+
 ## Reporting
 
 For each issue: what you clicked, what you expected, what happened, and the PDF

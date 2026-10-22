@@ -1051,6 +1051,35 @@ internal static class CoreNative
     public static extern int megapdf_write_text(IntPtr document, int firstPage, int pageCount, int format,
         ref WriteOptions options, WriteDelegate write, IntPtr context, IntPtr cancel);
 
+    // Recognised text for scanned pages (#683) ---------------------------------------------
+    //
+    // An opaque handle, so megapdf_write_options (mirrored by hand above) does not grow.
+
+    /// <summary>A new, empty set of recognised lines; <see cref="IntPtr.Zero"/> only when out of memory.</summary>
+    [DllImport(Dll)]
+    public static extern IntPtr megapdf_recognised_new();
+
+    /// <summary>
+    /// One recognised line of page <paramref name="page"/> (0-based): UTF-16, <paramref name="length"/>
+    /// code units, and its box in PDF points with a BOTTOM-LEFT origin (megapdf_rect's convention).
+    /// </summary>
+    [DllImport(Dll)]
+    public static extern int megapdf_recognised_add_line(IntPtr recognised, int page,
+        [MarshalAs(UnmanagedType.LPWStr)] string text, nuint length, double left, double bottom, double right, double top);
+
+    [DllImport(Dll)]
+    public static extern void megapdf_recognised_free(IntPtr recognised);
+
+    /// <summary>
+    /// <see cref="megapdf_write_text"/> with recognised text for scanned pages. The pages still
+    /// written as a "has no text layer: N image(s)" note go into <paramref name="pagesToRead"/> (the
+    /// first <paramref name="capacity"/>) and their number into <paramref name="count"/>.
+    /// </summary>
+    [DllImport(Dll)]
+    public static extern int megapdf_write_text_recognised(IntPtr document, int firstPage, int pageCount, int format,
+        ref WriteOptions options, IntPtr recognised, [Out] int[]? pagesToRead, nuint capacity, out nuint count,
+        WriteDelegate write, IntPtr context, IntPtr cancel);
+
     // Contract 10: page tools (#174) ------------------------------------------
     //
     // Rotate, delete, restore, move, insert a blank page, import pages from another file

@@ -40,9 +40,12 @@ API = "https://api.appstoreconnect.apple.com"
 APP_ID = os.environ.get("ASC_APP_ID", "6799522972")          # MegaPDF (iOS)
 PLATFORM = os.environ.get("ASC_PLATFORM", "IOS")
 # App Store Connect locale codes; the repo (docs, capture folders) calls France
-# French plain "fr", App Store Connect calls it "fr-FR".
-LOCALES = ["en-CA", "fr-CA", "fr-FR"]
-REPO_LOCALE = {"en-CA": "en", "fr-FR": "fr"}
+# French plain "fr", App Store Connect calls it "fr-FR". Spanish (#724): App Store
+# Connect has no es-419, so Latin American Spanish is listed as "es-MX" while the
+# capture folder stays "es-419"; Spain is "es-ES" and, like France, the plain "es"
+# folder. Do not rename the folder to match the store.
+LOCALES = ["en-CA", "fr-CA", "fr-FR", "es-MX", "es-ES"]
+REPO_LOCALE = {"en-CA": "en", "fr-FR": "fr", "es-MX": "es-419", "es-ES": "es"}
 
 # Store URLs (#662). The support page asks the four questions a useful report needs and
 # answers the common ones first; GitHub is the source, not the help desk.

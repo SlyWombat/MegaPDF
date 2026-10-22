@@ -157,6 +157,30 @@ final class RedactionTests: XCTestCase {
         }
     }
 
+    /// The same, for Spanish (#724): the catalogue's `es-419` and `es` localisations are real
+    /// folders in the app, the redaction summary's keys have entries in both, and none of them
+    /// reads in English. Nothing here is a French string, so a copy-paste from the French test
+    /// fails on the first assertion.
+    func testTheSummaryAndTheRefusalAreTranslatedInSpanish() throws {
+        let app = Bundle(for: ViewerModel.self)
+        let keys = ["1 area redacted: %@", "%@ areas redacted: %@", "%@ characters", "%@ images",
+                    "%@ form fields", "%@ annotations",
+                    "MegaPDF couldn't remove everything you marked on page %@, so it removed nothing and left the file as it was."]
+        for lang in ["es-419", "es"] {
+            guard let path = app.path(forResource: lang, ofType: "lproj"), let bundle = Bundle(path: path) else {
+                XCTFail("no \(lang).lproj in the app"); continue
+            }
+            for key in keys {
+                let value = bundle.localizedString(forKey: key, value: "\u{1}missing", table: nil)
+                XCTAssertNotEqual(value, "\u{1}missing", "\(lang): no entry for \(key)")
+                XCTAssertNotEqual(value, key, "\(lang): \(key) reads in English")
+            }
+            let two = bundle.localizedString(forKey: "%@ areas redacted: %@", value: nil, table: nil)
+            // Spanish takes no space before the colon (docs/localisation-glossary-es.md).
+            XCTAssertEqual(String(format: two, "2", "13 caracteres"), "2 áreas censuradas: 13 caracteres")
+        }
+    }
+
     // MARK: - marks that can be taken back (#329)
     //
     // A mark is the only thing a person can put on a page that is not an edit. These cover

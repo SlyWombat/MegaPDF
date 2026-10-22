@@ -1,12 +1,34 @@
 # Localisation — how the strings work on each platform
 
-MegaPDF ships in English, French (Canada) and French (France) since issue #91.
+MegaPDF ships in English, French (Canada) and French (France) since issue #91, and in
+Spanish (Latin America) and Spanish (Spain) since #724.
 Canadian French is the translated one; France French is derived from it by
-rule (see the glossary's last section), so there is one French to maintain. This is the
+rule (see the glossary's last section), so there is one French to maintain. Latin American
+Spanish is hand-written and Spain Spanish is derived from it the same way (see
+[localisation-glossary-es.md](localisation-glossary-es.md)). This is the
 reference for where the strings live, how a platform picks a language, and what
 to do when you add a string or a language. The vocabulary itself is in
 [localisation-glossary.md](localisation-glossary.md): same English concept, same
 French word on every platform.
+
+### Where each Spanish lives
+
+The hand-written Latin American catalogue and the derived Spain one sit in different places
+on purpose, because each platform falls back differently and every Spanish speaker must
+land in Spanish (#724):
+
+| Platform | hand-written es-419 | derived es-ES | why |
+|---|---|---|---|
+| Windows (MRT) | `Strings/es/Resources.resw` (neutral) | `Strings/es-ES/Resources.resw` | MRT and .NET fall back from `es-MX`, `es-AR`, `es-US` to the neutral `es`; they have no CLDR `es-419` parent |
+| macOS + Linux (.NET) | `Strings/Strings.es.resx` (neutral) | `Strings/Strings.es-ES.resx` | `CultureInfo("es-MX").Parent` is `es` |
+| Android | `values-b+es+419/strings.xml` | `values-es/strings.xml` (neutral) | since API 24 Android resolves `es-MX` to `es-419` by CLDR parent; the neutral folder catches `es-ES` |
+| iOS | `es-419` localization | `es` localization (Apple's convention: `es` is Spain) | iOS resolves `es-MX` to `es-419` itself |
+
+So on the desktops the neutral `es` is Latin American and on the phones it is Spain. Spanish
+has no punctuation pass: no space before `: ; ? !`, curly quotes, inverted marks.
+`tools/gen_strings.py es-es` derives the Spain catalogues; the Windows `language-es`
+self-test state asks MRT directly that `es-MX`, `es-419` and `es` read the hand-written
+catalogue and `es-ES` the derived one.
 
 ## The shape, in one paragraph
 
@@ -47,7 +69,7 @@ Android and .NET; Canada is the exact-match region on all four platforms.
   better is known. Windows' own IO messages are already in the user's language
   and are shown as they are.
 - **The Store package** declares `en-us`, `en-ca`, `fr-ca` and `fr-fr` in
-  `Package.appxmanifest`; the app description and the `.pdf` file-type name are
+  `Package.appxmanifest` (and, with the Spanish store listings, `es-mx` and `es-es`); the app description and the `.pdf` file-type name are
   `ms-resource:` references so Explorer localises them too.
 - **Language override.** `--language fr-CA` on the command line, or the
   Language setting in the Settings flyout (stored in `settings.json`, applied at
@@ -121,10 +143,11 @@ Android and .NET; Canada is the exact-match region on all four platforms.
 ## Adding a string
 
 1. Add it to the English catalogue of the platform, then to the Canadian
-   French one with the same key. Follow the glossary; if the term is new, add
+   French one and the Latin American Spanish one with the same key (marked
+   `FR-REVIEW #<issue>` and `ES-REVIEW #<issue>`). Follow the glossary; if the term is new, add
    a row, and a France row if the word differs there.
-2. Run `python3 tools/gen_strings.py fr-fr`: it regenerates the desktop
-   accessors and derives the France catalogues. Use `Strings.Key` in code.
+2. Run `python3 tools/gen_strings.py fr-fr es-es`: it regenerates the desktop
+   accessors and derives the France and Spain catalogues. Use `Strings.Key` in code.
 3. Run the Core tests (`dotnet test MegaPDF.sln`) — `StringCatalogueTests`
    tells you exactly which key is missing or untranslated on which platform.
 

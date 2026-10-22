@@ -1883,6 +1883,46 @@ MEGAPDF_API int megapdf_write_text(megapdf_document* document, int first_page, i
                                    const megapdf_write_options* options, megapdf_write_fn write, void* context,
                                    const megapdf_cancel* cancel);
 
+/* Text a device's recogniser read from scanned pages (#683), for megapdf_write_text_recognised(). */
+typedef struct megapdf_recognised megapdf_recognised;
+MEGAPDF_API megapdf_recognised* megapdf_recognised_new(void);   /* NULL only when out of memory */
+/**
+ * One recognised line of page `page_index` (0-based), in the recogniser's own reading order.
+ * `text` is UTF-16, `length` code units, no terminator needed. The box is PDF points, bottom-left
+ * origin, crop-relative (megapdf_rect's convention). A line that is empty or all whitespace is
+ * accepted and ignored. MEGAPDF_ERR_ARGUMENT for a NULL handle, a negative page, or NULL text with
+ * length > 0; MEGAPDF_ERR_MEMORY.
+ */
+MEGAPDF_API int megapdf_recognised_add_line(megapdf_recognised* recognised, int page_index, const unsigned short* text,
+                                            size_t length, double left, double bottom, double right, double top);
+MEGAPDF_API void megapdf_recognised_free(megapdf_recognised* recognised);
+
+/**
+ * megapdf_write_text() with recognised text for scanned pages (#683). A page written as a
+ * PAGE_IMAGE note with at least one image ("has no text layer: N image(s)") for which `recognised`
+ * holds a non-blank line is written instead as a recognition note and the text:
+ *   Markdown: "*[Page N is a scanned image, read by text recognition: the text may contain
+ *   mistakes]*", a blank line, then the text as a block quote -- one paragraph per group of lines
+ *   (a gap of more than 0.8 x the median line height below the previous line, or a line that sits
+ *   more than half a line height above the previous one, starts a new paragraph), each line
+ *   escaped as the start of a line and prefixed "> ", paragraphs separated by a line holding ">".
+ *   Text: the same note without the asterisks, a blank line, then the paragraphs unquoted,
+ *   separated by blank lines.
+ * Lines of a paragraph are joined with a space, or kept on their own lines under keep_lines. The
+ * recogniser's order is kept; nothing is re-sorted. The note is English, like every other note.
+ * Every other page, and every page when `recognised` is NULL, is byte-for-byte what
+ * megapdf_write_text() writes. The pages still written as such a note (ones with an image and no
+ * recognised line) are reported: their indexes go into out_pages_to_read (the first `capacity` of
+ * them, in page order) and their number into *out_pages_to_read_count; both may be NULL/0. The
+ * count is zeroed on entry and is left 0 on an error or a cancel. Returns what megapdf_write_text()
+ * returns; a recognised page does not count as having a text layer. The recognised text never
+ * enters megapdf_structure (contract 9 stays the document's own text).
+ */
+MEGAPDF_API int megapdf_write_text_recognised(megapdf_document* document, int first_page, int page_count, int format,
+                                              const megapdf_write_options* options, const megapdf_recognised* recognised,
+                                              int* out_pages_to_read, size_t capacity, size_t* out_pages_to_read_count,
+                                              megapdf_write_fn write, void* context, const megapdf_cancel* cancel);
+
 /* --------------------------------------------------------------------------
  * Contract 10: page tools (#174). Rotate, delete, move, insert a blank page, import
  * pages from another file (combine) and extract pages to a new file (split). Every

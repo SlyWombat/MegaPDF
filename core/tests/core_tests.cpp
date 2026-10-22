@@ -7515,6 +7515,144 @@ void test_structure_no_stray_control_characters(const std::string& fixtures, con
           std::to_string(total));
 }
 
+// --------------------------------------------------------------------------
+// #496: a wrap hyphen at the end of a block's FIRST line is never joined, because BuildPieces
+// joins a line only to the next line of the SAME block, and the reference side of measure 1
+// (structure_check's JoinLineWrapHyphens) joins across blocks. On one UN document the Spanish
+// edition wraps with hyphens 367 times and every one of them sat on exactly that boundary: a
+// numbered paragraph whose continuation lines return to the left margin, so GatherOneBlock cut
+// the item after its first line. Three layouts, each with the number or the first line drawn
+// to the right of where the continuation starts.
+// --------------------------------------------------------------------------
+
+namespace {
+
+// A one-page, US Letter, Helvetica document whose page content is `content`.
+std::vector<unsigned char> plain_text_pdf(const std::string& content) {
+    std::string pdf = "%PDF-1.4\n";
+    std::vector<size_t> offsets;
+    auto add = [&](const std::string& body) {
+        offsets.push_back(pdf.size());
+        pdf += std::to_string(offsets.size()) + " 0 obj\n" + body + "\nendobj\n";
+    };
+    add("<< /Type /Catalog /Pages 2 0 R >>");
+    add("<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+    add("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
+        "/Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>");
+    add("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>");
+    add("<< /Length " + std::to_string(content.size()) + " >>\nstream\n" + content + "\nendstream");
+    const size_t xref = pdf.size();
+    pdf += "xref\n0 " + std::to_string(offsets.size() + 1) + "\n0000000000 65535 f \n";
+    for (size_t off : offsets) {
+        char line[32];
+        std::snprintf(line, sizeof line, "%010zu 00000 n \n", off);
+        pdf += line;
+    }
+    pdf += "trailer\n<< /Size " + std::to_string(offsets.size() + 1) + " /Root 1 0 R >>\nstartxref\n" +
+           std::to_string(xref) + "\n%%EOF\n";
+    return std::vector<unsigned char>(pdf.begin(), pdf.end());
+}
+
+// A text-showing operator at (x, y), 10 pt Helvetica.
+std::string text_at(int x, int y, const char* text) {
+    return "BT /F1 10 Tf " + std::to_string(x) + " " + std::to_string(y) + " Td (" + text + ") Tj ET ";
+}
+
+// "12." at the margin, its text 28 pt in, the wrapped word's second half back at the margin, and
+// a second numbered item below. The continuation sits under the NUMBER, not under the text.
+std::vector<unsigned char> numbered_paragraph_hyphen_pdf() {
+    return plain_text_pdf(text_at(72, 700, "12.") + text_at(100, 700, "La Cumbre reconoce la importan-") +
+                          text_at(72, 688, "cia de los compromisos asumidos en materia de desarrollo.") +
+                          text_at(72, 664, "13.") + text_at(100, 664, "El siguiente punto trata de otro asunto."));
+}
+
+// The first line indented 36 pt, the rest at the margin: one paragraph, as a typeset page reads.
+std::vector<unsigned char> indented_paragraph_hyphen_pdf() {
+    return plain_text_pdf(text_at(108, 700, "Los Estados deben adoptar medidas urgen-") +
+                          text_at(72, 688, "tes para aplicar el plan.") +
+                          text_at(72, 676, "Segunda frase del mismo parrafo."));
+}
+
+// A numbered paragraph whose number is itself indented (the "a)", "b)" sub-items of a resolution)
+// with the continuation back at the margin, 24 pt to the LEFT of the number.
+std::vector<unsigned char> indented_numbered_hyphen_pdf() {
+    return plain_text_pdf(text_at(96, 700, "12.") + text_at(124, 700, "La Cumbre reconoce la importan-") +
+                          text_at(72, 688, "cia de los compromisos asumidos en materia de desarrollo.") +
+                          text_at(96, 664, "13.") + text_at(124, 664, "El siguiente punto trata de otro asunto."));
+}
+
+bool block_text_has(const megapdf_structure* s, size_t i, const std::string& needle) {
+    return block_text_ascii(s, i, MEGAPDF_BLOCK_TEXT).find(needle) != std::string::npos;
+}
+
+}  // namespace
+
+void test_structure_wrap_hyphen_across_indent() {
+    {
+        auto bytes = numbered_paragraph_hyphen_pdf();
+        megapdf_document* d = megapdf_open(bytes.data(), bytes.size(), nullptr);
+        check(d != nullptr, "structure wrap-hyphen numbered: opens");
+        if (d != nullptr) {
+            megapdf_structure* s = megapdf_structure_load(d, 0, 1, MEGAPDF_STRUCTURE_DEFAULT, nullptr);
+            check(s != nullptr, "structure wrap-hyphen numbered: loads");
+            if (s != nullptr) {
+                megapdf_block b0{};
+                const bool got0 = megapdf_block_count(s) > 0 && megapdf_block_get(s, 0, &b0) == MEGAPDF_OK;
+                check(megapdf_block_count(s) == 2 && got0 && b0.kind == MEGAPDF_BLOCK_LIST_ITEM,
+                      "structure wrap-hyphen numbered: one item holds both lines (#496)",
+                      std::to_string(megapdf_block_count(s)) + " blocks");
+                check(megapdf_block_count(s) > 0 && block_text_has(s, 0, "importancia") &&
+                          !block_text_has(s, 0, "importan-"),
+                      "structure wrap-hyphen numbered: the wrap hyphen is joined (#496)",
+                      megapdf_block_count(s) > 0 ? block_text_ascii(s, 0, MEGAPDF_BLOCK_TEXT) : "");
+                megapdf_structure_free(s);
+            }
+            megapdf_close(d);
+        }
+    }
+    {
+        auto bytes = indented_paragraph_hyphen_pdf();
+        megapdf_document* d = megapdf_open(bytes.data(), bytes.size(), nullptr);
+        check(d != nullptr, "structure wrap-hyphen indented: opens");
+        if (d != nullptr) {
+            megapdf_structure* s = megapdf_structure_load(d, 0, 1, MEGAPDF_STRUCTURE_DEFAULT, nullptr);
+            check(s != nullptr, "structure wrap-hyphen indented: loads");
+            if (s != nullptr) {
+                check(megapdf_block_count(s) == 1, "structure wrap-hyphen indented: one paragraph (#496)",
+                      std::to_string(megapdf_block_count(s)) + " blocks");
+                check(megapdf_block_count(s) > 0 && block_text_has(s, 0, "urgentes") &&
+                          !block_text_has(s, 0, "urgen-"),
+                      "structure wrap-hyphen indented: the wrap hyphen is joined (#496)",
+                      megapdf_block_count(s) > 0 ? block_text_ascii(s, 0, MEGAPDF_BLOCK_TEXT) : "");
+                megapdf_structure_free(s);
+            }
+            megapdf_close(d);
+        }
+    }
+    {
+        auto bytes = indented_numbered_hyphen_pdf();
+        megapdf_document* d = megapdf_open(bytes.data(), bytes.size(), nullptr);
+        check(d != nullptr, "structure wrap-hyphen indented number: opens");
+        if (d != nullptr) {
+            megapdf_structure* s = megapdf_structure_load(d, 0, 1, MEGAPDF_STRUCTURE_DEFAULT, nullptr);
+            check(s != nullptr, "structure wrap-hyphen indented number: loads");
+            if (s != nullptr) {
+                megapdf_block b0{};
+                const bool got0 = megapdf_block_count(s) > 0 && megapdf_block_get(s, 0, &b0) == MEGAPDF_OK;
+                check(megapdf_block_count(s) == 2 && got0 && b0.kind == MEGAPDF_BLOCK_LIST_ITEM,
+                      "structure wrap-hyphen indented number: one item holds both lines (#496)",
+                      std::to_string(megapdf_block_count(s)) + " blocks");
+                check(megapdf_block_count(s) > 0 && block_text_has(s, 0, "importancia") &&
+                          !block_text_has(s, 0, "importan-"),
+                      "structure wrap-hyphen indented number: the wrap hyphen is joined (#496)",
+                      megapdf_block_count(s) > 0 ? block_text_ascii(s, 0, MEGAPDF_BLOCK_TEXT) : "");
+                megapdf_structure_free(s);
+            }
+            megapdf_close(d);
+        }
+    }
+}
+
 void test_structure_tagged(const std::string& repo) {
     Doc d(repo + "/structure/tagged.pdf");
     if (!d.doc) { check(false, "structure tagged: opens"); return; }
@@ -8209,6 +8347,207 @@ void test_write_markdown_goldens(const std::string& repo, const std::string& exp
         {"tiny-font-size", repo + "/structure/tiny-font-size.pdf"},
     };
     for (const Case& c : cases) test_write_markdown_golden(c.name, c.path, expected_dir);
+}
+
+// --------------------------------------------------------------------------
+// #683: megapdf_write_text_recognised(). Scanned pages the caller has read are written as a
+// recognition note and a block quote (Markdown) or the plain paragraphs (text); everything else
+// is byte-for-byte what megapdf_write_text() writes. The goldens scan-recognised.md/.txt are
+// written by hand from the design, not generated from the writer.
+// --------------------------------------------------------------------------
+
+std::string read_text_file(const std::string& path) {
+    std::ifstream in(path, std::ios::binary);
+    return std::string((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+}
+
+void add_recognised(megapdf_recognised* r, int page, const std::u16string& text, double bottom, double top) {
+    const int rc = megapdf_recognised_add_line(r, page, reinterpret_cast<const unsigned short*>(text.data()),
+                                               text.size(), 72, bottom, 540, top);
+    check(rc == MEGAPDF_OK, "recognised: add_line succeeds", std::to_string(rc));
+}
+
+struct RecognisedWrite {
+    int rc = 0;
+    std::string text;
+    std::vector<int> unread;
+    size_t unread_count = 0;
+    int callbacks = 0;
+};
+
+int count_text_sink(void* context, const void* data, size_t size) {
+    auto* r = static_cast<std::pair<TextSink*, int*>*>(context);
+    (*r->second)++;
+    return write_to_text_sink(r->first, data, size);
+}
+
+RecognisedWrite write_recognised(const std::string& path, int format, const megapdf_recognised* rec,
+                                 const megapdf_write_options* opt = nullptr, const megapdf_cancel* cancel = nullptr) {
+    RecognisedWrite w;
+    Doc d(path);
+    if (d.doc == nullptr) { w.rc = MEGAPDF_ERR_ARGUMENT; return w; }
+    TextSink sink;
+    int callbacks = 0;
+    std::pair<TextSink*, int*> ctx(&sink, &callbacks);
+    int pages[64] = {};
+    w.rc = megapdf_write_text_recognised(d.doc, 0, megapdf_page_count(d.doc), format, opt, rec, pages, 64,
+                                         &w.unread_count, count_text_sink, &ctx, cancel);
+    w.text = sink.text;
+    w.callbacks = callbacks;
+    for (size_t i = 0; i < w.unread_count && i < 64; i++) w.unread.push_back(pages[i]);
+    return w;
+}
+
+void test_write_text_recognised(const std::string& repo, const std::string& expected_dir) {
+    const std::string scan = repo + "/structure/scan.pdf";
+    const char* const same_as_plain[] = {"columns", "furniture", "lists",  "headings",        "symbol-bullets",
+                                         "symbol-bullets-document", "tabular-headings", "xobject-text", "scan",
+                                         "empty-page", "mixed",     "tagged", "tagged-wrong", "tiny-font-size"};
+    // (a) With nothing recognised, every case is megapdf_write_text()'s output byte for byte, in both
+    // formats, with and without keep_lines.
+    for (const char* name : same_as_plain) {
+        const std::string path = repo + "/structure/" + name + ".pdf";
+        for (int format : {MEGAPDF_WRITE_TEXT, MEGAPDF_WRITE_MARKDOWN}) {
+            for (int keep : {0, 1}) {
+                Doc d(path);
+                if (d.doc == nullptr) { check(false, std::string("recognised ") + name + ": opens", path); continue; }
+                megapdf_write_options opt{};
+                opt.keep_lines = keep;
+                TextSink plain;
+                const int prc = megapdf_write_text(d.doc, 0, megapdf_page_count(d.doc), format, &opt,
+                                                   write_to_text_sink, &plain, nullptr);
+                megapdf_recognised* empty = megapdf_recognised_new();
+                for (const megapdf_recognised* rec : {static_cast<const megapdf_recognised*>(nullptr),
+                                                      static_cast<const megapdf_recognised*>(empty)}) {
+                    const RecognisedWrite w = write_recognised(path, format, rec, &opt);
+                    check(w.rc == prc && w.text == plain.text,
+                          std::string("recognised ") + name + ": nothing recognised is megapdf_write_text() byte for byte",
+                          w.text);
+                }
+                megapdf_recognised_free(empty);
+            }
+        }
+    }
+
+    // (b) Which pages are still scanned pages.
+    {
+        const RecognisedWrite w = write_recognised(scan, MEGAPDF_WRITE_MARKDOWN, nullptr);
+        check(w.unread_count == 1 && w.unread == std::vector<int>{0}, "recognised scan.pdf: reports page 0 to read",
+              std::to_string(w.unread_count));
+        const RecognisedWrite mixed = write_recognised(repo + "/structure/mixed.pdf", MEGAPDF_WRITE_TEXT, nullptr);
+        check(mixed.unread == std::vector<int>{1}, "recognised mixed.pdf: reports only the scanned middle page");
+        for (const char* name : {"empty-page", "headings"}) {
+            const RecognisedWrite e = write_recognised(repo + "/structure/" + name + ".pdf", MEGAPDF_WRITE_MARKDOWN,
+                                                       nullptr);
+            check(e.unread_count == 0 && e.unread.empty(), std::string("recognised ") + name + ".pdf: nothing to read");
+        }
+        // A capacity of 0 still reports the count, and nothing is written past the array.
+        Doc d(scan);
+        TextSink sink;
+        size_t n = 99;
+        const int rc = megapdf_write_text_recognised(d.doc, 0, 1, MEGAPDF_WRITE_MARKDOWN, nullptr, nullptr, nullptr, 0,
+                                                     &n, write_to_text_sink, &sink, nullptr);
+        check(rc == 0 && n == 1, "recognised scan.pdf: capacity 0 still counts", std::to_string(n));
+    }
+
+    // (c) Three lines: two adjacent, then one after a gap, make two paragraphs.
+    megapdf_recognised* rec = megapdf_recognised_new();
+    check(rec != nullptr, "recognised: handle allocates");
+    add_recognised(rec, 0, u"First line", 700, 712);
+    add_recognised(rec, 0, u"second line", 686, 698);
+    add_recognised(rec, 0, u"Third line", 600, 612);
+    {
+        const RecognisedWrite md = write_recognised(scan, MEGAPDF_WRITE_MARKDOWN, rec);
+        check(md.rc == 0, "recognised scan.pdf md: a recognised page is not a text layer", std::to_string(md.rc));
+        check(md.unread_count == 0, "recognised scan.pdf md: nothing left to read");
+        const std::string golden = read_text_file(expected_dir + "/scan-recognised.md");
+        check(!golden.empty() && md.text == golden, "recognised scan.pdf md: matches scan-recognised.md", md.text);
+        const RecognisedWrite tx = write_recognised(scan, MEGAPDF_WRITE_TEXT, rec);
+        const std::string tgolden = read_text_file(expected_dir + "/scan-recognised.txt");
+        check(!tgolden.empty() && tx.text == tgolden, "recognised scan.pdf txt: matches scan-recognised.txt", tx.text);
+        megapdf_write_options keep{};
+        keep.keep_lines = 1;
+        const RecognisedWrite kl = write_recognised(scan, MEGAPDF_WRITE_MARKDOWN, rec, &keep);
+        check(kl.text.find("> First line\n> second line\n>\n> Third line\n") != std::string::npos,
+              "recognised scan.pdf md: keep_lines keeps the recogniser's lines", kl.text);
+        // The scanned page sits between two text pages and leaves them alone.
+        megapdf_recognised* mid = megapdf_recognised_new();
+        add_recognised(mid, 1, u"Read me", 700, 712);
+        const RecognisedWrite m = write_recognised(repo + "/structure/mixed.pdf", MEGAPDF_WRITE_MARKDOWN, mid);
+        check(m.text == "First page has text.\n\n*[Page 2 is a scanned image, read by text recognition: the text may "
+                        "contain mistakes]*\n\n> Read me\n\nThird page has text too.\n",
+              "recognised mixed.pdf md: only the scanned page changes", m.text);
+        // Lines for a page that has its own text, or no image, are ignored.
+        megapdf_recognised* wrong = megapdf_recognised_new();
+        add_recognised(wrong, 0, u"ignored", 700, 712);
+        const RecognisedWrite ignored = write_recognised(repo + "/structure/mixed.pdf", MEGAPDF_WRITE_MARKDOWN, wrong);
+        const RecognisedWrite plain_mixed = write_recognised(repo + "/structure/mixed.pdf", MEGAPDF_WRITE_MARKDOWN, nullptr);
+        check(ignored.text == plain_mixed.text, "recognised mixed.pdf: lines for a page with text are ignored");
+        const RecognisedWrite blank = write_recognised(repo + "/structure/empty-page.pdf", MEGAPDF_WRITE_MARKDOWN, wrong);
+        check(blank.text == "*[Page 1 has no text layer]*\n", "recognised empty-page.pdf: a blank page is never read",
+              blank.text);
+        megapdf_recognised_free(wrong);
+        megapdf_recognised_free(mid);
+    }
+    megapdf_recognised_free(rec);
+
+    // (d) Recognised text is escaped as the start of a line inside the quote.
+    {
+        megapdf_recognised* esc = megapdf_recognised_new();
+        add_recognised(esc, 0, u"# 5 apples", 700, 712);
+        add_recognised(esc, 0, u"1. x", 686, 698);
+        add_recognised(esc, 0, u"a*b_c", 672, 684);
+        const RecognisedWrite md = write_recognised(scan, MEGAPDF_WRITE_MARKDOWN, esc);
+        check(md.text.find("> \\# 5 apples 1. x a\\*b\\_c\n") != std::string::npos,
+              "recognised md: only the start of the joined paragraph is a line start", md.text);
+        megapdf_write_options keep{};
+        keep.keep_lines = 1;
+        const RecognisedWrite kl = write_recognised(scan, MEGAPDF_WRITE_MARKDOWN, esc, &keep);
+        check(kl.text.find("> \\# 5 apples\n> 1\\. x\n> a\\*b\\_c\n") != std::string::npos,
+              "recognised md: # and 1. are escaped at each line start inside the quote", kl.text);
+        megapdf_recognised_free(esc);
+    }
+
+    // (e) Whitespace-only lines are ignored: the page keeps today's note and is still reported.
+    {
+        megapdf_recognised* blank = megapdf_recognised_new();
+        add_recognised(blank, 0, u"", 700, 712);
+        add_recognised(blank, 0, u"  \u00A0\u3000 ", 686, 698);
+        const RecognisedWrite w = write_recognised(scan, MEGAPDF_WRITE_MARKDOWN, blank);
+        const RecognisedWrite plain = write_recognised(scan, MEGAPDF_WRITE_MARKDOWN, nullptr);
+        check(w.text == plain.text && w.unread == std::vector<int>{0},
+              "recognised scan.pdf: whitespace lines leave today's note and the page still to read", w.text);
+        megapdf_recognised_free(blank);
+    }
+
+    // Handle argument checks.
+    {
+        const unsigned short x = 'x';
+        megapdf_recognised* h = megapdf_recognised_new();
+        check(megapdf_recognised_add_line(nullptr, 0, &x, 1, 0, 0, 1, 1) == MEGAPDF_ERR_ARGUMENT,
+              "recognised: a NULL handle is refused");
+        check(megapdf_recognised_add_line(h, -1, &x, 1, 0, 0, 1, 1) == MEGAPDF_ERR_ARGUMENT,
+              "recognised: a negative page is refused");
+        check(megapdf_recognised_add_line(h, 0, nullptr, 1, 0, 0, 1, 1) == MEGAPDF_ERR_ARGUMENT,
+              "recognised: NULL text with a length is refused");
+        check(megapdf_recognised_add_line(h, 0, nullptr, 0, 0, 0, 1, 1) == MEGAPDF_OK,
+              "recognised: NULL text with length 0 is accepted and ignored");
+        megapdf_recognised_free(h);
+        megapdf_recognised_free(nullptr);
+    }
+
+    // (f) A raised cancel writes nothing.
+    {
+        megapdf_recognised* one = megapdf_recognised_new();
+        add_recognised(one, 0, u"text", 700, 712);
+        megapdf_cancel* cancel = megapdf_cancel_new();
+        megapdf_cancel_raise(cancel);
+        const RecognisedWrite w = write_recognised(scan, MEGAPDF_WRITE_MARKDOWN, one, nullptr, cancel);
+        check(w.rc == MEGAPDF_ERR_CANCELLED && w.callbacks == 0 && w.text.empty(),
+              "recognised: a raised cancel returns CANCELLED and never calls write", std::to_string(w.rc));
+        megapdf_cancel_free(cancel);
+        megapdf_recognised_free(one);
+    }
 }
 
 // --------------------------------------------------------------------------
@@ -10459,6 +10798,7 @@ int main(int argc, char** argv) {
     test_structure_rotated_pages(std::string(MEGAPDF_REPO_FIXTURES));
     test_structure_no_stray_control_characters(argv[1], argv[2], std::string(MEGAPDF_REPO_FIXTURES));
     test_structure_tm_scaled_size(std::string(MEGAPDF_REPO_FIXTURES));
+    test_structure_wrap_hyphen_across_indent();
     test_structure_span_font(std::string(MEGAPDF_REPO_FIXTURES));
     test_structure_tagged(std::string(MEGAPDF_REPO_FIXTURES));
     test_structure_tiny_font_size(std::string(MEGAPDF_REPO_FIXTURES));
@@ -10466,6 +10806,7 @@ int main(int argc, char** argv) {
     test_write_text_goldens(std::string(MEGAPDF_REPO_FIXTURES), argv[4]);
     test_write_text_findability(argv[2]);
     test_write_markdown_goldens(std::string(MEGAPDF_REPO_FIXTURES), argv[4]);
+    test_write_text_recognised(std::string(MEGAPDF_REPO_FIXTURES), argv[4]);
     test_image_notes(std::string(MEGAPDF_REPO_FIXTURES), argv[1]);
     test_image_jpx_not_decoded(std::string(MEGAPDF_REPO_FIXTURES));
     test_markdown_round_trips(std::string(MEGAPDF_REPO_FIXTURES), argv[4]);

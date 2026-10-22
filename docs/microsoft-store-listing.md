@@ -14,9 +14,11 @@ there, not here.
 <!-- copy-by-language -->
 ## Copy by language
 
-Partner Center asks for one listing per language declared in the package: **English (United States)**, **English (Canada)**, **French (Canada)** and **French (France)**. Every field for every language is below as a block that pastes as-is — copy from inside the block only. The URLs, category and contact under *Other fields* are the same for all four.
+Partner Center asks for one listing per language declared in the package: **English (United States)**, **English (Canada)**, **French (Canada)** and **French (France)**, and since #724 **Spanish (Mexico)** and **Spanish (Spain)**. Every field for every language is below as a block that pastes as-is — copy from inside the block only. The URLs, category and contact under *Other fields* are the same for all of them.
 
 *French copy was translated by the build assistant against `docs/localisation-glossary.md` and signed off by a francophone reviewer for 2.0 (2026-09-18, #242); new copy gets the same read before it goes live. The France variant is derived from the Canadian one by `tools/gen_listing_copy.py`.*
+
+*Spanish copy was written by the build assistant against `docs/localisation-glossary-es.md` and is **ES-REVIEW #724: not yet read by the reviewer**. Fable's approval, recorded on #724, gates it; nothing Spanish is pasted into a store before then. The Spain variant is derived from the Latin American one by `tools/gen_listing_copy.py` (`spain()`), with no punctuation pass.*
 
 ### English (United States) — `en-US`
 
@@ -338,6 +340,168 @@ PDF léger
 06-search.png: Ctrl+F surligne tous les résultats d'un coup et les compte : la seule clause utile est à deux touches.
 07-redact.png: Marquez ce qui doit disparaître. L'enregistrement le retire du fichier au lieu de le recouvrir, et dit ce qu'il a retiré.
 08-home.png: Pas de compte, pas de cloud, pas d'abonnement, pas de télémétrie. Chaque document est ouvert et traité sur votre propre PC.
+```
+
+### Español (México) — `es-MX`
+
+*Latin American Spanish is listed under `es-mx`; the capture folder is `es-419`.*
+
+**Short description / first line**
+```
+El editor de PDF ligero para Windows. Abrir. Corregir. Guardar. Listo.
+```
+
+**Description** (plain text; the blank lines are paragraph breaks)
+```
+MegaPDF es un editor de PDF gratuito y ligero, pensado para quienes encuentran las grandes suites de PDF demasiado pesadas y complicadas. Hace ocho cosas excepcionalmente bien, y deliberadamente nada más.
+
+LEER — Presiona Ctrl+H y las herramientas desaparecen de la pantalla, dejando solo la página. Una pequeña barra flotante conserva el número de página; Esc lo devuelve todo. Los colores de la página están en Configuración: normal, sepia para una lectura larga y noche para una habitación a oscuras. El modo noche invierte la página, imágenes incluidas, algo deliberado que la propia opción aclara. Cada documento puede abrirse en modo de lectura si eso es lo que haces con él la mayor parte del tiempo.
+
+EDITAR TEXTO — Haz clic en el texto del documento y escribe, como al editar un archivo de Word. Corrige un error tipográfico, cambia una fecha, actualiza un número. MegaPDF conserva la fuente del propio documento siempre que puede, y si un cambio desplazara el resto de la página, te lo dice en lugar de mover cosas en silencio.
+
+AGREGAR TEXTO — Haz clic en una línea en blanco y escribe sobre ella. Elige el tamaño y el tipo de fuente (sans, serif o monoespaciada) para que lo que agregues combine con el resto del formulario. Arrástralo a su lugar, o haz doble clic en él más tarde para cambiarlo.
+
+CENSURAR — Arrastra sobre un nombre, una dirección o una imagen, o selecciona el texto, y MegaPDF lo quita del archivo en lugar de taparlo. Lo que había debajo desaparece: ninguna otra aplicación puede copiarlo ni buscarlo. Corrector, que solo cubre, lo advierte.
+
+CASILLAS — Haz clic en un cuadro vacío y se convierte en una casilla marcada. Formularios que nunca estuvieron pensados para completarse en formato digital, completados en formato digital.
+
+COLOCAR FIRMAS — Guarda una pequeña biblioteca personal de imágenes de firma. Elige una y haz clic donde va. Muévela, ajústala con pequeños desplazamientos y cámbiale el tamaño hasta que quede justo en su lugar.
+
+GUARDAR — Guardar sobrescribe, Guardar como crea una copia. Sin asistentes de exportación, sin diálogos para “aplanar”, sin sorpresas. Guardar como también puede escribir el texto del documento (títulos, listas, los valores que ingresaste) como archivo Markdown, sin tocar el PDF.
+
+PÁGINAS — El panel Páginas es un lugar para trabajar, no solo para mirar. Gira una página que se escaneó de lado, elimina una, arrastra las páginas para cambiar su orden, inserta una página en blanco, agrega las páginas de otro PDF o guarda las páginas que elegiste como un archivo aparte. Cada acción es un solo paso, y un solo Deshacer devuelve el documento a como estaba.
+
+También incluye, porque los documentos reales lo necesitan: busca cualquier palabra con Ctrl+F (todas las coincidencias resaltadas, Enter para recorrerlas), imprime tu PDF y reduce los escaneos demasiado pesados para enviarlos por correo electrónico con un clic (reducción de resolución de las imágenes y recompresión JPEG). Los documentos se abren como pestañas en una sola ventana, y un PDF al que haces doble clic en el Explorador de archivos se une a la ventana que ya tienes abierta.
+
+PRIVADO POR DISEÑO — Sin cuenta. Sin nube. Sin suscripción. Sin telemetría. Cada documento se procesa por completo en tu dispositivo y nunca se sube a ningún lugar. Ideal para contratos, formularios médicos y todo lo que preferirías no entregar al servidor de otra persona.
+
+MegaPDF es de código abierto (Apache-2.0): github.com/SlyWombat/MegaPDF
+```
+
+**App features** — one line per box, 14 boxes
+```
+El modo de lectura (Ctrl+H) oculta las herramientas y deja la página, con colores de página normal, sepia y noche
+Gira, elimina y reordena páginas, inserta una página en blanco, agrega páginas de otro PDF o guarda una selección: cada acción es un paso de Deshacer
+Edita el texto del propio documento haciendo clic y escribiendo, como en un documento de Word
+Censura nombres, direcciones e imágenes: se quitan del archivo, no solo se tapan
+Agrega texto en cualquier línea en blanco, con el tamaño y el tipo de fuente que combinan con el formulario
+Haz clic en los cuadros vacíos para marcar casillas en cualquier formulario
+Coloca con un clic una firma de tu biblioteca personal y luego ajústala y cámbiale el tamaño
+Busca cualquier palabra del documento con Ctrl+F: todas las coincidencias resaltadas, y Enter para recorrerlas
+Guardar sobrescribe, Guardar como crea una copia: sin asistentes de exportación ni diálogos para aplanar
+Abre varios PDF como pestañas en una sola ventana: un PDF al que haces doble clic en el Explorador de archivos se une a la ventana que ya tienes
+Guardar como escribe el texto del documento como Markdown: títulos, listas y valores ingresados, sin tocar el PDF
+Reduce los escaneos demasiado pesados para enviarlos por correo electrónico con un clic
+Imprime directamente desde la aplicación
+Procesamiento 100 % local: sin cuenta, sin nube, sin suscripción, sin telemetría
+```
+
+**Search terms** — one per box, seven boxes
+```
+editor de PDF
+editar PDF
+firmar PDF
+llenar formulario PDF
+firma en PDF
+comprimir PDF
+PDF ligero
+```
+
+**Copyright**
+```
+© 2026 Electric RV. Con licencia Apache-2.0.
+```
+
+**Screenshot captions** — same 8 files, same order
+```
+01-reading.png: Presiona Ctrl+H y las herramientas salen de la pantalla, dejando solo la página. Una pequeña barra flotante conserva tu lugar; Esc lo devuelve todo.
+02-text.png: Haz clic en el texto del propio documento y escribe: así se corrige un PDF, como se corrige un archivo de Word.
+03-checkbox.png: Haz clic en un cuadro vacío y queda marcado: las casillas impresas que nunca estuvieron pensadas para usarse en pantalla, ahora se marcan en pantalla.
+04-sign.png: Elige una firma de tu biblioteca, haz clic donde va y luego ajústala hasta que quede bien sobre la línea.
+05-pages.png: El panel Páginas es un lugar para trabajar: gira un escaneo de lado, elimina una página, reordénalas o guarda las que elegiste como un archivo aparte.
+06-search.png: Ctrl+F resalta todas las coincidencias a la vez y las cuenta, así que la cláusula que necesitas está a un par de teclas.
+07-redact.png: Marca lo que debe desaparecer. Al guardar, se quita del archivo en lugar de taparse, y te dice cuánto quitó.
+08-home.png: Sin cuenta, sin nube, sin suscripción, sin telemetría. Cada documento se abre y se maneja en tu propio equipo.
+```
+
+### Español (España) — `es-ES`
+
+**Short description / first line**
+```
+El editor de PDF ligero para Windows. Abrir. Corregir. Guardar. Listo.
+```
+
+**Description** (plain text; the blank lines are paragraph breaks)
+```
+MegaPDF es un editor de PDF gratuito y ligero, pensado para quienes encuentran las grandes suites de PDF demasiado pesadas y complicadas. Hace ocho cosas excepcionalmente bien, y deliberadamente nada más.
+
+LEER — Pulsa Ctrl+H y las herramientas desaparecen de la pantalla, dejando solo la página. Una pequeña barra flotante conserva el número de página; Esc lo devuelve todo. Los colores de la página están en Configuración: normal, sepia para una lectura larga y noche para una habitación a oscuras. El modo noche invierte la página, imágenes incluidas, algo deliberado que la propia opción aclara. Cada documento puede abrirse en modo de lectura si eso es lo que haces con él la mayor parte del tiempo.
+
+EDITAR TEXTO — Haz clic en el texto del documento y escribe, como al editar un archivo de Word. Corrige un error tipográfico, cambia una fecha, actualiza un número. MegaPDF conserva la fuente del propio documento siempre que puede, y si un cambio desplazara el resto de la página, te lo dice en lugar de mover cosas en silencio.
+
+AGREGAR TEXTO — Haz clic en una línea en blanco y escribe sobre ella. Elige el tamaño y el tipo de fuente (sans, serif o monoespaciada) para que lo que agregues combine con el resto del formulario. Arrástralo a su lugar, o haz doble clic en él más tarde para cambiarlo.
+
+CENSURAR — Arrastra sobre un nombre, una dirección o una imagen, o selecciona el texto, y MegaPDF lo quita del archivo en lugar de taparlo. Lo que había debajo desaparece: ninguna otra aplicación puede copiarlo ni buscarlo. Corrector, que solo cubre, lo advierte.
+
+CASILLAS — Haz clic en un cuadro vacío y se convierte en una casilla marcada. Formularios que nunca estuvieron pensados para completarse en formato digital, completados en formato digital.
+
+COLOCAR FIRMAS — Guarda una pequeña biblioteca personal de imágenes de firma. Elige una y haz clic donde va. Muévela, ajústala con pequeños desplazamientos y cámbiale el tamaño hasta que quede justo en su lugar.
+
+GUARDAR — Guardar sobrescribe, Guardar como crea una copia. Sin asistentes de exportación, sin diálogos para “aplanar”, sin sorpresas. Guardar como también puede escribir el texto del documento (títulos, listas, los valores que ingresaste) como archivo Markdown, sin tocar el PDF.
+
+PÁGINAS — El panel Páginas es un lugar para trabajar, no solo para mirar. Gira una página que se escaneó de lado, elimina una, arrastra las páginas para cambiar su orden, inserta una página en blanco, agrega las páginas de otro PDF o guarda las páginas que elegiste como un archivo aparte. Cada acción es un solo paso, y un solo Deshacer devuelve el documento a como estaba.
+
+También incluye, porque los documentos reales lo necesitan: busca cualquier palabra con Ctrl+F (todas las coincidencias resaltadas, Enter para recorrerlas), imprime tu PDF y reduce los escaneos demasiado pesados para enviarlos por correo electrónico con un clic (reducción de resolución de las imágenes y recompresión JPEG). Los documentos se abren como pestañas en una sola ventana, y un PDF al que haces doble clic en el Explorador de archivos se une a la ventana que ya tienes abierta.
+
+PRIVADO POR DISEÑO — Sin cuenta. Sin nube. Sin suscripción. Sin telemetría. Cada documento se procesa por completo en tu dispositivo y nunca se sube a ningún lugar. Ideal para contratos, formularios médicos y todo lo que preferirías no entregar al servidor de otra persona.
+
+MegaPDF es de código abierto (Apache-2.0): github.com/SlyWombat/MegaPDF
+```
+
+**App features** — one line per box, 14 boxes
+```
+El modo de lectura (Ctrl+H) oculta las herramientas y deja la página, con colores de página normal, sepia y noche
+Gira, elimina y reordena páginas, inserta una página en blanco, agrega páginas de otro PDF o guarda una selección: cada acción es un paso de Deshacer
+Edita el texto del propio documento haciendo clic y escribiendo, como en un documento de Word
+Censura nombres, direcciones e imágenes: se quitan del archivo, no solo se tapan
+Agrega texto en cualquier línea en blanco, con el tamaño y el tipo de fuente que combinan con el formulario
+Haz clic en los cuadros vacíos para marcar casillas en cualquier formulario
+Coloca con un clic una firma de tu biblioteca personal y luego ajústala y cámbiale el tamaño
+Busca cualquier palabra del documento con Ctrl+F: todas las coincidencias resaltadas, y Enter para recorrerlas
+Guardar sobrescribe, Guardar como crea una copia: sin asistentes de exportación ni diálogos para aplanar
+Abre varios PDF como pestañas en una sola ventana: un PDF al que haces doble clic en el Explorador de archivos se une a la ventana que ya tienes
+Guardar como escribe el texto del documento como Markdown: títulos, listas y valores ingresados, sin tocar el PDF
+Reduce los escaneos demasiado pesados para enviarlos por correo electrónico con un clic
+Imprime directamente desde la aplicación
+Procesamiento 100 % local: sin cuenta, sin nube, sin suscripción, sin telemetría
+```
+
+**Search terms** — one per box, seven boxes
+```
+editor de PDF
+editar PDF
+firmar PDF
+rellenar formulario PDF
+firma en PDF
+comprimir PDF
+PDF ligero
+```
+
+**Copyright**
+```
+© 2026 Electric RV. Con licencia Apache-2.0.
+```
+
+**Screenshot captions** — same 8 files, same order
+```
+01-reading.png: Pulsa Ctrl+H y las herramientas salen de la pantalla, dejando solo la página. Una pequeña barra flotante conserva tu lugar; Esc lo devuelve todo.
+02-text.png: Haz clic en el texto del propio documento y escribe: así se corrige un PDF, como se corrige un archivo de Word.
+03-checkbox.png: Haz clic en un cuadro vacío y queda marcado: las casillas impresas que nunca estuvieron pensadas para usarse en pantalla, ahora se marcan en pantalla.
+04-sign.png: Elige una firma de tu biblioteca, haz clic donde va y luego ajústala hasta que quede bien sobre la línea.
+05-pages.png: El panel Páginas es un lugar para trabajar: gira un escaneo de lado, elimina una página, reordénalas o guarda las que elegiste como un archivo aparte.
+06-search.png: Ctrl+F resalta todas las coincidencias a la vez y las cuenta, así que la cláusula que necesitas está a un par de teclas.
+07-redact.png: Marca lo que debe desaparecer. Al guardar, se quita del archivo en lugar de taparse, y te dice cuánto quitó.
+08-home.png: Sin cuenta, sin nube, sin suscripción, sin telemetría. Cada documento se abre y se maneja en tu propio equipo.
 ```
 
 <!-- /copy-by-language -->

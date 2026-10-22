@@ -31,6 +31,7 @@ Dave's go-ahead: <quote and date>. Live before this release: Windows <>, iOS <>,
 - [ ] **Every image read by eye** — no keyboard tip, grabber, real clock, cog; **no file picker, Explorer, Finder or recent list with personal files** in any public capture.
 - [ ] **Copy** — `docs/release-notes/<ver>/` (four store files, long form, README with the delta table, the issue per line, counts, French review); `python3 docs/release-notes/<ver>/check_copy.py --check`; `python3 tools/gen_listing_copy.py`; limits MS 1500 / Apple 4000 / Play 500 / App Review notes 4000; Apple copy names no other platform and no ✕.
 - [ ] **French** — every new app string and every new store block reviewed; fr-FR only by `python3 tools/gen_strings.py fr-fr` and `check_copy.py`; the review recorded in the README.
+- [ ] **Spanish** (#724) — every `ES-REVIEW` app string and every new store block reviewed by Fable, the approval recorded on #724 and in the README; es-ES only by `python3 tools/gen_strings.py es-es` and `check_copy.py`; no marker left on a string that shipped unreviewed; the Play and Linux Spanish release notes are not `PENDING`.
 - [ ] **WACK** at <ver4> on the CI x64 package — `wack-prep.ps1`, the `MegaPDF WACK` scheduled task, Dave clicks Yes; PASS with only the two known optional FAILs; report renamed `wack-report-<ver4>-<date>.xml`; task deleted.
 - [ ] **Docs** — README, TESTING, `tools/Linux-Packaging.md`, `tools/linux/megapdf-cli.1`; website: New in <x.y> above the previous block, gallery from this release's sets, footer source link, privacy date. Not deployed yet.
 
