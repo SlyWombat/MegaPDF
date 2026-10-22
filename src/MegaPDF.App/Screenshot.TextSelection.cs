@@ -228,7 +228,11 @@ internal static partial class Screenshot
         var heldAfter = view.PagesScrollOffsetForTest;
         Console.Error.WriteLine($"  held still for 500 ms: offset {heldBaseline:0} -> {heldAfter:0} DIP; the selection ends on page {(view.TextSelectionFocusPageForTest ?? -1) + 1}");
         Check("  held still for 500 ms, the pages kept scrolling", heldAfter > heldBaseline + 20);
-        Check("  and the selection's end moved onto page 2", view.TextSelectionFocusPageForTest == 1);
+        // Page 2 is reached once the pages have scrolled past the foot of page 1, a distance that
+        // depends on the window; a timer starved by a busy UI thread gets there later, never not at
+        // all. So it is given up to 3 s more of the same stillness before the check calls it.
+        Check("  and the selection's end moved onto page 2",
+              await UntilAsync(() => view.TextSelectionFocusPageForTest == 1, 3));
         Check("  the release lets go, and the timer with it", view.ReleaseHeldDragForTest() && !view.IsTextAutoScrollRunningForTest);
         // The last tick's ChangeView may still be on its way to the scroller when the release lands:
         // let that one settle, then nothing else may move the pages.
