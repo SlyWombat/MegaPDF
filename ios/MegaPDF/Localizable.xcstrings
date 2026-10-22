@@ -355,7 +355,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%lld páginas agregadas."
+            "value" : "%lld páginas añadidas."
           }
         },
         "es-419" : {
@@ -732,7 +732,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "1 página agregada."
+            "value" : "1 página añadida."
           }
         },
         "es-419" : {
@@ -906,7 +906,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Agregar"
+            "value" : "Añadir"
           }
         },
         "es-419" : {
@@ -935,7 +935,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Agregar páginas"
+            "value" : "Añadir páginas"
           }
         },
         "es-419" : {
@@ -964,7 +964,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Agregar texto"
+            "value" : "Añadir texto"
           }
         },
         "es-419" : {
@@ -1109,13 +1109,13 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Archivo"
+            "value" : "Archivados"
           }
         },
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Archivo"
+            "value" : "Archivados"
           }
         },
         "fr" : {
@@ -1138,7 +1138,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Página en blanco agregada como página %lld."
+            "value" : "Página en blanco añadida como página %lld."
           }
         },
         "es-419" : {
@@ -1602,7 +1602,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "No se pudo agregar ese texto."
+            "value" : "No se pudo añadir ese texto."
           }
         },
         "es-419" : {
@@ -2733,13 +2733,13 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Dibuja tu firma"
+            "value" : "Tu firma"
           }
         },
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Dibuja tu firma"
+            "value" : "Tu firma"
           }
         },
         "fr" : {
@@ -3313,7 +3313,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Mantén presionada una página para moverla"
+            "value" : "Mantén pulsada una página para moverla"
           }
         },
         "es-419" : {
@@ -4070,7 +4070,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Aún no hay firmas. Dibuja una con el dedo o agrega una foto de tu firma sobre papel blanco; el fondo se quita automáticamente."
+            "value" : "Aún no hay firmas. Dibuja una con el dedo o añade una foto de tu firma sobre papel blanco; el fondo se quita automáticamente."
           }
         },
         "es-419" : {
@@ -5317,13 +5317,13 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Lo coloca en la página"
+            "value" : "La coloca en la página"
           }
         },
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Lo coloca en la página"
+            "value" : "La coloca en la página"
           }
         },
         "fr" : {
@@ -6042,13 +6042,13 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Retorno inicia una nueva línea."
+            "value" : "La tecla Retorno inicia una línea nueva."
           }
         },
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Retorno inicia una nueva línea."
+            "value" : "La tecla Retorno inicia una línea nueva."
           }
         },
         "fr" : {
@@ -6970,7 +6970,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Firma agregada"
+            "value" : "Firma añadida"
           }
         },
         "es-419" : {
@@ -7318,7 +7318,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Ese archivo no permite copiar nada de él, así que sus páginas no se pueden agregar aquí."
+            "value" : "Ese archivo no permite copiar nada de él, así que sus páginas no se pueden añadir aquí."
           }
         },
         "es-419" : {
@@ -7985,7 +7985,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Este documento no permite girar, eliminar, mover ni agregar páginas. La contraseña del propietario sí lo permitiría."
+            "value" : "Este documento no permite girar, eliminar, mover ni añadir páginas. La contraseña del propietario sí lo permitiría."
           }
         },
         "es-419" : {
@@ -8362,7 +8362,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Este formulario está hecho para llenarse con Adobe Reader. Aquí aún puedes verlo, imprimirlo, guardarlo y compartirlo; lo único que no se puede es llenarlo."
+            "value" : "Este formulario está hecho para rellenarse con Adobe Reader. Aquí aún puedes verlo, imprimirlo, guardarlo y compartirlo; lo único que no se puede es rellenarlo."
           }
         },
         "es-419" : {
@@ -8391,7 +8391,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Este formulario necesita Adobe Reader para llenarse."
+            "value" : "Este formulario necesita Adobe Reader para rellenarse."
           }
         },
         "es-419" : {
@@ -8594,7 +8594,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Este texto lo agregó una versión anterior y no se puede editar aquí."
+            "value" : "Este texto lo añadió una versión anterior y no se puede editar aquí."
           }
         },
         "es-419" : {
@@ -8623,7 +8623,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Esto se agregará donde tocaste."
+            "value" : "Esto se añadirá donde tocaste."
           }
         },
         "es-419" : {
@@ -8652,7 +8652,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Esas páginas incluyen un campo de formulario cuyo nombre pertenece a un grupo de campos, y este documento ya tiene un campo con ese nombre. MegaPDF no puede cambiarle el nombre sin romper el formulario, así que no agregó nada para no dañarlo."
+            "value" : "Esas páginas incluyen un campo de formulario cuyo nombre pertenece a un grupo de campos, y este documento ya tiene un campo con ese nombre. MegaPDF no puede cambiarle el nombre sin romper el formulario, así que no añadió nada para no dañarlo."
           }
         },
         "es-419" : {

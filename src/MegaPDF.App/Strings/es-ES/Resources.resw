@@ -23,7 +23,7 @@
     <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
   </data>
   <data name="NoSignaturesYet.Text" xml:space="preserve">
-    <value>Aún no hay firmas. Dibuja una, escribe tu nombre o agrega una foto de tu firma sobre papel blanco; el fondo se quita automáticamente.</value>
+    <value>Aún no hay firmas. Dibuja una, escribe tu nombre o añade una foto de tu firma sobre papel blanco; el fondo se quita automáticamente.</value>
     <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
   </data>
   <data name="RenameSignatureItem.Text" xml:space="preserve">
@@ -213,7 +213,7 @@
     <comment>ES-REVIEW #724 — new, not yet read by the reviewer. #131, #135</comment>
   </data>
   <data name="DynamicXfaNoticeBar.Message" xml:space="preserve">
-    <value>Este formulario está hecho para llenarse con Adobe Reader. Aquí aún puedes verlo, imprimirlo, guardarlo y compartirlo; lo único que no se puede es llenarlo.</value>
+    <value>Este formulario está hecho para rellenarse con Adobe Reader. Aquí aún puedes verlo, imprimirlo, guardarlo y compartirlo; lo único que no se puede es rellenarlo.</value>
     <comment>ES-REVIEW #724 — new, not yet read by the reviewer. #456, #457: shown when megapdf_document_flags() reports MEGAPDF_DOC_DYNAMIC_XFA</comment>
   </data>
   <data name="GetAdobeReaderButton.Content" xml:space="preserve">
@@ -221,7 +221,7 @@
     <comment>ES-REVIEW #724 — new, not yet read by the reviewer. #457: opens the same reader-download page the document's own placeholder text names</comment>
   </data>
   <data name="DynamicXfaCannotFill" xml:space="preserve">
-    <value>Este formulario necesita Adobe Reader para llenarse.</value>
+    <value>Este formulario necesita Adobe Reader para rellenarse.</value>
     <comment>ES-REVIEW #724 — new, not yet read by the reviewer. #457: said instead of arming signature/checkmark placement on a dynamic-XFA document</comment>
   </data>
   <data name="SignedSaveWarningTitle" xml:space="preserve">
@@ -271,7 +271,7 @@
     <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Find bar note (#676) under the count while the current match was read from a scanned page by the device's recogniser</comment>
   </data>
   <data name="FindNoRecogniserText.Text" xml:space="preserve">
-    <value>No se puede buscar en las páginas escaneadas hasta que Windows tenga el reconocimiento de texto para tu idioma. Agrégalo en la configuración de idioma y luego reinicia MegaPDF.</value>
+    <value>No se puede buscar en las páginas escaneadas hasta que Windows tenga el reconocimiento de texto para tu idioma. Añádelo en la configuración de idioma y luego reinicia MegaPDF.</value>
     <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Find bar note (#687) shown when a search met a scanned page and Windows has no text-recognition language installed; the button below opens Settings</comment>
   </data>
   <data name="FindNoRecogniserButton.Content" xml:space="preserve">
@@ -386,7 +386,7 @@
     <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Shown in a page's slot when the engine could not rasterise it (#93)</comment>
   </data>
   <data name="CouldNotAddSignatureTitle" xml:space="preserve">
-    <value>No se pudo agregar esa firma</value>
+    <value>No se pudo añadir esa firma</value>
     <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
   </data>
   <data name="CouldNotPlaceSignatureTitle" xml:space="preserve">
@@ -654,7 +654,7 @@
     <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
   </data>
   <data name="Add" xml:space="preserve">
-    <value>Agregar</value>
+    <value>Añadir</value>
     <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
   </data>
   <data name="SignatureNamePlaceholder" xml:space="preserve">
@@ -714,19 +714,19 @@
     <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
   </data>
   <data name="ErrorNotExtractable" xml:space="preserve">
-    <value>Ese texto forma parte de una imagen escaneada, así que no se puede editar. Cúbrelo con corrector y agrega texto nuevo.</value>
+    <value>Ese texto forma parte de una imagen escaneada, así que no se puede editar. Cúbrelo con corrector y añade texto nuevo.</value>
     <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
   </data>
   <data name="ErrorLayoutWouldChange" xml:space="preserve">
-    <value>El texto de esta página no se puede modificar sin alterar su diseño: reescribirlo desplazaría el espaciado de otro texto. Cúbrelo con corrector y agrega texto nuevo.</value>
+    <value>El texto de esta página no se puede modificar sin alterar su diseño: reescribirlo desplazaría el espaciado de otro texto. Cúbrelo con corrector y añade texto nuevo.</value>
     <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
   </data>
   <data name="ErrorLayoutRenderWouldChange" xml:space="preserve">
-    <value>Esta línea no se puede modificar sin que otras partes de la página se vean distintas. Cúbrela con corrector y agrega texto nuevo.</value>
+    <value>Esta línea no se puede modificar sin que otras partes de la página se vean distintas. Cúbrela con corrector y añade texto nuevo.</value>
     <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
   </data>
   <data name="ErrorLayoutTextWouldMove" xml:space="preserve">
-    <value>Esta línea no se puede modificar sin mover texto de otras partes de la página. Cúbrela con corrector y agrega texto nuevo.</value>
+    <value>Esta línea no se puede modificar sin mover texto de otras partes de la página. Cúbrela con corrector y añade texto nuevo.</value>
     <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
   </data>
   <data name="ErrorUnsupportedSecurity" xml:space="preserve">
@@ -818,7 +818,7 @@
     <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
   </data>
   <data name="RegionAddedText" xml:space="preserve">
-    <value>Texto agregado</value>
+    <value>Texto añadido</value>
     <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
   </data>
   <data name="RegionSignatureOrMark" xml:space="preserve">
@@ -954,11 +954,11 @@
     <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Windows toolbar (#144): tooltip</comment>
   </data>
   <data name="ToolbarAddText" xml:space="preserve">
-    <value>Agregar texto</value>
+    <value>Añadir texto</value>
     <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Windows toolbar (#144): label</comment>
   </data>
   <data name="ToolbarAddTextTip" xml:space="preserve">
-    <value>Agrega texto nuevo en cualquier lugar</value>
+    <value>Añade texto nuevo en cualquier lugar</value>
     <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Windows toolbar (#144): tooltip</comment>
   </data>
   <data name="ToolbarFind" xml:space="preserve">
@@ -1106,7 +1106,7 @@
     <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Error dialog title when an edit fails (#145)</comment>
   </data>
   <data name="CouldNotRestoreTitle" xml:space="preserve">
-    <value>No se pudo restaurar tus ediciones</value>
+    <value>No se pudieron restaurar tus ediciones</value>
     <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Error dialog title when a crash-recovery replay fails (#145)</comment>
   </data>
   <data name="RecentNotFound" xml:space="preserve">
@@ -1146,7 +1146,7 @@
     <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
   </data>
   <data name="AddFromImageName" xml:space="preserve">
-    <value>Agregar una firma desde una foto</value>
+    <value>Añadir una firma desde una foto</value>
     <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
   </data>
   <data name="ToolbarRedact" xml:space="preserve">
@@ -1514,11 +1514,11 @@
     <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Announced after a reorder (#174)</comment>
   </data>
   <data name="BlankPageInserted" xml:space="preserve">
-    <value>Página en blanco agregada como página {0}.</value>
+    <value>Página en blanco añadida como página {0}.</value>
     <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Announced after an insert (#174)</comment>
   </data>
   <data name="PagesInsertedFromFile" xml:space="preserve">
-    <value>Se agregaron las páginas de {0}.</value>
+    <value>Se añadieron las páginas de {0}.</value>
     <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Announced after a combine (#174)</comment>
   </data>
   <data name="PageSavedAs" xml:space="preserve">

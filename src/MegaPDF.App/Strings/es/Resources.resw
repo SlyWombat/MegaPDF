@@ -1109,7 +1109,7 @@
     <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Error dialog title when an edit fails (#145)</comment>
   </data>
   <data name="CouldNotRestoreTitle" xml:space="preserve">
-    <value>No se pudo restaurar tus ediciones</value>
+    <value>No se pudieron restaurar tus ediciones</value>
     <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Error dialog title when a crash-recovery replay fails (#145)</comment>
   </data>
   <data name="RecentNotFound" xml:space="preserve">
