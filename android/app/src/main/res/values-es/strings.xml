@@ -681,6 +681,14 @@
     <string name="select_copy_forbidden">Este documento no permite copiar su texto.</string>
     <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
     <string name="select_copied">Copiado</string>
+    <!-- ES-REVIEW #710 — new, not yet read by the reviewer. -->
+    <string name="selection_start_handle">Inicio de la selección</string>
+    <!-- ES-REVIEW #710 — new, not yet read by the reviewer. -->
+    <string name="selection_end_handle">Fin de la selección</string>
+    <!-- ES-REVIEW #710 — new, not yet read by the reviewer. -->
+    <string name="selection_next_word">Palabra siguiente</string>
+    <!-- ES-REVIEW #710 — new, not yet read by the reviewer. -->
+    <string name="selection_previous_word">Palabra anterior</string>
     <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
     <string name="form_field_read_only">Este campo es de solo lectura.</string>
 </resources>
