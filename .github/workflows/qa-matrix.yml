@@ -54,13 +54,13 @@ jobs:
           python3 tools/qa/check-ios-strings.py --self-test
           python3 tools/qa/check-ios-strings.py
 
-      # The France derivation for the iOS catalogue, for the same reason: ci.yml's drift check
-      # (gen_strings.py fr-fr) never runs on an iOS-only pull request.
-      - name: The iOS catalogue's France French is derived, not stale
+      # The France and Spain derivations for the iOS catalogue, for the same reason: ci.yml's
+      # drift check (gen_strings.py fr-fr es-es) never runs on an iOS-only pull request (#724).
+      - name: The iOS catalogue's France French and Spain Spanish are derived, not stale
         run: |
-          python3 tools/gen_strings.py fr-fr
+          python3 tools/gen_strings.py fr-fr es-es
           git diff --exit-code -- ios/MegaPDF/Localizable.xcstrings \
-            || { echo "::error::ios/MegaPDF/Localizable.xcstrings is stale — run 'python3 tools/gen_strings.py fr-fr' and commit"; exit 1; }
+            || { echo "::error::ios/MegaPDF/Localizable.xcstrings is stale — run 'python3 tools/gen_strings.py fr-fr es-es' and commit"; exit 1; }
 
       # #668: deploy.py finds its login file from a worktree as well as the shared checkout,
       # and --dry-run reports it without ever opening it.
