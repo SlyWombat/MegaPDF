@@ -7299,6 +7299,114 @@ void test_structure_no_stray_control_characters(const std::string& fixtures, con
           std::to_string(total));
 }
 
+// --------------------------------------------------------------------------
+// #496: a wrap hyphen at the end of a block's FIRST line is never joined, because BuildPieces
+// joins a line only to the next line of the SAME block, and the reference side of measure 1
+// (structure_check's JoinLineWrapHyphens) joins across blocks. On one UN document the Spanish
+// edition wraps with hyphens 367 times and every one of them sat on exactly that boundary: a
+// numbered paragraph whose continuation lines return to the left margin, so GatherOneBlock cut
+// the item after its first line. Three layouts, each with the number or the first line drawn
+// to the right of where the continuation starts.
+// --------------------------------------------------------------------------
+
+namespace {
+
+// A one-page, US Letter, Helvetica document whose page content is `content`.
+std::vector<unsigned char> plain_text_pdf(const std::string& content) {
+    std::string pdf = "%PDF-1.4\n";
+    std::vector<size_t> offsets;
+    auto add = [&](const std::string& body) {
+        offsets.push_back(pdf.size());
+        pdf += std::to_string(offsets.size()) + " 0 obj\n" + body + "\nendobj\n";
+    };
+    add("<< /Type /Catalog /Pages 2 0 R >>");
+    add("<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+    add("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
+        "/Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>");
+    add("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>");
+    add("<< /Length " + std::to_string(content.size()) + " >>\nstream\n" + content + "\nendstream");
+    const size_t xref = pdf.size();
+    pdf += "xref\n0 " + std::to_string(offsets.size() + 1) + "\n0000000000 65535 f \n";
+    for (size_t off : offsets) {
+        char line[32];
+        std::snprintf(line, sizeof line, "%010zu 00000 n \n", off);
+        pdf += line;
+    }
+    pdf += "trailer\n<< /Size " + std::to_string(offsets.size() + 1) + " /Root 1 0 R >>\nstartxref\n" +
+           std::to_string(xref) + "\n%%EOF\n";
+    return std::vector<unsigned char>(pdf.begin(), pdf.end());
+}
+
+// A text-showing operator at (x, y), 10 pt Helvetica.
+std::string text_at(int x, int y, const char* text) {
+    return "BT /F1 10 Tf " + std::to_string(x) + " " + std::to_string(y) + " Td (" + text + ") Tj ET ";
+}
+
+// "12." at the margin, its text 28 pt in, the wrapped word's second half back at the margin, and
+// a second numbered item below. The continuation sits under the NUMBER, not under the text.
+std::vector<unsigned char> numbered_paragraph_hyphen_pdf() {
+    return plain_text_pdf(text_at(72, 700, "12.") + text_at(100, 700, "La Cumbre reconoce la importan-") +
+                          text_at(72, 688, "cia de los compromisos asumidos en materia de desarrollo.") +
+                          text_at(72, 664, "13.") + text_at(100, 664, "El siguiente punto trata de otro asunto."));
+}
+
+// The first line indented 36 pt, the rest at the margin: one paragraph, as a typeset page reads.
+std::vector<unsigned char> indented_paragraph_hyphen_pdf() {
+    return plain_text_pdf(text_at(108, 700, "Los Estados deben adoptar medidas urgen-") +
+                          text_at(72, 688, "tes para aplicar el plan.") +
+                          text_at(72, 676, "Segunda frase del mismo parrafo."));
+}
+
+bool block_text_has(const megapdf_structure* s, size_t i, const std::string& needle) {
+    return block_text_ascii(s, i, MEGAPDF_BLOCK_TEXT).find(needle) != std::string::npos;
+}
+
+}  // namespace
+
+void test_structure_wrap_hyphen_across_indent() {
+    {
+        auto bytes = numbered_paragraph_hyphen_pdf();
+        megapdf_document* d = megapdf_open(bytes.data(), bytes.size(), nullptr);
+        check(d != nullptr, "structure wrap-hyphen numbered: opens");
+        if (d != nullptr) {
+            megapdf_structure* s = megapdf_structure_load(d, 0, 1, MEGAPDF_STRUCTURE_DEFAULT, nullptr);
+            check(s != nullptr, "structure wrap-hyphen numbered: loads");
+            if (s != nullptr) {
+                megapdf_block b0{};
+                const bool got0 = megapdf_block_count(s) > 0 && megapdf_block_get(s, 0, &b0) == MEGAPDF_OK;
+                check(megapdf_block_count(s) == 2 && got0 && b0.kind == MEGAPDF_BLOCK_LIST_ITEM,
+                      "structure wrap-hyphen numbered: one item holds both lines (#496)",
+                      std::to_string(megapdf_block_count(s)) + " blocks");
+                check(megapdf_block_count(s) > 0 && block_text_has(s, 0, "importancia") &&
+                          !block_text_has(s, 0, "importan-"),
+                      "structure wrap-hyphen numbered: the wrap hyphen is joined (#496)",
+                      megapdf_block_count(s) > 0 ? block_text_ascii(s, 0, MEGAPDF_BLOCK_TEXT) : "");
+                megapdf_structure_free(s);
+            }
+            megapdf_close(d);
+        }
+    }
+    {
+        auto bytes = indented_paragraph_hyphen_pdf();
+        megapdf_document* d = megapdf_open(bytes.data(), bytes.size(), nullptr);
+        check(d != nullptr, "structure wrap-hyphen indented: opens");
+        if (d != nullptr) {
+            megapdf_structure* s = megapdf_structure_load(d, 0, 1, MEGAPDF_STRUCTURE_DEFAULT, nullptr);
+            check(s != nullptr, "structure wrap-hyphen indented: loads");
+            if (s != nullptr) {
+                check(megapdf_block_count(s) == 1, "structure wrap-hyphen indented: one paragraph (#496)",
+                      std::to_string(megapdf_block_count(s)) + " blocks");
+                check(megapdf_block_count(s) > 0 && block_text_has(s, 0, "urgentes") &&
+                          !block_text_has(s, 0, "urgen-"),
+                      "structure wrap-hyphen indented: the wrap hyphen is joined (#496)",
+                      megapdf_block_count(s) > 0 ? block_text_ascii(s, 0, MEGAPDF_BLOCK_TEXT) : "");
+                megapdf_structure_free(s);
+            }
+            megapdf_close(d);
+        }
+    }
+}
+
 void test_structure_tagged(const std::string& repo) {
     Doc d(repo + "/structure/tagged.pdf");
     if (!d.doc) { check(false, "structure tagged: opens"); return; }
@@ -10242,6 +10350,7 @@ int main(int argc, char** argv) {
     test_structure_rotated_pages(std::string(MEGAPDF_REPO_FIXTURES));
     test_structure_no_stray_control_characters(argv[1], argv[2], std::string(MEGAPDF_REPO_FIXTURES));
     test_structure_tm_scaled_size(std::string(MEGAPDF_REPO_FIXTURES));
+    test_structure_wrap_hyphen_across_indent();
     test_structure_span_font(std::string(MEGAPDF_REPO_FIXTURES));
     test_structure_tagged(std::string(MEGAPDF_REPO_FIXTURES));
     test_structure_tiny_font_size(std::string(MEGAPDF_REPO_FIXTURES));

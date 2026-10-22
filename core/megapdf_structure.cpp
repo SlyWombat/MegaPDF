@@ -157,6 +157,12 @@ constexpr double kParagraphPitchFactor = 1.4;                  // consecutive li
 constexpr double kParagraphLeftEdgeToleranceEm = 1.0;          // left edges within 1 em: same paragraph.
 constexpr double kParagraphIndentEm = 1.0;                     // indent >= 1 em starts a new paragraph.
 constexpr double kParagraphGapPitchFactor = 1.5;               // gap >= 1.5x pitch ends a paragraph.
+// #496: a paragraph whose FIRST line is indented and whose later lines return to the margin
+// (a typeset body paragraph) has its second line this far or less to the LEFT of its first. The
+// UN document that measured it indents the first line 2.4 em; 4 em covers a 1.27 cm indent at
+// 10 pt (3.6 em), which is where word processors put it by default. Beyond that the second line
+// is a different thing (a hanging outdent, a new column), not the rest of the same paragraph.
+constexpr double kFirstLineIndentMaxEm = 4.0;
 // Not in design §1.2: "median pitch" is measured from the page's own lines, so a page whose
 // every line sits in isolation (a form, a list of one-line fields — `doubled.pdf`'s six
 // unrelated single lines, each 40 pt apart, is the fixture that found this) has no small
@@ -2096,12 +2102,18 @@ size_t GatherOneBlock(const PageWork& pw, const std::vector<int>& order, size_t 
         std::vector<int> group{li};
         size_t j = i + 1;
         const double item_text_left = first_body_word.l;
+        // #496: a numbered paragraph's continuation lines often return to the margin, under the
+        // NUMBER rather than under the text after it. Cutting the item there left a wrap hyphen on
+        // the item's first line stranded in a block of its own: on one UN document, 179 of 367
+        // such hyphens, each one a word the reference side counts once and this side twice.
+        const double item_marker_left = line.l;
         while (j < order.size()) {
             const int nli = order[j];
             const Line& nline = pw.lines[static_cast<size_t>(nli)];
             if (LineStartsListItem(pw, nline, marker_ctx)) break;
             if (LineQualifiesBySize(LineFontSize(pw, nline), body_size)) break;
-            if (std::fabs(nline.l - item_text_left) > kParagraphLeftEdgeToleranceEm * Em(body_size)) break;
+            if (std::fabs(nline.l - item_text_left) > kParagraphLeftEdgeToleranceEm * Em(body_size) &&
+                std::fabs(nline.l - item_marker_left) > kParagraphLeftEdgeToleranceEm * Em(body_size)) break;
             const double pitch = LineCentre(pw.lines[static_cast<size_t>(group.back())]) - LineCentre(nline);
             if (pitch >= kParagraphGapPitchFactor * median_pitch) break;
             group.push_back(nli);
@@ -2129,7 +2141,7 @@ size_t GatherOneBlock(const PageWork& pw, const std::vector<int>& order, size_t 
     {
         std::vector<int> group{li};
         size_t j = i + 1;
-        const double first_left = line.l;
+        double first_left = line.l;
         while (j < order.size()) {
             const int nli = order[j];
             const Line& nline = pw.lines[static_cast<size_t>(nli)];
@@ -2139,7 +2151,17 @@ size_t GatherOneBlock(const PageWork& pw, const std::vector<int>& order, size_t 
             if (pitch >= kParagraphGapPitchFactor * median_pitch || pitch >= kParagraphPitchFactor * median_pitch) break;
             const double left_diff = nline.l - first_left;
             if (left_diff > kParagraphIndentEm * Em(body_size)) break;   // a first-line indent starts a new paragraph
-            if (std::fabs(left_diff) > kParagraphLeftEdgeToleranceEm * Em(body_size)) break;
+            if (std::fabs(left_diff) > kParagraphLeftEdgeToleranceEm * Em(body_size)) {
+                // #496: the first line of a typeset paragraph is indented and the rest return to
+                // the margin. Only the SECOND line is read that way (the group still holds just
+                // the first), and from then on the margin is the paragraph's left edge, so a
+                // later line is compared with that and not with the indented first line.
+                if (group.size() == 1 && -left_diff <= kFirstLineIndentMaxEm * Em(body_size)) {
+                    first_left = nline.l;
+                } else {
+                    break;
+                }
+            }
             group.push_back(nli);
             j++;
         }
