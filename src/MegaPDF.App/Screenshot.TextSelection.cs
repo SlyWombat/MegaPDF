@@ -172,7 +172,13 @@ internal static partial class Screenshot
         var clickStarted = Environment.TickCount64;
         await view.ClickForTest(0, charlie);
         Console.Error.WriteLine($"  the first click's editor took {Environment.TickCount64 - clickStarted} ms to open (open: {view.HasActiveEditorForTest})");
-        Check("a double-click on a word selects it", view.DoubleClickForTest(0, charlie) && view.HasTextSelection);
+        // The second click lands on the editor the first one opened, where WinUI raises no DoubleTapped
+        // (#774, measured): the page reads it from the Tapped it still gets, and only when it is near the first.
+        Check("the first click's editor is open when the second click comes", view.HasActiveEditorForTest);
+        Check("a second click far from the first is not a double-click: nothing selected, the editor stays",
+              !view.SecondClickForTest(0, Mid(lines[8])) && view.HasActiveEditorForTest && !view.HasTextSelection);
+        Check("a double-click on a word selects it, through the second click the editor took",
+              view.SecondClickForTest(0, charlie) && view.HasTextSelection);
         await view.TextAnnouncementForTest;
         Check("  and announces the word", view.LastAnnouncement == Strings.TextSelectionAnnounced("charlie"));
         Check("  and the editor its first click opened is gone, with nothing changed", !view.HasActiveEditorForTest && !tab.HasUnsavedChanges);
@@ -185,6 +191,38 @@ internal static partial class Screenshot
         await Task.Delay(300);
         Check("  and no editor opens behind it", !view.HasActiveEditorForTest && view.HasTextSelection);
         view.PressSelectionKeyForTest(Windows.System.VirtualKey.Escape);
+
+        // The same pair a second time, with the second click as a pair of Tapped events would make it: once the
+        // word is taken, a third click is a click again and opens the editor.
+        Check("a double-click is used up by the word it selected (a further second click does nothing)",
+              !view.SecondClickForTest(0, charlie));
+
+        // --- a double-click on an added text box edits it, selected or not (#775) ---
+        await tab.AddTextBoxAsync(0, new PdfPoint(200, 600), "box");
+        Check("a text box is added", await UntilAsync(() => tab.Pages[0].Regions.Any(r => r.Kind == PageHitKind.TextBox)));
+        await UntilAsync(() => !tab.Busy.IsBusy, 5); // a click while work runs is ignored (#145)
+        await Task.Delay(300);
+        var boxRegion = tab.Pages[0].Regions.FirstOrDefault(r => r.Kind == PageHitKind.TextBox);
+        var boxMid = boxRegion is null ? default : Mid(boxRegion.Bounds);
+        await view.ClickForTest(0, boxMid);
+        Check("a first click on the unselected box selects it (its chrome is up) and opens no editor",
+              view.HasSelectionChromeForTest && !view.HasActiveEditorForTest);
+        Check("  the second click lands on that chrome, and is a double-click: the box's editor opens",
+              view.SecondClickForTest(0, boxMid) && await UntilAsync(() => view.HasActiveEditorForTest));
+        Check("  with the box's own text in it", view.ActiveEditorTextForTest == "box");
+        Check("  and nothing selected: no text, no chrome", !view.HasTextSelection && !view.HasSelectionChromeForTest);
+        await view.PressEditorKeyForTest(Windows.System.VirtualKey.Escape);
+        Check("  Escape closes it, the box unchanged", await UntilAsync(() => !view.HasActiveEditorForTest)
+              && tab.Pages[0].Regions.Count(r => r.Kind == PageHitKind.TextBox) == 1);
+        // A word on the page is still the word's, and a box's chrome only takes a double-click that began on it.
+        await view.ClickForTest(0, charlie);
+        Check("  a double-click on body text still selects the word beside a text box",
+              view.SecondClickForTest(0, charlie) && view.HasTextSelection);
+        view.PressSelectionKeyForTest(Windows.System.VirtualKey.Escape);
+        if (tab.UndoCommand.CanExecute(null))
+            tab.UndoCommand.Execute(null);
+        await UntilAsync(() => !tab.Busy.IsBusy && tab.Pages[0].Regions.All(r => r.Kind != PageHitKind.TextBox), 5);
+        Check("  the box added for this is taken away again", tab.Pages[0].Regions.All(r => r.Kind != PageHitKind.TextBox));
 
         // --- across the page break, and the whole document ---
         var lastLeft = new PdfPoint(lines[10].X + 0.2, Mid(lines[10]).Y);    // the start of "Right five kilo"
