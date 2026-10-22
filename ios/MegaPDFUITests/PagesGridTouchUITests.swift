@@ -175,7 +175,13 @@ final class PagesGridTouchUITests: XCTestCase {
         let env = ProcessInfo.processInfo.environment
         let toggle = env["MEGAPDF_GRID_TOGGLE"] == "1"
         let probes = env["MEGAPDF_GRID_PROBES"] == "1"
+        // `MEGAPDF_GRID_PASSIVE=1`: on an episode, do nothing but keep looking (no screenshot,
+        // no snapshot, no touch until the tile is hittable or 15 s are up). The first four runs
+        // intervened at the one-second mark, and every episode then ended 2 s after the touch,
+        // which made the intervention a suspect in how long the episode lasted.
+        let passive = env["MEGAPDF_GRID_PASSIVE"] == "1"
         let variant = "\(toggle ? "toggle" : "launch")/probes \(probes ? "on" : "off")"
+            + (passive ? "/passive" : "")
         print("GRID-RUN variant=\(variant) openings=\(openings)")
 
         if toggle { launch(probes: probes) }
@@ -193,15 +199,17 @@ final class PagesGridTouchUITests: XCTestCase {
                 if let others = allOthers, hit[2] == nil, !episode, now - others >= 1.0 {
                     episode = true
                     // Before anything else: what is over the tile, and does a finger land?
-                    let attachment = XCTAttachment(screenshot: app.screenshot())
-                    attachment.name = "episode-\(variant.replacingOccurrences(of: "/", with: "-"))-\(iteration)"
-                    attachment.lifetime = .keepAlways
-                    add(attachment)
-                    if tile(2).exists, let snapshot = try? app.snapshot() {
-                        let frame = tile(2).frame
-                        cover(at: CGPoint(x: frame.midX, y: frame.midY), iteration: iteration, in: snapshot)
+                    if !passive {
+                        let attachment = XCTAttachment(screenshot: app.screenshot())
+                        attachment.name = "episode-\(variant.replacingOccurrences(of: "/", with: "-"))-\(iteration)"
+                        attachment.lifetime = .keepAlways
+                        add(attachment)
+                        if tile(2).exists, let snapshot = try? app.snapshot() {
+                            let frame = tile(2).frame
+                            cover(at: CGPoint(x: frame.midX, y: frame.midY), iteration: iteration, in: snapshot)
+                        }
+                        if tile(2).exists { landed = touchLands(2) }
                     }
-                    if tile(2).exists { landed = touchLands(2) }
                 }
                 for index in 0...3 where hit[index] == nil && isHittable(index) {
                     hit[index] = Date().timeIntervalSince(t0)
