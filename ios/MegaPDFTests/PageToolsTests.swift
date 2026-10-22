@@ -730,17 +730,25 @@ final class PageToolsTests: XCTestCase {
 
     // MARK: - the name an extract offers, and the sentences
 
+    /// The shape is asserted, not the English: the fragments come from the catalogue, because the
+    /// whole unit suite runs again under fr-CA and under es-MX in CI ("page 3" is "página 3"
+    /// there, and "pages" was only ever the same word in French by luck).
     func testTheExtractNameSaysWhichPagesTheseAre() {
+        let onePage = String(localized: "page \(3)")
+        let aRun = String(localized: "pages \(2)-\(4)")
+        let aCount = String(localized: "\(2) pages")
         XCTAssertEqual(ViewerModel.extractName(documentName: "Report.pdf", pages: [2], of: 9),
-                       "Report page 3")
+                       "Report " + onePage)
         XCTAssertEqual(ViewerModel.extractName(documentName: "Report.pdf", pages: [1, 2, 3], of: 9),
-                       "Report pages 2-4")
+                       "Report " + aRun)
         XCTAssertEqual(ViewerModel.extractName(documentName: "Report.pdf", pages: [0, 4], of: 9),
-                       "Report 2 pages", "a selection that is not a run is a count")
+                       "Report " + aCount, "a selection that is not a run is a count")
         XCTAssertEqual(ViewerModel.extractName(documentName: "Report.pdf", pages: [0, 1], of: 2),
-                       "Report 2 pages", "and so is the whole document")
+                       "Report " + aCount, "and so is the whole document")
         XCTAssertEqual(ViewerModel.extractName(documentName: "", pages: [0], of: 1),
-                       "Document page 1")
+                       String(localized: "Document") + " " + String(localized: "page \(1)"))
+        // and the three shapes are three different things, in any language
+        XCTAssertEqual(Set([onePage, aRun, aCount]).count, 3)
     }
 
     /// Every refusal has a sentence, and none of them is empty or the name of a code.

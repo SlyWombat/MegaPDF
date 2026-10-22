@@ -97,6 +97,14 @@
   <data name="LanguageFrenchFrance.Text" xml:space="preserve">
     <value>Français (France)</value>
   </data>
+  <data name="LanguageSpanish.Text" xml:space="preserve">
+    <value>Español (Latinoamérica)</value>
+    <comment>FR-REVIEW #724 — new, not yet read by the reviewer. A language name, written in its own language.</comment>
+  </data>
+  <data name="LanguageSpanishSpain.Text" xml:space="preserve">
+    <value>Español (España)</value>
+    <comment>FR-REVIEW #724 — new, not yet read by the reviewer. A language name, written in its own language.</comment>
+  </data>
   <data name="LanguageRestartNote.Text" xml:space="preserve">
     <value>Prend effet à la prochaine ouverture de MegaPDF.</value>
   </data>

@@ -4,6 +4,9 @@ The one vocabulary every platform's catalogue follows. Same English concept,
 same French word on Windows, macOS, Android and iOS. Add a row before you coin a
 new term; a term that exists here is not re-translated per platform.
 
+The Spanish sibling of this file is [localisation-glossary-es.md](localisation-glossary-es.md)
+(#724); its main table covers every English term below, and a test keeps the two in step.
+
 The exception is a platform's own idiom for its own system screen — Settings is
 the one case of this so far (Dave, 2026-10-01): it is *Paramètres* on Windows
 and Android, *Réglages* on iOS and macOS, each row below says so, and neither

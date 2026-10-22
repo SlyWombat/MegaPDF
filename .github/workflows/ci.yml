@@ -41,13 +41,20 @@ jobs:
       # The typed string accessors are generated from the English catalogues
       # (#91); an edited .resw/.resx without a regenerated Strings.g.cs would
       # otherwise compile against a key that is not there.
-      - name: Regenerate string accessors and the France catalogues, check for drift
+      - name: Regenerate string accessors and the France and Spain catalogues, check for drift
         run: |
-          python3 tools/gen_strings.py fr-fr
+          python3 tools/gen_strings.py fr-fr es-es
           git diff --exit-code -- '*Strings.g.cs' 'src/MegaPDF.App/Strings/fr-FR' \
             'src/MegaPDF.Avalonia/Strings/Strings.fr.resx' 'android/app/src/main/res/values-fr' \
+            'src/MegaPDF.App/Strings/es-ES' 'src/MegaPDF.Avalonia/Strings/Strings.es-ES.resx' \
+            'android/app/src/main/res/values-es' \
             'ios/MegaPDF/Localizable.xcstrings' \
-            || { echo "::error::Generated strings are stale — run 'python3 tools/gen_strings.py fr-fr' and commit the result"; exit 1; }
+            || { echo "::error::Generated strings are stale — run 'python3 tools/gen_strings.py fr-fr es-es' and commit the result"; exit 1; }
+
+      # The derivation tables themselves (#724): one subTest per row, whole words,
+      # article agreement, no space inserted into Spanish, idempotence.
+      - name: The string derivation tables
+        run: python3 -m unittest tools/test_gen_strings.py
 
   # The Linux app (#158). Here rather than in a workflow of its own, and here
   # rather than in macos-app.yml, because "on every push" is what this workflow
@@ -355,6 +362,20 @@ jobs:
           grep -q 'would run in fr-CA' "$RUNNER_TEMP/fr.log" \
             || { echo "::error::LANGUAGE=fr_CA:fr did not put the app in French"; exit 1; }
 
+      # Spanish, on Linux (#724). A Mexican desktop has no es-MX catalogue: .NET falls
+      # back to the parent culture, the neutral es, which is the Latin American one on
+      # the desktops. The window renders in it and the language check names es-MX.
+      - name: The app runs in Spanish
+        run: |
+          LANG=es_MX.UTF-8 xvfb-run -a -s "-screen 0 1100x760x24" \
+            "$RUNNER_TEMP/app/MegaPDF/bin/MegaPDF" --window 1100x760 \
+            --screenshot "$RUNNER_TEMP/linux-es-MX.png" "$RUNNER_TEMP/fixtures/demo-es.pdf"
+          test -s "$RUNNER_TEMP/linux-es-MX.png" || { echo "::error::no Spanish window was rendered"; exit 1; }
+          LANG=es_MX.UTF-8 "$RUNNER_TEMP/app/MegaPDF/bin/MegaPDF" --language-check \
+            | tee "$RUNNER_TEMP/es.log"
+          grep -q 'would run in es-MX' "$RUNNER_TEMP/es.log" \
+            || { echo "::error::LANG=es_MX.UTF-8 did not put the app in Spanish"; exit 1; }
+
       - name: Package
         run: |
           tar -C "$RUNNER_TEMP/app" -czf "$RUNNER_TEMP/MegaPDF-linux-x64.tar.gz" MegaPDF
@@ -367,6 +388,7 @@ jobs:
             ${{ runner.temp }}/MegaPDF-linux-x64.tar.gz
             ${{ runner.temp }}/linux-window.png
             ${{ runner.temp }}/linux-fr-CA.png
+            ${{ runner.temp }}/linux-es-MX.png
             ${{ runner.temp }}/linux-150.png
           if-no-files-found: error
 
@@ -771,6 +793,9 @@ jobs:
           # gen_test_fixtures.py copies into the fixtures directory.
           Run-Check "select-copy" 60 "$env:RUNNER_TEMP/fixtures/selection.pdf"
           Run-Check "about" 45
+          # #724: MRT resolves every Latin American Spanish tag to the neutral es folder and
+          # Spain to es-ES, asked directly (the dev build's x:Uid labels would not show it).
+          Run-Check "language-es" 45
 
           # #717: every state above checks, from inside, that it kept its data in a folder of
           # its own and left %LOCALAPPDATA%\MegaPDF byte-identical. This is the same claim from

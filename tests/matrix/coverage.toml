@@ -2162,15 +2162,18 @@ note = "a blind spot: no large-file test of any size on Android, in CI or by han
 
 [[feature]]
 id = "localisation"
-title = "English, fr-CA and fr-FR"
+title = "English, French (fr-CA, fr-FR) and Spanish (es-419, es-ES)"
 area = "Cross-cutting"
 [feature.windows]
 presence = "present"
 entry = "src/MegaPDF.App/MainWindow.xaml::LanguageChoice"
-coverage = "engine"
-tests = ["tests/MegaPDF.Core.Tests/StringCatalogueTests.cs::Catalogue"]
+coverage = "ui"
+tests = [
+  "tests/MegaPDF.Core.Tests/StringCatalogueTests.cs::Catalogue",
+  ".github/workflows/ci.yml::Run-Check \"language-es\"",
+]
 manual = "docs/RELEASING.md::switch to **fr-CA** and read the chrome"
-note = "catalogue completeness for all four platforms is asserted; no Windows run happens in French, and the French-width pass in tools/windows-qa is manual."
+note = "catalogue completeness for all four platforms is asserted, and the language-es state asks MRT directly that es-MX, es-419 and es read the hand-written Spanish catalogue and es-ES the derived one (#724); no Windows run happens in French, and the French-width pass in tools/windows-qa is manual."
 [feature.macos]
 presence = "present"
 entry = "src/MegaPDF.Avalonia/Platform/MacLanguage.cs::PreferredLanguages"
@@ -2179,7 +2182,7 @@ tests = [
   "tests/MegaPDF.Core.Tests/StringCatalogueTests.cs::Catalogue",
   "src/MegaPDF.Avalonia/Program.cs::CheckMinimumWindow",
 ]
-note = "CheckMinimumWindow lays the find bar and the empty state out in en, fr-CA and fr-FR at the declared minimum (#237) — the rest of --self-test is pinned to en-US on purpose so its PASS lines read the same."
+note = "CheckMinimumWindow lays the find bar and the empty state out in en, fr-CA, fr-FR, es-MX and es-ES at the declared minimum (#237, #724; es-MX also proves the fallback to the neutral es catalogue) — the rest of --self-test is pinned to en-US on purpose so its PASS lines read the same."
 [feature.linux]
 presence = "present"
 entry = "src/MegaPDF.Avalonia/Platform/LinuxLanguage.cs::LANGUAGE"
@@ -2188,17 +2191,19 @@ tests = [
   "tests/MegaPDF.Core.Tests/StringCatalogueTests.cs::Catalogue",
   "src/MegaPDF.Avalonia/Program.cs::CheckMinimumWindow",
   ".github/workflows/ci.yml::The app runs in French",
+  ".github/workflows/ci.yml::The app runs in Spanish",
 ]
-note = "the only platform where CI starts the real UI in French and reads the POSIX locale environment back."
+note = "the only platform where CI starts the real UI in French and in Spanish and reads the POSIX locale environment back; --language-check also proves es-MX's parent culture is es and both Spanish satellite assemblies are in the build (#724)."
 [feature.ios]
 presence = "present"
 entry = "ios/MegaPDF/SettingsView.swift::settingsPageColours"
 coverage = "ui"
 tests = [
   ".github/workflows/ios-ci.yml::-testLanguage fr",
+  ".github/workflows/ios-ci.yml::-testLanguage es",
   "tools/qa/check-ios-strings.py::def main",
 ]
-note = "the whole unit suite is re-run in fr-CA, which proves the catalogue compiles and the app launches — no test asserts any French string; and every literal in a localised SwiftUI position is checked against the catalogue, with its fr-CA, on every pull request (#644)."
+note = "the whole unit suite is re-run in fr-CA and in es-MX (which resolves to the es-419 localisation), which proves the catalogue compiles and the app launches — no test asserts any French string; and every literal in a localised SwiftUI position is checked against the catalogue, with its fr-CA, on every pull request (#644)."
 [feature.android]
 presence = "present"
 entry = "android/app/src/main/res/values/strings.xml::app_name"
