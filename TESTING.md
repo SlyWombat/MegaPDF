@@ -2600,7 +2600,12 @@ with `megapdf_shrink_images` replacing each placement separately, so a shared im
 it was shown by association, not by inspecting the output. The whole private corpus goes 3,240 MB ->
 1,827 MB; the public corpus goes 977 MB -> 1,007 MB (up, from rewrite growth on small fixtures).
 
-**The two timed-out documents, alone at a 3,000 s bound:** PENDING
+**The two timed-out documents, alone at a 3,000 s bound.** The 1.6 GB one is a 1,710-page JPEG 2000 scan (the
+export #696 measured). It finished in 2,727 s with the other workload on the machine (one core, 1.4 GB peak): every
+one of its 1,710 images was replaced, the file went from 1,566 MB to 590 MB (62% smaller, a plain rewrite alone is
+1,581 MB), and `megapdf_shrink_images` by itself took **2,391 s, about 40 minutes**, with no progress callback or way
+to stop it. The 2.1 GB one was stopped by the run's owner after about 14 minutes, not at the bound, so it has no
+number.
 
 Not done here, by design: the after-run (needs Phase 2), per-image timing on the phones, and anything
 on Windows or iOS encoders. Rerun with `tools/shrink-survey/run.sh <megapdf_shrink_survey> <corpus>
