@@ -146,6 +146,7 @@ established French for the cryptographic sense.
 | Not found | Introuvable | |
 | {0} of {1} | {0} sur {1} | match counter and page counter |
 | Page {0} of {1} | Page {0} sur {1} | |
+| Picture {0} of {1} | Image {0} sur {1} | #593, busy strip while shrinking for email. The desktops said « Image {0} de {1} », against the {0} of {1} row above; #593 put them back on it |
 | Extract text | Extraire le texte | #142, #168, #356 — `megapdf-cli extract`; not yet a UI string, added ahead so #168's reflow view reuses it |
 | Markdown | Markdown | #142, #168, #356 — `megapdf-cli --format md`; unchanged in French, as elsewhere on the platforms (product/brand-name-like technical terms) |
 | Export as Markdown | Exporter en Markdown | #386, #409 — the phones' menu row beside Save a copy (iOS since #386, Android since #409) and their redact-confirmation dialog; the desktops' Save As Markdown option; a one-way, lossy text export, not a Save-a-copy PDF variant — the word is *Exporter*, not *Enregistrer*, on every platform |
@@ -266,6 +267,9 @@ established French for the cryptographic sense.
 | Save first | Enregistrez d'abord | |
 | Nothing to shrink | Rien à réduire | |
 | Smaller copy saved | Copie réduite enregistrée | |
+| Smaller copy ready | Copie réduite prête | #593, title of the phones' result sheet |
+| The document you have open is unchanged. | Le document ouvert n'est pas modifié. | #593, under Was/now on the phones' result sheet |
+| Shrinking wouldn't make this document any smaller. | La réduction ne rendrait pas ce document plus petit. | #593, phones; #6 reuses it on the desktops |
 | Was {0} MB, now {1} MB. Saved as {2}, ready to email. | Avant : {0} Mo, après : {1} Mo. Enregistrée sous {2}, prête pour le courriel. | #632, the Windows shrink notice; Mac/Linux say this on the status line in their own words |
 | Saved | Enregistré | |
 | Saving… | Enregistrement… | |
@@ -329,6 +333,7 @@ established French for the cryptographic sense.
 | Services | Services | #191, the system's submenu; the same word in French |
 | Show in Finder | Afficher dans le Finder | #165, macOS context menu on a recent document. Apple's own wording (Migration.loctable) |
 | Show in Files | Afficher dans Fichiers | #165, iOS context menu. **For francophone review** — not confirmed against an Apple catalogue |
+| Save to Files | Enregistrer dans Fichiers | #593, iOS result sheet; iOS's own name for the Files app, as in the row above. **For francophone review** |
 | {0}, in {1} | {0}, dans {1} | #165, the accessible name of a recent document: the file name and where it lives |
 | Not found · {0} | Introuvable · {0} | #165, a recent document that is no longer where it was |
 | iCloud Drive | iCloud Drive | #165; the Files app's sidebar says iCloud Drive in French too |

@@ -12,7 +12,9 @@
 #include <jni.h>
 #include <android/bitmap.h>
 
+#include <cmath>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <string>
 #include <vector>
@@ -57,6 +59,60 @@ int WriteToStream(void* context, const void* data, size_t size) {
         return 0;
     }
     return 1;
+}
+
+// Bridges the core's shrink callbacks to a com.megapdf.engine.ShrinkCallbacks (#593). Unlike
+// WriteToStream, a thrown exception must not stay pending: the core goes on to make more JNI
+// calls through these thunks, and a JNI call with an exception pending aborts the app.
+struct ShrinkBridge {
+    JNIEnv* env;
+    jobject callbacks;
+    jmethodID encode;
+    jmethodID progress;
+};
+
+int ShrinkEncode(void* context, const unsigned char* bgra, int width, int height, double quality,
+                 unsigned char** out_jpeg, size_t* out_length) {
+    auto* b = static_cast<ShrinkBridge*>(context);
+    JNIEnv* env = b->env;
+    const size_t count = static_cast<size_t>(width) * static_cast<size_t>(height);
+    // ARGB_8888 is not BGRA: build ARGB ints, alpha forced opaque, or red and blue swap.
+    std::vector<jint> argb(count);
+    for (size_t i = 0; i < count; i++) {
+        const unsigned char* px = bgra + i * 4;
+        argb[i] = static_cast<jint>((0xFFu << 24) | (static_cast<unsigned>(px[2]) << 16) |
+                                    (static_cast<unsigned>(px[1]) << 8) | static_cast<unsigned>(px[0]));
+    }
+    jintArray pixels = env->NewIntArray(static_cast<jsize>(count));
+    if (pixels == nullptr) { env->ExceptionClear(); return 0; }
+    env->SetIntArrayRegion(pixels, 0, static_cast<jsize>(count), argb.data());
+    auto* jpeg = static_cast<jbyteArray>(env->CallObjectMethod(
+        b->callbacks, b->encode, pixels, static_cast<jint>(width), static_cast<jint>(height),
+        static_cast<jint>(std::lround(quality * 100))));
+    env->DeleteLocalRef(pixels);
+    if (env->ExceptionCheck()) {
+        // A failed encode skips that picture; it does not end the run.
+        env->ExceptionClear();
+        if (jpeg != nullptr) env->DeleteLocalRef(jpeg);
+        return 0;
+    }
+    if (jpeg == nullptr) return 0;
+    const jsize length = env->GetArrayLength(jpeg);
+    auto* bytes = length > 0 ? static_cast<unsigned char*>(std::malloc(static_cast<size_t>(length))) : nullptr;
+    if (bytes != nullptr) env->GetByteArrayRegion(jpeg, 0, length, reinterpret_cast<jbyte*>(bytes));
+    env->DeleteLocalRef(jpeg);
+    if (bytes == nullptr) return 0;
+    *out_jpeg = bytes;
+    *out_length = static_cast<size_t>(length);
+    return 1;
+}
+
+void ShrinkRelease(void*, unsigned char* jpeg) { std::free(jpeg); }
+
+void ShrinkProgress(void* context, int done, int total) {
+    auto* b = static_cast<ShrinkBridge*>(context);
+    b->env->CallVoidMethod(b->callbacks, b->progress, static_cast<jint>(done), static_cast<jint>(total));
+    if (b->env->ExceptionCheck()) b->env->ExceptionClear();
 }
 
 }  // namespace
@@ -1520,6 +1576,33 @@ Java_com_megapdf_engine_PdfiumNative_nativePagesExtract(JNIEnv* env, jobject, jl
         reinterpret_cast<const char*>(path), reinterpret_cast<const megapdf_cancel*>(cancel));
     env->ReleaseByteArrayElements(outPathUtf8, path, JNI_ABORT);
     return static_cast<jint>(status);
+}
+
+// Shrink for email (#593): megapdf_shrink_images_cancellable with the platform's JPEG encoder,
+// and progress called back into Kotlin on this thread (the shrink's own, never the engine's).
+// [status, considered, replaced]. `cancel` is a megapdf_cancel handle or 0.
+JNIEXPORT jintArray JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativeShrinkImages(JNIEnv* env, jobject, jlong handle, jlong cancel,
+                                                        jobject callbacks) {
+    jint values[3] = {MEGAPDF_ERR_ARGUMENT, 0, 0};
+    jclass cls = env->GetObjectClass(callbacks);
+    jmethodID encode = env->GetMethodID(cls, "encodeJpeg", "([IIII)[B");
+    jmethodID progress = encode != nullptr ? env->GetMethodID(cls, "progress", "(II)V") : nullptr;
+    env->DeleteLocalRef(cls);
+    if (encode != nullptr && progress != nullptr) {
+        ShrinkBridge bridge{env, callbacks, encode, progress};
+        int counts[MEGAPDF_SHRINK_COUNTS] = {};
+        values[0] = megapdf_shrink_images_cancellable(reinterpret_cast<Document*>(handle)->core, ShrinkEncode, ShrinkRelease,
+                                                      ShrinkProgress, &bridge, reinterpret_cast<const megapdf_cancel*>(cancel),
+                                                      counts, MEGAPDF_SHRINK_COUNTS);
+        values[1] = counts[MEGAPDF_SHRINK_CONSIDERED];
+        values[2] = counts[MEGAPDF_SHRINK_REPLACED];
+    } else {
+        env->ExceptionClear();   // the missing method threw NoSuchMethodError
+    }
+    jintArray out = env->NewIntArray(3);
+    if (out != nullptr) env->SetIntArrayRegion(out, 0, 3, values);
+    return out;
 }
 
 }  // extern "C"

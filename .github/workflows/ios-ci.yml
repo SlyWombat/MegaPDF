@@ -311,6 +311,7 @@ jobs:
             -only-testing:MegaPDFUITests/FormTextUITests \
             -only-testing:MegaPDFUITests/SelectCopyUITests \
             -only-testing:MegaPDFUITests/ProgressStripUITests \
+            -only-testing:MegaPDFUITests/ShrinkForEmailUITests \
             CODE_SIGNING_ALLOWED=NO
 
       # The regular-width half of the zoom check (#465) and of reading mode (#506). No

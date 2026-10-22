@@ -219,10 +219,17 @@ def to_france(value: str) -> str:
     return "".join(out)
 
 
-def derive_xml_values(text: str, pattern: str) -> str:
+def derive_xml_values(text: str, pattern: str, escape=lambda value: value) -> str:
     """Apply to_france inside the element bodies `pattern` captures, leaving the
-    file's comments and formatting alone."""
-    return re.sub(pattern, lambda m: m.group(1) + to_france(m.group(2)) + m.group(3), text, flags=re.S)
+    file's comments and formatting alone. `escape` then fixes up what the table
+    put in for the target format."""
+    return re.sub(pattern, lambda m: m.group(1) + escape(to_france(m.group(2))) + m.group(3), text, flags=re.S)
+
+
+def android_escape(value: str) -> str:
+    """An Android string resource needs every apostrophe escaped, and the table's
+    France wording brings new ones ("pour l'e-mail", #593); aapt2 refuses a bare one."""
+    return re.sub(r"(?<!\\)'", r"\\'", value)
 
 
 WINDOWS_FR_CA = ROOT / "src/MegaPDF.App/Strings/fr-CA/Resources.resw"
@@ -240,13 +247,13 @@ def write_france() -> None:
     xml_value = r"(<value(?: [^>]*)?>)(.*?)(</value>)"
     android_value = r"(<(?:string|item)\b[^>]*>)(.*?)(</(?:string|item)>)"
 
-    for src, dst, pattern, banner in (
-        (WINDOWS_FR_CA, WINDOWS_FR_FR, xml_value, "Français (France)"),
-        (MAC_FR_CA, MAC_FR_FR, xml_value, "Français (France) — the neutral `fr` culture"),
-        (ANDROID_FR_CA, ANDROID_FR_FR, android_value, "Français (France) — the neutral `values-fr`"),
+    for src, dst, pattern, banner, escape in (
+        (WINDOWS_FR_CA, WINDOWS_FR_FR, xml_value, "Français (France)", lambda v: v),
+        (MAC_FR_CA, MAC_FR_FR, xml_value, "Français (France) — the neutral `fr` culture", lambda v: v),
+        (ANDROID_FR_CA, ANDROID_FR_FR, android_value, "Français (France) — the neutral `values-fr`", android_escape),
     ):
         text = src.read_text(encoding="utf-8")
-        text = derive_xml_values(text, pattern)
+        text = derive_xml_values(text, pattern, escape)
         # Replace the hand-written header comment with the derived-file banner.
         text = re.sub(r"<!--.*?-->", f"<!--\n  {banner}.\n  {DERIVED_HEADER}\n-->", text, count=1, flags=re.S)
         dst.parent.mkdir(parents=True, exist_ok=True)

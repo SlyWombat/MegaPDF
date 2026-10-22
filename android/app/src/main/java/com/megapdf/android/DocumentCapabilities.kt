@@ -70,6 +70,11 @@ data class DocumentCapabilities(
      * not gated: a document that forbids copying still selects, and Copy says why it will not.
      */
     val canCopyText: Boolean = true,
+    /**
+     * Shrink for email (#593): the modify permission, the desktops' `CanShrink`. Shrinking
+     * rewrites the document's pictures (#131), even though it only ever does so on a copy.
+     */
+    val canShrink: Boolean = true,
 ) {
     /** Whether this open may apply [operation]. An edit this list does not know needs full access. */
     fun allows(operation: PdfEditOperation): Boolean = when (operation) {
@@ -160,6 +165,7 @@ data class DocumentCapabilities(
                 isSigned = flags.isSigned,
                 isCertificationSigned = flags.isCertificationSigned,
                 canCopyText = may(PdfPermissions.COPY),
+                canShrink = modify,
             )
         }
 

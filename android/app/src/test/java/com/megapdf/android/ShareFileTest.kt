@@ -38,4 +38,13 @@ class ShareFileTest {
     fun `the share directory is a single fixed subtree of the cache dir`() {
         assertEquals(File(cacheDir, "share"), shareDirectory(cacheDir))
     }
+
+    @Test
+    fun `a shrunk copy is named through the catalogue pattern and stays a pdf`() {
+        // #593: "lease.pdf" becomes "lease - smaller.pdf", the French "lease - réduit.pdf".
+        assertEquals("lease - smaller.pdf", shrinkFileName("lease.pdf", "%1\$s - smaller"))
+        assertEquals("lease - réduit.pdf", shrinkFileName("lease.PDF", "%1\$s - réduit"))
+        assertEquals("scan - smaller.pdf", shrinkFileName("scan", "%1\$s - smaller"))
+        assertTrue(shrinkFileName("../../a/b.pdf", "%1\$s - smaller").none { it == '/' || it == '\\' })
+    }
 }

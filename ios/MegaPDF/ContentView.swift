@@ -37,10 +37,13 @@ enum ExportKind {
     case pdf
     /// Export as Markdown: a one-way, lossy text export (#386), never a save of the document.
     case markdown
+    /// Save to Files from Shrink for email (#593): a PDF, but a copy that is **never** adopted as
+    /// the open document, unlike `.pdf` (#572).
+    case shrunkPdf
 
     var contentType: UTType {
         switch self {
-        case .pdf: return .pdf
+        case .pdf, .shrunkPdf: return .pdf
         case .markdown: return megapdfMarkdownUTType
         }
     }
@@ -131,6 +134,16 @@ struct ContentView: View {
                             }
                         }
                     },
+                    onShrink: {
+                        guard !model.fileCommandsBlocked else { return }
+                        Task { await model.shrinkForEmail(named: displayName) }
+                    },
+                    onSaveShrunk: { url in
+                        exportKind = .shrunkPdf
+                        exportName = url.lastPathComponent
+                        exportDoc = StagedExportDocument(file: url)
+                        exporting = true
+                    },
                     onClose: model.close
                 )
             }
@@ -185,6 +198,14 @@ struct ContentView: View {
                     model.finishMarkdownExport(saved: true)
                 } else {
                     model.finishMarkdownExport(saved: false)
+                }
+            case .shrunkPdf:
+                // #593: never finishExport(savedTo:), which adopts the copy as the open
+                // document (#572). The shrunk copy is a different file.
+                if case .success = result {
+                    model.finishShrunkExport(saved: true)
+                } else {
+                    model.finishShrunkExport(saved: false)
                 }
             }
         }

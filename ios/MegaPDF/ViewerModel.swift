@@ -136,6 +136,15 @@ struct PageExport: Identifiable, Equatable {
     let pageCount: Int
 }
 
+/// A shrunk copy waiting for Share or Save to Files (#593): the staged file, and the sizes
+/// "Was X, now Y" shows.
+struct ShrinkReady: Identifiable {
+    let id = UUID()
+    let url: URL
+    let before: Int64
+    let after: Int64
+}
+
 @MainActor
 final class ViewerModel: ObservableObject {
     @Published private(set) var state: ViewerState
@@ -150,6 +159,10 @@ final class ViewerModel: ObservableObject {
     /// `UIActivityViewController` for it. Always `sourceURL` — Share hands over the document
     /// as currently on disk, so unlike Save a copy there is nothing to serialize freshly.
     @Published var shareURL: URL?
+    /// Set when Shrink for email made a smaller copy; the result sheet shows while it is set (#593).
+    @Published var shrinkReady: ShrinkReady?
+    /// The shrunk copy's staged file, kept past the sheet for the Save to Files exporter (#593).
+    private var shrunkStagedURL: URL?
     /// An action waiting on the "Unsaved changes" alert (#377, #378): nil the rest of the
     /// time. Set here rather than as view-local state because `openExternal` needs to raise
     /// the same alert and runs before any view has a gesture to hang state off.
@@ -3397,6 +3410,104 @@ final class ViewerModel: ObservableObject {
             statusMessage = String(localized: "Couldn't prepare the copy.")
             return nil
         }
+    }
+
+    // MARK: - shrink for email (#593): a copy, never a change
+
+    /// Shrink for email (#593): a smaller copy of the document as it stands on screen, unsaved
+    /// edits included (Dave, 2026-10-21: no save-first refusal), with its pictures re-encoded at
+    /// email quality by the core's rules. The open document is never touched: it is saved to a
+    /// private file, that copy is shrunk off the engine actor and saved again, and the result is
+    /// offered (`shrinkReady`) only if it came out smaller (D4, D7). "Picture N of M" and Stop in
+    /// the strip; a stopped shrink ends silently, as a stopped extract does.
+    func shrinkForEmail(named name: String) async {
+        guard let doc = document, capabilities.canShrink else { return }
+        let stop = CoreCancelFlag()
+        let request = StopRequest()
+        guard let token = busy.begin(.shrinking, scope: .document, blocksFileCommands: true,
+                                     progressFormat: { done, total in String(localized: "Picture \(done) of \(total)") },
+                                     onStop: { request.stopped = true; stop?.raise() })
+        else { return }
+        defer { busy.end(token) }
+        finishShrunkExport(saved: false)   // anything left from an earlier shrink goes
+        let engine = PdfEngine.shared
+        var source: URL?
+        var copy: PdfDocument?
+        do {
+            let staged = try Self.namedStagingURL(for: name)
+            source = staged
+            try await engine.save(doc, to: staged)
+            let shrinking = try await engine.open(file: staged, like: doc)   // still protected if the document was (#132)
+            copy = shrinking
+            let outcome = await engine.shrinkImages(shrinking, stop: stop) { done, total in
+                Task { @MainActor in self.busy.report(token, done: done, total: total) }
+            }
+            guard !request.stopped else { await closeShrinkCopy(copy, source: source); return }
+            guard let outcome, !outcome.stopped else {
+                statusMessage = String(localized: "Couldn't shrink.")
+                await closeShrinkCopy(copy, source: source)
+                return
+            }
+            guard outcome.replaced > 0 else {
+                statusMessage = String(localized: "The pictures in this document are already small — nothing to shrink.")
+                await closeShrinkCopy(copy, source: source)
+                return
+            }
+            var base = name
+            if base.lowercased().hasSuffix(".pdf") { base = String(base.dropLast(4)) }
+            let smaller = try Self.namedStagingURL(for: String(localized: "\(base) - smaller"))
+            do {
+                try await engine.save(shrinking, to: smaller)
+                let verify = try await engine.open(file: smaller, like: doc)
+                await engine.close(verify)
+            } catch {
+                try? FileManager.default.removeItem(at: smaller.deletingLastPathComponent())
+                throw error
+            }
+            // "Was" is the size of the saved copy of what is on screen, so the two are like for like (D6).
+            let before = Self.fileSize(staged)
+            let after = Self.fileSize(smaller)
+            await closeShrinkCopy(copy, source: source)
+            copy = nil
+            source = nil
+            // Per-picture savings do not promise a smaller file: a full rewrite can lose the
+            // original's object streams (D7). And a document closed meanwhile gets nothing.
+            guard document === doc, after < before else {
+                try? FileManager.default.removeItem(at: smaller.deletingLastPathComponent())
+                if document === doc {
+                    statusMessage = String(localized: "Shrinking wouldn't make this document any smaller.")
+                }
+                return
+            }
+            shrunkStagedURL = smaller
+            shrinkReady = ShrinkReady(url: smaller, before: before, after: after)
+        } catch {
+            await closeShrinkCopy(copy, source: source)
+            guard !request.stopped else { return }
+            statusMessage = String(localized: "Couldn't shrink.")
+        }
+    }
+
+    /// The shrink's private copy closed and its source file's folder removed; either may be nil.
+    private func closeShrinkCopy(_ copy: PdfDocument?, source: URL?) async {
+        if let copy { await PdfEngine.shared.close(copy) }
+        if let source { try? FileManager.default.removeItem(at: source.deletingLastPathComponent()) }
+    }
+
+    private static func fileSize(_ url: URL) -> Int64 {
+        ((try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? NSNumber)?.int64Value ?? 0
+    }
+
+    /// The result sheet is done with the shrunk copy: Done, Share's sheet closed, or the Save to
+    /// Files exporter finished. The staged file goes either way. Never touches `sourceURL`,
+    /// `isDirty` or `editCount`: the shrunk copy is not the document being edited (D8).
+    func finishShrunkExport(saved: Bool) {
+        if let staged = shrunkStagedURL {
+            try? FileManager.default.removeItem(at: staged.deletingLastPathComponent())
+        }
+        shrunkStagedURL = nil
+        shrinkReady = nil
+        if saved { statusMessage = String(localized: "Smaller copy saved") }
     }
 
     /// `<tmp>/export-<UUID>/<name>.<ext>`: a fresh folder, so the name can be the document's own.

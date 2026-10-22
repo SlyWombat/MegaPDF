@@ -84,6 +84,27 @@
     <string name="exported_markdown">Exporté en Markdown</string>
     <string name="markdown_export_failed">Impossible d\'exporter en Markdown.</string>
 
+    <!-- Réduire pour courriel (#593) : une copie réduite du document tel qu'il est à l'écran,
+         offerte d'abord à Partager, puis à Enregistrer une copie. Le document ouvert ne change pas. -->
+    <!-- FR-REVIEW #593 — new with Shrink for email, not yet read by the reviewer. -->
+    <string name="shrink_for_email">Réduire pour l\'e-mail</string>
+    <!-- FR-REVIEW #593 — new with Shrink for email, not yet read by the reviewer. -->
+    <string name="shrink_ready_title">Copie réduite prête</string>
+    <!-- FR-REVIEW #593 — new with Shrink for email, not yet read by the reviewer. -->
+    <string name="shrink_ready_body">Avant&#160;: %1$s, après&#160;: %2$s.</string>
+    <!-- FR-REVIEW #593 — new with Shrink for email, not yet read by the reviewer. -->
+    <string name="shrink_original_unchanged">Le document ouvert n\'est pas modifié.</string>
+    <!-- FR-REVIEW #593 — new with Shrink for email, not yet read by the reviewer. -->
+    <string name="shrink_nothing">Les images de ce document sont déjà petites — rien à réduire.</string>
+    <!-- FR-REVIEW #593 — new with Shrink for email, not yet read by the reviewer. -->
+    <string name="shrink_not_smaller">La réduction ne rendrait pas ce document plus petit.</string>
+    <!-- FR-REVIEW #593 — new with Shrink for email, not yet read by the reviewer. -->
+    <string name="shrink_failed">Impossible de réduire.</string>
+    <!-- FR-REVIEW #593 — new with Shrink for email, not yet read by the reviewer. -->
+    <string name="shrink_file_name">%1$s - réduit</string>
+    <!-- FR-REVIEW #593 — new with Shrink for email, not yet read by the reviewer. -->
+    <string name="smaller_copy_saved">Copie réduite enregistrée</string>
+
     <!-- Sécurité du document (#131) -->
     <!-- #558 : reformulé. « restreint » et le renvoi au mot de passe du propriétaire disaient
          qu\'un verrou bloquait le document; c\'est une demande de l\'auteur, pas un verrou. -->
@@ -235,6 +256,10 @@
     <string name="busy_inserting_page">Insertion de la page…</string>
     <string name="busy_adding_pages">Ajout de pages…</string>
     <string name="busy_progress_of_pages">Page %1$d sur %2$d</string>
+    <!-- FR-REVIEW #593 — new with Shrink for email, not yet read by the reviewer. -->
+    <string name="busy_shrinking">Création d\'une copie réduite…</string>
+    <!-- FR-REVIEW #593 — new with Shrink for email, not yet read by the reviewer. -->
+    <string name="busy_progress_of_pictures">Image %1$d sur %2$d</string>
     <string name="stop">Arrêter</string>
     <string name="work_stopped">Arrêté.</string>
     <string name="search_stopped">Recherche arrêtée.</string>

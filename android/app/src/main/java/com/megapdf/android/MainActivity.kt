@@ -146,6 +146,19 @@ fun MegaPdfApp(viewModel: ViewerViewModel = viewModel(), screenshotState: String
     val exportMarkdown = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("text/markdown")
     ) { uri -> uri?.let { viewModel.exportMarkdown(it) } }
+    // Save a copy from the Shrink for email result (#593): a PDF picker of its own, for #409's
+    // reason, and never Save As — the shrunk copy is not the document being edited. Backing out
+    // of the picker drops the copy, as dismissing the sheet does.
+    val saveShrunk = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/pdf")
+    ) { uri -> if (uri != null) viewModel.saveShrunkCopy(uri) else viewModel.discardShrunkCopy() }
+    // The result sheet steps aside while that picker is up, without dropping the copy. Saveable,
+    // so a recreation behind the picker does not bring the sheet back over its result.
+    var shrunkSaveAsked by androidx.compose.runtime.saveable.rememberSaveable {
+        androidx.compose.runtime.mutableStateOf(false)
+    }
+    val shrinkReady = viewModel.shrinkReady
+    LaunchedEffect(shrinkReady) { if (shrinkReady == null) shrunkSaveAsked = false }
     val pickSignatureImage = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia()
     ) { uri -> uri?.let { viewModel.importSignature(it) } }
@@ -361,6 +374,9 @@ fun MegaPdfApp(viewModel: ViewerViewModel = viewModel(), screenshotState: String
                         exportMarkdown.launch(markdownExportName(state.displayName))
                     }
                 },
+                // Shrink for email (#593): what is on screen, unsaved edits included (Dave,
+                // 2026-10-21); the open document is never touched.
+                onShrink = viewModel::shrinkForEmail,
                 capabilities = viewModel.capabilities,
                 isDynamicXfa = state.isDynamicXfa,
                 isSignedOverwritePending = viewModel.isSignedOverwritePending,
@@ -559,6 +575,19 @@ fun MegaPdfApp(viewModel: ViewerViewModel = viewModel(), screenshotState: String
                             )
                         }
                     },
+                )
+            }
+
+            // Shrink for email's result (#593): Share first, then Save a copy.
+            if (shrinkReady != null && !shrunkSaveAsked) {
+                ShrinkReadySheet(
+                    ready = shrinkReady,
+                    onShare = viewModel::shareShrunkCopy,
+                    onSave = {
+                        shrunkSaveAsked = true
+                        saveShrunk.launch(shrinkReady.file.name)
+                    },
+                    onDismiss = viewModel::discardShrunkCopy,
                 )
             }
 

@@ -22,7 +22,9 @@ import com.megapdf.engine.PdfLoadException
 import com.megapdf.engine.PdfPasswordException
 import com.megapdf.engine.PdfPermissions
 import com.megapdf.engine.PdfSecurity
+import com.megapdf.engine.ShrinkOutcome
 import com.megapdf.engine.extractPages
+import com.megapdf.engine.shrinkImagesForEmail
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -927,6 +929,140 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                 token.end()
             }
         }
+    }
+
+    /** A shrunk copy waiting for Share or Save a copy (#593): the file, and the sizes "Was X, now Y" shows. */
+    data class ShrinkReady(val file: File, val beforeBytes: Long, val afterBytes: Long)
+
+    /** Set when a shrink made a smaller copy; the result sheet shows while it is set (#593). */
+    var shrinkReady: ShrinkReady? by mutableStateOf(null)
+        private set
+
+    /**
+     * Shrink for email (#593): a smaller copy of the document as it stands on screen, unsaved
+     * edits included (Dave, 2026-10-21: no save-first refusal), with its pictures re-encoded at
+     * email quality by the core's own rules. The open document is never touched: it is
+     * serialised to a private file, that copy is shrunk and written to `cacheDir/share/`, and the
+     * copy is offered for Share or Save a copy only if it came out smaller (D4, D7).
+     *
+     * Modelled on [extractSelectedPagesTo]: the #558 question first, then a Stop-able document
+     * job with the core's own flag, counting pictures in the strip.
+     */
+    fun shrinkForEmail() {
+        val doc = document ?: return
+        if (isSaving || busy.locksDocument) return
+        val app = getApplication<Application>()
+        val name = (uiState as? ViewerUiState.Viewing)?.displayName ?: "document.pdf"
+        viewModelScope.launch {
+            // Shrinking rewrites the pictures, which is modify, as on the desktops (#131); #558
+            // makes that a question rather than a wall.
+            if (!permitted(PermissionClass.EDITING, capabilities.canShrink)) return@launch
+            if (document !== doc || busy.locksDocument) return@launch
+            val cancel = com.megapdf.engine.PdfCancelFlag()
+            var stoppedByUser = false
+            val job = busy.beginDocument(
+                BusyLabel.SHRINKING, locks = true, cancel = { stoppedByUser = true; cancel.cancel() },
+            )
+            val source = File(app.cacheDir, "shrink-src-${System.nanoTime()}.pdf")
+            val target = File(shareDirectory(app.cacheDir), shrinkFileName(name, str(R.string.shrink_file_name)))
+            var copy: PdfDocument? = null
+            var offered = false
+            try {
+                withContext(Dispatchers.IO) { source.outputStream().buffered().use { doc.save(it) } }
+                val shrinking = engine.openFileLike(doc, source.path)
+                copy = shrinking
+                val outcome = shrinking.shrinkImagesForEmail(cancel) { done, total ->
+                    viewModelScope.launch(Dispatchers.Main) { job.report(done, total) }
+                }
+                when (outcome) {
+                    is ShrinkOutcome.Stopped -> {
+                        if (stoppedByUser) statusMessage = str(R.string.work_stopped)
+                    }
+                    is ShrinkOutcome.Failed -> statusMessage = str(R.string.shrink_failed)
+                    is ShrinkOutcome.Done -> if (outcome.replaced == 0) {
+                        statusMessage = str(R.string.shrink_nothing)
+                    } else {
+                        withContext(Dispatchers.IO) {
+                            target.parentFile?.mkdirs()
+                            target.outputStream().buffered().use { shrinking.save(it) }
+                        }
+                        // Verified by reopening, as a save is, before anything is offered.
+                        engine.openFileLike(doc, target.path).close()
+                        val before = source.length()
+                        val after = target.length()
+                        // Per-picture savings do not promise a smaller file: a full rewrite can
+                        // lose the original's object streams (D7).
+                        if (after >= before) {
+                            statusMessage = str(R.string.shrink_not_smaller)
+                        } else {
+                            shrinkReady = ShrinkReady(target, before, after)
+                            offered = true
+                        }
+                    }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                statusMessage = str(R.string.shrink_failed)
+            } finally {
+                withContext(NonCancellable + Dispatchers.IO) {
+                    copy?.close()
+                    source.delete()
+                    if (!offered) target.delete()
+                }
+                job.end()
+            }
+        }
+    }
+
+    /** Share from the result sheet (#593): the OS chooser; the copy stays in `cacheDir/share/` for the receiving app. */
+    fun shareShrunkCopy() {
+        shareFile = shrinkReady?.file ?: return
+        shrinkReady = null
+    }
+
+    /**
+     * Save a copy from the result sheet (#593): the shrunk copy written where the picker said.
+     * Never [writeTo]'s Save As: the shrunk copy is not the document being edited, so
+     * [currentUri], the title and Recents are left alone (D8).
+     */
+    fun saveShrunkCopy(uri: Uri) {
+        val ready = shrinkReady ?: return
+        if (busy.locksDocument) return
+        val app = getApplication<Application>()
+        viewModelScope.launch {
+            val job = busy.beginDocument(BusyLabel.SAVING, locks = true)
+            try {
+                withContext(Dispatchers.IO) {
+                    val pfd = app.contentResolver.openFileDescriptor(uri, "wt")
+                        ?: throw IllegalStateException("provider returned no descriptor")
+                    pfd.use {
+                        java.io.FileOutputStream(it.fileDescriptor).use { out ->
+                            java.io.FileInputStream(ready.file).use { input -> input.copyTo(out, COPY_BUFFER_BYTES) }
+                            out.fd.sync()
+                        }
+                    }
+                }
+                statusMessage = str(R.string.smaller_copy_saved)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: SecurityException) {
+                statusMessage = str(R.string.save_no_permission)
+            } catch (_: Exception) {
+                statusMessage = str(R.string.save_failed)
+            } finally {
+                withContext(NonCancellable + Dispatchers.IO) { ready.file.delete() }
+                if (shrinkReady === ready) shrinkReady = null
+                job.end()
+            }
+        }
+    }
+
+    /** The result sheet dismissed, or the save picker backed out of (#593): the copy is dropped. */
+    fun discardShrunkCopy() {
+        val ready = shrinkReady ?: return
+        shrinkReady = null
+        viewModelScope.launch(NonCancellable + Dispatchers.IO) { ready.file.delete() }
     }
 
     /** What a refusal means, in the user's words rather than the engine's (#174). */

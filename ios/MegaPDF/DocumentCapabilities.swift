@@ -11,6 +11,7 @@ import Foundation
 /// | canEditContent | modify | editing the document's own text |
 /// | canAssemblePages | assemble or modify | rotating, deleting, moving, inserting, importing pages |
 /// | canExtractPages | copy | saving a selection of pages as a new file |
+/// | canShrink | modify | Shrink for email (#593), as on the desktops |
 ///
 /// A form that allows filling lets people fill in everything it offers: its fields,
 /// check marks, signatures and text boxes. Changing the document's own text needs
@@ -51,6 +52,9 @@ struct DocumentCapabilities: Equatable {
     /// what the core's `megapdf_permissions_in_effect` reports and what the desktops gate their
     /// Copy on (`DocumentCapabilities.CanCopyText`). Selecting is never gated, only this.
     let canCopyText: Bool
+    /// Shrink for email (#593): modify, the desktops' `CanShrink`. Shrinking rewrites the
+    /// document's pictures (#131), even though it only ever does so on a copy.
+    let canShrink: Bool
     /// Protected and opened without full access: the app says so and offers the owner password.
     let isRestricted: Bool
 
@@ -70,6 +74,7 @@ struct DocumentCapabilities: Equatable {
         canAssemblePages = modify || security.allows(.assemble)
         canExtractPages = full || security.allows(.copy)
         canCopyText = full || security.allows(.copy)
+        canShrink = modify
         canChangeSecurity = full
         canPrint = full || security.allows(.print)
         isRestricted = security.isEncrypted && !full
