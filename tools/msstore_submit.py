@@ -53,6 +53,10 @@ LANGS = {
     "en-ca": {"shots": "en", "doc": "en-CA"},
     "fr-ca": {"shots": "fr-CA", "doc": "fr-CA"},
     "fr-fr": {"shots": "fr-FR", "doc": "fr-FR"},
+    # Spanish (#724): Partner Center lists Latin America as es-mx, the capture folder
+    # stays es-419; Spain is es-es with the es-ES folder.
+    "es-mx": {"shots": "es-419", "doc": "es-MX"},
+    "es-es": {"shots": "es-ES", "doc": "es-ES"},
 }
 LIMITS = {"description": 10000, "shortDescription": 1000, "releaseNotes": 1500,
           "feature": 200, "features": 20, "keyword": 30, "keywords": 7,

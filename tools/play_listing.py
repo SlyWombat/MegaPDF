@@ -24,7 +24,7 @@ leaves the 10-inch set on Play exactly as it is, for a release that shot no new 
 <captures> may be `--text-only` instead: the listing text and the release notes
 are set or compared, and the screenshots on Play are left exactly as they are.
 
-<captures> holds {phone,tablet}/{en,fr-CA,fr-FR}/android-<pose>.png; the poses and their
+<captures> holds {phone,tablet}/{en,fr-CA,fr-FR,es-419,es-ES}/android-<pose>.png; the poses and their
 order are in tools/store_slots.py.
 Key: PLAY_SA_PATH (a file) or PLAY_SA_JSON, as play_submit.py takes it.
 """
@@ -40,7 +40,8 @@ import store_slots  # noqa: E402
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BASE = f"/androidpublisher/v3/applications/{ps.PACKAGE}"
 UPLOAD = f"/upload/androidpublisher/v3/applications/{ps.PACKAGE}"
-LOCALES = {"en-CA": "en", "fr-CA": "fr-CA", "fr-FR": "fr-FR"}   # Play -> capture folder
+LOCALES = {"en-CA": "en", "fr-CA": "fr-CA", "fr-FR": "fr-FR",
+           "es-419": "es-419", "es-ES": "es-ES"}   # Play -> capture folder
 IMAGE_TYPES = {"phone": "phoneScreenshots", "tablet": "tenInchScreenshots"}
 LIMITS = {"title": 30, "shortDescription": 80, "fullDescription": 4000, "notes": 500}
 CONTACT_WEBSITE = "https://electricrv.ca/megapdf/support/"   # #662: Play shows it under "App support"
@@ -53,7 +54,8 @@ def copy_by_language():
     body = text.split("<!-- copy-by-language -->", 1)[1].split("<!-- /copy-by-language -->", 1)[0]
     out = {}
     for sec in re.split(r"^### ", body, flags=re.M)[1:]:
-        loc = re.search(r"`([a-z]{2}-[A-Z]{2})`", sec.splitlines()[0]).group(1)
+        # "es-419" is a region code of three digits, not two letters (#724).
+        loc = re.search(r"`([a-z]{2}-(?:[A-Z]{2}|[0-9]{3}))`", sec.splitlines()[0]).group(1)
         fields = dict(re.findall(
             r"\*\*(Title|Short description|Full description|Release notes)\*\*[^\n]*\n```\n(.*?)\n```",
             sec, flags=re.S))
@@ -62,6 +64,12 @@ def copy_by_language():
         for k, lim in LIMITS.items():
             if len(out[loc][k]) > lim:
                 raise SystemExit(f"{loc} {k} is {len(out[loc][k])} > {lim}")
+        # tools/gen_listing_copy.py writes PENDING where a language's release notes are not
+        # written yet (they are made with docs/release-notes/<ver>/ at release time). That
+        # text is a note to the maintainer and must never reach Play.
+        if out[loc]["notes"].startswith("PENDING"):
+            raise SystemExit(f"{loc}: the release notes are still PENDING; write them in "
+                             f"docs/release-notes/<ver>/google-play.md and regenerate the copy")
     missing = set(LOCALES) - set(out)
     if missing:
         raise SystemExit(f"no copy for {sorted(missing)}")
