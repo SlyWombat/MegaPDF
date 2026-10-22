@@ -354,6 +354,7 @@ jobs:
             -only-testing:MegaPDFUITests/ViewerZoomUITests \
             -only-testing:MegaPDFUITests/ReadingModeUITests \
             -only-testing:MegaPDFUITests/PageToolsUITests \
+            -only-testing:MegaPDFUITests/PagesGridTouchUITests \
             -only-testing:MegaPDFUITests/SaveACopyExportUITests \
             -only-testing:MegaPDFUITests/FormTextUITests \
             -only-testing:MegaPDFUITests/SelectCopyUITests \

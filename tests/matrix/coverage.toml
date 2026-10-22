@@ -758,6 +758,8 @@ coverage = "ui"
 tests = [
   "ios/MegaPDFUITests/PageToolsUITests.swift::testThePhonesGridIsASheetThatLeavesThePageOnScreen",
   ".github/workflows/ios-ci.yml::-only-testing:MegaPDFUITests/PageToolsUITests",
+  "ios/MegaPDFUITests/PagesGridTouchUITests.swift::testTheSecondRowsFirstTileTakesATouchOnEveryOpening",
+  ".github/workflows/ios-ci.yml::-only-testing:MegaPDFUITests/PagesGridTouchUITests",
 ]
 note = "arrived with #570 — a sheet on a compact width and a sidebar on a regular one, both asserted in CI on their own destinations."
 [feature.android]
