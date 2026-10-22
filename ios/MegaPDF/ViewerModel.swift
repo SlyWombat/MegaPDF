@@ -2444,6 +2444,7 @@ final class ViewerModel: ObservableObject {
                     doc, index: index, pixelWidth: width, pixelHeight: height, tint: .normal) {
                     guard !Task.isCancelled, document === doc else { return }
                     pageThumbnails[index] = image
+                    PagesGridTrace.note("thumb \(index)")
                 }
             }
         }

@@ -763,6 +763,9 @@ entry = "ios/MegaPDF/ViewerView.swift::PagesPanel(model: model,"
 coverage = "ui"
 tests = [
   "ios/MegaPDFUITests/PageToolsUITests.swift::testThePhonesGridIsASheetThatLeavesThePageOnScreen",
+  "ios/MegaPDFUITests/PagesGridTouchUITests.swift::testTheSecondRowsFirstTileTakesATouchOnEveryOpening",
+  "ios/ui-test-lanes.txt::ipad/PagesGridTouchUITests",
+  "ios/ui-test-lanes.txt::iphone/PagesGridTouchUITests",
   "ios/ui-test-lanes.txt::iphone/PageToolsUITests",
   "ios/ui-test-lanes.txt::ipad/PageToolsUITests",
 ]
