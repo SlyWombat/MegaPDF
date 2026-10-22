@@ -371,12 +371,10 @@ struct PagesPanel: View {
                         .onAppear {
                             PagesGridTrace.note("tile appear \(index)")
                             visible.insert(index)
-                            pushThumbnailWindow()
                         }
                         .onDisappear {
                             PagesGridTrace.note("tile disappear \(index)")
                             visible.remove(index)
-                            pushThumbnailWindow()
                         }
                 }
             }
@@ -387,6 +385,16 @@ struct PagesPanel: View {
                 .foregroundStyle(.secondary)
                 .padding(.bottom, 16)
                 .accessibilityHidden(true)
+        }
+        // One thumbnail-window push per settled change of the realised range (#640), not one per
+        // tile from inside the layout pass that realises it: each push cancels and restarts the
+        // render task and republishes the model mid-layout, which is N restarts per opening.
+        // 50 ms coalesces a row realised in one pass and is well under a thumbnail's own render
+        // time. `.task(id:)` cancels the previous run when `visible` changes, so it needs no state.
+        .task(id: visible) {
+            try? await Task.sleep(nanoseconds: 50_000_000)
+            guard !Task.isCancelled else { return }
+            pushThumbnailWindow()
         }
         .modifier(SidebarInk(active: presentation == .sidebar))
     }
