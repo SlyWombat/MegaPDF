@@ -301,19 +301,19 @@ public sealed class ScanSearcher
     }
 
     /// <summary>
-    /// Hits found in what the recogniser reads of <paramref name="page"/> when it has no text of its
-    /// own. Empty for a page with text, for one that could not be read, and for a read that an edit
-    /// overtook. <paramref name="own"/> are the rectangles the document's own text already found on
-    /// the page: a read hit that lands on one is the same words seen twice and is dropped.
+    /// What the recogniser read of <paramref name="page"/> when it has no text of its own: from the
+    /// cache, or read now and kept (#683 lifted this out of <see cref="Hits"/> so the Markdown
+    /// export and Find share one cache and one decision). Null for a page with text, for one that
+    /// could not be read, and for a read that an edit overtook.
     /// </summary>
-    public IReadOnlyList<PdfSearchMatch> Hits(int page, string term, IReadOnlyList<PdfRect> own)
+    public OcrPage? Page(int page)
     {
         OcrPage? scanned;
         int started;
         lock (_gate)
         {
             if (_cache.HasText(page))
-                return [];
+                return null;
             scanned = _cache.Get(page);
             started = _generation;
         }
@@ -324,21 +324,30 @@ public sealed class ScanSearcher
                 lock (_gate)
                     if (started == _generation)
                         _cache.NoteText(page);
-                return [];
+                return null;
             }
             var fresh = _read(page);
             if (fresh is null)
-                return [];
+                return null;
             lock (_gate)
             {
                 if (started != _generation)
-                    return [];
+                    return null;
                 _cache.Set(page, fresh);
             }
             scanned = fresh;
         }
-        return scanned.Matches(term, own);
+        return scanned;
     }
+
+    /// <summary>
+    /// Hits found in what the recogniser reads of <paramref name="page"/> when it has no text of its
+    /// own. Empty for a page with text, for one that could not be read, and for a read that an edit
+    /// overtook. <paramref name="own"/> are the rectangles the document's own text already found on
+    /// the page: a read hit that lands on one is the same words seen twice and is dropped.
+    /// </summary>
+    public IReadOnlyList<PdfSearchMatch> Hits(int page, string term, IReadOnlyList<PdfRect> own) =>
+        Page(page)?.Matches(term, own) ?? [];
 
     /// <summary>A page operation renumbered the document: what was read follows its page.</summary>
     public void Renumbered(IReadOnlyList<PageShift> shifts)
