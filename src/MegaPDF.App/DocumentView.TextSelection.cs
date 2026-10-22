@@ -80,7 +80,7 @@ public sealed partial class DocumentView
     private int _pageTapGeneration;
 
     /// <summary>When the last click on a page arrived (milliseconds) and which page, for the double-click.</summary>
-    private (long At, int Page)? _lastPageTap;
+    private (long At, int Page, PdfPoint Point)? _lastPageTap;
 
     /// <summary>The text the open editor started with, so a double-click knows it is unchanged.</summary>
     private string? _activeEditorInitialText;
@@ -89,6 +89,7 @@ public sealed partial class DocumentView
     private MenuFlyoutItem? _textMenuCopy;
     private MenuFlyoutItem? _textMenuReason;
     private DoubleTappedEventHandler? _wordDoubleTapHandler;
+    private TappedEventHandler? _secondTapHandler;
 
     /// <summary>The reason Copy is unavailable, for the notice's x:Bind.</summary>
     public string CopyWithheldMessage => Strings.CopyWithheld;
@@ -401,7 +402,69 @@ public sealed partial class DocumentView
             || e.PointerDeviceType == PointerDeviceType.Touch)
             return;
         if (TrySelectWordAt(pageView, ToPagePoint(e.GetPosition(canvas))))
+        {
             e.Handled = true;
+            _textGestureSwallowsTap = true; // and a Tapped the pair's second release may still raise is not a click
+        }
+    }
+
+    /// <summary>
+    /// The second click of a double-click, when something over the page took it (#774, #775).
+    /// WinUI raises DoubleTapped only when both taps land on the same element. On body text the
+    /// first click opens the line editor within a frame, so the second click lands on the editor's
+    /// TextBox; on an unselected added text box the first click puts selection chrome over it, so
+    /// the second lands on the chrome. Measured on Windows: the second tap's Tapped arrives, handled,
+    /// and no DoubleTapped is raised anywhere. This reads that Tapped (handledEventsToo) as the second
+    /// half of a double-click when it comes within the system's double-click time and rectangle of
+    /// the click the page took, and does what the double-click means there (<see cref="TakeSecondClick"/>).
+    /// </summary>
+    private void OnPageTappedAfterAnother(object sender, TappedRoutedEventArgs e)
+    {
+        // Only a tap that something above the page took: the page's own handler has every other one.
+        if (!e.Handled || sender is not PageCanvas canvas || canvas.DataContext is not PageView pageView
+            || e.PointerDeviceType == PointerDeviceType.Touch || e.OriginalSource is not DependencyObject source)
+            return;
+        TakeSecondClick(pageView, ToPagePoint(e.GetPosition(canvas)),
+            onEditor: _activeEditor is { } editor && IsWithin(source, editor),
+            onChrome: _selectionChrome is { } chrome && IsWithin(source, chrome));
+    }
+
+    /// <summary>
+    /// What a double-click means where its second click was taken: on the line editor the first click
+    /// opened, the word under it is selected and the first click taken back (#774); on the chrome the
+    /// first click put over an added text box, that box's editor opens with nothing selected (#775).
+    /// True when it did one of them.
+    /// </summary>
+    private bool TakeSecondClick(PageView pageView, PdfPoint point, bool onEditor, bool onChrome)
+    {
+        if (_lastPageTap is not { } tap || tap.Page != pageView.Index
+            || Environment.TickCount64 - tap.At > GetDoubleClickTime() || !WithinDoubleClickRect(tap.Point, point))
+            return false;
+        if (onEditor)
+        {
+            if (!TrySelectWordAt(pageView, point))
+                return false;
+            _lastPageTap = null;
+            return true;
+        }
+        if (onChrome && _selection is { Run: not null } selection && selection.Page == pageView
+            && selection.Id.StartsWith("textbox:", StringComparison.Ordinal))
+        {
+            _lastPageTap = null;
+            _ = EditTextBoxAtAsync(selection.Canvas, pageView, selection.Bounds.Center);
+            return true;
+        }
+        return false;
+    }
+
+    /// <summary>Whether two clicks are within the system's double-click rectangle (centred on the first), as Windows judges a double-click.</summary>
+    private bool WithinDoubleClickRect(PdfPoint first, PdfPoint second)
+    {
+        var scale = XamlRoot?.RasterizationScale ?? 1.0;
+        var halfWidth = Math.Max(GetSystemMetrics(SmCxDoubleClk), 4) / 2.0 / scale;
+        var halfHeight = Math.Max(GetSystemMetrics(SmCyDoubleClk), 4) / 2.0 / scale;
+        return Math.Abs(first.X - second.X) / PointsPerDip <= halfWidth
+               && Math.Abs(first.Y - second.Y) / PointsPerDip <= halfHeight;
     }
 
     private bool TrySelectWordAt(PageView pageView, PdfPoint point)
@@ -681,6 +744,11 @@ public sealed partial class DocumentView
         // handledEventsToo: the editor a first click opened sits over the line and takes the
         // second click, and the double-click still belongs to the page (see OnPageDoubleTappedForWord).
         canvas.AddHandler(DoubleTappedEvent, _wordDoubleTapHandler, handledEventsToo: true);
+        // The second click of a double-click is often taken by something over the page, and WinUI
+        // raises no DoubleTapped for it (#774, #775): see OnPageTappedAfterAnother.
+        _secondTapHandler ??= OnPageTappedAfterAnother;
+        canvas.RemoveHandler(TappedEvent, _secondTapHandler);
+        canvas.AddHandler(TappedEvent, _secondTapHandler, handledEventsToo: true);
         canvas.ContextFlyout = TextContextMenu();
         // Read the page's text as it is shown, off the UI thread, so a drag never waits for it.
         if (pageView.Source is not null && ViewModel.SelectableText is { } cache && cache.Peek(pageView.Index) is null)
@@ -756,6 +824,8 @@ public sealed partial class DocumentView
     [DllImport("user32.dll")]
     private static extern uint GetDoubleClickTime();
 
+    private const int SmCxDoubleClk = 36;
+    private const int SmCyDoubleClk = 37;
     private const int SmCxDrag = 68;
     private const int SmCyDrag = 69;
 
@@ -856,6 +926,19 @@ public sealed partial class DocumentView
     /// <summary>The second click of a double-click on a word, as the double-tap handler takes it, for the self-test.</summary>
     internal bool DoubleClickForTest(int pageIndex, PdfPoint point) =>
         ViewModel.Pages.ElementAtOrDefault(pageIndex) is { } pageView && TrySelectWordAt(pageView, point);
+
+    /// <summary>
+    /// The second click of a double-click at <paramref name="point"/> as the page reads it when whatever
+    /// is over the first click's spot — its line editor, or its selection chrome — took it, for the
+    /// self-test (#774, #775): the decision <see cref="OnPageTappedAfterAnother"/> makes. WinUI cannot
+    /// synthesise the Tapped itself, which is why the harness cannot go further than this.
+    /// </summary>
+    internal bool SecondClickForTest(int pageIndex, PdfPoint point) =>
+        ViewModel.Pages.ElementAtOrDefault(pageIndex) is { } pageView
+        && TakeSecondClick(pageView, point, onEditor: _activeEditor is not null, onChrome: _selectionChrome is not null);
+
+    /// <summary>Whether an added object's or a signature's selection chrome is on the page, for the self-test.</summary>
+    internal bool HasSelectionChromeForTest => _selectionChrome is not null;
 
     /// <summary>A key the page's selection answers (Escape), through the same decision the real key takes.</summary>
     internal bool PressSelectionKeyForTest(VirtualKey key) => HandleTextSelectionKey(key);

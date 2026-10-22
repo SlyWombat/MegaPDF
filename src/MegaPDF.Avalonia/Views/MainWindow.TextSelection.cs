@@ -390,7 +390,10 @@ public partial class MainWindow
     /// The second press of a double-click, seen on its way down — before an editor the first
     /// click opened can take it. On the document's own text it selects the word, and takes back
     /// the first click: the editor it opened goes, or the check it started opens nothing. On an
-    /// added text box, or inside an editor that was already open, it is left alone.
+    /// added text box it opens that box's editor (#775): the first click selected the box, which
+    /// put chrome over it, so the pair's two taps have different targets and Avalonia raises no
+    /// DoubleTapped for it; the chrome's own handler only ever saw a double-click on a box that
+    /// was already selected. Inside an editor that was already open it is left alone.
     /// </summary>
     private void OnPagePreviewPointerPressed(object? sender, PointerPressedEventArgs e)
     {
@@ -400,11 +403,27 @@ public partial class MainWindow
             return;
         var position = e.GetPosition(SurfaceOf(container));
         var dipToPoint = 1.0 / (PageBitmap.PointsToPixels * vm.Zoom);
-        if (TrySelectWordAt(vm, page, new PdfPoint(position.X * dipToPoint, position.Y * dipToPoint)))
+        var point = new PdfPoint(position.X * dipToPoint, position.Y * dipToPoint);
+        if (TrySelectWordAt(vm, page, point) || TryEditTextBoxAt(vm, page, point))
         {
             CancelTextPress();
             e.Handled = true;
         }
+    }
+
+    /// <summary>
+    /// A double-click on an added text box opens its editor (#775). The first click of the pair has
+    /// selected the box; the second, seen here, is on it. False when no box is selected there, or
+    /// an editor is already open (its double-click is its own).
+    /// </summary>
+    private bool TryEditTextBoxAt(DocumentViewModel vm, PageViewModel page, PdfPoint point)
+    {
+        if (_inlineEditor is not null
+            || vm.Selection is not { Kind: DocumentViewModel.SelectionKind.TextBox, Run: { } run } box
+            || box.PageIndex != page.Index || !box.Bounds.Contains(point))
+            return false;
+        ShowTextBoxEditor(box.PageIndex, run);
+        return _inlineEditor is not null;
     }
 
     private bool TrySelectWordAt(DocumentViewModel vm, PageViewModel page, PdfPoint point)
@@ -660,10 +679,6 @@ public partial class MainWindow
     /// <summary>The context menu's Copy and its reason as they would show now, for the self-test.</summary>
     internal (bool CopyEnabled, bool ReasonShown) TextMenuStateForTest() =>
         PageContainer(0)?.ContextMenu is { } menu ? UpdateTextMenu(menu) : (false, false);
-
-    /// <summary>The second click of a double-click on a word, through the same decision the real one takes.</summary>
-    internal bool DoubleClickWordForTest(int pageIndex, PdfPoint point) =>
-        Active is { } vm && vm.Pages.FirstOrDefault(p => p.Index == pageIndex) is { } page && TrySelectWordAt(vm, page, point);
 
     /// <summary>A selection key (Escape, Shift+Left/Right) through the same decision the real one takes.</summary>
     internal bool PressSelectionKeyForTest(Key key, KeyModifiers modifiers = KeyModifiers.None) =>

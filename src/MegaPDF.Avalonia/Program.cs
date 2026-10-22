@@ -6473,10 +6473,9 @@ internal static class Program
     /// drag; an edit to the page drops the selection on it; reading mode selects too; and a
     /// document that asked not to be copied from selects, but greys Copy and says why.
     ///
-    /// The double-click's second press is the one thing not sent as real input: the headless
-    /// platform does not raise a click count of two reliably (the same limit
-    /// BeginEditingSelectedTextBoxForTest documents), so it goes through the decision the real
-    /// one takes, DoubleClickWordForTest, straight after a real first click.
+    /// The double-click is real input too: headless MouseDown raises a click count of two for a second
+    /// press soon after the first (measured, #774/#775), so the pair goes through the tunnelling handler a
+    /// person's does, on a word and on an added text box.
     /// </summary>
     private static void CheckTextSelection(string dir, string state, Action<string, bool> check)
     {
@@ -6648,14 +6647,82 @@ internal static class Program
             check("  Escape closes it, nothing changed", !window.HasOpenInlineEditor && !vm.IsDirty);
 
             // --- a double-click selects a word and takes back its first click's editor ---
+            // Real input: headless MouseDown raises a click count of two for a second press that follows the
+            // first soon enough, so the pair goes through the tunnelling handler a person's does.
+            void SecondPress(int pageIndex, PdfPoint p)
+            {
+                var a = At(pageIndex, p);
+                HeadlessWindowExtensions.MouseDown(window, a, MouseButton.Left);
+                HeadlessWindowExtensions.MouseUp(window, a, MouseButton.Left);
+                Pump();
+            }
             var charlie = new PdfPoint(lines[3].Right - 2, Mid(lines[3]).Y);
-            Click(0, charlie);
-            PumpUntilRendered(() => window.HasOpenInlineEditor, TimeSpan.FromSeconds(3));
-            check("a double-click on a word selects it", window.DoubleClickWordForTest(0, charlie) && vm.HasTextSelection);
+            // The second press is a double-click only within the platform's double-click time of the first, so a
+            // first click whose editor took longer than that to open on a loaded machine is tried again.
+            var opened = false;
+            for (var attempt = 1; attempt <= 3 && !opened; attempt++)
+            {
+                var firstClickAt = Environment.TickCount64;
+                Click(0, charlie);
+                PumpUntilRendered(() => window.HasOpenInlineEditor, TimeSpan.FromSeconds(3));
+                var took = Environment.TickCount64 - firstClickAt;
+                Console.WriteLine($"  the first click's editor opened in {took} ms (attempt {attempt}, double-click time 500 ms)");
+                opened = window.HasOpenInlineEditor && took < 350;
+                if (!opened && window.HasOpenInlineEditor)
+                {
+                    Press(Key.Escape, PhysicalKey.Escape);
+                    PumpUntilRendered(() => !window.HasOpenInlineEditor, TimeSpan.FromSeconds(3));
+                }
+            }
+            check("the first click of a pair opens the line editor", window.HasOpenInlineEditor);
+            SecondPress(0, charlie);
+            check("a double-click on a word selects it", vm.HasTextSelection);
             check("  and announces the word", Announced() == Strings.TextSelectionAnnounced("charlie"));
             check("  and the editor its first click opened is gone, nothing changed", !window.HasOpenInlineEditor && !vm.IsDirty);
             check("  the clipboard gets the word", Copied() == "charlie");
             Press(Key.Escape, PhysicalKey.Escape);
+            // The pair arriving before the first click's check has opened its editor: the open is called off.
+            {
+                var at = At(0, charlie);
+                HeadlessWindowExtensions.MouseDown(window, at, MouseButton.Left);
+                HeadlessWindowExtensions.MouseUp(window, at, MouseButton.Left);
+                HeadlessWindowExtensions.MouseDown(window, at, MouseButton.Left);
+                HeadlessWindowExtensions.MouseUp(window, at, MouseButton.Left);
+                Pump();
+                PumpFor(TimeSpan.FromMilliseconds(300));
+                check("a double-click quicker than the first click's editor also selects the word, and none opens behind it",
+                      vm.HasTextSelection && !window.HasOpenInlineEditor && Copied() == "charlie");
+            }
+            Press(Key.Escape, PhysicalKey.Escape);
+
+            // --- a double-click on an added text box edits it, selected or not (#775) ---
+            // The first click selects the box, which puts chrome over it: the pair's two taps have different
+            // targets, and Avalonia raises no DoubleTapped for it.
+            vm.AddTextBox(0, new PdfPoint(200, 600), "box");
+            PumpUntil(() => vm.IsIdle, TimeSpan.FromSeconds(5));
+            PumpUntilRendered(() => vm.Pages[0].Regions.Any(r => r.Kind == PageHitKind.TextBox), TimeSpan.FromSeconds(5));
+            var boxBounds = vm.Pages[0].Regions.FirstOrDefault(r => r.Kind == PageHitKind.TextBox).Bounds;
+            check("a text box is added", boxBounds.Width > 0);
+            var boxMid = Mid(boxBounds);
+            vm.ClearSelection();
+            Pump();
+            Click(0, boxMid);
+            check("a first click on the unselected box selects it, and opens no editor",
+                  vm.Selection is { Kind: DocumentViewModel.SelectionKind.TextBox } && !window.HasOpenInlineEditor);
+            SecondPress(0, boxMid);
+            PumpUntilRendered(() => window.HasOpenInlineEditor, TimeSpan.FromSeconds(3));
+            check("  the second click of the pair opens the box's editor", window.HasOpenInlineEditor);
+            check("  with the box's own text in it", window.InlineEditorTextForTest == "box");
+            check("  and no text selected on the page", !vm.HasTextSelection);
+            Press(Key.Escape, PhysicalKey.Escape);
+            PumpUntilRendered(() => !window.HasOpenInlineEditor, TimeSpan.FromSeconds(3));
+            check("  Escape closes it, the box unchanged", !window.HasOpenInlineEditor && vm.Pages[0].Regions.Count(r => r.Kind == PageHitKind.TextBox) == 1);
+            vm.ClearSelection();
+            while (vm.CanUndo)
+                vm.UndoCommand.Execute(null);
+            PumpUntil(() => vm.IsIdle, TimeSpan.FromSeconds(5));
+            PumpUntilRendered(() => vm.Pages[0].Regions.All(r => r.Kind != PageHitKind.TextBox), TimeSpan.FromSeconds(5));
+            check("  the box added for this is taken away again", vm.Pages[0].Regions.All(r => r.Kind != PageHitKind.TextBox));
 
             // --- across the page break, and the whole document ---
             PumpUntilRendered(() => window.WindowPointForTest(1, new PdfPoint(72, 72)) is not null && cache.Peek(1) is not null, TimeSpan.FromSeconds(5));
