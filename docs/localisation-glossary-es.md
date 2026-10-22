@@ -266,6 +266,7 @@ refers to the same row in the French file.
 | This page has no text to select. | Esta página no tiene texto que seleccionar. |  |
 | The owner of this document doesn't allow copying its text. | El propietario de este documento no permite copiar su texto. |  |
 | Start of selection / End of selection | Inicio de la selección / Fin de la selección |  |
+| Next word / Previous word | Palabra siguiente / Palabra anterior |  |
 | This field is read-only. | Este campo es de solo lectura. |  |
 | Save as a copy, keeping the invalid signature | Guardar como copia conservando la firma inválida |  |
 | Saved. The copy carries the document's digital signature, and it is no longer valid. | Guardado. La copia lleva la firma digital del documento, y ya no es válida. |  |

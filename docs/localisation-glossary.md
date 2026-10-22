@@ -249,7 +249,8 @@ established French for the cryptographic sense.
 | Copy | Copier | #710, iOS: the system edit menu's item over a text selection; the system's own French |
 | This page has no text to select. | Cette page ne contient aucun texte à sélectionner. | #710, iOS: long press on a scan |
 | The owner of this document doesn't allow copying its text. | Le propriétaire de ce document n'autorise pas la copie de son texte. | #710, iOS: the copy permission is off; the text still selects. Not "chiffrement" or "protégé": it is a permission, not encryption |
-| Start of selection / End of selection | Début de la sélection / Fin de la sélection | #710, iOS: VoiceOver names of the two handles |
+| Start of selection / End of selection | Début de la sélection / Fin de la sélection | #710, iOS: VoiceOver names of the two handles; Android: the same words, TalkBack's names for them |
+| Next word / Previous word | Mot suivant / Mot précédent | #710, Android: the two TalkBack custom actions on each selection handle, moving that end one word later or earlier |
 | This field is read-only. | Ce champ est en lecture seule. | #712, iOS: a form field marked read-only by its author |
 | Save as a copy, keeping the invalid signature | Enregistrer une copie en gardant la signature invalide | #576, iOS: the *redaction*-confirm sheet's twin of the row above, keyed "Save **as a** copy" rather than "Save a copy" because that is what its own plain row is already keyed — same French either way, since French does not need the English distinction |
 | Saved. The copy carries the document's digital signature, and it is no longer valid. | Enregistré. La copie porte la signature numérique du document, et celle-ci n'est plus valide. | #576, Android's own idiom: a snackbar message starting "Saved.", and naming the document rather than the original, since Android's string never otherwise mentions "the original" — the canonical row above is Windows/Avalonia's own phrasing |
