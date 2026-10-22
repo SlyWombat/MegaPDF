@@ -641,7 +641,7 @@ tests = [
   "ios/ui-test-lanes.txt::iphone/SelectCopyUITests",
   "ios/ui-test-lanes.txt::ipad/SelectCopyUITests",
 ]
-note = "#710: a long press selects the word, drawn in the tint at the selection opacity with two draggable handles and the system's UIEditMenuInteraction offering Copy (plain text to UIPasteboard); a tap clears it. One page at a time, not across pages. Copy is disabled with a notice when the document's copy bit is off. TextSelectionTests runs selection.pdf through the Swift binding and the handle logic; SelectCopyUITests long-presses, copies and reads the pasteboard back. iOS reading mode shows page images, not reflowed text, so there is nothing there to make selectable."
+note = "#710: a long press selects the word, drawn in the tint at the selection opacity with two draggable handles and the system's UIEditMenuInteraction offering Copy (plain text to UIPasteboard); a tap clears it. One page at a time, not across pages. Copy is disabled with a notice when the document's copy bit is off. TextSelectionTests runs selection.pdf through the Swift binding and the handle logic; SelectCopyUITests long-presses, copies and reads the pasteboard back, steps the end handle by a word with VoiceOver's adjust action (the handles are adjustable, their value the selected text), copies with a hardware keyboard's Command-C through the responder chain (iPad only), and drives a no-copy document (owner-only.pdf) to a disabled Copy and the reason notice. iOS reading mode shows page images, not reflowed text, so there is nothing there to make selectable."
 [feature.android]
 presence = "present"
 entry = "android/app/src/main/java/com/megapdf/android/ViewerViewModel.kt::onPageLongPressed"

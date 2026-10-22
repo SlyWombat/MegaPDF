@@ -1626,7 +1626,9 @@ struct ViewerView: View {
                         model.dragSelectionHandle(handle, xFraction: Double(point.x / width),
                                                   yFraction: Double(point.y / height))
                     },
-                    onEndDrag: model.endSelectionHandleDrag)
+                    onEndDrag: model.endSelectionHandleDrag,
+                    selectedText: model.selectedText,
+                    onAdjust: model.moveSelectionHandleByWord)
                 if let box = SelectionGeometry.bounds(of: model.selectionRects) {
                     let frame = space.rect(box)
                     SelectionMenuHost(request: model.selectionMenuRequest,

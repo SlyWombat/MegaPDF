@@ -111,6 +111,8 @@ targets:
       - MegaPDFUITests
       # The core's selection fixture, shared with the unit tests rather than copied (#710).
       - path: MegaPDFTests/selection.pdf
+      # The no-copy fixture: opens without a password but forbids copying (#710).
+      - path: MegaPDFTests/owner-only.pdf
     dependencies:
       - target: MegaPDF
     settings:

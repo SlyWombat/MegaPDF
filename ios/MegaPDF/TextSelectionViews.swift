@@ -45,6 +45,10 @@ struct TextSelectionOverlay: View {
     let space: PageSpace
     let onDragHandle: (PageTextSelection.Handle, CGPoint) -> Void
     let onEndDrag: () -> Void
+    /// What is selected now, which VoiceOver reads as each handle's value after a step.
+    let selectedText: String
+    /// VoiceOver's adjust gesture on a handle: `forward` moves that end one word later.
+    let onAdjust: (PageTextSelection.Handle, _ forward: Bool) -> Void
 
     var body: some View {
         ZStack(alignment: .topLeading) {
@@ -94,6 +98,17 @@ struct TextSelectionOverlay: View {
                 }
                 .onEnded { _ in onEndDrag() })
         .accessibilityLabel(isStart ? Text("Start of selection") : Text("End of selection"))
+        // A handle cannot be dragged by a VoiceOver user, so it adjusts: swipe up for one word
+        // later, down for one word earlier (#710). The value is the selected text, which
+        // VoiceOver speaks after each step.
+        .accessibilityValue(Text(verbatim: selectedText))
+        .accessibilityAdjustableAction { direction in
+            switch direction {
+            case .increment: onAdjust(which, true)
+            case .decrement: onAdjust(which, false)
+            @unknown default: break
+            }
+        }
         .accessibilityIdentifier(isStart ? "selectionHandleStart" : "selectionHandleEnd")
     }
 }
@@ -103,7 +118,27 @@ extension PageSpace {
     static let name = "megapdfPageSpace"
 }
 
-/// Presents the system edit menu over the selection. A zero-interaction `UIView` laid exactly
+/// The view the edit menu points at, and the responder a hardware keyboard's Command-C (and
+/// the iPadOS menu bar's Edit > Copy) reaches while a selection is up (#710). Both are the
+/// standard `copy:` action through the responder chain, so nothing shadows Copy in a text
+/// field: the app has no Command-C key command of its own, and a text field that is first
+/// responder takes the action itself.
+final class SelectionMenuAnchor: UIView {
+    var canCopy = true
+    var onCopy: () -> Void = {}
+
+    override var canBecomeFirstResponder: Bool { true }
+
+    override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
+        // Only Copy, and only when the document allows it: a no-copy document leaves the menu
+        // bar's item disabled, as the edit menu's is.
+        action == #selector(UIResponderStandardEditActions.copy(_:)) && canCopy
+    }
+
+    override func copy(_ sender: Any?) { onCopy() }
+}
+
+/// Presents the system edit menu over the selection. A zero-interaction view laid exactly
 /// over the selection's box, so the menu points at it; `request` going up asks it to appear.
 struct SelectionMenuHost: UIViewRepresentable {
     let request: Int
@@ -112,8 +147,8 @@ struct SelectionMenuHost: UIViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
-    func makeUIView(context: Context) -> UIView {
-        let view = UIView()
+    func makeUIView(context: Context) -> SelectionMenuAnchor {
+        let view = SelectionMenuAnchor()
         view.isUserInteractionEnabled = false   // the interaction presents without touches
         view.backgroundColor = .clear
         let interaction = UIEditMenuInteraction(delegate: context.coordinator)
@@ -125,10 +160,12 @@ struct SelectionMenuHost: UIViewRepresentable {
         return view
     }
 
-    func updateUIView(_ view: UIView, context: Context) {
+    func updateUIView(_ view: SelectionMenuAnchor, context: Context) {
         let coordinator = context.coordinator
         coordinator.canCopy = canCopy
         coordinator.onCopy = onCopy
+        view.canCopy = canCopy
+        view.onCopy = onCopy
         guard coordinator.shown != request else { return }
         coordinator.shown = request
         // After this layout pass, and again if the view is not in a window yet: it is created in
@@ -136,8 +173,9 @@ struct SelectionMenuHost: UIViewRepresentable {
         coordinator.present(in: view, attemptsLeft: 8)
     }
 
-    static func dismantleUIView(_ view: UIView, coordinator: Coordinator) {
+    static func dismantleUIView(_ view: SelectionMenuAnchor, coordinator: Coordinator) {
         coordinator.interaction?.dismissMenu()
+        if view.isFirstResponder { view.resignFirstResponder() }
     }
 
     final class Coordinator: NSObject, UIEditMenuInteractionDelegate {
@@ -146,13 +184,15 @@ struct SelectionMenuHost: UIViewRepresentable {
         var canCopy = true
         var onCopy: () -> Void = {}
 
-        func present(in view: UIView, attemptsLeft: Int) {
+        func present(in view: SelectionMenuAnchor, attemptsLeft: Int) {
             DispatchQueue.main.async { [weak self, weak view] in
                 guard let self, let view else { return }
                 guard view.window != nil, view.bounds.width > 0 else {
                     if attemptsLeft > 0 { self.present(in: view, attemptsLeft: attemptsLeft - 1) }
                     return
                 }
+                // The selection's own responder, so Command-C copies it.
+                view.becomeFirstResponder()
                 let point = CGPoint(x: view.bounds.midX, y: view.bounds.minY)
                 let configuration = UIEditMenuConfiguration(identifier: nil, sourcePoint: point)
                 configuration.preferredArrowDirection = .down
