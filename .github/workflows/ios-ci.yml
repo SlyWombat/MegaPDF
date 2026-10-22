@@ -16,10 +16,10 @@ on:
         options: [auto, self-hosted, hosted]
   push:
     branches: [main]
-    paths: ['ios/**', 'core/**', 'libs/pdfium/**', 'tools/gen_test_fixtures.py', '.github/workflows/ios-ci.yml']
+    paths: ['ios/**', 'core/**', 'libs/pdfium/**', 'tools/gen_test_fixtures.py', 'tools/qa/ios_ui_lanes.py', '.github/workflows/ios-ci.yml']
   pull_request:
     branches: [main]
-    paths: ['ios/**', 'core/**', 'libs/pdfium/**', 'tools/gen_test_fixtures.py', '.github/workflows/ios-ci.yml']
+    paths: ['ios/**', 'core/**', 'libs/pdfium/**', 'tools/gen_test_fixtures.py', 'tools/qa/ios_ui_lanes.py', '.github/workflows/ios-ci.yml']
 
 # One iOS CI run per pull request at a time: a push to a PR cancels that PR's older run,
 # so a single standing runner never works through stale commits (#614). Pushes to main
@@ -241,8 +241,8 @@ jobs:
       # #589 is why Save a copy is in this list. It was broken on every document on
       # `main` — two `.fileExporter` modifiers on one view, and the PDF one never
       # presented — while every job here stayed green, because the only suite that
-      # drove the real export sheet for it (FilesEndToEndUITests) is excluded below
-      # and the unit tests call `finishExport` directly, with no sheet involved.
+      # drove the real export sheet for it (FilesEndToEndUITests) is excluded in
+      # ios/ui-test-lanes.txt and the unit tests call `finishExport` directly, with no sheet involved.
       # SaveACopyExportUITests presents the real system sheet off bytes in the launch
       # environment, so it needs none of the staged Files fixtures that keep the
       # end-to-end suite off a runner, and it fails if the sheet does not appear.
@@ -259,18 +259,11 @@ jobs:
       # bindings and that the Stop is a finger-sized target -- both only answerable in a
       # running app.
       #
-      # Kept out on purpose: DemoFlowUITests is the preview-video choreography
-      # (timed for a recording, not a verdict); CaptureSimulatorSetupUITests
-      # changes the simulator's Settings for the screenshot rig;
-      # FilesEndToEndUITests needs a 1 GB fixture and the real Files picker
-      # (tools/ios-files-e2e.sh); ShareVerificationUITests and
-      # OpenWithVerificationUITests go through the Files app, which on a runner
-      # did not open the staged file at all (two runs, two different failures)
-      # and on the Mac mini does not list MegaPDF in its share sheet;
-      # RecentsAccessibilityUITests' long-press test passed one runner run and
-      # failed the next ("the context menu has no Remove from Recents"); and
-      # RedactionUITests' menu test fails on the simulator today ("the ⋯ menu
-      # has no Redact row" — its first run on a device, 2026-09-27).
+      # What each lane runs, and the reason for every exclusion, is ios/ui-test-lanes.txt
+      # (#598): the iPhone lane runs every suite except the ones listed there, so a new suite
+      # runs here with nobody listing it. The two UI steps below ask tools/qa/ios_ui_lanes.py
+      # for their xcodebuild arguments, and tools/qa/check-matrix.py checks the file against
+      # the test files and the coverage map, in both directions.
       - name: Build the UI tests
         run: |
           xcodebuild build-for-testing \
@@ -304,6 +297,10 @@ jobs:
       # runs measured at 61 s, every time, before "Unable to find a device".
       - name: Run the UI tests
         run: |
+          # Unquoted on purpose: the words are identifiers with no spaces, and word splitting is
+          # what hands them to xcodebuild as separate arguments. Python 3.9 and bash 3.2 safe.
+          LANE_ARGS=$(python3 ../tools/qa/ios_ui_lanes.py xcodebuild-args iphone)
+          echo "iPhone lane (ios/ui-test-lanes.txt): $LANE_ARGS"
           xcodebuild test-without-building \
             -project MegaPDF.xcodeproj \
             -scheme MegaPDFDemo \
@@ -311,39 +308,20 @@ jobs:
             -destination-timeout 300 \
             -derivedDataPath "$DD" \
             -resultBundlePath "$RUNNER_TEMP/ui-tests.xcresult" \
-            -only-testing:MegaPDFUITests/ViewerZoomUITests \
-            -only-testing:MegaPDFUITests/ReadingModeUITests \
-            -only-testing:MegaPDFUITests/PageToolsUITests \
-            -only-testing:MegaPDFUITests/BodyTextEditUITests \
-            -only-testing:MegaPDFUITests/MarkdownExportUITests \
-            -only-testing:MegaPDFUITests/SaveACopyExportUITests \
-            -only-testing:MegaPDFUITests/RecentsAccessibilityUITests/testEveryRecentRowAnnouncesWhereItsFileLives \
-            -only-testing:MegaPDFUITests/ViewerBarContrastUITests \
-            -only-testing:MegaPDFUITests/RedactionUITests/testSaveIsReachableWithAMarkAndAsksBeforeRemoving \
-            -only-testing:MegaPDFUITests/MultilineTextUITests \
-            -only-testing:MegaPDFUITests/FormTextUITests \
-            -only-testing:MegaPDFUITests/SelectCopyUITests \
-            -only-testing:MegaPDFUITests/ProgressStripUITests \
+            $LANE_ARGS \
             CODE_SIGNING_ALLOWED=NO
 
-      # The regular-width half of the zoom check (#465) and of reading mode (#506). No
-      # second build: an iOS Simulator build-for-testing is keyed to the platform, not to
-      # the device, so the products above run against an iPad destination unchanged.
-      # Reading mode is here as well as on the iPhone because the two layouts differ in
-      # exactly the chrome it hides -- the iPad's tools are a strip of its own (#172) and
-      # carry reading mode's second entry point, where compact width has only the bottom
-      # bar and the dot-dot-dot menu. The page tools (#174) are here for a stronger version
-      # of the same reason: the two widths get genuinely different answers -- a sheet with
-      # detents on the phone, a sidebar beside the document on the iPad -- and each of those
-      # tests skips on the other width, so neither destination alone runs the whole suite.
-      # Save a copy is here because #589 was reported on both widths, the ⋯ menu it is
-      # tapped from is a different control on each, and in regular width the pages sidebar
-      # puts a second file exporter in the same hierarchy as the viewer's own.
+      # The regular-width half of the UI tests. No second build: an iOS Simulator
+      # build-for-testing is keyed to the platform, not to the device, so the products above
+      # run against an iPad destination unchanged. Which suites run here, and why each one
+      # gets a different answer on regular width, is the `ipad` lines of ios/ui-test-lanes.txt.
       - name: Ready the iPad, alone
         run: bash scripts/ci-simulator.sh ready "$IPAD_UDID" "$SIM_UDID"
 
-      - name: Run the zoom, reading-mode, page-tools and Save-a-copy tests on an iPad too
+      - name: Run the width-class UI tests on an iPad too
         run: |
+          LANE_ARGS=$(python3 ../tools/qa/ios_ui_lanes.py xcodebuild-args ipad)
+          echo "iPad lane (ios/ui-test-lanes.txt): $LANE_ARGS"
           xcodebuild test-without-building \
             -project MegaPDF.xcodeproj \
             -scheme MegaPDFDemo \
@@ -351,13 +329,7 @@ jobs:
             -destination-timeout 300 \
             -derivedDataPath "$DD" \
             -resultBundlePath "$RUNNER_TEMP/ui-tests-ipad.xcresult" \
-            -only-testing:MegaPDFUITests/ViewerZoomUITests \
-            -only-testing:MegaPDFUITests/ReadingModeUITests \
-            -only-testing:MegaPDFUITests/PageToolsUITests \
-            -only-testing:MegaPDFUITests/PagesGridTouchUITests \
-            -only-testing:MegaPDFUITests/SaveACopyExportUITests \
-            -only-testing:MegaPDFUITests/FormTextUITests \
-            -only-testing:MegaPDFUITests/SelectCopyUITests \
+            $LANE_ARGS \
             CODE_SIGNING_ALLOWED=NO
 
       - name: Upload the UI test result bundle

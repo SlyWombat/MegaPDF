@@ -674,7 +674,7 @@ La barra lateral Miniaturas ahora es un lugar para trabajar: gira una página qu
 Privado por diseño
 MegaPDF no realiza ninguna conexión de red (su sandbox ni siquiera las permite) y solo abre los archivos que tú eliges. Tus documentos y tu firma nunca salen de tu Mac. La aplicación es de código abierto, así que cualquiera puede verificarlo.
 
-Como en casa en el Mac
+Hecho para el Mac
 Cada comando está en la barra de menús con el atajo que esperas, los documentos se abren como pestañas en una sola ventana, y un PDF abierto desde el Finder se une al que ya tienes. VoiceOver lee la barra de herramientas y la página, la aplicación sigue tu apariencia clara u oscura, y lo que firmas aquí es un PDF estándar que se abre en Vista Previa y en cualquier otro lugar.
 
 MegaPDF es deliberadamente simple: no te entierra en barras de herramientas. Abre, corrige, guarda. Listo.""",

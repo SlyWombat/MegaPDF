@@ -1,0 +1,27 @@
+# Which iOS UI tests each CI lane runs (#598). The ONE list: ios-ci.yml reads it through
+# tools/qa/ios_ui_lanes.py, and tools/qa/check-matrix.py checks it against the test files
+# and the coverage map. Format: <lane> <run|skip> <Suite>[/<testMethod>] -- <why>
+#
+# iphone runs EVERY suite in MegaPDFUITests except its `skip` lines, so a new suite runs
+# there with nobody listing it. ipad runs only its `run` lines: it is the width-class subset,
+# where regular width gets a genuinely different answer (a sidebar, a tool strip, a popover).
+#
+# A suite added to ios/MegaPDFUITests/ runs on the iPhone at once. If it cannot run on a
+# runner, its PR adds a `skip` line here with the reason, in the same commit.
+
+iphone skip CaptureSimulatorSetupUITests -- changes the simulator's Settings for the screenshot rig
+iphone skip DemoFlowUITests -- the preview-video choreography: timed for a recording, not a verdict
+iphone skip FilesEndToEndUITests -- needs a 1 GB fixture and the real Files picker; tools/ios-files-e2e.sh runs it by hand
+iphone skip OpenWithVerificationUITests -- goes through the Files app, which did not open the staged file on a runner (two runs, two different failures)
+iphone skip PageDragUITests -- a synthesised drag cannot express what tells a drag from a long press; a by-hand gate (#570)
+iphone skip ShareVerificationUITests -- goes through the Files app; on the Mac mini its share sheet does not list MegaPDF
+iphone skip RecentsAccessibilityUITests/testARowOffersRemoveFromRecents -- passed one runner run and failed the next ("the context menu has no Remove from Recents")
+iphone skip RedactionUITests/testTheRedactToolIsInTheMenuAndSaysWhetherItIsArmed -- fails on the simulator ("the ⋯ menu has no Redact row", first run 2026-09-27)
+
+ipad run FormTextUITests -- the form field editor is a sheet on both widths, presented differently on regular width (#701)
+ipad run PageToolsUITests -- the grid is a sidebar beside the document on regular width and a sheet on compact (#174)
+ipad run PagesGridTouchUITests -- the sidebar grid's second-row tile on a fresh launch's first opening: a touch must land (#640); skips itself on the phone
+ipad run ReadingModeUITests -- regular width's tool strip carries reading mode's second entry point (#506)
+ipad run SaveACopyExportUITests -- #589 was reported on both widths, and the pages sidebar puts a second exporter in the hierarchy
+ipad run SelectCopyUITests -- the long press and the edit menu present over a different layout on regular width (#710)
+ipad run ViewerZoomUITests -- a synthesised pinch's lower finger lands on compact width's bottom toolbar, not on regular width's (#465)

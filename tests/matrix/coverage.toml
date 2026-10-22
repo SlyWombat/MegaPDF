@@ -33,13 +33,16 @@
 # CI runs must be cited by some cell or carry an `[[exempt]]` with a reason — that is what
 # keeps this file from going quietly stale as tests are added.
 #
-# #598: an iOS `coverage = "ui"` cell citing an `ios/MegaPDFUITests/*.swift` suite must
-# also cite the `.github/workflows/ios-ci.yml` text that runs it (the `-only-testing`
-# line), the same way a Windows cell cites `.github/workflows/ci.yml::Run-Check "..."`.
-# ios-ci.yml names each UI suite on its own line, duplicated across an iPhone and an iPad
-# lane, and a conflict that drops one line keeps the job green with no warning — citing
-# only the test file never noticed, because the conflict never touches that file. Citing
-# the line means a dropped line breaks a citation here instead.
+# #598: which iOS UI tests CI runs is written once, in `ios/ui-test-lanes.txt`, and both
+# ios-ci.yml and check-matrix.py read it. An iOS `coverage = "ui"` cell citing an
+# `ios/MegaPDFUITests/*.swift` suite must also cite the lane that runs it, as
+# `ios/ui-test-lanes.txt::iphone/<Suite>` (or `::ipad/<Suite>`, one citation per lane; a suite
+# the lane runs only in part is cited per test, `::iphone/<Suite>/<test>`). That citation
+# resolves only if the manifest really has that lane run that unit, so a line dropped from
+# either lane breaks a citation here instead of passing silently (the old per-workflow-line
+# citation was lane-blind: an iPad claim resolved against the iPhone line). In reverse, every
+# unit a lane runs must be cited by some cell or exempted. A new suite runs on the iPhone lane
+# with nobody listing it, and that rule is what makes it ask for a cell.
 #
 # Coverage here means "something looks at it", never "it works": the suites themselves say
 # that. And none of it replaces the by-hand pass in docs/RELEASING.md §2.3, which is still
@@ -233,7 +236,7 @@ entry = "ios/MegaPDF/HomeView.swift::Remove from Recents"
 coverage = "ui"
 tests = [
   "ios/MegaPDFUITests/RecentsAccessibilityUITests.swift::testEveryRecentRowAnnouncesWhereItsFileLives",
-  ".github/workflows/ios-ci.yml::-only-testing:MegaPDFUITests/RecentsAccessibilityUITests/testEveryRecentRowAnnouncesWhereItsFileLives",
+  "ios/ui-test-lanes.txt::iphone/RecentsAccessibilityUITests/testEveryRecentRowAnnouncesWhereItsFileLives",
   "ios/MegaPDFTests/RecentsStoreTests.swift::Recents",
   "ios/MegaPDFTests/RecentLocationTests.swift::Location",
 ]
@@ -512,7 +515,8 @@ entry = "ios/MegaPDF/ViewerView.swift::PinchZoom"
 coverage = "ui"
 tests = [
   "ios/MegaPDFUITests/ViewerZoomUITests.swift::class",
-  ".github/workflows/ios-ci.yml::-only-testing:MegaPDFUITests/ViewerZoomUITests",
+  "ios/ui-test-lanes.txt::iphone/ViewerZoomUITests",
+  "ios/ui-test-lanes.txt::ipad/ViewerZoomUITests",
   "ios/MegaPDFTests/ZoomAnchorTests.swift::class",
 ]
 note = "the one feature CI exercises on both an iPhone and an iPad destination."
@@ -634,7 +638,8 @@ coverage = "ui"
 tests = [
   "ios/MegaPDFTests/TextSelectionTests.swift::class",
   "ios/MegaPDFUITests/SelectCopyUITests.swift::class",
-  ".github/workflows/ios-ci.yml::MegaPDFUITests/SelectCopyUITests",
+  "ios/ui-test-lanes.txt::iphone/SelectCopyUITests",
+  "ios/ui-test-lanes.txt::ipad/SelectCopyUITests",
 ]
 note = "#710: a long press selects the word, drawn in the tint at the selection opacity with two draggable handles and the system's UIEditMenuInteraction offering Copy (plain text to UIPasteboard); a tap clears it. One page at a time, not across pages. Copy is disabled with a notice when the document's copy bit is off. TextSelectionTests runs selection.pdf through the Swift binding and the handle logic; SelectCopyUITests long-presses, copies and reads the pasteboard back. iOS reading mode shows page images, not reflowed text, so there is nothing there to make selectable."
 [feature.android]
@@ -683,7 +688,8 @@ entry = "ios/MegaPDF/ReadingBar.swift::ReadingBar"
 coverage = "ui"
 tests = [
   "ios/MegaPDFUITests/ReadingModeUITests.swift::class",
-  ".github/workflows/ios-ci.yml::-only-testing:MegaPDFUITests/ReadingModeUITests",
+  "ios/ui-test-lanes.txt::iphone/ReadingModeUITests",
+  "ios/ui-test-lanes.txt::ipad/ReadingModeUITests",
   "ios/MegaPDFTests/ReadingModeTests.swift::class",
 ]
 note = "run on both the iPhone and the iPad destination, including the iPad tool-strip entry point."
@@ -757,9 +763,11 @@ entry = "ios/MegaPDF/ViewerView.swift::PagesPanel(model: model,"
 coverage = "ui"
 tests = [
   "ios/MegaPDFUITests/PageToolsUITests.swift::testThePhonesGridIsASheetThatLeavesThePageOnScreen",
-  ".github/workflows/ios-ci.yml::-only-testing:MegaPDFUITests/PageToolsUITests",
   "ios/MegaPDFUITests/PagesGridTouchUITests.swift::testTheSecondRowsFirstTileTakesATouchOnEveryOpening",
-  ".github/workflows/ios-ci.yml::-only-testing:MegaPDFUITests/PagesGridTouchUITests",
+  "ios/ui-test-lanes.txt::ipad/PagesGridTouchUITests",
+  "ios/ui-test-lanes.txt::iphone/PagesGridTouchUITests",
+  "ios/ui-test-lanes.txt::iphone/PageToolsUITests",
+  "ios/ui-test-lanes.txt::ipad/PageToolsUITests",
 ]
 note = "arrived with #570 — a sheet on a compact width and a sidebar on a regular one, both asserted in CI on their own destinations."
 [feature.android]
@@ -820,7 +828,8 @@ tests = [
   "ios/MegaPDFTests/DocumentCapabilitiesTests.swift::class",
   "ios/MegaPDFTests/FormFieldFlagsTests.swift::class",
   "ios/MegaPDFUITests/FormTextUITests.swift::class",
-  ".github/workflows/ios-ci.yml::MegaPDFUITests/FormTextUITests",
+  "ios/ui-test-lanes.txt::iphone/FormTextUITests",
+  "ios/ui-test-lanes.txt::ipad/FormTextUITests",
 ]
 note = "#701: a tap on a text widget opens FormTextSheet; Done writes through megapdf_form_set_text as one undo step (FormTextOperation), gated on fill-forms. FormTextTests fills formtext.pdf through the model, saves, reopens and undoes; FormTextUITests types into the real sheet. #712: the sheet reads the core's flags (megapdf_form_field_flags, _max_length): only a multi-line field takes returns, a single-line field's return submits like Done, a /MaxLen cuts the draft, and a read-only field says so instead of opening. FormFieldFlagsTests reads formflow.pdf's flags through the binding. Comb and masked entry are read but not yet acted on."
 [feature.android]
@@ -1033,7 +1042,7 @@ tests = [
   "ios/MegaPDFTests/AddTextTests.swift::class",
   "ios/MegaPDFTests/MultilineTextTests.swift::class",
   "ios/MegaPDFUITests/MultilineTextUITests.swift::testTheFieldHandsBackANewlineForAReturnAndNotACarriageReturn",
-  ".github/workflows/ios-ci.yml::-only-testing:MegaPDFUITests/MultilineTextUITests",
+  "ios/ui-test-lanes.txt::iphone/MultilineTextUITests",
 ]
 note = "geometry, style and round-trip at the engine; size chips since #43 and multi-line splitting since #4, with the UI test reading the code points the field actually hands back for a Return — the thing Windows and Android each got wrong by assuming it. No UI test places a box."
 [feature.android]
@@ -1093,7 +1102,7 @@ entry = "ios/MegaPDF/BodyTextSheet.swift::BodyTextSheet"
 coverage = "ui"
 tests = [
   "ios/MegaPDFUITests/BodyTextEditUITests.swift::class",
-  ".github/workflows/ios-ci.yml::-only-testing:MegaPDFUITests/BodyTextEditUITests",
+  "ios/ui-test-lanes.txt::iphone/BodyTextEditUITests",
   "ios/MegaPDFTests/BodyTextTests.swift::class",
 ]
 note = "the only live UI test of this on any platform, and it runs in CI."
@@ -1245,7 +1254,7 @@ coverage = "ui"
 tests = [
   "ios/MegaPDFTests/RedactionTests.swift::apply",
   "ios/MegaPDFUITests/RedactionUITests.swift::testSaveIsReachableWithAMarkAndAsksBeforeRemoving",
-  ".github/workflows/ios-ci.yml::-only-testing:MegaPDFUITests/RedactionUITests/testSaveIsReachableWithAMarkAndAsksBeforeRemoving",
+  "ios/ui-test-lanes.txt::iphone/RedactionUITests/testSaveIsReachableWithAMarkAndAsksBeforeRemoving",
 ]
 [feature.android]
 presence = "present"
@@ -1337,7 +1346,7 @@ entry = "ios/MegaPDF/PagesView.swift::Rotate Left"
 coverage = "ui"
 tests = [
   "ios/MegaPDFUITests/PageToolsUITests.swift::testRotatingASelectionIsOneChangeAndOneUndo",
-  ".github/workflows/ios-ci.yml::-only-testing:MegaPDFUITests/PageToolsUITests",
+  "ios/ui-test-lanes.txt::iphone/PageToolsUITests",
   "ios/MegaPDFTests/PageToolsTests.swift::testDeletingPagesTakesExactlyThoseAndUndoPutsThePagesThemselvesBack",
   "ios/MegaPDFTests/PageToolsModelTests.swift::testTheSizesFollowARotationAndItsPictureIsRedrawn",
   "ios/MegaPDFTests/PageCheckTests.swift::class",
@@ -1548,7 +1557,8 @@ coverage = "ui"
 tests = [
   "ios/MegaPDFUITests/SaveACopyExportUITests.swift::testSaveACopyPresentsTheExportSheet",
   "ios/MegaPDFUITests/SaveACopyExportUITests.swift::testBothExportsPresentTheirSheetInOneSession",
-  ".github/workflows/ios-ci.yml::-only-testing:MegaPDFUITests/SaveACopyExportUITests",
+  "ios/ui-test-lanes.txt::iphone/SaveACopyExportUITests",
+  "ios/ui-test-lanes.txt::ipad/SaveACopyExportUITests",
   "ios/MegaPDFTests/SaveACopyAdoptionTests.swift::class",
   "ios/MegaPDFTests/SignatureDetectionTests.swift::copy",
 ]
@@ -1604,9 +1614,9 @@ coverage = "ui"
 tests = [
   "core/tests/core_tests.cpp::test_write_text_recognised",
   "ios/MegaPDFUITests/MarkdownExportUITests.swift::class",
-  ".github/workflows/ios-ci.yml::-only-testing:MegaPDFUITests/MarkdownExportUITests",
+  "ios/ui-test-lanes.txt::iphone/MarkdownExportUITests",
   "ios/MegaPDFUITests/SaveACopyExportUITests.swift::testBothExportsPresentTheirSheetInOneSession",
-  ".github/workflows/ios-ci.yml::-only-testing:MegaPDFUITests/SaveACopyExportUITests",
+  "ios/ui-test-lanes.txt::iphone/SaveACopyExportUITests",
   "ios/MegaPDFTests/StructureExportTests.swift::class",
 ]
 note = "#589: iOS exports Markdown through the same single file exporter Save a copy uses, so the test that drives both in one session is cited by both cells \u2014 one exporter serving the wrong kind would send this result to the wrong completion, and the alert would read \"Saved\" rather than \"Exported\"."
@@ -1888,7 +1898,7 @@ tests = [
   "ios/MegaPDFTests/NoticeLifetimeTests.swift::class",
   "ios/MegaPDFTests/ProgressAndStopTests.swift::class",
   "ios/MegaPDFUITests/ProgressStripUITests.swift::testAScanShowsItsCountAndCanBeStoppedFromTheStrip",
-  ".github/workflows/ios-ci.yml::-only-testing:MegaPDFUITests/ProgressStripUITests",
+  "ios/ui-test-lanes.txt::iphone/ProgressStripUITests",
 ]
 note = "the timing state machine, the progress and Stop layer, and a UI test that reads the count line and presses the Stop in a running app — which is how the Stop's hit area was found to be 15.7 points tall. Search has progress and Stop, extract has Stop, a save has neither on purpose (#145); shrink does not exist on this platform."
 [feature.android]
@@ -2241,7 +2251,7 @@ entry = "ios/MegaPDF/ViewerView.swift::colorScheme"
 coverage = "ui"
 tests = [
   "ios/MegaPDFUITests/ViewerBarContrastUITests.swift::class",
-  ".github/workflows/ios-ci.yml::-only-testing:MegaPDFUITests/ViewerBarContrastUITests",
+  "ios/ui-test-lanes.txt::iphone/ViewerBarContrastUITests",
 ]
 note = "the one real check of chrome legibility on a dark bar on any platform; it is not a system-wide dark-mode pass."
 [feature.android]
@@ -2291,7 +2301,7 @@ entry = "ios/MegaPDF/ViewerView.swift::accessibilityLabel"
 coverage = "ui"
 tests = [
   "ios/MegaPDFUITests/RecentsAccessibilityUITests.swift::testEveryRecentRowAnnouncesWhereItsFileLives",
-  ".github/workflows/ios-ci.yml::-only-testing:MegaPDFUITests/RecentsAccessibilityUITests/testEveryRecentRowAnnouncesWhereItsFileLives",
+  "ios/ui-test-lanes.txt::iphone/RecentsAccessibilityUITests/testEveryRecentRowAnnouncesWhereItsFileLives",
 ]
 note = "a real row announcement is asserted; the VoiceOver-running case is a mocked flag, not VoiceOver."
 [feature.android]
