@@ -180,8 +180,11 @@ final class PagesGridTouchUITests: XCTestCase {
         // intervened at the one-second mark, and every episode then ended 2 s after the touch,
         // which made the intervention a suspect in how long the episode lasted.
         let passive = env["MEGAPDF_GRID_PASSIVE"] == "1"
+        // `MEGAPDF_GRID_ONLY=screenshot|snapshot|tap`: of the three things an intervention does,
+        // do only that one, to find which of them ends an episode.
+        let only = env["MEGAPDF_GRID_ONLY"] ?? "all"
         let variant = "\(toggle ? "toggle" : "launch")/probes \(probes ? "on" : "off")"
-            + (passive ? "/passive" : "")
+            + (passive ? "/passive" : "") + (only == "all" ? "" : "/only-\(only)")
         print("GRID-RUN variant=\(variant) openings=\(openings)")
 
         if toggle { launch(probes: probes) }
@@ -200,15 +203,18 @@ final class PagesGridTouchUITests: XCTestCase {
                     episode = true
                     // Before anything else: what is over the tile, and does a finger land?
                     if !passive {
-                        let attachment = XCTAttachment(screenshot: app.screenshot())
-                        attachment.name = "episode-\(variant.replacingOccurrences(of: "/", with: "-"))-\(iteration)"
-                        attachment.lifetime = .keepAlways
-                        add(attachment)
-                        if tile(2).exists, let snapshot = try? app.snapshot() {
+                        if only == "all" || only == "screenshot" {
+                            let attachment = XCTAttachment(screenshot: app.screenshot())
+                            attachment.name = "episode-\(variant.replacingOccurrences(of: "/", with: "-"))-\(iteration)"
+                            attachment.lifetime = .keepAlways
+                            add(attachment)
+                        }
+                        if only == "all" || only == "snapshot",
+                           tile(2).exists, let snapshot = try? app.snapshot() {
                             let frame = tile(2).frame
                             cover(at: CGPoint(x: frame.midX, y: frame.midY), iteration: iteration, in: snapshot)
                         }
-                        if tile(2).exists { landed = touchLands(2) }
+                        if only == "all" || only == "tap", tile(2).exists { landed = touchLands(2) }
                     }
                 }
                 for index in 0...3 where hit[index] == nil && isHittable(index) {
