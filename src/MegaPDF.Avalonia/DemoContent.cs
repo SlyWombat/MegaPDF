@@ -22,7 +22,8 @@ internal static class DemoContent
     /// also what proves the accented glyphs survive whatever face the demo picks.
     /// </summary>
     internal static string PrintedName => ForLanguage(
-        english: "Jane Whitfield", frenchCanadian: "Hélène Bélanger", french: "Céline Lefèvre");
+        english: "Jane Whitfield", frenchCanadian: "Hélène Bélanger", french: "Céline Lefèvre",
+        spanish: "Sofía Ramírez", spanishSpain: "Lucía Fernández");
 
     /// <summary>
     /// What the find steps search for. Three hits on the demo agreement in both
@@ -30,7 +31,8 @@ internal static class DemoContent
     /// where the French page is translated to keep exactly that.
     /// </summary>
     internal static string SearchTerm => ForLanguage(
-        english: "rental", frenchCanadian: "location", french: "location");
+        english: "rental", frenchCanadian: "location", french: "location",
+        spanish: "arrendamiento", spanishSpain: "alquiler");
 
     /// <summary>
     /// What the Redact capture marks (#173): a line of the demo agreement with something on
@@ -38,7 +40,8 @@ internal static class DemoContent
     /// lands on a sentence in every language rather than on whatever a fixed box covers.
     /// </summary>
     internal static string RedactedWord => ForLanguage(
-        english: "customer named", frenchCanadian: "client nommé", french: "client nommé");
+        english: "customer named", frenchCanadian: "client nommé", french: "client nommé",
+        spanish: "cliente nombrado", spanishSpain: "cliente nombrado");
 
     /// <summary>
     /// What the demo document is called in a capture.
@@ -52,7 +55,9 @@ internal static class DemoContent
     internal static string DocumentFileName => ForLanguage(
         english: "Rental Agreement.pdf",
         frenchCanadian: "Contrat de location.pdf",
-        french: "Contrat de location.pdf");
+        french: "Contrat de location.pdf",
+        spanish: "Contrato de arrendamiento.pdf",
+        spanishSpain: "Contrato de alquiler.pdf");
 
     /// <summary>
     /// The rows the home screenshot shows (#146 §3): a name and the place under it.
@@ -69,10 +74,13 @@ internal static class DemoContent
     internal static IReadOnlyList<(string Name, string Location)> Recents =>
     [
         (DocumentFileName,
-         ForLanguage("Documents › Clients", "Documents › Clients", "Documents › Clients")),
-        (ForLanguage("Field Trip Permission.pdf", "Autorisation de sortie scolaire.pdf", "Autorisation de sortie scolaire.pdf"),
-         ForLanguage("Downloads", "Téléchargements", "Téléchargements")),
-        (ForLanguage("Insurance Claim Form.pdf", "Formulaire de réclamation.pdf", "Formulaire de réclamation.pdf"),
+         ForLanguage("Documents › Clients", "Documents › Clients", "Documents › Clients",
+                     "Documentos › Clientes", "Documentos › Clientes")),
+        (ForLanguage("Field Trip Permission.pdf", "Autorisation de sortie scolaire.pdf", "Autorisation de sortie scolaire.pdf",
+                     "Permiso para excursión escolar.pdf", "Permiso para excursión escolar.pdf"),
+         ForLanguage("Downloads", "Téléchargements", "Téléchargements", "Descargas", "Descargas")),
+        (ForLanguage("Insurance Claim Form.pdf", "Formulaire de réclamation.pdf", "Formulaire de réclamation.pdf",
+                     "Formulario de reclamación de seguro.pdf", "Formulario de reclamación de seguro.pdf"),
          // The one row whose place is not the same on both of this project's desktops.
          // "iCloud Drive" is where a Mac keeps a file and is right in the Mac listing's
          // home shot; on a Linux listing it advertises an Apple service the app cannot
@@ -80,14 +88,23 @@ internal static class DemoContent
          // (#254 A1). The macOS value is untouched, so the signed-off Mac set is
          // unchanged byte for byte.
          OperatingSystem.IsLinux()
-             ? ForLanguage("Desktop", "Bureau", "Bureau")
-             : ForLanguage("iCloud Drive", "iCloud Drive", "iCloud Drive")),
+             ? ForLanguage("Desktop", "Bureau", "Bureau", "Escritorio", "Escritorio")
+             : ForLanguage("iCloud Drive", "iCloud Drive", "iCloud Drive", "iCloud Drive", "iCloud Drive")),
     ];
 
-    private static string ForLanguage(string english, string frenchCanadian, string french)
+    private static string ForLanguage(string english, string frenchCanadian, string french,
+                                      string spanish, string spanishSpain)
     {
         var culture = CultureInfo.CurrentUICulture;
-        if (!culture.TwoLetterISOLanguageName.Equals("fr", StringComparison.OrdinalIgnoreCase))
+        var language = culture.TwoLetterISOLanguageName;
+        if (language.Equals("es", StringComparison.OrdinalIgnoreCase))
+        {
+            // es-ES is its own listing language, with its own name and its own page
+            // (demo-es-ES.pdf, Spain's alquiler); every other Spanish takes the
+            // Latin American one, as the neutral catalogue does (#724).
+            return culture.Name.Equals("es-ES", StringComparison.OrdinalIgnoreCase) ? spanishSpain : spanish;
+        }
+        if (!language.Equals("fr", StringComparison.OrdinalIgnoreCase))
             return english;
         // fr-CA is its own listing language, with its own name; every other
         // French locale takes the France one, as the catalogue does.

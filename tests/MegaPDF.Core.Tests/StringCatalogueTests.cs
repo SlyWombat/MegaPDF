@@ -12,6 +12,10 @@ namespace MegaPDF.Core.Tests;
 /// it by <c>tools/gen_strings.py fr-fr</c>). Both are checked against the
 /// English, so a derivation that dropped a key or a placeholder fails here.
 ///
+/// Two Spanish variants, the same way (#724): Latin America (translated by hand)
+/// and Spain (derived by <c>tools/gen_strings.py es-es</c>). Where each lives
+/// differs by platform on purpose, see docs/localisation.md.
+///
 /// None of the apps can be launched from a test, so this is static, in the
 /// shape of <see cref="DesignTokenParityTests"/>: it reads each catalogue off
 /// disk and checks the three things a missing translation looks like —
@@ -42,6 +46,8 @@ public class StringCatalogueTests
         ["LanguageEnglish.Text"] = "language names are written in their own language",
         ["LanguageFrench.Text"] = "same",
         ["LanguageFrenchFrance.Text"] = "same",
+        ["LanguageSpanish.Text"] = "language names are written in their own language (#724)",
+        ["LanguageSpanishSpain.Text"] = "language names are written in their own language (#724)",
         ["OK"] = "OK is OK",
         ["redact_ok"] = "OK is OK on Android too (#173)",
         // #507: the reading bar's page counter is "%1$d / %2$d" — two numbers and a
@@ -123,6 +129,40 @@ public class StringCatalogueTests
         ["MenuServices"] = "macOS spells the Services menu the same way in French (#191)",
     };
 
+    /// <summary>
+    /// Keys whose Spanish is legitimately the English (#724). Each needs a reason, as
+    /// <see cref="SameInFrench"/> does, or the list becomes somewhere to hide an
+    /// untranslated string.
+    /// </summary>
+    private static readonly Dictionary<string, string> SameInSpanish = new()
+    {
+        // Windows
+        ["AboutVersion"] = "\"MegaPDF {0}\" is a brand name and a number",
+        ["LanguageEnglish.Text"] = "language names are written in their own language",
+        ["LanguageFrench.Text"] = "same",
+        ["LanguageFrenchFrance.Text"] = "same",
+        ["LanguageSpanish.Text"] = "same",
+        ["LanguageSpanishSpain.Text"] = "same",
+        ["SplashCopyright.Text"] = "a copyright line with no words to translate",
+        // The page colours, on every platform: Normal and Sepia are the same words in Spanish.
+        ["PageColoursNormal.Text"] = "\"Normal\" is the same word in Spanish",
+        ["PageColoursSepia.Text"] = "\"Sepia\" is the same word in Spanish",
+        // macOS
+        ["PageColoursNormal"] = "\"Normal\" is the same word in Spanish",
+        ["PageColoursSepia"] = "\"Sepia\" is the same word in Spanish",
+        ["WindowTitleFormat"] = "\"{0} — MegaPDF\" carries no words of its own",
+        ["Zoom"] = "the Window menu item macOS itself calls Zoom in Spanish too",
+        // Android
+        ["page_counter"] = "digits and a slash, identical in every language (#507)",
+        ["page_colours_normal"] = "\"Normal\" is the same word in Spanish",
+        ["page_colours_sepia"] = "\"Sepia\" is the same word in Spanish",
+        ["screenshot_signature_name"] = "the demo signature's library name",
+        // iOS
+        ["Normal"] = "\"Normal\" is the same word in Spanish",
+        ["Sepia"] = "\"Sepia\" is the same word in Spanish",
+        ["iCloud Drive"] = "the Files app's sidebar says iCloud Drive in Spanish too (#165)",
+    };
+
     private static readonly Regex DotNetPlaceholder = new(@"\{(\d+)(?:[:,][^}]*)?\}", RegexOptions.Compiled);
     private static readonly Regex JavaPlaceholder = new(@"%(\d+\$)?[sd]", RegexOptions.Compiled);
     private static readonly Regex ApplePlaceholder = new(@"%(\d+\$)?(lld|ld|d|@)", RegexOptions.Compiled);
@@ -132,11 +172,13 @@ public class StringCatalogueTests
     [Theory]
     [InlineData("fr-CA")]
     [InlineData("fr-FR")]
+    [InlineData("es")]
+    [InlineData("es-ES")]
     public void WindowsCatalogueIsComplete(string language)
     {
         var en = ResxValues("src/MegaPDF.App/Strings/en-US/Resources.resw");
         var fr = ResxValues($"src/MegaPDF.App/Strings/{language}/Resources.resw");
-        AssertParity($"Windows {language}", en, fr, DotNetPlaceholder);
+        AssertParity($"Windows {language}", en, fr, DotNetPlaceholder, AllowlistFor(language));
     }
 
     [Fact]
@@ -148,11 +190,13 @@ public class StringCatalogueTests
     [Theory]
     [InlineData("fr-CA")]
     [InlineData("fr")]
+    [InlineData("es")]
+    [InlineData("es-ES")]
     public void MacCatalogueIsComplete(string culture)
     {
         var en = ResxValues("src/MegaPDF.Avalonia/Strings/Strings.resx");
         var fr = ResxValues($"src/MegaPDF.Avalonia/Strings/Strings.{culture}.resx");
-        AssertParity($"macOS {culture}", en, fr, DotNetPlaceholder);
+        AssertParity($"macOS {culture}", en, fr, DotNetPlaceholder, AllowlistFor(culture));
     }
 
     [Fact]
@@ -164,11 +208,13 @@ public class StringCatalogueTests
     [Theory]
     [InlineData("values-fr-rCA")]
     [InlineData("values-fr")]
+    [InlineData("values-b+es+419")]
+    [InlineData("values-es")]
     public void AndroidCatalogueIsComplete(string folder)
     {
         var en = AndroidValues("android/app/src/main/res/values/strings.xml");
         var fr = AndroidValues($"android/app/src/main/res/{folder}/strings.xml");
-        AssertParity($"Android {folder}", en, fr, JavaPlaceholder);
+        AssertParity($"Android {folder}", en, fr, JavaPlaceholder, AllowlistFor(folder));
     }
 
     // --- iOS: Localizable.xcstrings ---
@@ -176,6 +222,8 @@ public class StringCatalogueTests
     [Theory]
     [InlineData("fr-CA")]
     [InlineData("fr")]
+    [InlineData("es-419")]
+    [InlineData("es")]
     public void IosCatalogueIsComplete(string localization)
     {
         using var doc = JsonDocument.Parse(File.ReadAllText(Path.Combine(RepoRoot(), "ios/MegaPDF/Localizable.xcstrings")));
@@ -196,7 +244,7 @@ public class StringCatalogueTests
                 fr[entry.Name] = unit.GetProperty("value").GetString() ?? "";
             }
         }
-        AssertParity($"iOS {localization}", en, fr, ApplePlaceholder);
+        AssertParity($"iOS {localization}", en, fr, ApplePlaceholder, AllowlistFor(localization));
     }
 
     /// <summary>
@@ -370,6 +418,135 @@ public class StringCatalogueTests
             + string.Join(", ", stale));
     }
 
+    [Fact]
+    public void TheSameInSpanishListIsNotStale()
+    {
+        var all = new Dictionary<string, (string en, string es)>();
+        void Add(Dictionary<string, string> en, Dictionary<string, string> es)
+        {
+            foreach (var (k, v) in en)
+                if (es.TryGetValue(k, out var f))
+                    all[k] = (v, f);
+        }
+        Add(ResxValues("src/MegaPDF.App/Strings/en-US/Resources.resw"), ResxValues("src/MegaPDF.App/Strings/es/Resources.resw"));
+        Add(ResxValues("src/MegaPDF.Avalonia/Strings/Strings.resx"), ResxValues("src/MegaPDF.Avalonia/Strings/Strings.es.resx"));
+        Add(AndroidValues("android/app/src/main/res/values/strings.xml"), AndroidValues("android/app/src/main/res/values-b+es+419/strings.xml"));
+        // iOS: the English text is the key.
+        foreach (var (k, v) in IosValues("es-419"))
+            all[k] = (k, v);
+
+        var stale = SameInSpanish.Keys
+            .Where(k => all.TryGetValue(k, out var pair) && pair.en != pair.es)
+            .ToList();
+        Assert.True(stale.Count == 0,
+            "These keys are listed as identical in Spanish but are now translated — remove them from SameInSpanish: "
+            + string.Join(", ", stale));
+    }
+
+    // --- Spanish typography (docs/localisation-glossary-es.md) ---
+
+    /// <summary>Every Spanish value on all four platforms, both variants: (label, key, value).</summary>
+    private static IEnumerable<(string label, string key, string value)> SpanishValues()
+    {
+        var sets = new List<(string label, Dictionary<string, string> values)>
+        {
+            ("Windows es", ResxValues("src/MegaPDF.App/Strings/es/Resources.resw")),
+            ("Windows es-ES", ResxValues("src/MegaPDF.App/Strings/es-ES/Resources.resw")),
+            ("macOS es", ResxValues("src/MegaPDF.Avalonia/Strings/Strings.es.resx")),
+            ("macOS es-ES", ResxValues("src/MegaPDF.Avalonia/Strings/Strings.es-ES.resx")),
+            ("Android values-b+es+419", AndroidValues("android/app/src/main/res/values-b+es+419/strings.xml")),
+            ("Android values-es", AndroidValues("android/app/src/main/res/values-es/strings.xml")),
+            ("iOS es-419", IosValues("es-419")),
+            ("iOS es", IosValues("es")),
+        };
+        foreach (var (label, values) in sets)
+            foreach (var (key, value) in values)
+                yield return (label, key, value);
+    }
+
+    /// <summary>
+    /// Spanish has no space before ":", ";", "?" or "!" — not a plain one and not a
+    /// non-breaking one. French wants U+00A0 there, so a French copy-paste is exactly
+    /// what this catches.
+    /// </summary>
+    [Fact]
+    public void SpanishHasNoSpaceBeforeColonSemicolonQuestionOrExclamation()
+    {
+        var space = new Regex("[\\u0020\\u00A0\\u202F]+[:;?!]");
+        var offenders = SpanishValues()
+            // A placeholder becomes a letter, not nothing: "de {0}?" must not read as "de ?".
+            .Where(v => space.IsMatch(Placeholders.Replace(v.value, "x")))
+            .Select(v => $"{v.label} {v.key}: {v.value}").ToList();
+        Assert.True(offenders.Count == 0,
+            "Spanish takes no space before : ; ? ! (docs/localisation-glossary-es.md):\n" + string.Join("\n", offenders));
+    }
+
+    /// <summary>
+    /// A Spanish question opens with ¿ and an exclamation with ¡, so each count equals
+    /// the closing mark's. Placeholders are stripped first (a format may hold a "?").
+    /// </summary>
+    [Fact]
+    public void SpanishOpensEveryQuestionAndExclamation()
+    {
+        var offenders = new List<string>();
+        foreach (var (label, key, value) in SpanishValues())
+        {
+            var prose = Placeholders.Replace(value, "");
+            if (prose.Count(c => c == '¿') != prose.Count(c => c == '?') || prose.Count(c => c == '¡') != prose.Count(c => c == '!'))
+                offenders.Add($"{label} {key}: {value}");
+        }
+        Assert.True(offenders.Count == 0,
+            "Spanish opens every ? with ¿ and every ! with ¡:\n" + string.Join("\n", offenders));
+    }
+
+    /// <summary>Quotation marks are curly in Spanish (“ ”), never the guillemets French uses.</summary>
+    [Fact]
+    public void SpanishUsesCurlyQuotes()
+    {
+        var offenders = SpanishValues()
+            .Where(v => v.value.Contains('«') || v.value.Contains('»'))
+            .Select(v => $"{v.label} {v.key}: {v.value}").ToList();
+        Assert.True(offenders.Count == 0,
+            "Spanish quotes with “ ”, never « »:\n" + string.Join("\n", offenders));
+    }
+
+    /// <summary>
+    /// The Spanish glossary lists every English term the French one does, so a term added
+    /// to French and not to Spanish fails here rather than at the Fable review.
+    /// </summary>
+    [Fact]
+    public void SpanishGlossaryCoversEveryEnglishTerm()
+    {
+        var french = GlossaryEnglishTerms("docs/localisation-glossary.md");
+        var spanish = GlossaryEnglishTerms("docs/localisation-glossary-es.md");
+        Assert.True(french.Count > 100, "the French glossary's main table was not found");
+        var missing = french.Except(spanish).Order().ToList();
+        Assert.True(missing.Count == 0,
+            "docs/localisation-glossary-es.md has no row for: " + string.Join(" | ", missing));
+    }
+
+    /// <summary>The first column of the main table: the rows under the "| English | ..." header up to the next heading.</summary>
+    private static HashSet<string> GlossaryEnglishTerms(string relativePath)
+    {
+        var terms = new HashSet<string>();
+        var inTable = false;
+        foreach (var line in File.ReadLines(Path.Combine(RepoRoot(), relativePath)))
+        {
+            if (!inTable)
+            {
+                // Only the main table's header starts "| English |"; the signatures table starts "| meaning |".
+                inTable = line.StartsWith("| English | ", StringComparison.Ordinal);
+                continue;
+            }
+            if (line.StartsWith("## ", StringComparison.Ordinal))
+                break;
+            var m = Regex.Match(line, @"^\| (.+?) \|");
+            if (m.Success && !line.StartsWith("|---", StringComparison.Ordinal))
+                terms.Add(m.Groups[1].Value);
+        }
+        return terms;
+    }
+
     // --- helpers ---
 
     /// <summary>One localization's values out of the iOS string catalog.</summary>
@@ -391,26 +568,36 @@ public class StringCatalogueTests
     }
 
 
-    private static void AssertParity(string platform, Dictionary<string, string> en, Dictionary<string, string> fr, Regex placeholder)
+    /// <summary>Spanish catalogues use <see cref="SameInSpanish"/>, French ones <see cref="SameInFrench"/>.</summary>
+    private static bool IsSpanish(string localeOrFolder) =>
+        localeOrFolder == "es" || localeOrFolder.StartsWith("es-", StringComparison.Ordinal)
+        || localeOrFolder == "values-es" || localeOrFolder.StartsWith("values-b+es", StringComparison.Ordinal);
+
+    private static IReadOnlyDictionary<string, string> AllowlistFor(string localeOrFolder) =>
+        IsSpanish(localeOrFolder) ? SameInSpanish : SameInFrench;
+
+    private static void AssertParity(string platform, Dictionary<string, string> en, Dictionary<string, string> tr,
+        Regex placeholder, IReadOnlyDictionary<string, string> same)
     {
+        var language = same == SameInSpanish ? "Spanish" : "French";
         Assert.True(en.Count > 0, $"{platform}: the English catalogue is empty");
 
-        var missingInFrench = en.Keys.Except(fr.Keys).Order().ToList();
-        var extraInFrench = fr.Keys.Except(en.Keys).Order().ToList();
-        Assert.True(missingInFrench.Count == 0, $"{platform}: keys with no French: {string.Join(", ", missingInFrench)}");
-        Assert.True(extraInFrench.Count == 0, $"{platform}: French keys with no English: {string.Join(", ", extraInFrench)}");
+        var missing = en.Keys.Except(tr.Keys).Order().ToList();
+        var extra = tr.Keys.Except(en.Keys).Order().ToList();
+        Assert.True(missing.Count == 0, $"{platform}: keys with no {language}: {string.Join(", ", missing)}");
+        Assert.True(extra.Count == 0, $"{platform}: {language} keys with no English: {string.Join(", ", extra)}");
 
         var untranslated = en.Keys
-            .Where(k => en[k] == fr[k] && !SameInFrench.ContainsKey(k))
+            .Where(k => en[k] == tr[k] && !same.ContainsKey(k))
             .Order().ToList();
         Assert.True(untranslated.Count == 0,
-            $"{platform}: French is identical to English (translate, or add to SameInFrench with a reason): {string.Join(", ", untranslated)}");
+            $"{platform}: {language} is identical to English (translate, or add to SameIn{language} with a reason): {string.Join(", ", untranslated)}");
 
         var placeholders = en.Keys
-            .Where(k => !Slots(en[k], placeholder).SetEquals(Slots(fr[k], placeholder)))
+            .Where(k => !Slots(en[k], placeholder).SetEquals(Slots(tr[k], placeholder)))
             .Order().ToList();
         Assert.True(placeholders.Count == 0,
-            $"{platform}: placeholder sets differ between English and French: {string.Join(", ", placeholders)}");
+            $"{platform}: placeholder sets differ between English and {language}: {string.Join(", ", placeholders)}");
     }
 
     /// <summary>Placeholder identities, so "%1$lld" and "%lld" in first position compare equal.</summary>

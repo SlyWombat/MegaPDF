@@ -114,7 +114,8 @@ cp "$NOTICES" "$APP/Contents/Resources/THIRD-PARTY-NOTICES.txt"
 # CFBundleLocalizations list is what tells the system, and the App Store
 # listing, which languages the app has. Written before signing, like the icon:
 # a resource added afterwards breaks the seal.
-mkdir -p "$APP/Contents/Resources/en.lproj" "$APP/Contents/Resources/fr.lproj" "$APP/Contents/Resources/fr-CA.lproj"
+mkdir -p "$APP/Contents/Resources/en.lproj" "$APP/Contents/Resources/fr.lproj" "$APP/Contents/Resources/fr-CA.lproj" \
+  "$APP/Contents/Resources/es-419.lproj" "$APP/Contents/Resources/es-ES.lproj"
 cat > "$APP/Contents/Resources/en.lproj/InfoPlist.strings" << 'STRINGS'
 CFBundleTypeName = "PDF document";
 NSLocalNetworkUsageDescription = "MegaPDF looks for printers on your network when you print.";
@@ -125,6 +126,16 @@ for lproj in fr fr-CA; do
 cat > "$APP/Contents/Resources/$lproj.lproj/InfoPlist.strings" << 'STRINGS'
 CFBundleTypeName = "Document PDF";
 NSLocalNetworkUsageDescription = "MegaPDF recherche les imprimantes de votre réseau lorsque vous imprimez.";
+STRINGS
+done
+# Spanish (#724): Latin America and Spain read the same here too. ES-REVIEW #724 --
+# not yet read by the reviewer; Fable's approval gates the release.
+for lproj in es-419 es-ES; do
+cat > "$APP/Contents/Resources/$lproj.lproj/InfoPlist.strings" << 'STRINGS'
+/* ES-REVIEW #724 */
+CFBundleTypeName = "Documento PDF";
+/* ES-REVIEW #724 */
+NSLocalNetworkUsageDescription = "MegaPDF busca las impresoras de tu red cuando imprimes.";
 STRINGS
 done
 
@@ -144,8 +155,8 @@ cat > "$APP/Contents/Info.plist" << PLIST
     <key>CFBundleShortVersionString</key><string>$VERSION</string>
     <key>CFBundleVersion</key><string>$BUILD</string>
     <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
-    <!-- English is the development language; French (France, the neutral fr)
-         and French (Canada) are the translations (#91). This list must agree
+    <!-- English is the development language; French (France, the neutral fr),
+         French (Canada), Spanish (Latin America) and Spanish (Spain) are the translations (#91, #724). This list must agree
          with the .lproj folders above and the Strings.*.resx catalogues. -->
     <key>CFBundleDevelopmentRegion</key><string>en</string>
     <key>CFBundleLocalizations</key>
@@ -153,6 +164,8 @@ cat > "$APP/Contents/Info.plist" << PLIST
         <string>en</string>
         <string>fr</string>
         <string>fr-CA</string>
+        <string>es-419</string>
+        <string>es-ES</string>
     </array>
     <key>LSMinimumSystemVersion</key><string>12.0</string>
     <!-- The Mac App Store refuses a package without a category (ITMS 90242). -->

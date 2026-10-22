@@ -446,6 +446,13 @@ internal static class Program
              "a codeset and a modifier are dropped, not translated"),
             (new(), null,
              "an empty environment leaves .NET's own default alone"),
+            // Spanish (#724).
+            (new() { ["LANG"] = "es_MX.UTF-8" }, "es-MX",
+             "a Mexican Spanish desktop, which falls back to the neutral es catalogue (Latin American)"),
+            (new() { ["LANG"] = "es_ES.UTF-8" }, "es-ES",
+             "Spain"),
+            (new() { ["LANG"] = "en_US.UTF-8", ["LANGUAGE"] = "es_MX:es" }, "es-MX",
+             "Spanish display language with English formats"),
         ];
 
         var failures = 0;
@@ -463,12 +470,39 @@ internal static class Program
 
         // And that every tag the table produces is a culture .NET actually has, so a
         // pass here cannot mean "resolved to a custom culture with no resources".
-        foreach (var tag in new[] { "fr-CA", "fr", "fr-FR", "en-CA" })
+        foreach (var tag in new[] { "fr-CA", "fr", "fr-FR", "en-CA", "es", "es-419", "es-MX", "es-ES" })
         {
             var culture = CultureInfo.GetCultureInfo(tag);
             var ok = !culture.Equals(CultureInfo.InvariantCulture);
             if (!ok) failures++;
             Console.WriteLine($"  [{(ok ? "PASS" : "FAIL")}] {tag} resolves to a real culture ({culture.EnglishName})");
+        }
+
+        // Spanish on the desktops (#724): every Latin American culture reaches the
+        // neutral "es" catalogue through its parent, and both Spanish satellite
+        // assemblies are really in the build. If either failed, a Mexican desktop
+        // would quietly read English.
+        foreach (var tag in new[] { "es-MX", "es-419" })
+        {
+            var parent = CultureInfo.GetCultureInfo(tag).Parent.Name;
+            var ok = parent == "es";
+            if (!ok) failures++;
+            Console.WriteLine($"  [{(ok ? "PASS" : "FAIL")}] {tag}'s parent culture is es (got \"{parent}\")");
+        }
+        foreach (var tag in new[] { "es", "es-ES" })
+        {
+            bool ok;
+            try
+            {
+                typeof(Strings).Assembly.GetSatelliteAssembly(CultureInfo.GetCultureInfo(tag));
+                ok = true;
+            }
+            catch (Exception)
+            {
+                ok = false;
+            }
+            if (!ok) failures++;
+            Console.WriteLine($"  [{(ok ? "PASS" : "FAIL")}] the {tag} satellite assembly is in the build");
         }
 
         Console.WriteLine($"language-check: {(failures == 0 ? "PASS" : $"FAIL — {failures} check(s)")}");
@@ -4601,7 +4635,7 @@ internal static class Program
         // old one.
         try
         {
-            foreach (var tag in new[] { "en", "fr-CA", "fr-FR" })
+            foreach (var tag in new[] { "en", "fr-CA", "fr-FR", "es-MX", "es-ES" })
             {
                 var culture = CultureInfo.GetCultureInfo(tag);
                 CultureInfo.DefaultThreadCurrentUICulture = culture;
@@ -4656,7 +4690,7 @@ internal static class Program
                 // The demo agreement in the running language, so the counter reads a
                 // count rather than "Not found" — the two are different widths and the
                 // row has to hold either.
-                var demo = new[] { tag == "fr-FR" ? "demo-fr-FR.pdf" : tag == "fr-CA" ? "demo-fr.pdf" : "demo.pdf", "fixture.pdf" }
+                var demo = new[] { tag == "fr-FR" ? "demo-fr-FR.pdf" : tag == "fr-CA" ? "demo-fr.pdf" : tag == "es-ES" ? "demo-es-ES.pdf" : tag == "es-MX" ? "demo-es.pdf" : "demo.pdf", "fixture.pdf" }
                     .Select(name => Path.Combine(dir, name)).First(File.Exists);
                 vm.Open(demo);
                 shell.AddTab(vm);

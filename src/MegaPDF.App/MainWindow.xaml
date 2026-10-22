@@ -426,6 +426,8 @@
                                 <TextBlock x:Uid="LanguageEnglish" />
                                 <TextBlock x:Uid="LanguageFrench" />
                                 <TextBlock x:Uid="LanguageFrenchFrance" />
+                                <TextBlock x:Uid="LanguageSpanish" />
+                                <TextBlock x:Uid="LanguageSpanishSpain" />
                             </RadioButtons>
                             <TextBlock x:Uid="LanguageRestartNote" x:Name="LanguageRestartNote" Visibility="Collapsed" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorTertiaryBrush}" TextWrapping="Wrap" />
                         </StackPanel>

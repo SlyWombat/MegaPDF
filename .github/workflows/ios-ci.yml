@@ -221,6 +221,19 @@ jobs:
             -testLanguage fr -testRegion CA \
             CODE_SIGNING_ALLOWED=NO
 
+      # And under Spanish (Latin America) (#724): es-MX resolves to the es-419
+      # localisation, so this proves the catalogue compiles, that the build holds an
+      # es-419.lproj, and that the app launches with it.
+      - name: Test again in Spanish (Latin America)
+        run: |
+          xcodebuild test-without-building \
+            -project MegaPDF.xcodeproj \
+            -scheme MegaPDF \
+            -destination "id=$SIM_UDID" \
+            -derivedDataPath "$DD" \
+            -testLanguage es -testRegion MX \
+            CODE_SIGNING_ALLOWED=NO
+
       # The UI tests that drive the built app on the simulator (#405): pinch zoom,
       # body-text editing, Markdown export, Save a copy, the recents rows' labels,
       # the viewer bar's contrast and the redaction save question.
