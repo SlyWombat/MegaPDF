@@ -132,9 +132,8 @@ internal fun TextSelectionOverlay(
                         // What TalkBack says, and the way to move the handle without dragging it: a
                         // screen-reader user cannot drag, so each end steps a word at a time (#710).
                         .semantics {
-                            // TEMPORARY (red proof for #710): semantics disabled
-                            if (false) contentDescription = handleName
-                            if (false) customActions = listOf(
+                            contentDescription = handleName
+                            customActions = listOf(
                                 CustomAccessibilityAction(nextWord) { stepHandle(isStart, true) },
                                 CustomAccessibilityAction(previousWord) { stepHandle(isStart, false) },
                             )
