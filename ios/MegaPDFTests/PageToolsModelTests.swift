@@ -327,7 +327,8 @@ final class PageToolsModelTests: XCTestCase {
         try await waitUntil("the extract is staged") { model.pageExport != nil }
 
         let export = try XCTUnwrap(model.pageExport)
-        XCTAssertEqual(export.defaultName, "Report pages 2-3")
+        // The catalogue's own fragment, not its English: this suite also runs under es-MX (#724).
+        XCTAssertEqual(export.defaultName, "Report " + String(localized: "pages \(2)-\(3)"))
         XCTAssertEqual(export.pageCount, 2)
         XCTAssertTrue(FileManager.default.fileExists(atPath: export.url.path))
         let staged = export.url
