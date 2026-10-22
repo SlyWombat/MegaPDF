@@ -1883,6 +1883,20 @@ final class ViewerModel: ObservableObject {
         setTextSelection(selection, snapshot: snapshot)
     }
 
+    /// Moves a handle one word on or back, for VoiceOver's adjust gesture (#710): a user who
+    /// cannot drag can still extend or shrink the selection. Word boundaries are the ones a long
+    /// press uses. Does nothing at the page's first or last word, or where the step would empty
+    /// the selection. Synchronous, like a drag: the snapshot is already loaded.
+    func moveSelectionHandleByWord(_ handle: PageTextSelection.Handle, forward: Bool) {
+        guard var selection = textSelection, let snapshot = selectables[selection.pageIndex] else { return }
+        let from = handle == .start ? selection.start : selection.end
+        guard let caret = snapshot.caret(byWordFrom: from, forward: forward),
+              selection.step(handle, to: caret, length: snapshot.length) else { return }
+        setTextSelection(selection, snapshot: snapshot)
+        // Show the menu again, as after a drag: Copy is how the user finishes.
+        selectionMenuRequest += 1
+    }
+
     /// The handle was let go: show the menu again.
     func endSelectionHandleDrag() {
         if textSelection != nil { selectionMenuRequest += 1 }

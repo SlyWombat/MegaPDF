@@ -42,6 +42,22 @@ struct PageTextSelection: Equatable {
         case .end: anchor = start; focus = clamped
         }
     }
+
+    /// Moves `handle` to `caret` for a step by word, the VoiceOver way (#710). Unlike a drag,
+    /// a step never flips the selection or empties it: stepping the end handle back to the
+    /// start, or the start forward to the end, does nothing, because a user who cannot see the
+    /// highlight must not lose the word they have. Returns whether the selection changed.
+    @discardableResult
+    mutating func step(_ handle: Handle, to caret: Int, length: Int) -> Bool {
+        let clamped = max(0, min(caret, length))
+        switch handle {
+        case .start: guard clamped < end else { return false }
+        case .end: guard clamped > start else { return false }
+        }
+        let before = self
+        drag(handle, to: clamped, length: length)
+        return self != before
+    }
 }
 
 /// Where a selection's two handles go and where the edit menu points, from the selection's
