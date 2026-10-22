@@ -3746,6 +3746,23 @@
         }
       }
     },
+    "Selects this mark." : {
+      "comment" : "#644: VoiceOver hint on a redaction mark on the page; says what activating it does, never the gesture (Apple's hint style). FR-REVIEW #644 — new, not yet read by the reviewer.",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sélectionne cette marque."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sélectionne cette marque."
+          }
+        }
+      }
+    },
     "Sepia" : {
       "comment" : "#512: a page colour FR-REVIEW #512 — new with reading preferences, not yet read by the reviewer.",
       "localizations" : {

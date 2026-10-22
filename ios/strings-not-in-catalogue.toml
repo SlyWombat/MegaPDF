@@ -1,0 +1,11 @@
+# Literals in a localised SwiftUI position that are deliberately NOT in Localizable.xcstrings (#644).
+# Each needs a reason. Prefer Text(verbatim:) at the call site, which says the same thing where it
+# is read; list a literal here only when verbatim is not possible. tools/qa/check-ios-strings.py
+# fails on an entry that no longer matches a literal, or whose text has since gained a key.
+#
+# This file sits outside ios/MegaPDF/ on purpose: XcodeGen bundles every file in a source folder.
+#
+# [[literal]]
+# text = "exact literal, with each \\(…) written as %@"
+# file = "ios/MegaPDF/SomeView.swift"
+# why = "what it is and why no person ever sees it"

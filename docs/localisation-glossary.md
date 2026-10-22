@@ -304,6 +304,7 @@ established French for the cryptographic sense.
 | Redact | Caviarder | #173. The verb Termium and the Quebec public service use for removing content from a document; "expurger" is the alternative and is less specific. **For francophone review.** |
 | Redaction | Caviardage | #173 |
 | Marked for redaction | Marqué pour caviardage | #173 |
+| Selects this mark. | Sélectionne cette marque. | #644, iOS VoiceOver hint on a redaction mark; Apple's hint style says what happens, never the gesture |
 | Remove content from the file | Retirer du contenu du fichier | #173. "Retirer" (take out), not "supprimer" (delete), because the point is that it leaves the file |
 | Cover an area — this doesn't remove what's under it | Masquer une zone : ce qui est dessous n'est pas retiré | #173. The whiteout tooltip, reworded so the tool says what it does |
 | Whiteout covers — it doesn't remove | Le correcteur masque sans rien retirer | #173 first-use hint; no comma splice (#242) |

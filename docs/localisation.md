@@ -107,6 +107,16 @@ Android and .NET; Canada is the exact-match region on all four platforms.
 - `project.yml` sets `developmentLanguage: en` and `SWIFT_EMIT_LOC_STRINGS`.
   `ios-ci.yml` runs the test suite a second time with `-testLanguage fr
   -testRegion CA`.
+- **A literal with no key shows English and nothing fails**, so a check reads the Swift
+  (#644). `tools/qa/check-ios-strings.py`, run by `qa-matrix.yml` on every pull request, finds
+  each literal in a localised position (the SwiftUI initialisers and modifiers above,
+  `String(localized:)`, and anything declared `LocalizedStringKey`) and fails when it has no key
+  in `Localizable.xcstrings` or no translated fr-CA. It lives in `qa-matrix.yml` and not in
+  `StringCatalogueTests` because `ci.yml` ignores `ios/**`. For text that is deliberately not a
+  string for a person (a UI-test probe), write `Text(verbatim:)`: it says so where it is read
+  and needs no list. `ios/strings-not-in-catalogue.toml` is for the rare literal where verbatim
+  is not possible; each entry needs a reason and the check fails when one goes stale. A VoiceOver
+  hint describes the result and never names the gesture (Apple's style), e.g. "Selects this mark."
 
 ## Adding a string
 

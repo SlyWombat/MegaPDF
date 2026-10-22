@@ -427,7 +427,7 @@ struct ViewerView: View {
     private func zoomProbes(geo: GeometryProxy) -> some View {
         if zoomProbesRequested {
             ZStack(alignment: .topLeading) {
-                Text("zoom \(String(format: "%.4f", zoom))")
+                Text(verbatim: "zoom \(String(format: "%.4f", zoom))")
                     .font(.system(size: 6))
                     .foregroundColor(.clear)
                     .accessibilityIdentifier("viewerZoomProbe")
@@ -437,7 +437,7 @@ struct ViewerView: View {
                 // together with `viewerZoomProbe`, this is what lets the UI tests assert
                 // that leaving reading mode came back to the *same place* rather than
                 // merely to a page.
-                Text("reading \(model.readingMode ? "on" : "off")"
+                Text(verbatim: "reading \(model.readingMode ? "on" : "off")"
                      + " bar \(readingBarVisible ? "on" : "off")"
                      + " page \(currentPageIndex)"
                      + " tint \(model.pageTint.rawValue.isEmpty ? "Normal" : model.pageTint.rawValue)")
@@ -449,7 +449,7 @@ struct ViewerView: View {
                 // are deliberately different sizes — and a rotation shows up in the same string
                 // as a swapped width and height, which is how "the rotate arrived and did
                 // something" is told from "the rotate arrived and did nothing".
-                Text("pages \(model.pagesOpen ? "on" : "off")"
+                Text(verbatim: "pages \(model.pagesOpen ? "on" : "off")"
                      + " selecting \(model.pagesSelecting ? "on" : "off")"
                      + " selected \(model.pageSelection.count)"
                      + " count \(pageSizes.count)"
@@ -463,7 +463,7 @@ struct ViewerView: View {
                     .contentShape(Rectangle())
                     .accessibilityElement()
                     .accessibilityIdentifier("viewerPinchProbe")
-                    .accessibilityLabel("Pinch probe")
+                    .accessibilityLabel(Text(verbatim: "Pinch probe"))
                     .padding(.leading, geo.size.width * 0.15)
                     .padding(.top, geo.size.height * 0.2)
             }
@@ -1532,7 +1532,7 @@ struct ViewerView: View {
                         .accessibilityElement()
                         .accessibilityLabel("Marked for redaction")
                         .accessibilityAddTraits(.isButton)
-                        .accessibilityHint("Double tap to select this mark")
+                        .accessibilityHint("Selects this mark.")
                         .accessibilityAction {
                             model.selectRedactionMark(pageIndex: index, markId: mark.markId)
                         }
