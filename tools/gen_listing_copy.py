@@ -2,10 +2,12 @@
 """Write the per-language store copy into the three listing docs (#91).
 
 Every field the stores ask for, in every language the apps ship, each one a
-fenced block that pastes as-is. English and Canadian French are authored here;
-English (Canada) is the US copy unchanged, and French (France) is derived from
-Canadian French by the same rules the app catalogues use
-(tools/gen_strings.py: FR_CA_TO_FR_FR + France punctuation).
+fenced block that pastes as-is. English, Canadian French and Latin American
+Spanish are authored here; English (Canada) is the US copy unchanged, French
+(France) is derived from Canadian French by the same rules the app catalogues use
+(tools/gen_strings.py: FR_CA_TO_FR_FR + France punctuation), and Spanish (Spain)
+is derived from Latin American Spanish the same way (ES_419_TO_ES_ES, with no
+punctuation pass: Spanish has none) (#724).
 
     python3 tools/gen_listing_copy.py
 
@@ -22,7 +24,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
-from gen_strings import to_france  # noqa: E402
+from gen_strings import to_france, to_spain  # noqa: E402
 import store_slots  # noqa: E402
 
 # The spacing rule the 2.0 store blocks follow, applied here too: U+00A0 before ":"
@@ -49,6 +51,18 @@ def release_block(name: str, language: str) -> str:
     text = (RELEASE_NOTES / name).read_text(encoding="utf-8")
     section = text.split(f"\n## {language}", 1)[1]
     return re.search(r"\*\*[^*]+\*\*\s*\[\d+\]\s*\(\d+\)\s*\n\n```\n(.*?)\n```", section, re.S).group(1)
+
+
+def release_block_or_pending(name: str, language: str) -> str:
+    """release_block, or a PENDING line when that language has no section yet. Spanish
+    release notes are written with docs/release-notes/<version>/ at release time (#724),
+    so until then the listing's What's new field says so, and tools/play_listing.py
+    refuses to upload anything that starts with PENDING."""
+    text = (RELEASE_NOTES / name).read_text(encoding="utf-8")
+    if f"\n## {language}" not in text:
+        return (f"PENDING: the {language} release notes are written with "
+                f"docs/release-notes/{NOTES_VERSION}/{name} at release time (#724).")
+    return release_block(name, language)
 
 # --------------------------------------------------------------------------
 # Microsoft Store
@@ -498,6 +512,196 @@ PLAY_FR_CA = {
 
 
 # --------------------------------------------------------------------------
+# Spanish (Latin America), #724. Hand-written; ES-REVIEW #724 until Fable has
+# read it (docs/localisation-glossary-es.md). Spain's is derived by spain().
+# --------------------------------------------------------------------------
+
+MS_ES_419 = {
+    "short": "El editor de PDF ligero para Windows. Abrir. Corregir. Guardar. Listo.",
+    "description": """MegaPDF es un editor de PDF gratuito y ligero, pensado para quienes encuentran las grandes suites de PDF demasiado pesadas y complicadas. Hace ocho cosas excepcionalmente bien, y deliberadamente nada más.
+
+LEER — Presiona Ctrl+H y las herramientas desaparecen de la pantalla, dejando solo la página. Una pequeña barra flotante conserva el número de página; Esc lo devuelve todo. Los colores de la página están en Configuración: normal, sepia para una lectura larga y noche para una habitación a oscuras. El modo noche invierte la página, imágenes incluidas, algo deliberado que la propia opción aclara. Cada documento puede abrirse en modo de lectura si eso es lo que haces con él la mayor parte del tiempo.
+
+EDITAR TEXTO — Haz clic en el texto del documento y escribe, como al editar un archivo de Word. Corrige un error tipográfico, cambia una fecha, actualiza un número. MegaPDF conserva la fuente del propio documento siempre que puede, y si un cambio desplazara el resto de la página, te lo dice en lugar de mover cosas en silencio.
+
+AGREGAR TEXTO — Haz clic en una línea en blanco y escribe sobre ella. Elige el tamaño y el tipo de fuente (sans, serif o monoespaciada) para que lo que agregues combine con el resto del formulario. Arrástralo a su lugar, o haz doble clic en él más tarde para cambiarlo.
+
+CENSURAR — Arrastra sobre un nombre, una dirección o una imagen, o selecciona el texto, y MegaPDF lo quita del archivo en lugar de taparlo. Lo que había debajo desaparece: ninguna otra aplicación puede copiarlo ni buscarlo. Corrector, que solo cubre, lo advierte.
+
+CASILLAS — Haz clic en un cuadro vacío y se convierte en una casilla marcada. Formularios que nunca estuvieron pensados para completarse en formato digital, completados en formato digital.
+
+COLOCAR FIRMAS — Guarda una pequeña biblioteca personal de imágenes de firma. Elige una y haz clic donde va. Muévela, ajústala con pequeños desplazamientos y cámbiale el tamaño hasta que quede justo en su lugar.
+
+GUARDAR — Guardar sobrescribe, Guardar como crea una copia. Sin asistentes de exportación, sin diálogos para “aplanar”, sin sorpresas. Guardar como también puede escribir el texto del documento (títulos, listas, los valores que ingresaste) como archivo Markdown, sin tocar el PDF.
+
+PÁGINAS — El panel Páginas es un lugar para trabajar, no solo para mirar. Gira una página que se escaneó de lado, elimina una, arrastra las páginas para cambiar su orden, inserta una página en blanco, agrega las páginas de otro PDF o guarda las páginas que elegiste como un archivo aparte. Cada acción es un solo paso, y un solo Deshacer devuelve el documento a como estaba.
+
+También incluye, porque los documentos reales lo necesitan: busca cualquier palabra con Ctrl+F (todas las coincidencias resaltadas, Enter para recorrerlas), imprime tu PDF y reduce los escaneos demasiado pesados para enviarlos por correo electrónico con un clic (reducción de resolución de las imágenes y recompresión JPEG). Los documentos se abren como pestañas en una sola ventana, y un PDF al que haces doble clic en el Explorador de archivos se une a la ventana que ya tienes abierta.
+
+PRIVADO POR DISEÑO — Sin cuenta. Sin nube. Sin suscripción. Sin telemetría. Cada documento se procesa por completo en tu dispositivo y nunca se sube a ningún lugar. Ideal para contratos, formularios médicos y todo lo que preferirías no entregar al servidor de otra persona.
+
+MegaPDF es de código abierto (Apache-2.0): github.com/SlyWombat/MegaPDF""",
+    "features": [
+        "El modo de lectura (Ctrl+H) oculta las herramientas y deja la página, con colores de página normal, sepia y noche",
+        "Gira, elimina y reordena páginas, inserta una página en blanco, agrega páginas de otro PDF o guarda una selección: cada acción es un paso de Deshacer",
+        "Edita el texto del propio documento haciendo clic y escribiendo, como en un documento de Word",
+        "Censura nombres, direcciones e imágenes: se quitan del archivo, no solo se tapan",
+        "Agrega texto en cualquier línea en blanco, con el tamaño y el tipo de fuente que combinan con el formulario",
+        "Haz clic en los cuadros vacíos para marcar casillas en cualquier formulario",
+        "Coloca con un clic una firma de tu biblioteca personal y luego ajústala y cámbiale el tamaño",
+        "Busca cualquier palabra del documento con Ctrl+F: todas las coincidencias resaltadas, y Enter para recorrerlas",
+        "Guardar sobrescribe, Guardar como crea una copia: sin asistentes de exportación ni diálogos para aplanar",
+        "Abre varios PDF como pestañas en una sola ventana: un PDF al que haces doble clic en el Explorador de archivos se une a la ventana que ya tienes",
+        "Guardar como escribe el texto del documento como Markdown: títulos, listas y valores ingresados, sin tocar el PDF",
+        "Reduce los escaneos demasiado pesados para enviarlos por correo electrónico con un clic",
+        "Imprime directamente desde la aplicación",
+        "Procesamiento 100 % local: sin cuenta, sin nube, sin suscripción, sin telemetría",
+    ],
+    "terms": ["editor de PDF", "editar PDF", "firmar PDF", "llenar formulario PDF", "firma en PDF", "comprimir PDF", "PDF ligero"],
+    "copyright": "© 2026 Electric RV. Con licencia Apache-2.0.",
+    "captions": {
+        "reading": "Presiona Ctrl+H y las herramientas salen de la pantalla, dejando solo la página. Una pequeña barra flotante conserva tu lugar; Esc lo devuelve todo.",
+        "text": "Haz clic en el texto del propio documento y escribe: así se corrige un PDF, como se corrige un archivo de Word.",
+        "checkbox": "Haz clic en un cuadro vacío y queda marcado: las casillas impresas que nunca estuvieron pensadas para usarse en pantalla, ahora se marcan en pantalla.",
+        "sign": "Elige una firma de tu biblioteca, haz clic donde va y luego ajústala hasta que quede bien sobre la línea.",
+        "pages": "El panel Páginas es un lugar para trabajar: gira un escaneo de lado, elimina una página, reordénalas o guarda las que elegiste como un archivo aparte.",
+        "search": "Ctrl+F resalta todas las coincidencias a la vez y las cuenta, así que la cláusula que necesitas está a un par de teclas.",
+        "redact": "Marca lo que debe desaparecer. Al guardar, se quita del archivo en lugar de taparse, y te dice cuánto quitó.",
+        "home": "Sin cuenta, sin nube, sin suscripción, sin telemetría. Cada documento se abre y se maneja en tu propio equipo.",
+    },
+}
+
+AS_ES_419 = {
+    "name": "MegaPDF",
+    "subtitle": "Llena, marca y firma PDF",
+    "promo": "¿Te enviaron un PDF para firmar? Ábrelo, toca las casillas, coloca tu firma y guarda. Listo en menos de un minuto, sin cuenta ni suscripción.",
+    "description": """Abrir. Corregir. Guardar. Listo.
+
+MegaPDF hace el trabajo que la mayoría de la gente realmente tiene con un PDF: alguien te envió un formulario y necesitas devolverlo llenado, marcado y firmado. Sin cuenta. Sin suscripción. Sin nube. Todo sucede en tu dispositivo.
+
+Marca cualquier casilla
+Toca una casilla y queda marcada, tanto en campos de formulario interactivos reales como en simples cuadros impresos. MegaPDF reconoce las casillas dibujadas que otras aplicaciones tratan como simple decoración.
+
+Escribe en cualquier línea
+Toca donde va la respuesta y escríbela. Elige el tamaño y el tipo de fuente (sans, serif o monoespaciada) para que lo que agregues combine con el formulario que estás completando. Arrástralo a su lugar, o tócalo de nuevo para corregir un error. Todo lo que agregas es texto real en el que se puede buscar, no un adhesivo pegado sobre la página.
+
+Corrige el texto del propio documento
+¿Fecha equivocada? ¿Nombre mal escrito? Toca la línea y vuelve a escribirla. MegaPDF conserva la fuente del propio documento siempre que puede y te avisa cuando tuvo que usar una parecida. Si un cambio alterara el resto de la página, te lo dice en lugar de mover cosas en silencio. Deshacer devuelve el original exactamente como estaba.
+
+Censura, y de verdad desaparece
+Selecciona lo que tiene que desaparecer (un nombre, una dirección, una imagen) y MegaPDF lo quita del archivo en lugar de taparlo. Lo que había debajo desaparece: ninguna otra aplicación puede copiarlo ni buscarlo.
+
+Firma con convicción
+Dibuja tu firma con el dedo o fotografía la que tienes en papel; el fondo blanco desaparece automáticamente. Tus firmas se quedan en una biblioteca privada en tu dispositivo; coloca una en un documento y muévela y cámbiale el tamaño hasta que quede justo sobre la línea.
+
+Guarda sin miedo
+Guardar escribe sobre el archivo original, de forma segura. MegaPDF verifica cada documento antes de tocar tu original, así que un guardado fallido nunca puede corromper el archivo que alguien te envió. O conserva el original y guarda una copia. Exportar como Markdown escribe el texto del documento (títulos, listas, los valores que ingresaste) como archivo Markdown y deja el PDF tal como estaba.
+
+Encuentra cualquier palabra
+Busca en todo el documento mientras escribes: cada coincidencia se ilumina y el contador dice cuántas hay, así que la única cláusula que necesitas en un contrato de arrendamiento de cuarenta páginas está a unos toques de distancia.
+
+Lee el documento, no la aplicación
+El modo de lectura quita las barras de herramientas de la pantalla y deja solo la página. Con él vienen los colores de página: Sepia para una lectura larga, Noche para una habitación a oscuras; y Noche invierte también las imágenes, deliberadamente. MegaPDF puede abrir todos los documentos de esa forma.
+
+Pon las páginas en orden
+Gira una página que llegó de lado, elimina una, arrastra las páginas al orden correcto, inserta una página en blanco, agrega las páginas de otro PDF o guarda algunas páginas como su propio archivo. Cada acción es un solo paso, y un solo Deshacer la revierte.
+
+Privado por diseño
+MegaPDF no solicita ningún permiso y no realiza ninguna conexión de red. Tus documentos y tu firma nunca salen de tu dispositivo: no hay ningún servidor al que puedan ir. La aplicación es de código abierto, así que cualquiera puede verificarlo.
+
+Funciona con todo
+Abre un PDF desde Mail, Archivos, iCloud Drive o cualquier aplicación que comparta uno (MegaPDF está entre las aplicaciones que ofrecen para abrirlo) y devuélvelo con Compartir. Los documentos que completas y firmas aquí son PDF estándar: se abren perfectamente en cualquier otra aplicación de PDF.
+
+MegaPDF es deliberadamente simple: no te entierra en barras de herramientas. Abre, corrige, guarda. Listo.""",
+    "keywords": "llenar,completar,formulario,casilla,editor,buscar,documento,anotar,lector,censurar,contrato",
+    "captions_iphone": {
+        "reading": "El modo de lectura deja solo la página, esa que marcaste y firmaste",
+        "text-edit": "Corrige un error en el propio documento",
+        "sign": "Tus firmas, guardadas en tu dispositivo",
+        "draw": "Dibújala una vez, úsala en todas partes",
+        "pages": "Gira, reordena, elimina: un solo Deshacer lo revierte todo",
+        "text": "Escribe en la línea en blanco, con tu tamaño y tu fuente",
+        "search": "Encuentra cualquier palabra, en todas las páginas",
+        "redact": "Censurar quita el contenido. No solo lo tapa.",
+        "home": "Sin cuenta. Sin nube. Sin rastreo.",
+    },
+    "captions_ipad": {
+        "pages": "Tu propia barra de herramientas y las páginas en una barra lateral: hecho para la pantalla grande",
+        "reading": "Y luego desaparece: el modo de lectura deja solo la página",
+        "text-edit": "Corrige un error en el propio documento",
+        "sign": "Tus firmas, guardadas en tu dispositivo",
+        "draw": "Dibújala una vez, úsala en todas partes",
+        "text": "Escribe en la línea en blanco, con tu tamaño y tu fuente",
+        "search": "Encuentra cualquier palabra, en todas las páginas",
+        "redact": "Censurar quita el contenido. No solo lo tapa.",
+        "home": "Sin cuenta. Sin nube. Sin rastreo.",
+    },
+}
+
+AS_MAC_ES_419 = {
+    "promo": "¿Te enviaron un PDF para firmar? Ábrelo, haz clic en las casillas, coloca tu firma y guarda. Listo en menos de un minuto, sin cuenta ni suscripción.",
+    "description": """Abrir. Corregir. Guardar. Listo.
+
+MegaPDF hace el trabajo que la mayoría de la gente realmente tiene con un PDF: alguien te envió un formulario y necesitas devolverlo llenado, marcado y firmado, en tu propio Mac.
+
+Marca cualquier casilla
+Haz clic en una casilla y queda marcada, tanto en campos de formulario reales como en simples cuadros impresos. MegaPDF reconoce las casillas dibujadas que otras aplicaciones tratan como simple decoración.
+
+Escribe en cualquier línea
+Haz clic donde va la respuesta y escríbela, con el tamaño y el tipo de fuente (sans, serif o monoespaciada) que combinan con el formulario. Arrástralo a su lugar, o haz doble clic en él para corregir un error. Todo lo que agregas es texto real en el que se puede buscar, no un adhesivo pegado sobre la página.
+
+Corrige el texto del propio documento
+¿Fecha equivocada? ¿Nombre mal escrito? Haz clic en la línea y vuelve a escribirla. MegaPDF conserva la fuente del propio documento siempre que puede y lo dice cuando tuvo que usar una parecida. Si un cambio alterara la página, te lo dice en lugar de mover cosas en silencio, y Deshacer devuelve el original exactamente como estaba.
+
+Censura, y de verdad desaparece
+Selecciona lo que tiene que desaparecer (un nombre, una dirección, una imagen) y MegaPDF lo quita del archivo en lugar de taparlo. Lo que había debajo desaparece: ninguna otra aplicación puede copiarlo ni buscarlo. También está Cubrir, que dice claramente que solo cubre.
+
+Firma con convicción
+Dibuja tu firma con el trackpad o el mouse, escríbela, o fotografía la que tienes en papel; el fondo blanco desaparece automáticamente. Tus firmas se quedan en una biblioteca privada en tu Mac; coloca una en un documento y muévela y cámbiale el tamaño hasta que quede justo sobre la línea.
+
+Guarda sin miedo
+Guardar escribe sobre el archivo que abriste, de forma segura. MegaPDF verifica primero cada documento, así que un guardado fallido nunca puede corromper el archivo que alguien te envió. O guarda una copia, o un archivo Markdown con el texto del documento, y el PDF queda como estaba. Al cerrar o salir con cambios sin guardar, siempre te pregunta primero.
+
+Encuentra cualquier palabra
+Busca en todo el documento mientras escribes: cada coincidencia se ilumina y el contador dice cuántas hay, así que la única cláusula que necesitas en un contrato de arrendamiento de cuarenta páginas está a una pulsación de distancia.
+
+Lee el documento, no la aplicación
+El modo de lectura (⇧⌘R) quita la barra de herramientas y la barra lateral y deja solo la página; Esc devuelve la ventana. Los colores de página están junto a él en Opciones: Sepia para una lectura larga, Noche para una habitación a oscuras; y Noche invierte también las imágenes, deliberadamente.
+
+Pon las páginas en orden
+La barra lateral Miniaturas ahora es un lugar para trabajar: gira una página que llegó de lado, elimina una, arrastra las páginas al orden correcto, inserta una página en blanco, inserta las páginas de otro PDF o guarda una selección como su propio archivo. Cada acción es un solo paso, y un solo Deshacer la revierte.
+
+Privado por diseño
+MegaPDF no realiza ninguna conexión de red (su sandbox ni siquiera las permite) y solo abre los archivos que tú eliges. Tus documentos y tu firma nunca salen de tu Mac. La aplicación es de código abierto, así que cualquiera puede verificarlo.
+
+Como en casa en el Mac
+Cada comando está en la barra de menús con el atajo que esperas, los documentos se abren como pestañas en una sola ventana, y un PDF abierto desde el Finder se une al que ya tienes. VoiceOver lee la barra de herramientas y la página, la aplicación sigue tu apariencia clara u oscura, y lo que firmas aquí es un PDF estándar que se abre en Vista Previa y en cualquier otro lugar.
+
+MegaPDF es deliberadamente simple: no te entierra en barras de herramientas. Abre, corrige, guarda. Listo.""",
+}
+
+WORKS_ES_419_AS = "Abre un PDF desde Mail, Archivos, iCloud Drive o cualquier aplicación que comparta uno (MegaPDF está entre las aplicaciones que ofrecen para abrirlo) y devuélvelo con Compartir. Los documentos que completas y firmas aquí son PDF estándar: se abren perfectamente en cualquier otra aplicación de PDF."
+WORKS_ES_419_PLAY = "Abre un PDF desde Archivos, Google Drive, Gmail o cualquier aplicación que te entregue uno (MegaPDF está en su lista Abrir con) y devuélvelo con Compartir. Los documentos que completas y firmas aquí se abren perfectamente en Adobe Acrobat y en cualquier aplicación de PDF de escritorio."
+
+PLAY_ES_419_SWAPS = [
+    (WORKS_ES_419_AS, WORKS_ES_419_PLAY),
+    ("Dibuja tu firma con el dedo o fotografía la que tienes en papel; el fondo blanco desaparece automáticamente.",
+     "Dibuja tu firma con el dedo, escribe tu nombre o usa una foto de la que tienes en papel; el fondo blanco desaparece automáticamente."),
+    ("MegaPDF verifica cada documento antes de tocar tu original, así que un guardado fallido nunca puede corromper el archivo que alguien te envió. O conserva el original y guarda una copia. Exportar como Markdown escribe el texto del documento (títulos, listas, los valores que ingresaste) como archivo Markdown y deja el PDF tal como estaba.",
+     "MegaPDF revisa primero cada guardado, así que uno fallido nunca puede corromper el archivo que alguien te envió. O conserva el original y guarda una copia. Exportar como Markdown escribe el texto del documento (títulos, listas, los valores ingresados) como archivo Markdown y deja el PDF tal como estaba. También puedes ponerle una contraseña a un documento o quitársela."),
+    ("MegaPDF no solicita ningún permiso y no realiza ninguna conexión de red.",
+     "MegaPDF no te pide ningún permiso y no realiza ninguna conexión de red."),
+]
+
+PLAY_ES_419 = {
+    "title": "MegaPDF: llena y firma PDF",
+    "short": "Llena, marca y firma un PDF. Sin cuenta y sin nube.",
+    "description": swapped(AS_ES_419["description"], PLAY_ES_419_SWAPS),
+    "notes": release_block_or_pending("google-play.md", "Español (Latinoamérica)"),
+}
+
+
+# --------------------------------------------------------------------------
 # Rendering
 # --------------------------------------------------------------------------
 
@@ -534,6 +738,20 @@ def derive(copy: dict) -> dict:
         else:
             out[k] = [to_france(x) for x in v]
     return respace(out, ":?!;")
+
+
+def spain(copy: dict) -> dict:
+    """The Spain variant of a Latin American copy dictionary: the word table only. No
+    spacing pass, because Spanish has none (never respace(), never space_before)."""
+    out = {}
+    for k, v in copy.items():
+        if isinstance(v, str):
+            out[k] = to_spain(v)
+        elif isinstance(v, dict):
+            out[k] = {p: to_spain(c) for p, c in v.items()}
+        else:
+            out[k] = [to_spain(x) for x in v]
+    return out
 
 
 def ms_section(title: str, tag: str, c: dict, note: str = "") -> str:
@@ -611,25 +829,54 @@ LIMITS_OK = [
     (len(PLAY_EN["description"]) <= 4000 and len(PLAY_FR_CA["description"]) <= 4000, "Play full description ≤4000"),
     (len(PLAY_EN["notes"]) <= 500 and len(PLAY_FR_CA["notes"]) <= 500, "Play notes ≤500"),
 ]
+# Spanish (#724): the hand-written es-419 copy and the Spain copy derived from it, against
+# the same limits.
+for _name, _es in (("es-419", lambda c: c), ("es-ES", spain)):
+    _ms, _as, _mac, _play = _es(MS_ES_419), _es(AS_ES_419), _es(AS_MAC_ES_419), _es(PLAY_ES_419)
+    LIMITS_OK += [
+        (len(_ms["short"]) <= 100, f"MS short ({_name})"),
+        (all(len(f) <= 200 for f in _ms["features"]) and len(_ms["features"]) <= 20, f"MS features ({_name})"),
+        (len(_ms["description"]) <= 10000, f"MS description ({_name})"),
+        (all(len(t) <= 30 for t in _ms["terms"]) and len(_ms["terms"]) == 7, f"MS terms ({_name})"),
+        (all(len(c) <= 200 for c in _ms["captions"].values()), f"MS captions ({_name})"),
+        (len(_as["name"]) <= 30 and len(_as["subtitle"]) <= 30, f"AS name/subtitle ({_name})"),
+        (len(_as["promo"]) <= 170, f"AS promo ({_name})"),
+        (len(_as["keywords"]) <= 100, f"AS keywords ({_name})"),
+        (len(_as["description"]) <= 4000, f"AS description ({_name})"),
+        (len(_mac["promo"]) <= 170 and len(_mac["description"]) <= 4000, f"Mac ({_name})"),
+        (len(_play["title"]) <= 30 and len(_play["short"]) <= 80, f"Play title/short ({_name})"),
+        (len(_play["description"]) <= 4000, f"Play description ({_name})"),
+    ]
 
 REVIEW_NOTE = ("*French copy was translated by the build assistant against "
                "`docs/localisation-glossary.md` and signed off by a francophone reviewer for 2.0 "
                "(2026-09-18, #242); new copy gets the same read before it goes live. "
                "The France variant is derived from the Canadian one by `tools/gen_listing_copy.py`.*\n")
 
+ES_REVIEW_NOTE = ("*Spanish copy was written by the build assistant against "
+                  "`docs/localisation-glossary-es.md` and is **ES-REVIEW #724: not yet read by the "
+                  "reviewer**. Fable's approval, recorded on #724, gates it; nothing Spanish is "
+                  "pasted into a store before then. The Spain variant is derived from the Latin "
+                  "American one by `tools/gen_listing_copy.py` (`spain()`), with no punctuation pass.*\n")
+
 MS_BODY = "\n".join([
     "## Copy by language\n",
     "Partner Center asks for one listing per language declared in the package: "
     "**English (United States)**, **English (Canada)**, **French (Canada)** and "
-    "**French (France)**. Every field for every language is below as a block that "
+    "**French (France)**, and since #724 **Spanish (Mexico)** and **Spanish (Spain)**. "
+    "Every field for every language is below as a block that "
     "pastes as-is — copy from inside the block only. The URLs, category and "
-    "contact under *Other fields* are the same for all four.\n",
+    "contact under *Other fields* are the same for all of them.\n",
     REVIEW_NOTE,
+    ES_REVIEW_NOTE,
     ms_section("English (United States)", "en-US", MS_EN),
     ms_section("English (Canada)", "en-CA", MS_EN,
                "*Identical to en-US — the copy carries no US-vs-CA spelling. Repeated so this section pastes on its own.*\n"),
     ms_section("Français (Canada)", "fr-CA", canada(MS_FR_CA)),
     ms_section("Français (France)", "fr-FR", derive(MS_FR_CA)),
+    ms_section("Español (México)", "es-MX", MS_ES_419,
+               "*Latin American Spanish is listed under `es-mx`; the capture folder is `es-419`.*\n"),
+    ms_section("Español (España)", "es-ES", spain(MS_ES_419)),
 ])
 
 AS_BODY = "\n".join([
@@ -637,32 +884,47 @@ AS_BODY = "\n".join([
     "App Store Connect → the version page → **Localizations**: **English (Canada)** "
     "is the primary language; add **French (Canada)** and **French**. Every field "
     "for every language is below as a block that pastes as-is. Character limits are "
-    "in brackets with the actual count beside them.\n",
+    "in brackets with the actual count beside them. Since #724 add **Spanish (Mexico)** "
+    "(`es-MX`, App Store Connect has no es-419) and **Spanish (Spain)** (`es-ES`).\n",
     REVIEW_NOTE,
+    ES_REVIEW_NOTE,
     as_section("English (Canada)", "en-CA", AS_EN),
     as_section("Français (Canada)", "fr-CA", canada(AS_FR_CA)),
     # The France What's new is read from the release file, not derived here, so that a
     # hand-made France wording there (#242) survives; since 2.1.1 that file's own
     # check_copy.py derives it the same way this script derives the rest.
     as_section("Français", "fr", {**derive(AS_FR_CA), "whatsnew": release_block("app-store.md", "Français (France)")}),
+    as_section("Español (México)", "es-MX",
+               {**AS_ES_419, "whatsnew": release_block_or_pending("app-store.md", "Español (Latinoamérica)")}),
+    as_section("Español (España)", "es-ES",
+               {**spain(AS_ES_419), "whatsnew": release_block_or_pending("app-store.md", "Español (España)")}),
     mac_section("English (Canada)", "en-CA", AS_MAC_EN),
     mac_section("Français (Canada)", "fr-CA", canada(AS_MAC_FR_CA)),
     mac_section("Français", "fr", derive(AS_MAC_FR_CA)),
+    mac_section("Español (México)", "es-MX", AS_MAC_ES_419),
+    mac_section("Español (España)", "es-ES", spain(AS_MAC_ES_419)),
 ])
 
 PLAY_BODY = "\n".join([
     "## Play listing — copy by language\n",
     "Main store listing → **Manage translations** → add **French (Canada) – fr-CA** "
-    "and **French (France) – fr-FR** beside the default **English (Canada) – en-CA**. "
+    "and **French (France) – fr-FR** beside the default **English (Canada) – en-CA**; "
+    "since #724 also **Spanish (Latin America) – es-419** and **Spanish (Spain) – es-ES**. "
     "`tools/play_submit.py` uploads binaries only; this text is pasted by hand. "
     "Every field for every language is below as a block that pastes as-is. "
     "Screenshots: the **Android Screenshots** workflow captures once per language "
-    "(artifacts `play-screenshots-en`, `-fr-CA`, `-fr-FR`); the French runs set the "
-    "app's per-app locale on the emulator and open the French demo agreement.\n",
+    "(artifacts `play-screenshots-en`, `-fr-CA`, `-fr-FR`, `-es-419`, `-es-ES`); the French "
+    "and Spanish runs set the app's per-app locale on the emulator and open that "
+    "language's demo agreement.\n",
     REVIEW_NOTE,
+    ES_REVIEW_NOTE,
     play_section("English (Canada)", "en-CA", PLAY_EN),
     play_section("Français (Canada)", "fr-CA", canada(PLAY_FR_CA)),
     play_section("Français (France)", "fr-FR", {**derive(PLAY_FR_CA), "notes": release_block("google-play.md", "Français (France)")}),
+    play_section("Español (Latinoamérica)", "es-419", PLAY_ES_419),
+    play_section("Español (España)", "es-ES",
+                 {**spain({k: v for k, v in PLAY_ES_419.items() if k != "notes"}),
+                  "notes": release_block_or_pending("google-play.md", "Español (España)")}),
 ])
 
 START, END = "<!-- copy-by-language -->", "<!-- /copy-by-language -->"

@@ -232,7 +232,7 @@ the counts and the French review. The tools read `docs/release-notes/<x.y>/`
 python3 docs/release-notes/<x.y.z>/check_copy.py          # derive fr-FR, recount, sync ../<x.y>/
 python3 docs/release-notes/<x.y.z>/check_copy.py --check  # fail on drift — run before every submit
 python3 tools/gen_listing_copy.py                          # listing docs + android/RELEASING.md
-python3 tools/gen_strings.py fr-fr                         # the app's fr-FR catalogues; never hand-edit fr-FR
+python3 tools/gen_strings.py fr-fr es-es                  # the app's fr-FR and es-ES catalogues; never hand-edit a derived one
 ```
 
 Limits, counted as the field counts: Microsoft **1500**, App Store and Mac App Store

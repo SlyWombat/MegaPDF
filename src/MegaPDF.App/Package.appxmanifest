@@ -30,6 +30,15 @@
          a listing Partner Center asks for. -->
     <Resource Language="fr-ca" />
     <Resource Language="fr-fr" />
+    <!-- es-mx and es-es (#724): Strings\es\Resources.resw is the hand-written Latin
+         American catalogue, which every Latin American locale reaches because MRT falls
+         back from es-MX (and es-AR, es-US ...) to the neutral es and has no es-419
+         parent; Strings\es-ES\Resources.resw is derived from it by
+         tools/gen_strings.py es-es. A declared language that resolves to a neutral
+         folder is this file's existing pattern (en-ca has no en-CA folder). Declared
+         together with the two Spanish Partner Center listings, which it asks for. -->
+    <Resource Language="es-mx" />
+    <Resource Language="es-es" />
   </Resources>
 
   <Applications>

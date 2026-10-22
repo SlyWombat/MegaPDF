@@ -12,6 +12,8 @@ so this script writes the accessor class instead. Run from anywhere:
 
     python3 tools/gen_strings.py            # regenerate both Strings.g.cs
     python3 tools/gen_strings.py fr-fr      # also derive France French from Canadian
+    python3 tools/gen_strings.py es-es      # also derive Spain Spanish from Latin American (#724)
+    python3 tools/gen_strings.py fr-fr es-es   # both, as CI runs it
     python3 tools/gen_strings.py pseudo     # also write the qps-ploc catalogues
 
 `fr-fr` outputs (committed, checked for drift by ci.yml):
@@ -19,6 +21,12 @@ so this script writes the accessor class instead. Run from anywhere:
     src/MegaPDF.Avalonia/Strings/Strings.fr.resx
     android/app/src/main/res/values-fr/strings.xml
     the "fr" localizations inside ios/MegaPDF/Localizable.xcstrings
+
+`es-es` outputs (committed, checked for drift by ci.yml):
+    src/MegaPDF.App/Strings/es-ES/Resources.resw
+    src/MegaPDF.Avalonia/Strings/Strings.es-ES.resx
+    android/app/src/main/res/values-es/strings.xml
+    the "es" localizations inside ios/MegaPDF/Localizable.xcstrings
 
 Outputs (committed, checked for drift by ci.yml):
     src/MegaPDF.App/Strings.g.cs
@@ -269,6 +277,126 @@ def write_france() -> None:
     print(f"{IOS_CATALOG.relative_to(ROOT)}: {count} fr entries derived from fr-CA")
 
 
+# --- Spain Spanish, derived from Latin American Spanish (#724) ----------------
+#
+# The same shape as France French: es-419 is hand-written, es-ES is generated
+# from it by a short word table. Where each catalogue lives differs by
+# platform on purpose (docs/localisation.md): the desktops keep Latin American
+# in the neutral `es` (MRT and .NET fall back from es-MX to `es` only), the
+# phones keep it in `es-419` and Spain in the neutral `es`.
+#
+# There is no punctuation pass. Spanish has no non-breaking-space rule: never
+# call FRANCE_PUNCTUATION on it.
+
+ES_419_TO_ES_ES = [
+    # (es-419, es-ES), whole words, case-sensitive, longest first. Article
+    # agreement rows go before the bare noun: "la computadora" is "el ordenador".
+    ("las computadoras", "los ordenadores"), ("una computadora", "un ordenador"),
+    ("la computadora", "el ordenador"), ("esta computadora", "este ordenador"),
+    ("computadoras", "ordenadores"), ("computadora", "ordenador"),
+    ("Computadora", "Ordenador"),
+    ("celulares", "móviles"), ("celular", "móvil"), ("Celular", "Móvil"),
+    ("videos", "vídeos"), ("video", "vídeo"), ("Videos", "Vídeos"), ("Video", "Vídeo"),
+    ("el mouse", "el ratón"), ("mouse", "ratón"),
+    ("Presiona", "Pulsa"), ("presiona", "pulsa"), ("Presionar", "Pulsar"), ("presionar", "pulsar"),
+    ("Llenar", "Rellenar"), ("llenar", "rellenar"), ("Llena", "Rellena"), ("llena", "rellena"),
+    ("llenado", "rellenado"), ("llenada", "rellenada"),
+    # Not a word but a person: the demo signatory in the store captures, who has a
+    # different name per listing language (D7, Dave 2026-10-21).
+    ("Sofía Ramírez", "Lucía Fernández"),
+    # Nor this: the demo document the phones' captures open. es-419 opens
+    # demo-es.pdf, Latin America's page; es-ES opens demo-es-ES.pdf, Spain's.
+    ("demo-es", "demo-es-ES"),
+    # The demo document's rental word: es-419 pages say arrendamiento (a contrato de
+    # arrendamiento), Spain's say alquiler. The phones' screenshot strings (document
+    # name, edited heading, search term) carry it, and the search term must occur in
+    # the page the captures open.
+    ("arrendamiento", "alquiler"),
+    ("Español (Latinoamérica)", "Español (Latinoamérica)"),  # language names never change
+]
+
+# Settings (D6) is a variant split, applied by key and never by word, so that
+# "la configuración de seguridad" is left alone. Windows keeps Configuración in
+# both variants and so has no entry; the Mac catalogue has no Settings key.
+ES_ES_KEY_OVERRIDES = {
+    "android": {"settings": "Ajustes"},
+    "ios": {"Settings": "Ajustes", "Settings…": "Ajustes…"},
+}
+
+
+def _es_pattern(a: str, b: str) -> "re.Pattern[str]":
+    """Whole-word pattern for one table row. A row whose output starts with its
+    input (demo-es -> demo-es-ES) must not fire again on its own output, or the
+    derivation would not be idempotent."""
+    tail = b[len(a):] if b.startswith(a) else ""
+    guard = rf"(?!{re.escape(tail)})" if tail else ""
+    return re.compile(rf"(?<!\w){re.escape(a)}(?!\w){guard}")
+
+
+ES_PATTERNS = [(_es_pattern(a, b), b) for a, b in ES_419_TO_ES_ES]
+
+
+def to_spain(value: str) -> str:
+    for pattern, spain in ES_PATTERNS:
+        value = pattern.sub(lambda _m, spain=spain: spain, value)
+    return value
+
+
+WINDOWS_ES_419 = ROOT / "src/MegaPDF.App/Strings/es/Resources.resw"
+WINDOWS_ES_ES = ROOT / "src/MegaPDF.App/Strings/es-ES/Resources.resw"
+MAC_ES_419 = ROOT / "src/MegaPDF.Avalonia/Strings/Strings.es.resx"
+MAC_ES_ES = ROOT / "src/MegaPDF.Avalonia/Strings/Strings.es-ES.resx"
+ANDROID_ES_419 = ROOT / "android/app/src/main/res/values-b+es+419/strings.xml"
+ANDROID_ES_ES = ROOT / "android/app/src/main/res/values-es/strings.xml"
+
+DERIVED_HEADER_ES = "DERIVED FILE — generated by `tools/gen_strings.py es-es` from the Latin American Spanish catalogue. Edit that file, or the ES_419_TO_ES_ES table, never this one."
+
+
+def derive_es_values(text: str, pattern: str) -> str:
+    return re.sub(pattern, lambda m: m.group(1) + to_spain(m.group(2)) + m.group(3), text, flags=re.S)
+
+
+def write_spain() -> None:
+    xml_value = r"(<value(?: [^>]*)?>)(.*?)(</value>)"
+    android_value = r"(<(?:string|item)\b[^>]*>)(.*?)(</(?:string|item)>)"
+
+    for src, dst, pattern, banner, platform in (
+        (WINDOWS_ES_419, WINDOWS_ES_ES, xml_value, "Español (España)", "windows"),
+        (MAC_ES_419, MAC_ES_ES, xml_value, "Español (España) — the es-ES culture", "mac"),
+        (ANDROID_ES_419, ANDROID_ES_ES, android_value, "Español (España) — the neutral `values-es`", "android"),
+    ):
+        text = src.read_text(encoding="utf-8")
+        text = derive_es_values(text, pattern)
+        for key, value in ES_ES_KEY_OVERRIDES.get(platform, {}).items():
+            text, n = re.subn(
+                rf'(<string name="{re.escape(key)}"[^>]*>)(.*?)(</string>)',
+                lambda m, value=value: m.group(1) + value + m.group(3), text, flags=re.S)
+            if n != 1:
+                raise SystemExit(f"{src.name}: expected one <string name=\"{key}\">, found {n}")
+        text = re.sub(r"<!--.*?-->", lambda _m: f"<!--\n  {banner}.\n  {DERIVED_HEADER_ES}\n-->", text, count=1, flags=re.S)
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        dst.write_text(text, encoding="utf-8", newline="\n")
+        print(f"{dst.relative_to(ROOT)}: derived from {src.name}")
+
+    # iOS: a second localization inside the same catalog. Read afresh, because
+    # write_france() has just rewritten the file when both modes run together.
+    catalog = json.loads(IOS_CATALOG.read_text(encoding="utf-8"))
+    overrides = ES_ES_KEY_OVERRIDES["ios"]
+    count = 0
+    for key, entry in catalog["strings"].items():
+        locs = entry.get("localizations")
+        if not locs or "es-419" not in locs:
+            continue
+        unit = locs["es-419"]["stringUnit"]
+        value = overrides.get(key, to_spain(unit["value"]))
+        locs["es"] = {"stringUnit": {"state": unit["state"], "value": value}}
+        count += 1
+    IOS_CATALOG.write_text(
+        json.dumps(catalog, ensure_ascii=False, indent=2, separators=(",", " : "), sort_keys=True) + "\n",
+        encoding="utf-8", newline="\n")
+    print(f"{IOS_CATALOG.relative_to(ROOT)}: {count} es entries derived from es-419")
+
+
 def main(argv: list[str]) -> int:
     for resx, out, ns, loader in (
         (WINDOWS_RESW, WINDOWS_OUT, "MegaPDF.App", WINDOWS_LOADER),
@@ -289,6 +417,8 @@ def main(argv: list[str]) -> int:
 
     if "fr-fr" in argv:
         write_france()
+    if "es-es" in argv:
+        write_spain()
     return 0
 
 

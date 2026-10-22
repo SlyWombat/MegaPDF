@@ -41,6 +41,13 @@ jobs:
       - name: Store slot order agrees across the gate, the rigs and the submission tools
         run: python3 tools/test_store_slots.py
 
+      # #724: the Spanish store copy follows the Spanish typography and names no other platform
+      # in the Apple descriptions, the submission tools know es-419 / es-MX / es-ES and map them
+      # to the folders the captures are kept in, and the Play tool reads the es-419 section and
+      # refuses release notes that are still PENDING.
+      - name: The Spanish store copy and the tools that carry it
+        run: python3 tools/test_store_copy_es.py
+
       # Printed into the log on purpose: the gap list is the point of the map, and a run
       # whose gaps nobody reads is a run that only proves a file parses.
       - name: The gaps it names
