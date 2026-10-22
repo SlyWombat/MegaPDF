@@ -2106,14 +2106,26 @@ size_t GatherOneBlock(const PageWork& pw, const std::vector<int>& order, size_t 
         // NUMBER rather than under the text after it. Cutting the item there left a wrap hyphen on
         // the item's first line stranded in a block of its own: on one UN document, 179 of 367
         // such hyphens, each one a word the reference side counts once and this side twice.
-        const double item_marker_left = line.l;
+        double item_marker_left = line.l;
         while (j < order.size()) {
             const int nli = order[j];
             const Line& nline = pw.lines[static_cast<size_t>(nli)];
             if (LineStartsListItem(pw, nline, marker_ctx)) break;
             if (LineQualifiesBySize(LineFontSize(pw, nline), body_size)) break;
             if (std::fabs(nline.l - item_text_left) > kParagraphLeftEdgeToleranceEm * Em(body_size) &&
-                std::fabs(nline.l - item_marker_left) > kParagraphLeftEdgeToleranceEm * Em(body_size)) break;
+                std::fabs(nline.l - item_marker_left) > kParagraphLeftEdgeToleranceEm * Em(body_size)) {
+                // An indented item ("a)", "b)" under a numbered paragraph) whose second line
+                // returns to the margin, to the LEFT of its own number: the same first-line
+                // indent the paragraph rule below allows, on the number instead. 144 of the 367
+                // stranded hyphens on the UN document. Only the second line is read that way,
+                // and the margin is then the item's left edge.
+                const double left_of_marker = item_marker_left - nline.l;
+                if (group.size() == 1 && left_of_marker > 0 && left_of_marker <= kFirstLineIndentMaxEm * Em(body_size)) {
+                    item_marker_left = nline.l;
+                } else {
+                    break;
+                }
+            }
             const double pitch = LineCentre(pw.lines[static_cast<size_t>(group.back())]) - LineCentre(nline);
             if (pitch >= kParagraphGapPitchFactor * median_pitch) break;
             group.push_back(nli);

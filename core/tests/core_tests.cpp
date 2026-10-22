@@ -7357,6 +7357,14 @@ std::vector<unsigned char> indented_paragraph_hyphen_pdf() {
                           text_at(72, 676, "Segunda frase del mismo parrafo."));
 }
 
+// A numbered paragraph whose number is itself indented (the "a)", "b)" sub-items of a resolution)
+// with the continuation back at the margin, 24 pt to the LEFT of the number.
+std::vector<unsigned char> indented_numbered_hyphen_pdf() {
+    return plain_text_pdf(text_at(96, 700, "12.") + text_at(124, 700, "La Cumbre reconoce la importan-") +
+                          text_at(72, 688, "cia de los compromisos asumidos en materia de desarrollo.") +
+                          text_at(96, 664, "13.") + text_at(124, 664, "El siguiente punto trata de otro asunto."));
+}
+
 bool block_text_has(const megapdf_structure* s, size_t i, const std::string& needle) {
     return block_text_ascii(s, i, MEGAPDF_BLOCK_TEXT).find(needle) != std::string::npos;
 }
@@ -7399,6 +7407,28 @@ void test_structure_wrap_hyphen_across_indent() {
                 check(megapdf_block_count(s) > 0 && block_text_has(s, 0, "urgentes") &&
                           !block_text_has(s, 0, "urgen-"),
                       "structure wrap-hyphen indented: the wrap hyphen is joined (#496)",
+                      megapdf_block_count(s) > 0 ? block_text_ascii(s, 0, MEGAPDF_BLOCK_TEXT) : "");
+                megapdf_structure_free(s);
+            }
+            megapdf_close(d);
+        }
+    }
+    {
+        auto bytes = indented_numbered_hyphen_pdf();
+        megapdf_document* d = megapdf_open(bytes.data(), bytes.size(), nullptr);
+        check(d != nullptr, "structure wrap-hyphen indented number: opens");
+        if (d != nullptr) {
+            megapdf_structure* s = megapdf_structure_load(d, 0, 1, MEGAPDF_STRUCTURE_DEFAULT, nullptr);
+            check(s != nullptr, "structure wrap-hyphen indented number: loads");
+            if (s != nullptr) {
+                megapdf_block b0{};
+                const bool got0 = megapdf_block_count(s) > 0 && megapdf_block_get(s, 0, &b0) == MEGAPDF_OK;
+                check(megapdf_block_count(s) == 2 && got0 && b0.kind == MEGAPDF_BLOCK_LIST_ITEM,
+                      "structure wrap-hyphen indented number: one item holds both lines (#496)",
+                      std::to_string(megapdf_block_count(s)) + " blocks");
+                check(megapdf_block_count(s) > 0 && block_text_has(s, 0, "importancia") &&
+                          !block_text_has(s, 0, "importan-"),
+                      "structure wrap-hyphen indented number: the wrap hyphen is joined (#496)",
                       megapdf_block_count(s) > 0 ? block_text_ascii(s, 0, MEGAPDF_BLOCK_TEXT) : "");
                 megapdf_structure_free(s);
             }
