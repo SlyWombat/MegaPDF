@@ -6576,6 +6576,36 @@ internal static class Program
                 return window.Clipboard is { } clipboard ? Wait(clipboard.GetTextAsync()) : null;
             }
             static string Shown(string? s) => s is null ? "(none)" : s.Replace("\r", "\\r").Replace("\n", "\\n");
+            // A DispatcherTimer fires only inside the dispatcher's main loop, which the headless
+            // pump (RunJobs) never enters: run the loop itself for the time given, the way the
+            // app's own run does, so the 30 ms and 300 ms timers of #710 get their ticks.
+            void RunLoopFor(TimeSpan span)
+            {
+                using var stop = new CancellationTokenSource(span);
+                global::Avalonia.Threading.Dispatcher.UIThread.MainLoop(stop.Token);
+                Pump();
+            }
+            // What a screen reader was told when the selection settled (#710): read off the UI
+            // thread, so the live region is looked at once the read has finished.
+            string Announced()
+            {
+                PumpUntilRendered(() => window.TextAnnouncementForTest.IsCompleted, TimeSpan.FromSeconds(10));
+                Pump();
+                return window.AnnouncementForTest;
+            }
+
+            // --- the Mac's own selected-text colour is the fill (#710) ---
+            var fill = window.TextSelectionFillForTest;
+            Console.WriteLine($"  the selection fill: {fill?.ToString() ?? "(none)"} (alpha {fill?.A})");
+            check("the selection has a fill, translucent", fill is { A: > 80 and < 120 });
+            if (OperatingSystem.IsMacOS())
+            {
+                var system = Platform.MacApplication.SelectedTextBackgroundColor();
+                Console.WriteLine($"  NSColor.selectedTextBackgroundColor in sRGB: {system?.ToString() ?? "(none)"}");
+                check("on the Mac, AppKit gave the selected-text colour", system is not null);
+                check("  and it is the fill, at the usual alpha",
+                      system is { } sys && fill is { } f && f.R == sys.R && f.G == sys.G && f.B == sys.B);
+            }
 
             // --- a drag across the two columns ---
             var from = new PdfPoint(lines[2].X + 0.5, Mid(lines[2]).Y);   // the start of "Left two bravo and more"
@@ -6586,13 +6616,22 @@ internal static class Program
             check("  it is drawn: one highlight per line selected", vm.Pages[0].TextSelectionRects.Count == 6);
             check("  the Edit menu's Copy is on", vm.CanCopySelection);
             check("  and so is the context menu's, with no reason shown", window.TextMenuStateForTest() == (true, false));
+            const string FirstEighty = "Left two bravo and more Left three charlie Left four delta Left five echo Right\u2026";
+            check("the release announces the selection: \"Selected: \" and its first 80 characters",
+                  Announced() == Strings.TextSelectionAnnounced(FirstEighty));
+            Console.WriteLine($"  announced: {window.AnnouncementForTest}");
             var copied = Copied();
+            check("  and the copy announces \"Copied\"", window.AnnouncementForTest == Strings.TextCopiedAnnounced);
             Console.WriteLine($"  clipboard: {Shown(copied)}");
             check("the clipboard runs down the left column and then the right, with LF line ends",
                   copied == "Left two bravo and more\nLeft three charlie\nLeft four delta\nLeft five echo\nRight one golf\nRight two hotel");
 
             // --- keys ---
             Press(Key.Right, PhysicalKey.ArrowRight, RawInputModifiers.Shift);
+            check("Shift+Right says nothing yet: the keys are debounced", window.AnnouncementForTest == Strings.TextCopiedAnnounced);
+            RunLoopFor(TimeSpan.FromMilliseconds(600));
+            check("  then, 300 ms after the last key, it announces the selection",
+                  Announced() == Strings.TextSelectionAnnounced(FirstEighty));
             var stepped = Copied();
             check("Shift+Right takes the next character, over the line end",
                   stepped == "Left two bravo and more\nLeft three charlie\nLeft four delta\nLeft five echo\nRight one golf\nRight two hotel\nR");
@@ -6613,6 +6652,7 @@ internal static class Program
             Click(0, charlie);
             PumpUntilRendered(() => window.HasOpenInlineEditor, TimeSpan.FromSeconds(3));
             check("a double-click on a word selects it", window.DoubleClickWordForTest(0, charlie) && vm.HasTextSelection);
+            check("  and announces the word", Announced() == Strings.TextSelectionAnnounced("charlie"));
             check("  and the editor its first click opened is gone, nothing changed", !window.HasOpenInlineEditor && !vm.IsDirty);
             check("  the clipboard gets the word", Copied() == "charlie");
             Press(Key.Escape, PhysicalKey.Escape);
@@ -6629,11 +6669,49 @@ internal static class Program
             check("  and both pages show their share", vm.Pages[0].TextSelectionRects.Count == 1 && vm.Pages[1].TextSelectionRects.Count >= 1);
 
             window.SelectAllCommand();
+            check("Select All announces the first 80 characters of the document",
+                  Announced() == Strings.TextSelectionAnnounced(
+                      "Selection Columns Left one alpha Left two bravo and more Left three charlie Left\u2026"));
             var all = Copied() ?? "";
             check("Select All copies the whole document, ligatures expanded and line-end hyphens kept",
                   all.StartsWith("Selection Columns\nLeft one alpha\n", StringComparison.Ordinal)
                   && all.Contains("Right five kilo\nThe final flow test\nWe test hyphen-\nation here.", StringComparison.Ordinal)
                   && all.EndsWith("known word.", StringComparison.Ordinal));
+
+            // --- a drag held still past the bottom edge goes on scrolling and selecting (#710) ---
+            // The pointer sends nothing while it is still, so only a timer can do it. The moves that
+            // brought it there scrolled once each; the baseline is taken after the last of them, and
+            // what the pages do over the next 500 ms with NO further input is the timer's.
+            Press(Key.Escape, PhysicalKey.Escape);
+            window.ScrollPagesToTopForTest();
+            Pump();
+            check($"the pages can scroll (room: {window.PagesScrollRoomForTest:0} DIP)", window.PagesScrollRoomForTest > 100);
+            var holdFrom = At(0, from);
+            var holdTo = new Point(holdFrom.X, window.PagesViewportBottomForTest + 40);
+            HeadlessWindowExtensions.MouseDown(window, holdFrom, MouseButton.Left);
+            Pump();
+            for (var i = 1; i <= 10; i++)
+            {
+                HeadlessWindowExtensions.MouseMove(window, new Point(holdFrom.X, holdFrom.Y + (holdTo.Y - holdFrom.Y) * i / 10));
+                Pump();
+            }
+            check("a drag taken 40 DIP below the pages is a selection", vm.HasTextSelection);
+            Pump();
+            var heldBaseline = window.PagesScrollOffsetForTest;
+            RunLoopFor(TimeSpan.FromMilliseconds(500));
+            var heldAfter = window.PagesScrollOffsetForTest;
+            Console.WriteLine($"  held still for 500 ms: offset {heldBaseline:0} -> {heldAfter:0} of {window.PagesScrollRoomForTest:0} DIP; the selection ends on page {(vm.TextSelection.Focus?.PageIndex ?? -1) + 1}");
+            check("  held still for 500 ms, the pages kept scrolling", heldAfter > heldBaseline + 20);
+            check("  and the selection's end moved onto page 2", vm.TextSelection.Focus?.PageIndex == 1);
+            HeadlessWindowExtensions.MouseUp(window, holdTo, MouseButton.Left);
+            Pump();
+            check("  the release lets go, and the timer with it", !window.HasTextPressForTest && !window.IsTextAutoScrollRunningForTest);
+            var stoppedAt = window.PagesScrollOffsetForTest;
+            PumpFor(TimeSpan.FromMilliseconds(200));
+            check("  and the pages stay where they stopped, the selection kept", window.PagesScrollOffsetForTest == stoppedAt && vm.HasTextSelection);
+            Press(Key.Escape, PhysicalKey.Escape);
+            window.ScrollPagesToTopForTest();
+            Pump();
 
             // --- an armed tool keeps its drag, and the edit it makes drops the selection on its page ---
             vm.ToggleWhiteoutCommand.Execute(null);

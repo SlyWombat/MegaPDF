@@ -187,6 +187,74 @@ public static class PdfTextSelection
         return string.Join('\n', pieces);
     }
 
+    /// <summary>How many characters of a selection a screen reader is told (#710).</summary>
+    public const int SpokenLimit = 80;
+
+    /// <summary>
+    /// The start of a selection as a screen reader should say it (#710): line ends and runs of
+    /// white space made single spaces, trimmed, and cut to <paramref name="limit"/> characters
+    /// with an ellipsis when there was more. A cut never splits a surrogate pair. Empty when the
+    /// text is only white space.
+    /// </summary>
+    public static string Spoken(string text, int limit = SpokenLimit)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        ArgumentOutOfRangeException.ThrowIfLessThan(limit, 1);
+        var collapsed = Collapse(text);
+        if (collapsed.Length <= limit)
+            return collapsed;
+        var cut = char.IsHighSurrogate(collapsed[limit - 1]) ? limit - 1 : limit;
+        return collapsed[..cut].TrimEnd() + "\u2026";
+    }
+
+    /// <summary>
+    /// <see cref="Spoken"/> for the selection from <paramref name="anchor"/> to
+    /// <paramref name="focus"/>, reading only as many pages as it takes to fill
+    /// <paramref name="limit"/> characters: Select All on a long document must not read every
+    /// page to say eighty characters.
+    /// </summary>
+    public static string Preview(PdfTextPosition anchor, PdfTextPosition focus, Func<int, PdfSelectableText> page,
+                                 int limit = SpokenLimit)
+    {
+        ArgumentNullException.ThrowIfNull(page);
+        var (first, last) = anchor.CompareTo(focus) <= 0 ? (anchor, focus) : (focus, anchor);
+        var gathered = new System.Text.StringBuilder();
+        for (var index = first.PageIndex; index <= last.PageIndex; index++)
+        {
+            var text = page(index);
+            if (RangeOnPage(first, last, index, text.Length) is not { } range)
+                continue;
+            var piece = text.GetText(range);
+            if (piece.Length == 0)
+                continue;
+            if (gathered.Length > 0)
+                gathered.Append('\n');
+            gathered.Append(piece);
+            if (Collapse(gathered.ToString()).Length > limit)
+                break;
+        }
+        return Spoken(gathered.ToString(), limit);
+    }
+
+    private static string Collapse(string text)
+    {
+        var result = new System.Text.StringBuilder(text.Length);
+        var gap = false;
+        foreach (var c in text)
+        {
+            if (char.IsWhiteSpace(c))
+            {
+                gap = result.Length > 0;
+                continue;
+            }
+            if (gap)
+                result.Append(' ');
+            gap = false;
+            result.Append(c);
+        }
+        return result.ToString();
+    }
+
     /// <summary>
     /// <paramref name="text"/> with its line ends as a platform's clipboard wants them. The core
     /// ends every line with <c>\n</c>; Windows expects CR LF (<c>"\r\n"</c>) on the clipboard, and

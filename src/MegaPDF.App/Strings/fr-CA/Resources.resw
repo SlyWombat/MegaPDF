@@ -1384,6 +1384,14 @@
     <value>L'auteur de ce document a demandé que rien n'en soit copié.</value>
     <comment>FR-REVIEW #710 — new with text selection, not yet read by the reviewer. #710: why Copy is unavailable on a document without the copy permission; #558's extraction-class wording. Selecting still works</comment>
   </data>
+  <data name="TextSelectionAnnounced" xml:space="preserve">
+    <value>Sélectionné : {0}</value>
+    <comment>FR-REVIEW #710 — new, not yet read by the reviewer. #710: what a screen reader says when a text selection settles (drag released, word or Select All chosen, Shift+arrow pause); {0} is the first 80 characters of the selected text, with an ellipsis when it is longer. Spoken only, never shown</comment>
+  </data>
+  <data name="TextCopiedAnnounced" xml:space="preserve">
+    <value>Copié</value>
+    <comment>FR-REVIEW #710 — new, not yet read by the reviewer. #710: what a screen reader says after a successful copy of the selected text. Spoken only, never shown</comment>
+  </data>
   <data name="UndoLossTitle" xml:space="preserve">
     <value>Vos modifications ne pourront plus être annulées ensuite</value>
     <comment>FR-REVIEW #633 — new, not yet read by the reviewer. #633: the title of the question put before a save or a password change takes away the undo history. Shared by both reasons</comment>

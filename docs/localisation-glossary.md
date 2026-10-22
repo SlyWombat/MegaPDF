@@ -370,6 +370,8 @@ established French for the cryptographic sense.
 | Copy (selected text) | Copier | #710, the desktops' page context menu and the Mac's Edit menu. The verb, as every OS's own Copy says it; not *Copie*, which is the noun in *Enregistrer une copie* |
 | Select all / Select All | Tout sélectionner | #710, the desktops' page context menu and the Mac's Edit menu; the same words the phones' page tools already use (`pages_select_all`). Title case in the Mac's English only, its menu idiom |
 | The author of this document asked that nothing be copied out of it. (Copy unavailable) | L'auteur de ce document a demandé que rien n'en soit copié. | #710 reuses #558's extraction-class row word for word as the reason Copy is greyed on a document without the copy permission: selecting still works, only Copy is off. A request, never *interdit* |
+| Selected: {0} (announced) | Sélectionné : {0} | #710, the desktops: what Narrator or VoiceOver says when a text selection settles; {0} is the first 80 characters of the selection. Spoken only. The Canadian rule: U+00A0 before the colon; France derives its own |
+| Copied (announced) | Copié | #710, the desktops: spoken after a successful copy; the past participle, as the Android toast says it (*select_copied*) |
 
 ## Français (France)
 

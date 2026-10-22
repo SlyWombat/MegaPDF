@@ -306,4 +306,64 @@ public sealed class TextSelectionTests : IDisposable
     [InlineData("", "\r\n", "")]
     public void TheClipboardGetsThePlatformsLineEnds(string text, string newline, string expected) =>
         Assert.Equal(expected, PdfTextSelection.WithLineEnds(text, newline));
+
+    // --- what a screen reader is told (#710) ---
+
+    [Theory]
+    [InlineData("charlie", "charlie")]
+    [InlineData("Left two\nLeft three\r\n  Left four ", "Left two Left three Left four")]
+    [InlineData("  \n\t ", "")]
+    [InlineData("", "")]
+    public void SpokenTextIsOneLineWithSingleSpaces(string text, string expected) =>
+        Assert.Equal(expected, PdfTextSelection.Spoken(text));
+
+    [Fact]
+    public void SpokenTextIsCutAtEightyCharactersWithAnEllipsis()
+    {
+        var exactly = new string('a', 80);
+        Assert.Equal(exactly, PdfTextSelection.Spoken(exactly));
+        Assert.Equal(new string('a', 80) + "\u2026", PdfTextSelection.Spoken(exactly + "b"));
+        // The cut falls on a space: no space is left dangling before the ellipsis.
+        var spaced = new string('a', 79) + " " + new string('b', 10);
+        Assert.Equal(new string('a', 79) + "\u2026", PdfTextSelection.Spoken(spaced));
+        // And never between the halves of a surrogate pair (an emoji is two UTF-16 units).
+        var pair = new string('a', 79) + "\U0001F600" + "tail";
+        Assert.Equal(new string('a', 79) + "\u2026", PdfTextSelection.Spoken(pair));
+    }
+
+    [Fact]
+    public void TheSpokenPreviewOfADragReadsDownTheColumnsAndStopsAtTheEnd()
+    {
+        using var doc = _engine.Open(Structure("selection"));
+        using var cache = new SelectableTextCache(doc);
+        var page = cache.Get(0);
+        var lines = page.GetRects(0, page.Length);
+        var anchor = new PdfTextPosition(0, page.CaretAt(new PdfPoint(lines[2].X + 0.5, lines[2].Y + lines[2].Height / 2)) ?? -1);
+        var focus = new PdfTextPosition(0, page.CaretAt(new PdfPoint(lines[7].Right + 30, lines[7].Y + lines[7].Height / 2)) ?? -1);
+        Assert.Equal("Left two bravo and more Left three charlie Left four delta Left five echo Right one golf Right two hotel",
+                     PdfTextSelection.Preview(anchor, focus, cache.Get, limit: 200));
+        // Either order of the two ends reads the same.
+        Assert.Equal(PdfTextSelection.Preview(anchor, focus, cache.Get), PdfTextSelection.Preview(focus, anchor, cache.Get));
+        Assert.Equal("Left two bravo and more Left three charlie Left four delta Left five echo Right\u2026",
+                     PdfTextSelection.Preview(anchor, focus, cache.Get));
+    }
+
+    [Fact]
+    public void TheSpokenPreviewOfSelectAllReadsOnlyTheFirstPagesItNeeds()
+    {
+        using var doc = _engine.Open(Structure("selection"));
+        using var cache = new SelectableTextCache(doc);
+        var selection = new TextSelectionState();
+        selection.SelectAll(doc.PageCount);
+        var loaded = new List<int>();
+        PdfSelectableText Page(int i)
+        {
+            loaded.Add(i);
+            return cache.Get(i);
+        }
+        var preview = PdfTextSelection.Preview(selection.Anchor!.Value, selection.Focus!.Value, Page);
+        Assert.StartsWith("Selection Columns Left one alpha Left two bravo and more", preview);
+        Assert.EndsWith("\u2026", preview);
+        Assert.Equal([0], loaded); // page 1 alone fills eighty characters; page 2 was never asked for
+    }
 }

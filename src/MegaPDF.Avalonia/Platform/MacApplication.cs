@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
+using Avalonia.Media;
 
 namespace MegaPDF.Avalonia.Platform;
 
@@ -17,7 +18,8 @@ namespace MegaPDF.Avalonia.Platform;
 ///
 /// That is all this is: three selectors on the shared application, in the same
 /// hand-written interop style as <see cref="MacPrinter"/>, which the app already
-/// uses for the print panel.
+/// uses for the print panel. And one question put to AppKit that Avalonia does not
+/// answer: the colour selected text uses (<see cref="SelectedTextBackgroundColor"/>, #710).
 /// </summary>
 [SupportedOSPlatform("macos")]
 internal static class MacApplication
@@ -32,6 +34,15 @@ internal static class MacApplication
 
     [DllImport(Objc, EntryPoint = "objc_msgSend")]
     private static extern void MsgSend_Void_Ptr(IntPtr receiver, IntPtr selector, IntPtr arg);
+
+    [DllImport(Objc, EntryPoint = "objc_msgSend")]
+    private static extern IntPtr MsgSend_Ptr_Ptr(IntPtr receiver, IntPtr selector, IntPtr arg);
+
+    // A CGFloat is a double on every 64-bit Mac. A double comes back in a floating-point
+    // register on arm64 and on x86-64 alike, through plain objc_msgSend (only a long double
+    // needs the _fpret entry point), so the one declaration serves both builds.
+    [DllImport(Objc, EntryPoint = "objc_msgSend")]
+    private static extern double MsgSend_Double(IntPtr receiver, IntPtr selector);
 
     [DllImport(Objc)]
     private static extern IntPtr objc_getClass([MarshalAs(UnmanagedType.LPUTF8Str)] string name);
@@ -66,4 +77,37 @@ internal static class MacApplication
 
     /// <summary>Brings everything hidden back — Show All.</summary>
     internal static void ShowAll() => Perform("unhideAllApplications:");
+
+    /// <summary>
+    /// The colour AppKit gives selected text (<c>NSColor.selectedTextBackgroundColor</c>), in sRGB,
+    /// opaque (#710). It follows System Settings ▸ Appearance ▸ Highlight colour, which is the
+    /// Accent colour only while Highlight is left at "Accent colour": Preview's selection uses it,
+    /// so the app's selection must too. It is a dynamic colour, so it is resolved for the
+    /// appearance in force when this is called. Null if AppKit cannot say.
+    /// </summary>
+    internal static Color? SelectedTextBackgroundColor()
+    {
+        try
+        {
+            var nsColor = objc_getClass("NSColor");
+            var nsColorSpace = objc_getClass("NSColorSpace");
+            if (nsColor == IntPtr.Zero || nsColorSpace == IntPtr.Zero)
+                return null;
+            var selected = MsgSend(nsColor, sel_registerName("selectedTextBackgroundColor"));
+            var srgbSpace = MsgSend(nsColorSpace, sel_registerName("sRGBColorSpace"));
+            if (selected == IntPtr.Zero || srgbSpace == IntPtr.Zero)
+                return null;
+            // Some catalogue colours cannot be converted; the answer is then nil, not a wrong colour.
+            var srgb = MsgSend_Ptr_Ptr(selected, sel_registerName("colorUsingColorSpace:"), srgbSpace);
+            if (srgb == IntPtr.Zero)
+                return null;
+            byte Channel(string component) =>
+                (byte)Math.Round(Math.Clamp(MsgSend_Double(srgb, sel_registerName(component)), 0, 1) * 255);
+            return Color.FromRgb(Channel("redComponent"), Channel("greenComponent"), Channel("blueComponent"));
+        }
+        catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException)
+        {
+            return null;
+        }
+    }
 }

@@ -193,6 +193,7 @@
                             PointerPressed="OnPagePointerPressed"
                             PointerReleased="OnPagePointerReleased"
                             PointerMoved="OnPagePointerMoved"
+                            PointerCaptureLost="OnPagePointerCaptureLost"
                             PointerExited="OnPagePointerExited">
                             <Image Source="{x:Bind Source}" Stretch="Uniform" />
                             <!-- A page the engine refused to rasterise says so (#93) rather than
