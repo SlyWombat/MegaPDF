@@ -2718,6 +2718,33 @@ on Windows or iOS encoders. Rerun with `tools/shrink-survey/run.sh <megapdf_shri
 <out> --jobs 6` then `summarise.py <out>/survey.jsonl --md`; build `cmake -S core -B build
 -DMEGAPDF_SHRINK_SURVEY=ON`.
 
+## `--window-tabs-check` exits non-zero when an assertion fails (#711), 2026-10-22
+
+The 2026-10-21 note on #711 said one `--window-tabs-check` run printed `[FAIL]` lines and exited 0.
+Measured on the Mac mini: it can. Avalonia's default `ShutdownMode` is `OnLastWindowClose`, and the
+check closes windows itself (Close Window, the closing step of the run). When an earlier assertion
+failed, the check's own close steps took the wrong path and closed the last window, so the process
+ended with exit 0 before `Finish` ran: `[FAIL]` lines, no `::error::window-tabs-check: N check(s) failed`
+line. The fix sets `ShutdownMode.OnExplicitShutdown` in the `--window-tabs-check` block of
+`App.axaml.cs`, so only `desktop.Shutdown(code)` ends the process.
+
+All runs: Mac mini, scratch clone of `origin/main` (a3111b4) with the one-file change below as
+stated, built with `tools/build-macos-app.sh osx-arm64`, output redirected to a file (no pipe).
+
+| change | files given | exit | what the run printed |
+|---|---|---|---|
+| none | `fixture.pdf forms.pdf` (two) | 1 | `[FAIL] three PDFs were given`, `::error::...1 check(s) failed` |
+| none, plus a deliberate `Check(..., false)` before the final `foreach` (scratch only) | `fixture.pdf forms.pdf demo.pdf` | **0** | two `[FAIL]` lines (B has no editable text at the click point in `forms.pdf`), the run stopped after "undo after the round trip", **no** summary line, the deliberate failure never ran |
+| none, the same deliberate failure | `demo.pdf fixture.pdf forms.pdf` | 1 | all 30 usual lines, the deliberate `[FAIL]`, `1 check(s) failed` |
+| `OnExplicitShutdown` | `fixture.pdf forms.pdf` | 1 | same as the first row |
+| `OnExplicitShutdown`, deliberate failure | `fixture.pdf forms.pdf demo.pdf` | 1 | six `[FAIL]` lines including the deliberate one, `6 check(s) failed` (the run now reaches `Finish`) |
+| `OnExplicitShutdown`, deliberate failure | `demo.pdf fixture.pdf forms.pdf` | 1 | the deliberate `[FAIL]`, `1 check(s) failed` |
+| `OnExplicitShutdown`, no deliberate failure | `demo.pdf fixture.pdf forms.pdf` | 0 | 30 `[PASS]`, `window-tabs-check: PASS`, no hang, `pgrep MegaPDF` empty |
+
+The argument order matters: the check clicks body text at (78, 186) on its second file and edits
+there, so `fixture.pdf forms.pdf demo.pdf` (the order #711's remaining-work list gives) fails two
+checks on its own; `demo.pdf fixture.pdf forms.pdf` is the order that passes on a clean build.
+
 ## Reporting
 
 For each issue: what you clicked, what you expected, what happened, and the PDF

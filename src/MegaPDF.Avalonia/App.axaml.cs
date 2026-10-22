@@ -1614,6 +1614,13 @@ public partial class App : Application
             // person's way, which is what puts them in windows and tabs.
             if (OperatingSystem.IsMacOS() && ArgumentAfter(desktop.Args, "--window-tabs-check") is { } tabsCheckDir)
             {
+                // The check closes windows itself (Close Window, ⌘W). Under the default
+                // OnLastWindowClose, the process ends with exit 0 the moment the last one
+                // closes, before the check reaches Finish: a run whose earlier assertions
+                // had already failed then printed [FAIL] lines and no summary, and
+                // returned 0 (measured on the Mac mini, 2026-10-22, #711). Only the
+                // Shutdown(code) below may end it.
+                desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
                 window.Opened += (_, _) => DispatcherTimer.RunOnce(async () =>
                 {
                     int code;
