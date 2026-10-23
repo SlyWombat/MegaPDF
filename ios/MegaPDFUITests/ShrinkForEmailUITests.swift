@@ -124,9 +124,18 @@ final class ShrinkForEmailUITests: XCTestCase {
         // buttons are looked for anywhere in the app (an action sheet on the phone).
         XCTAssertTrue(app.descendants(matching: .button)["Shrink for email"].waitForExistence(timeout: 5),
                       dump("the question has no Shrink for email"))
+        // Cancel is how the question is answered no. Where the dialog is a popover (iOS 26 on
+        // the phone, measured on the Mac mini's simulator) it draws no Cancel row, and a tap
+        // outside it is the cancel: the full-screen dismiss region, tapped by its corner so the
+        // tap lands outside the popover.
         let cancel = app.descendants(matching: .button)["Cancel"].firstMatch
-        XCTAssertTrue(cancel.exists, dump("the question has no Cancel"))
-        cancel.tap()
+        if cancel.exists {
+            cancel.tap()
+        } else {
+            let outside = app.otherElements["PopoverDismissRegion"].firstMatch
+            XCTAssertTrue(outside.exists, dump("the question has no Cancel and no dismiss region"))
+            outside.coordinate(withNormalizedOffset: CGVector(dx: 0.03, dy: 0.97)).tap()
+        }
 
         // Cancelled: the question is gone, and no strip, no result sheet and no alert followed.
         let gone = NSPredicate(format: "exists == false")
