@@ -2542,6 +2542,8 @@ int ComputeConfidence(const PageWork& pw, bool too_many_columns, const std::vect
 //     soft hyphen. A literal U+002D/U+2010 PDFium did not flag is NOT joined here, although
 //     BuildPieces does join those inside a block: the reference does not, and across a block
 //     boundary there is no line geometry to say it was a wrap. A lone "-" word is not a prefix.
+//   - the continuation is the character the producer drew right after the hyphen (PDFium's own
+//     order), not merely the next block's first word; see the test below for why.
 //   - the next block is a PARAGRAPH (never a heading, list item or figure) whose first word
 //     starts with an ASCII lowercase letter, BuildPieces' own `strip` test. Uppercase, a digit
 //     or an accented letter leave both blocks alone, which is also what keeps #728/#756's
@@ -2583,6 +2585,15 @@ void JoinHyphenAcrossBlocks(const PageWork& pw, std::vector<BlockImpl>* content,
         const auto next_cps = WordCodepoints(pw.chars, pw.words[static_cast<size_t>(next_word_index)]);
         if (next_cps.empty()) continue;
         if (!soft && !IsAsciiLower(next_cps[0])) continue;
+        // The continuation must be what the producer drew NEXT: the character right after the
+        // hyphen in PDFium's order (`chars` holds only real, non-whitespace characters, so
+        // consecutive indices are consecutive in the content). Without this, a prefix ending a
+        // block in one column took the first lowercase word of whatever block came next in
+        // reading order -- a different word from the one the hyphen wraps into -- and glued two
+        // unrelated words together. 30 of 4,084 private documents got worse that way before the
+        // test existed (measured, #781); the interleaved-column cases whose real continuation is
+        // elsewhere are the diagnosis's class (b) and stay stranded rather than wrongly joined.
+        if (pw.words[static_cast<size_t>(next_word_index)].chars.front() != last_word.chars.back() + 1) continue;
         tail[k] = next_word_index;
         skip_first[k + 1] = 1;
         any = true;
