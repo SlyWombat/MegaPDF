@@ -389,6 +389,7 @@ permanently instead of being fetched or copied per run:
 | private (Canadian forms) | `~/pdf-test-ca` | 135 documents | same |
 | private (UN) | `~/pdf-test-un` | 90 documents | same |
 | public | `~/pdf-public` | **1,494 documents, 4.3 GB** (#609, 2026-10-01) | `tools/stress/public-corpus/fetch.sh ~/pdf-public` |
+| private (vendor manuals) | `~/pdf-test-vendor` | 28 documents, 77 MB (2026-10-22) | never re-fetched; third-party copyright, internal test use only, never committed. `manifest.tsv` holds a sha256 per file |
 
 Point any battery at `~/pdf-public` exactly as at `~/megapdf-public-corpus` above — it is
 the same corpus, just not re-downloaded:
@@ -2269,6 +2270,39 @@ wait is now 180 s: it guards against a hang, not the read time.
 **Known limits.** A phrase split across two recognised lines is not found (the engine's own
 search finds those); a highlight is a whole word, not a slice of it; a drawing-only page is read
 (only a uniform blank sheet is skipped); reading is on demand inside Find, not a background pass.
+
+## Vendor manuals corpus, first run (2026-10-23)
+
+Dave's 27 CNC vendor manuals (Carbide 3D, PocketNC, Roland, Shaper, Stepcraft, Tormach, from the
+CaseMaker research behind #664 and #665) plus `R02P032 Installation.pdf` are staged read-only at
+`~/pdf-test-vendor` on kdocker3: 28 documents (921 pages in the 26 that open). None was in any of the other four
+corpora. They are third-party copyright, so the folder is never committed or redistributed, and
+batteries are pointed at it exactly as at the others. Two Stepcraft files are truncated at 1,048,576
+bytes on purpose (#665) and must stay that way.
+
+Run on kdocker3 at `fcff3df` in a throwaway `megapdf:base` container built from a clean clone
+(`megapdf-cli 2.3.0`, PDFium at 33 patches), `structure-battery.sh --reference --cli`,
+`markdown-battery.sh` and `pages-battery.sh`, corpus mounted read-only, then removed. Disk count 28,
+visited 28 in every battery. **Zero crashes, zero hangs, zero bad exit codes in all three.**
+
+| battery | result |
+|---|---|
+| structure | 26 opened, 2 unreadable. **Token F1 0.997394 against the 0.998 gate (fail), the same through `megapdf-cli`.** Order tau median 0.986 on 197 tagged pages; poppler agreement tau median 0.995 on 909 pages |
+| markdown | 26 extracted, 2 unreadable, 0 cmark failures, 0 cmark timeouts |
+| pages | rotate, delete, move, blank, import-self and import-pair 0 qpdf failures, 0 count mismatches, 0 write failures; extract 26 ok |
+
+The two unreadable documents are the two truncated Stepcraft manuals. `megapdf-cli extract` on each
+prints "the file looks incomplete: 1.0 MB present, the PDF's own index says 2.4 MB" (7.0 MB for the
+other) and exits 10, so #665's behaviour holds on the real files it came from. Two Roland MDX-50
+guides carry owner restrictions; the pages battery reports them as restricted and refuses the
+edits.
+
+**The structure gate fails on this corpus: five documents** (`stepcraft/manual-uccnc-quickstart`
+0.9848, `roland/MDX-50_InstallGuide_EN` 0.9888, `roland/MDX-50_users-manual_apac` 0.9896,
+`roland/MDX-50_UserManual_EN` 0.9934, `roland/3d-tech-brief` 0.9957); the other 21 that opened are
+at or above 0.9981. The cause is not diagnosed (#781). Whether this corpus gates a release or is
+reported like the public corpus's known figure is Dave's call; it is registered but not made a
+gate. A new corpus has no earlier run, so nothing here is a regression.
 
 ## Phone downloads corpus, first run (2026-10-18)
 

@@ -163,7 +163,8 @@ Corpus batteries in `tools/stress/`: structure, markdown, pages, redaction. Gate
 F1 ≥ 0.998, order τ ≥ 0.9, zero crashes, zero hangs, zero out-of-contract refusals. Runs are
 recorded in `TESTING.md` — add yours rather than replacing.
 
-Four corpora: `~/pdf-test` (private), `~/pdf-public`, `~/pdf-test-ca`, `~/pdf-test-un`. Staged
+Five corpora: `~/pdf-test` (private), `~/pdf-public`, `~/pdf-test-ca`, `~/pdf-test-un`, and
+`~/pdf-test-vendor` (28 third-party CNC manuals, internal test use only, never committed). Staged
 documents are read-only by convention. Exclusions are recorded in
 `EXCLUDED-FROM-THIS-CORPUS.tsv` with a stated reason, and every battery prints them by name.
 
