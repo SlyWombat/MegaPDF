@@ -589,6 +589,12 @@ public partial class DocumentViewModel(Func<Window> host, AppSettings settings, 
         Announced?.Invoke(message);
     }
 
+    /// <summary>The "shrinking would not make it smaller" half of <see cref="ShrinkForEmailAsync"/> (#6).
+    /// Informational: nothing failed, nothing was saved, and there is nothing to decide. Split out so
+    /// the self-test can raise it without the save picker.</summary>
+    internal void ReportShrinkNotSmaller() =>
+        ShowShrinkNotice(Strings.CouldNotShrinkTitle, Strings.ShrinkNotSmallerBody, InfoBarSeverity.Informational);
+
     /// <summary>The success half of <see cref="ShrinkForEmailAsync"/>, split out so the
     /// self-test can raise it without the save picker, which cannot be driven headless.</summary>
     internal void ReportSmallerCopySaved(long originalBytes, long newBytes, string fileName) =>
@@ -2924,6 +2930,23 @@ public partial class DocumentViewModel(Func<Window> host, AppSettings settings, 
         return replaced;
     }
 
+    /// <summary>
+    /// Serialises the shrunk <paramref name="copy"/> to a temporary file and compares its bytes with
+    /// <paramref name="baselineBytes"/>, the file on disk (what the person would otherwise attach).
+    /// Returns the staged copy when it is strictly smaller. When it is not, deletes it, raises the
+    /// "wouldn't make this document any smaller" notice and returns null: the caller must open no
+    /// save picker and save nothing (#6). Split out so the self-test can drive it picker-free.
+    /// </summary>
+    internal async Task<VerifiedSave.StagedCopy?> StageSmallerCopyAsync(IPdfDocument copy, long baselineBytes)
+    {
+        VerifiedSave.StagedCopy? staged;
+        using (Busy.Begin(Strings.BusyShrinking))
+            staged = await Task.Run(() => SmallerCopyGate.StageIfSmaller(Engine, copy, baselineBytes));
+        if (staged is null)
+            ReportShrinkNotSmaller();
+        return staged;
+    }
+
     [RelayCommand(CanExecute = nameof(CanShrink))]
     private async Task ShrinkForEmailAsync()
     {
@@ -2976,33 +2999,53 @@ public partial class DocumentViewModel(Func<Window> host, AppSettings settings, 
                 return;
             }
 
-            var picker = new FileSavePicker();
-            picker.FileTypeChoices.Add(Strings.PdfDocumentFilter, [".pdf"]);
-            picker.SuggestedFileName = Strings.SmallerFileName(Path.GetFileNameWithoutExtension(sourcePath));
-            WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(window));
-            var file = await picker.PickSaveFileAsync();
-            if (file is null)
-                return;
-
+            // Serialise first and compare bytes, before any picker: replacing images does not mean
+            // the file got smaller (#6). Not smaller means nothing is offered or saved.
+            VerifiedSave.StagedCopy? staged;
             try
             {
-                using (var busy = Busy.Begin(Strings.BusySaving))
-                    await Task.Run(() => VerifiedSave.ToPath(Engine, copy, file.Path, stage => busy.SetLabel(SaveStageLabel(stage))));
+                staged = await StageSmallerCopyAsync(copy, originalBytes);
             }
             catch (Exception ex)
             {
-                // Save and Save As both catch here; this one did not, and the
-                // difference was not cosmetic. App.UnhandledException sets
-                // Handled = false, so a throw after the save dialog terminated
-                // the process — no message, no file, and nothing in WER because
-                // the crash log goes to GetTempPath(). Observed 2026-07-24 in the
-                // packaged build and mistaken for a shrink-specific failure.
                 await ShowErrorAsync(Strings.CouldNotShrinkTitle, UserFacing.Describe(ex));
                 return;
             }
+            if (staged is null)
+                return;
 
-            var newBytes = new FileInfo(file.Path).Length;
-            ReportSmallerCopySaved(originalBytes, newBytes, Path.GetFileName(file.Path));
+            using (staged)
+            {
+                var picker = new FileSavePicker();
+                picker.FileTypeChoices.Add(Strings.PdfDocumentFilter, [".pdf"]);
+                picker.SuggestedFileName = Strings.SmallerFileName(Path.GetFileNameWithoutExtension(sourcePath));
+                WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(window));
+                var file = await picker.PickSaveFileAsync();
+                if (file is null)
+                    return;
+
+                try
+                {
+                    // The staged copy was written and read back above; this puts it at the chosen
+                    // path through AtomicFileWriter's swap, as the save did before.
+                    using (Busy.Begin(Strings.BusySaving))
+                        await Task.Run(() => staged.WriteToPath(file.Path));
+                }
+                catch (Exception ex)
+                {
+                    // Save and Save As both catch here; this one did not, and the
+                    // difference was not cosmetic. App.UnhandledException sets
+                    // Handled = false, so a throw after the save dialog terminated
+                    // the process — no message, no file, and nothing in WER because
+                    // the crash log goes to GetTempPath(). Observed 2026-07-24 in the
+                    // packaged build and mistaken for a shrink-specific failure.
+                    await ShowErrorAsync(Strings.CouldNotShrinkTitle, UserFacing.Describe(ex));
+                    return;
+                }
+
+                var newBytes = new FileInfo(file.Path).Length;
+                ReportSmallerCopySaved(originalBytes, newBytes, Path.GetFileName(file.Path));
+            }
         }
         finally
         {

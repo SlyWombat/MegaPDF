@@ -3237,7 +3237,7 @@ internal static class Program
             using var watcher = new BusyWatcher(vm.Busy);
 
             watcher.StopWhen(f => f.Label == Strings.BusyShrinking && f.CanCancel);
-            var (result, copy) = vm.PrepareShrunkCopy();
+            var (result, copy, _) = vm.PrepareShrunkCopy();
             using (copy)
             {
                 check("  shrink offers Stop while it runs",
@@ -3256,6 +3256,28 @@ internal static class Program
         finally
         {
             if (File.Exists(shrinkSource)) File.Delete(shrinkSource);
+        }
+
+        // --- shrink on a document with no pictures is "nothing to shrink", not "not smaller" (#6) ---
+        // The two answers are different sentences. This one must not raise the new one: nothing was
+        // re-encoded, so there was no copy to weigh against the file on disk.
+        var nothingSource = Path.Combine(saveDir, $"megapdf-selftest-nothing-shrink-{Guid.NewGuid():N}.pdf");
+        try
+        {
+            File.Copy(fixture, nothingSource);
+            using var vm = WatchableDocument(state);
+            vm.Open(nothingSource);
+            var (nothing, nothingCopy, nothingNotSmaller) = vm.PrepareShrunkCopy();
+            using (nothingCopy)
+            {
+                check("shrink on a document with no pictures re-encodes nothing", nothing.ImagesReplaced == 0);
+                check("  hands back no copy to save", nothingCopy is null);
+                check("  and is not reported as 'not smaller': nothing was weighed", !nothingNotSmaller);
+            }
+        }
+        finally
+        {
+            if (File.Exists(nothingSource)) File.Delete(nothingSource);
         }
 
         // --- Stop is offered only where it can be honoured, and is never a way round D1 ---

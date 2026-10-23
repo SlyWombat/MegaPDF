@@ -24,7 +24,8 @@ internal static partial class Screenshot
     /// The command is started without being awaited, and the check polls
     /// <see cref="DialogGate.IsShowing"/>: awaiting a command that opens a ContentDialog hangs the
     /// harness rather than failing it, which is the one failure worse than no check at all. The
-    /// bar is left open so the PNG shows it. Needs a document; the exit code is the test.
+    /// bar is left open so the PNG shows it. The not-smaller half (#6) goes through the real byte
+    /// gate rather than a raised notice alone. Needs a document; the exit code is the test.
     /// </summary>
     private static async Task<bool> CheckShrinkNoticeAsync(MainWindow window)
     {
@@ -91,6 +92,42 @@ internal static partial class Screenshot
         Check("  Success", bar?.Severity == InfoBarSeverity.Success);
         Check("  showing the title", bar?.Title == Strings.SmallerCopySavedTitle);
         Check("  showing the message", bar?.Message == expected);
+
+        // 4. A copy that is not smaller than the file on disk is never offered (#6). Driven through
+        //    the real byte gate (the same method the command calls before it opens the picker), on a
+        //    copy of the fixture against a baseline no document can be under: it must come back
+        //    null, leave no temporary file, and raise the Informational notice. Then against a
+        //    baseline it is under, where it must come back staged and say nothing.
+        tab.IsShrinkNoticeOpen = false;
+        var stagingBefore = Directory.GetFiles(Path.GetTempPath(), "megapdf-staged-*.pdf").Length;
+        using (var engine = new MegaPDF.Core.Engine.Pdfium.PdfiumEngine())
+        using (var copy = engine.Open(fixturePath))
+        {
+            var refused = await tab.StageSmallerCopyAsync(copy, baselineBytes: 1);
+            Check("a copy that is not smaller than the file on disk is not offered", refused is null);
+            refused?.Dispose();
+            Check("  no save picker was opened", !DialogGate.IsShowing);
+            Check("  the temporary copy is deleted", Directory.GetFiles(Path.GetTempPath(), "megapdf-staged-*.pdf").Length == stagingBefore);
+            Check("  the notice is open", tab.IsShrinkNoticeOpen);
+            Check("  titled Couldn't shrink", tab.ShrinkNoticeTitle == Strings.CouldNotShrinkTitle);
+            Check($"  saying shrinking would not make it smaller (\"{tab.ShrinkNotice}\")", tab.ShrinkNotice == Strings.ShrinkNotSmallerBody);
+            Check("  as Informational, because nothing failed", tab.ShrinkNoticeSeverity == InfoBarSeverity.Informational);
+            await Task.Delay(300);   // let the bindings settle before reading the control
+            var notSmallerBar = tab.View is { } nv ? FindByAutomationId<InfoBar>(nv, "ShrinkNoticeBar") : null;
+            Check("  and ShrinkNoticeBar shows it", notSmallerBar?.IsOpen == true
+                  && notSmallerBar.Severity == InfoBarSeverity.Informational
+                  && notSmallerBar.Title == Strings.CouldNotShrinkTitle
+                  && notSmallerBar.Message == Strings.ShrinkNotSmallerBody);
+
+            tab.IsShrinkNoticeOpen = false;
+            using var accepted = await tab.StageSmallerCopyAsync(copy, baselineBytes: long.MaxValue);
+            Check("a copy that is smaller than the file on disk is staged for the picker", accepted is not null && File.Exists(accepted.Path));
+            Check("  and says nothing", !tab.IsShrinkNoticeOpen);
+
+            // Leave the PNG showing the new notice.
+            tab.ReportShrinkNotSmaller();
+        }
+        await Task.Delay(300);
 
         Console.Error.WriteLine($"shrink-notice: {passed} passed, {failed} failed ({passed + failed} checks)");
         return failed == 0;

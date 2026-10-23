@@ -1779,10 +1779,11 @@ tests = [
   ".github/workflows/ci.yml::Run-Check \"progress\"",
   ".github/workflows/ci.yml::Run-Check \"shrink-notice\"",
   "tests/MegaPDF.Core.Tests/ImageShrinkerTests.cs::Shrink",
+  "tests/MegaPDF.Core.Tests/SmallerCopyGateTests.cs::SmallerCopyGate",
   "tests/MegaPDF.Core.Tests/ImageCompressionTests.cs::Compress",
 ]
 manual = "TESTING.md::**Shrink for email**"
-note = "progress and a deterministic in-loop Stop, with no partial file left behind. #632: the outcome is an InfoBar (ShrinkNoticeBar), never a dialog — shrink-notice drives the real command on a picture-less document and raises the success bar without the picker."
+note = "progress and a deterministic in-loop Stop, with no partial file left behind. #632: the outcome is an InfoBar (ShrinkNoticeBar), never a dialog — shrink-notice drives the real command on a picture-less document and raises the success bar without the picker. #6: a copy that is not strictly smaller than the file on disk is never offered or saved; shrink-notice drives the real byte gate (StageSmallerCopyAsync) and shows the not-smaller notice, and SmallerCopyGateTests decides on bytes in the core."
 [feature.macos]
 presence = "present"
 entry = "src/MegaPDF.Avalonia/Views/MainWindow.Toolbar.cs::CommandEntry(Strings.Shrink"
@@ -1790,6 +1791,7 @@ coverage = "ui"
 tests = [
   "src/MegaPDF.Avalonia/Program.cs::CheckProgressAndCancel",
   "tests/MegaPDF.Core.Tests/ImageShrinkerTests.cs::Shrink",
+  "tests/MegaPDF.Core.Tests/SmallerCopyGateTests.cs::SmallerCopyGate",
   "tests/MegaPDF.Core.Tests/ImageCompressionTests.cs::Compress",
 ]
 manual = "TESTING.md::**Shrink for email**"
@@ -1801,6 +1803,7 @@ coverage = "ui"
 tests = [
   "src/MegaPDF.Avalonia/Program.cs::CheckProgressAndCancel",
   "tests/MegaPDF.Core.Tests/ImageShrinkerTests.cs::Shrink",
+  "tests/MegaPDF.Core.Tests/SmallerCopyGateTests.cs::SmallerCopyGate",
   "tests/MegaPDF.Core.Tests/ImageCompressionTests.cs::Compress",
 ]
 manual = "TESTING.md::**Shrink for email**"

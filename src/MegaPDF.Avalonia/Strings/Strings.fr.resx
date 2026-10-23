@@ -588,6 +588,10 @@
   <data name="NothingToShrink" xml:space="preserve">
     <value>Les images de ce document sont déjà petites — rien à réduire.</value>
   </data>
+  <data name="ShrinkNotSmaller" xml:space="preserve">
+    <value>La réduction ne rendrait pas ce document plus petit.</value>
+    <comment>FR-REVIEW #6 — new, not yet read by the reviewer.</comment>
+  </data>
   <data name="SmallerCopySavedOne" xml:space="preserve">
     <value>Copie réduite enregistrée&#160;: {0} image réencodée.</value>
   </data>
