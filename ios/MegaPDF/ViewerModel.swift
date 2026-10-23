@@ -1896,6 +1896,20 @@ final class ViewerModel: ObservableObject {
         setTextSelection(selection, snapshot: snapshot)
     }
 
+    /// Moves a handle one word on or back, for VoiceOver's adjust gesture (#710): a user who
+    /// cannot drag can still extend or shrink the selection. Word boundaries are the ones a long
+    /// press uses. Does nothing at the page's first or last word, or where the step would empty
+    /// the selection. Synchronous, like a drag: the snapshot is already loaded.
+    func moveSelectionHandleByWord(_ handle: PageTextSelection.Handle, forward: Bool) {
+        guard var selection = textSelection, let snapshot = selectables[selection.pageIndex] else { return }
+        let from = handle == .start ? selection.start : selection.end
+        guard let caret = snapshot.caret(byWordFrom: from, forward: forward),
+              selection.step(handle, to: caret, length: snapshot.length) else { return }
+        setTextSelection(selection, snapshot: snapshot)
+        // Show the menu again, as after a drag: Copy is how the user finishes.
+        selectionMenuRequest += 1
+    }
+
     /// The handle was let go: show the menu again.
     func endSelectionHandleDrag() {
         if textSelection != nil { selectionMenuRequest += 1 }
@@ -1979,10 +1993,34 @@ final class ViewerModel: ObservableObject {
         bodyDraft = ""
     }
 
+    /// How a notice is spoken (#631). Queued rather than interrupting: "Saved" usually lands as the
+    /// export sheet goes away, and an announcement posted during that screen change is otherwise
+    /// cut off by it. A seam so the tests can see what VoiceOver would be told.
+    var speakNotice: @MainActor (String) -> Void = { text in
+        UIAccessibility.post(
+            notification: .announcement,
+            argument: NSAttributedString(
+                string: text,
+                attributes: [.accessibilitySpeechQueueAnnouncement: true]))
+    }
+
+    /// A finished file command (#631): a self-clearing notice when it is only a confirmation, and
+    /// the alert when a redaction summary rides along. What a redaction permanently removed is
+    /// acknowledged once, with an OK (#276, #279). A four-second capsule is the wrong place for it.
+    private func confirmFinished(_ title: String, detail: String?) {
+        if let detail {
+            statusMessage = title
+            statusDetail = detail
+        } else {
+            showNotice(title)
+        }
+    }
+
     /// Shows a notice over the page for a few seconds (`NoticeLifetime`).
     func showNotice(_ text: String) {
         noticeTask?.cancel()
         notice = text
+        speakNotice(text)
         guard NoticeLifetime.clearsItself() else { return }
         noticeTask = Task {
             try? await Task.sleep(nanoseconds: NoticeLifetime.visibleNanoseconds)
@@ -2433,6 +2471,7 @@ final class ViewerModel: ObservableObject {
                     doc, index: index, pixelWidth: width, pixelHeight: height, tint: .normal) {
                     guard !Task.isCancelled, document === doc else { return }
                     pageThumbnails[index] = image
+                    PagesGridTrace.note("thumb \(index)")
                 }
             }
         }
@@ -3204,7 +3243,7 @@ final class ViewerModel: ObservableObject {
             return
         }
         signatures.append(entry)
-        statusMessage = String(localized: "Signature added")
+        showNotice(String(localized: "Signature added"))
     }
 
     private func downscaled(_ image: CGImage, maxDim: Int = 1500) -> CGImage {
@@ -3284,8 +3323,7 @@ final class ViewerModel: ObservableObject {
                     isSaving = false
                     openPicked(url: newURL)
                 default:
-                    statusMessage = String(localized: "Saved")
-                    statusDetail = summaryForSave
+                    confirmFinished(String(localized: "Saved"), detail: summaryForSave)
                 }
                 summaryForSave = nil
             } catch {
@@ -3548,8 +3586,7 @@ final class ViewerModel: ObservableObject {
         adopt(exportedCopy: destination)
         if exportEditCount == editCount { isDirty = false }
         exportEditCount = nil
-        statusMessage = String(localized: "Saved")
-        statusDetail = summary
+        confirmFinished(String(localized: "Saved"), detail: summary)
     }
 
     /// Points the open document at the copy Save a copy just wrote (#572): everything an open
@@ -3619,8 +3656,15 @@ final class ViewerModel: ObservableObject {
     /// quiet about a PDF that was never actually saved.
     func finishMarkdownExport(saved: Bool) {
         discardExportFile()
-        guard saved else { return }
-        statusMessage = String(localized: "Exported")
+        let summary = summaryForSave
+        summaryForSave = nil
+        guard saved else {
+            // Cancelled: nothing was written, but the redaction was applied to the open document,
+            // so what it removed is still said, as finishExport does (#631).
+            if let summary { redactionSummary = summary }
+            return
+        }
+        confirmFinished(String(localized: "Exported"), detail: summary)
     }
 
     private func discardExportFile() {

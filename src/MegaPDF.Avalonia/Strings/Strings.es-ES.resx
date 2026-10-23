@@ -107,7 +107,7 @@
     <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
   </data>
   <data name="AddText" xml:space="preserve">
-    <value>Agregar texto</value>
+    <value>Añadir texto</value>
     <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
   </data>
   <data name="Cover" xml:space="preserve">
@@ -187,7 +187,7 @@
     <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Placeholder shown in the preview sheet before anything is typed (#101)</comment>
   </data>
   <data name="Add" xml:space="preserve">
-    <value>Agregar</value>
+    <value>Añadir</value>
     <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Confirm button of the type-a-name dialog (#101)</comment>
   </data>
   <data name="SignatureOptions" xml:space="preserve">
@@ -459,7 +459,7 @@
     <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
   </data>
   <data name="TextAdded" xml:space="preserve">
-    <value>Texto agregado.</value>
+    <value>Texto añadido.</value>
     <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
   </data>
   <data name="TextRemoved" xml:space="preserve">
@@ -543,7 +543,7 @@
     <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
   </data>
   <data name="RegionAddedText" xml:space="preserve">
-    <value>Texto agregado</value>
+    <value>Texto añadido</value>
     <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
   </data>
   <data name="RegionSignatureOrMark" xml:space="preserve">
@@ -795,7 +795,7 @@
     <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
   </data>
   <data name="AddASignature" xml:space="preserve">
-    <value>Agregar una firma</value>
+    <value>Añadir una firma</value>
     <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Window title</comment>
   </data>
   <data name="SignInTheBox" xml:space="preserve">
@@ -861,7 +861,7 @@
     <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
   </data>
   <data name="DynamicXfaBanner" xml:space="preserve">
-    <value>Este formulario está hecho para llenarse con Adobe Reader. Aquí aún puedes verlo, imprimirlo, guardarlo y compartirlo; lo único que no se puede es llenarlo.</value>
+    <value>Este formulario está hecho para rellenarse con Adobe Reader. Aquí aún puedes verlo, imprimirlo, guardarlo y compartirlo; lo único que no se puede es rellenarlo.</value>
     <comment>ES-REVIEW #724 — new, not yet read by the reviewer. #456, #457: shown for the life of an open whose document.IsDynamicXfa is true</comment>
   </data>
   <data name="GetAdobeReader" xml:space="preserve">
@@ -869,7 +869,7 @@
     <comment>ES-REVIEW #724 — new, not yet read by the reviewer. #457: opens the same reader-download page the document's own placeholder text names</comment>
   </data>
   <data name="DynamicXfaCannotFill" xml:space="preserve">
-    <value>Este formulario necesita Adobe Reader para llenarse.</value>
+    <value>Este formulario necesita Adobe Reader para rellenarse.</value>
     <comment>ES-REVIEW #724 — new, not yet read by the reviewer. #457: said instead of arming signature/checkmark placement on a dynamic-XFA document</comment>
   </data>
   <data name="SignedSaveWarningTitle" xml:space="preserve">
@@ -905,7 +905,7 @@
     <comment>ES-REVIEW #724 — new, not yet read by the reviewer. #576: Dave's tick, in the dialog body rather than a fourth button — a button would be a different destination and compete with the two already there, while a tick modifies the destination already chosen. Ticked by default. His own sketch said "the invalid signature"; the tense is wrong before the save that invalidates it, which is the only change from his words</comment>
   </data>
   <data name="SignedSaveRemoveOffer" xml:space="preserve">
-    <value>Si se deja, viaja con el archivo guardado y sigue afirmando que describe un archivo que ya no describe, de modo que MegaPDF y otros lectores informan de ese archivo como firmado. El documento que abriste no cambia en ningún caso: esto solo afecta al archivo que se escribe. Y una firma digital indica que un archivo no ha cambiado desde que se firmó: nunca ha impedido que alguien abra este documento, así que un archivo guardado sin ella lo puede leer exactamente la misma gente.</value>
+    <value>Si se deja, viaja con el archivo guardado y sigue afirmando que describe un archivo que ya no describe, de modo que MegaPDF y otros lectores indican que ese archivo está firmado. El documento que abriste no cambia en ningún caso: esto solo afecta al archivo que se escribe. Y una firma digital indica que un archivo no ha cambiado desde que se firmó: nunca ha impedido que alguien abra este documento, así que un archivo guardado sin ella pueden leerlo exactamente las mismas personas.</value>
     <comment>ES-REVIEW #724 — new, not yet read by the reviewer. #576, #602: what the tick means. Three things it must keep saying — the original file is untouched (removing a signature from a document you did not sign is a meaningful act), the choice reaches only the file being written, and a digital signature is not encryption and never was: nothing here may let someone think the document was protected, or that removing the signature exposes it</comment>
   </data>
   <data name="SaveACopyButton" xml:space="preserve">
@@ -1417,7 +1417,7 @@
     <comment>ES-REVIEW #724 — new, not yet read by the reviewer. About window, Linux, installed as a Flatpak: where updates come from. "Flatpak" is a product name (#158)</comment>
   </data>
   <data name="UpdatesFromDebFile" xml:space="preserve">
-    <value>Este .deb no recibe actualizaciones por sí solo. Agrega el repositorio de MegaPDF para recibirlas junto con las de tu sistema.</value>
+    <value>Este .deb no recibe actualizaciones por sí solo. Añade el repositorio de MegaPDF para recibirlas junto con las de tu sistema.</value>
     <comment>ES-REVIEW #724 — new, not yet read by the reviewer. About window, Linux, installed from a downloaded .deb with no repository: how to get updates. Followed by the download page link (#158)</comment>
   </data>
   <data name="UpdatesFromTarball" xml:space="preserve">
@@ -1586,11 +1586,11 @@
     <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Announced after a reorder (#174)</comment>
   </data>
   <data name="BlankPageInserted" xml:space="preserve">
-    <value>Página en blanco agregada como página {0}.</value>
+    <value>Página en blanco añadida como página {0}.</value>
     <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Announced after an insert (#174)</comment>
   </data>
   <data name="PagesInsertedFromFile" xml:space="preserve">
-    <value>Se agregaron las páginas de {0}.</value>
+    <value>Se añadieron las páginas de {0}.</value>
     <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Announced after a combine (#174)</comment>
   </data>
   <data name="PageSavedAs" xml:space="preserve">
@@ -1704,6 +1704,14 @@
   <data name="CopyWithheld" xml:space="preserve">
     <value>El autor de este documento pidió que no se copie nada de él.</value>
     <comment>ES-REVIEW #724 — new, not yet read by the reviewer. #710: why Copy is unavailable on a document without the copy permission; #558's extraction-class wording. Selecting still works</comment>
+  </data>
+  <data name="TextSelectionAnnounced" xml:space="preserve">
+    <value>Seleccionado: {0}</value>
+    <comment>ES-REVIEW #710 — new, not yet read by the reviewer. #710: what a screen reader says when a text selection settles (drag released, word or Select All chosen, Shift+arrow pause); {0} is the first 80 characters of the selected text, with an ellipsis when it is longer. Spoken only, never shown</comment>
+  </data>
+  <data name="TextCopiedAnnounced" xml:space="preserve">
+    <value>Copiado</value>
+    <comment>ES-REVIEW #710 — new, not yet read by the reviewer. #710: what a screen reader says after a successful copy of the selected text. Spoken only, never shown</comment>
   </data>
   <data name="UndoLossTitle" xml:space="preserve">
     <value>Tus cambios no se podrán deshacer después</value>

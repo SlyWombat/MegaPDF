@@ -459,6 +459,14 @@
     <string name="select_copy_forbidden">Ce document n\'autorise pas la copie de son texte.</string>
     <!-- FR-REVIEW #710 -->
     <string name="select_copied">Copié</string>
+    <!-- FR-REVIEW #710 - TalkBack name of the selection's start handle (iOS's wording). -->
+    <string name="selection_start_handle">Début de la sélection</string>
+    <!-- FR-REVIEW #710 - TalkBack name of the selection's end handle (iOS's wording). -->
+    <string name="selection_end_handle">Fin de la sélection</string>
+    <!-- FR-REVIEW #710 - TalkBack custom action: move this handle one word later. -->
+    <string name="selection_next_word">Mot suivant</string>
+    <!-- FR-REVIEW #710 - TalkBack custom action: move this handle one word earlier. -->
+    <string name="selection_previous_word">Mot précédent</string>
     <!-- FR-REVIEW #712 - new with the form field flags, not yet read by the reviewer. -->
     <string name="form_field_read_only">Ce champ est en lecture seule.</string>
 </resources>

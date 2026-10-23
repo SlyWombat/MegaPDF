@@ -389,6 +389,7 @@ permanently instead of being fetched or copied per run:
 | private (Canadian forms) | `~/pdf-test-ca` | 135 documents | same |
 | private (UN) | `~/pdf-test-un` | 90 documents | same |
 | public | `~/pdf-public` | **1,494 documents, 4.3 GB** (#609, 2026-10-01) | `tools/stress/public-corpus/fetch.sh ~/pdf-public` |
+| private (vendor manuals) | `~/pdf-test-vendor` | 28 documents, 77 MB (2026-10-22) | never re-fetched; third-party copyright, internal test use only, never committed. `manifest.tsv` holds a sha256 per file |
 
 Point any battery at `~/pdf-public` exactly as at `~/megapdf-public-corpus` above — it is
 the same corpus, just not re-downloaded:
@@ -2270,6 +2271,47 @@ wait is now 180 s: it guards against a hang, not the read time.
 search finds those); a highlight is a whole word, not a slice of it; a drawing-only page is read
 (only a uniform blank sheet is skipped); reading is on demand inside Find, not a background pass.
 
+## Vendor manuals corpus, first run (2026-10-23)
+
+Dave's 27 CNC vendor manuals (Carbide 3D, PocketNC, Roland, Shaper, Stepcraft, Tormach, from the
+CaseMaker research behind #664 and #665) plus `R02P032 Installation.pdf` are staged read-only at
+`~/pdf-test-vendor` on kdocker3: 28 documents (921 pages in the 26 that open). None was in any of the other four
+corpora. They are third-party copyright, so the folder is never committed or redistributed, and
+batteries are pointed at it exactly as at the others. Two Stepcraft files are truncated at 1,048,576
+bytes on purpose (#665) and must stay that way.
+
+Run on kdocker3 at `fcff3df` in a throwaway `megapdf:base` container built from a clean clone
+(`megapdf-cli 2.3.0`, PDFium at 33 patches), `structure-battery.sh --reference --cli`,
+`markdown-battery.sh` and `pages-battery.sh`, corpus mounted read-only, then removed. Disk count 28,
+visited 28 in every battery. **Zero crashes, zero hangs, zero bad exit codes in all three.**
+
+| battery | result |
+|---|---|
+| structure | 26 opened, 2 unreadable. **Token F1 0.997394 against the 0.998 gate (fail), the same through `megapdf-cli`.** Order tau median 0.986 on 197 tagged pages; poppler agreement tau median 0.995 on 909 pages |
+| markdown | 26 extracted, 2 unreadable, 0 cmark failures, 0 cmark timeouts |
+| pages | rotate, delete, move, blank, import-self and import-pair 0 qpdf failures, 0 count mismatches, 0 write failures; extract 26 ok |
+
+The two unreadable documents are the two truncated Stepcraft manuals. `megapdf-cli extract` on each
+prints "the file looks incomplete: 1.0 MB present, the PDF's own index says 2.4 MB" (7.0 MB for the
+other) and exits 10, so #665's behaviour holds on the real files it came from. Two Roland MDX-50
+guides carry owner restrictions; the pages battery reports them as restricted and refuses the
+edits.
+
+**The structure gate fails on this corpus: five documents** (`stepcraft/manual-uccnc-quickstart`
+0.9848, `roland/MDX-50_InstallGuide_EN` 0.9888, `roland/MDX-50_users-manual_apac` 0.9896,
+`roland/MDX-50_UserManual_EN` 0.9934, `roland/3d-tech-brief` 0.9957); the other 21 that opened are
+at or above 0.9981. The cause is not diagnosed (#781). Whether this corpus gates a release or is
+reported like the public corpus's known figure is Dave's call; it is registered but not made a
+gate. A new corpus has no earlier run, so nothing here is a regression.
+
+**After #781's cross-block hyphen join (2026-10-23, see "Cross-block wrap hyphens (#781)" below):
+F1 0.998199, internal API and `megapdf-cli` the same to the last digit; unmatched words 912 to 630.**
+The cause #781 found was stranded wrap hyphens (845 of the 912 unmatched words); the join takes
+282 of the unmatched words back, from the 336 the diagnosis put in class (a) (the continuation is
+the first word of the very next block). The other 509 (class (b): columns or cells interleaved into
+one block) are untouched, so the corpus passes by about 0.0002, roughly 35 words. Whether it gates
+a release is still Dave's call.
+
 ## Phone downloads corpus, first run (2026-10-18)
 
 Dave offered the PDFs on the Pixel 4 XL's Downloads folder for private testing. 58 files; 37 were
@@ -2717,6 +2759,188 @@ Not done here, by design: the after-run (needs Phase 2), per-image timing on the
 on Windows or iOS encoders. Rerun with `tools/shrink-survey/run.sh <megapdf_shrink_survey> <corpus>
 <out> --jobs 6` then `summarise.py <out>/survey.jsonl --md`; build `cmake -S core -B build
 -DMEGAPDF_SHRINK_SURVEY=ON`.
+
+## `--window-tabs-check` exits non-zero when an assertion fails (#711), 2026-10-22
+
+The 2026-10-21 note on #711 said one `--window-tabs-check` run printed `[FAIL]` lines and exited 0.
+Measured on the Mac mini: it can. Avalonia's default `ShutdownMode` is `OnLastWindowClose`, and the
+check closes windows itself (Close Window, the closing step of the run). When an earlier assertion
+failed, the check's own close steps took the wrong path and closed the last window, so the process
+ended with exit 0 before `Finish` ran: `[FAIL]` lines, no `::error::window-tabs-check: N check(s) failed`
+line. The fix sets `ShutdownMode.OnExplicitShutdown` in the `--window-tabs-check` block of
+`App.axaml.cs`, so only `desktop.Shutdown(code)` ends the process.
+
+All runs: Mac mini, scratch clone of `origin/main` (a3111b4) with the one-file change below as
+stated, built with `tools/build-macos-app.sh osx-arm64`, output redirected to a file (no pipe).
+
+| change | files given | exit | what the run printed |
+|---|---|---|---|
+| none | `fixture.pdf forms.pdf` (two) | 1 | `[FAIL] three PDFs were given`, `::error::...1 check(s) failed` |
+| none, plus a deliberate `Check(..., false)` before the final `foreach` (scratch only) | `fixture.pdf forms.pdf demo.pdf` | **0** | two `[FAIL]` lines (B has no editable text at the click point in `forms.pdf`), the run stopped after "undo after the round trip", **no** summary line, the deliberate failure never ran |
+| none, the same deliberate failure | `demo.pdf fixture.pdf forms.pdf` | 1 | all 30 usual lines, the deliberate `[FAIL]`, `1 check(s) failed` |
+| `OnExplicitShutdown` | `fixture.pdf forms.pdf` | 1 | same as the first row |
+| `OnExplicitShutdown`, deliberate failure | `fixture.pdf forms.pdf demo.pdf` | 1 | six `[FAIL]` lines including the deliberate one, `6 check(s) failed` (the run now reaches `Finish`) |
+| `OnExplicitShutdown`, deliberate failure | `demo.pdf fixture.pdf forms.pdf` | 1 | the deliberate `[FAIL]`, `1 check(s) failed` |
+| `OnExplicitShutdown`, no deliberate failure | `demo.pdf fixture.pdf forms.pdf` | 0 | 30 `[PASS]`, `window-tabs-check: PASS`, no hang, `pgrep MegaPDF` empty |
+
+The argument order matters: the check clicks body text at (78, 186) on its second file and edits
+there, so `fixture.pdf forms.pdf demo.pdf` (the order #711's remaining-work list gives) fails two
+checks on its own; `demo.pdf fixture.pdf forms.pdf` is the order that passes on a clean build.
+
+## Wave 2: real-input, VoiceOver and hosted-CI runs (#710, #711, #614), 2026-10-22
+
+One day's verification of select-and-copy (#710), tab tear-out (#711) and the standing iOS runner
+(#614) on the real machines: GPD-DAVE, the Mac mini, WSLg, the kdocker2/3 builders and the
+hosted macOS runners. Each row is one run; the issues hold the per-step detail. What the day
+found and fixed: the Windows word double-click (#774) and text-box double-click (#775) never
+received a DoubleTapped (the two taps hit different elements), fixed in #777; VoiceOver never
+spoke the app's live-region announcements on the Mac (#778), fixed in #779 by posting AppKit's
+own announcement request; `--window-tabs-check` could exit 0 after `[FAIL]` (#767). Still open
+and unmilestoned: #770, #771, #773, #776.
+
+### #710 desktop items 1 and 2: the real routes and the real double-click (before the fixes)
+
+| date | machine | build | what | result |
+|---|---|---|---|---|
+| 2026-10-22 | GPD-DAVE (2560x1600, 150 %), elevated launch, person's launch (`MEGAPDF_USER_DATA` scratch) | `a3111b4`, Release win-x64 unpackaged | #710 desktop item 1: real input (`mouse_event` with real move events + `SendKeys`) on `selection.pdf` and `owner-only.pdf`: drag + Ctrl+C, right-click then mouse-click Copy (`TextCopyItem` by UI Automation), Ctrl+A + Ctrl+C, no-copy document | all PASS: clipboard equals the expected text with `\r\n` (6-line drag; 16-line whole document); `owner-only.pdf`: clipboard unchanged, notice shown, Copy disabled with reason. Note: a drag whose moves are `SetCursorPos` warps (the shape of `Drag` in tools/windows-qa/common.ps1) starts no selection; use `MOUSEEVENTF_MOVE\|ABSOLUTE` |
+| 2026-10-22 | GPD-DAVE, same | `a3111b4` | #710 desktop item 2: real double-click on "charlie" and "bravo" (gaps 20-350 ms), single click on a body line, added text box double-click | **FAIL**: the word double-click opens the line editor and selects nothing at every gap (#774); single click opens the editor (PASS); first double-click on an unselected added text box only selects it, the second opens the editor (#775) |
+| 2026-10-22 | Mac mini (macOS 26, 2560x1440 @1x), person's launch (`MEGAPDF_USER_DATA` scratch), fresh clone `~/mp-710` | `a3111b4`, `tools/build-macos-app.sh osx-arm64` | #710 desktop item 1: `cliclick` drag, Cmd+C, Edit > Copy and Cmd+A, Cmd+C through System Events, right-click > Copy, no-copy document | all PASS: `pbpaste` equals the expected text with `\n` (104-byte drag, 257-byte whole document); `owner-only.pdf`: Edit > Copy disabled, sentinel unchanged by Cmd+C and the menu, popup shows Copy greyed + reason. Note: `cliclick kp:return` and `kp:esc` did not reach the app; System Events `key code 36` / `53` did |
+| 2026-10-22 | Mac mini, same | `a3111b4` | #710 desktop item 2: `cliclick dc:` on "charlie", single click press/release, added text box double-click (also CGEvents at 120 and 300 ms) | word double-click PASS (`charlie`, no editor); single click opens on release (PASS); added text box: first double-click only selects, second opens the editor (#775) |
+| 2026-10-22 | GPD-DAVE WSLg, pointer driven from the Windows side, text read from the Windows clipboard | `a3111b4`, `MegaPDF-linux-x64` from ci.yml run 39792746643 | #710 desktop items 1 and 2: drag + Ctrl+C, right-click > Copy, Ctrl+A + Ctrl+C, no-copy document, double-click, single click, added text box | PASS: the three copies (the clipboard mirror carried the text with `\n`), `owner-only.pdf` Ctrl+C unchanged with the notice in the status bar, word double-click (`charlie`), single click opens on release. NOT SHOWN: the right-click menu on `owner-only.pdf` (#776, app or WSLg not told apart). FAIL: added text box first double-click only selects (#775) |
+
+### #710 desktop items 3, 4 and 5: announcement, auto-scroll while held, Mac highlight colour
+
+| date | machine | build | what | result |
+|---|---|---|---|---|
+| 2026-10-22 | GPD-DAVE (2560x1600, 150 %), person's launch (`MEGAPDF_USER_DATA` scratch), Windows UI lock held | `e709ac7`, Release win-x64 unpackaged | #710 desktop item 3 (Windows, listener half): real input (`mouse_event` with real move events + `SendKeys`) on `selection.pdf` while a UI Automation notification listener (`IUIAutomation5.AddNotificationEventHandler`, desktop root, subtree; a throwaway C# tool) logged `UIA_NotificationEventId`. Narrator NOT run (Dave's) | the app raises, kind 2 / processing 1 / activity `page-focus`: `Selected: Left two bravo and more Left three charlie Left four delta Left five echo Right…` after the drag, `Copied` after Ctrl+C, `Selected: Selection Columns Left one alpha Left two bravo and more Left three charlie Left…` after Ctrl+A. Word double-click: no notification (#774 opened the line editor). Proves what the app raises, not what Narrator speaks |
+| 2026-10-22 | Mac mini (macOS 26.7.1, 2560x1440 @1x), person's launch, VoiceOver on with the caption panel (`SCREnableCaptionPanel`), mini lock held | `e709ac7`, `tools/build-macos-app.sh osx-arm64` | #710 desktop item 3 (Mac): real drag, double-click, Cmd+A, Cmd+C; caption panel frames captured around each; the app's accessibility tree read after each | **FAIL (#778)**: the tree holds `Selected: ...` / `Selected: charlie` / `Copied`, VoiceOver speaks none of them (panel showed only `Select All`, `Copy`, `Left three charlie, text`); the older reading-mode live region is silent the same way; `libAvaloniaNative.dylib` has no `NSAccessibilityPostNotification` symbol. VoiceOver prefs removed afterwards; osascript to VoiceOver raised a TCC prompt, answered Don't Allow |
+| 2026-10-22 | GPD-DAVE, same | `e709ac7` | #710 desktop item 4 (Windows): window 1278x889 (not maximised), press on page 1, drag to 40 px below the window, still for 2.6 s with `CopyFromScreen` shots only, release, Ctrl+C | PASS: pages scrolled during the hold to "Page 2 of 2"; clipboard ran through the last page 2 line (14 lines, `\r\n`); the listener's `Selected:` notification came 4 ms after the release |
+| 2026-10-22 | Mac mini, same | `e709ac7` | #710 desktop item 4 (Mac): window 1200x540 points (not maximised), `cliclick dd:`, 12 `dm:`, `w:2500`, `du:`; shots mid-hold; Cmd+C | PASS: scrolled to "Page 2 of 2" during the hold, page 2 text highlighted mid-hold, clipboard 14 lines with `\n` |
+| 2026-10-22 | GPD-DAVE WSLg, pointer from the Windows side, text read from the Windows clipboard | `e709ac7`, `MegaPDF-linux-x64` from ci.yml run 39832937133 | #710 desktop item 4 (Linux): the window as it opened (fills the screen), press on page 1, drag to 40 px below the page area (inside the status bar), still 2.6 s, release, Ctrl+C | PASS: scrolled to "Page 2 of 2", page 2 highlighted mid-hold, clipboard 14 lines with `\n`. A resize of the WSLg window from outside left its content clipped (not a product measurement) |
+| 2026-10-22 | Mac mini, same | `e709ac7` | #710 desktop item 5: `defaults write -g AppleHighlightColor "1.000000 0.874510 0.701961 Orange"`, launch, real drag, `screencapture`, sample the pixels between glyphs; delete the default, relaunch, repeat | PASS: orange (254, 241, 229) with the override, accent blue (226, 240, 255) without; `defaults read` absent before, after the delete, and at the end |
+
+### #710 item 2 after the fixes (#774, #775; PR #777)
+
+| date | machine | build | what | result |
+|---|---|---|---|---|
+| 2026-10-22 | GPD-DAVE (150 %), Windows UI lock | `857ae61` (PR #777) | Windows `--screenshot-state` select-copy and the states that touch DocumentView text/selection | select-copy 64/64 (was 40; +24 for the second-click decision and the text box); whiteout-text 28/28, fill 17/17, form-flow 29/29, redact 19/19, reading exit 0. Fail-first: with the fix switched off select-copy is 56 passed, 8 failed (the new word and text-box checks). Hosted Windows UI self-test green on the same head |
+| 2026-10-22 | kdocker3, `megapdf:dotnet` container under Xvfb | `857ae61` | Linux `--self-test` (whole), Avalonia headless `CheckTextSelection` with real click-count-2 double-clicks, Core tests | 936 PASS, exit 0; Core tests 574/574. Fail-first: without `TryEditTextBoxAt` the box's "second click opens the editor" and "with its own text" checks fail, everything else passes |
+| 2026-10-22 | Mac mini (macOS 26), fresh clone | `857ae61` | macOS `--self-test` | 925 PASS, exit 0 |
+| 2026-10-22 | GPD-DAVE (win-x64), mini (`cliclick`), WSLg (CI `MegaPDF-linux-x64`), person's launches | `857ae61` | #710 desktop item 2 re-verified with real input: word double-click copy, text-box double-click, single click | PASS on all three (clipboard `charlie`, no editor; text box editor opens on the first double-click; single click opens the line editor). Before (`a3111b4`/`e709ac7`): Windows FAIL (#774), all three FAIL on the box (#775) |
+
+### #778: Mac VoiceOver speaks the announcements (PR #779)
+
+| date | machine | build | what | result |
+|---|---|---|---|---|
+| 2026-10-22 | Mac mini (macOS 26.7.1, arm64), VoiceOver caption panel | `origin/main` 186d958 | drag, double-click, ⌘A, ⌘C, ⇧⌘R with real `cliclick` input | fail-first: no `Selected:`, `Copied` or `Reading mode on` caption; only VoiceOver's own focus and menu speech |
+| 2026-10-22 | Mac mini, VoiceOver | PR #779 (6a712ce's `Announce` path) | the same five actions | `Selected: Left two bravo…`, `Selected: charlie`, `Selected: Selection Columns…`, `Copied`, `Reading mode on` / `off`; ⌘A+⌘C 60 ms apart ends on `Copied`; 4 of 5 double-clicks announced |
+| 2026-10-22 | Mac mini | 6a712ce | `--self-test` | 934 PASS, 0 FAIL, exit 0 |
+| 2026-10-22 | kdocker3 | 6a712ce | Core tests; Linux `--self-test` under Xvfb | 574/0; 944 PASS, 0 FAIL |
+| 2026-10-22 | kdocker3 | 6a712ce with the `NativeAnnouncer?.Invoke` line commented out | Linux `--self-test` | 6 FAIL (the #778 hand-over checks), exit 1 |
+
+### #710 iOS: adjustable handles, Command-C on the iPad, no-copy path (PR #772)
+
+| date | machine | build | what | result |
+|---|---|---|---|---|
+| 2026-10-22 | Mac mini, iPhone 17 Pro + iPad Pro 13" simulators, iOS 26.5, build 32ac588 | #710 iOS: SelectCopyUITests (VoiceOver-adjustable handle step, Command-C on iPad, no-copy path); FormTextUITests, BodyTextEditUITests regression; unit suite 366 | iPhone 4 pass 1 skip, iPad 5/5; regression 7/7 + 3/3; unit 366/0; fail-first mutations each red |
+
+### #711 items 2 and 4: Windows at other scales, Linux under WSLg
+
+| date | machine | build | what | result |
+|---|---|---|---|---|
+| 2026-10-22 | GPD-DAVE (2560x1600; scale 150 %, 100 %, restored to 200 %), elevated launches | `a3111b4` (origin/main), Release win-x64 unpackaged | #711 item 2: `--screenshot-state tab-move fixture.pdf` | exit 0, 70 PASS / 0 FAIL at 150 % and 100 % (70/0 at 200 %, exit not captured); `closes by itself` passed on all three |
+| 2026-10-22 | GPD-DAVE, same | `a3111b4` | #711 item 2: real SendInput drags (tear-out 250 px with an unsaved edit, drop onto another strip, Escape mid-drag, Ctrl+Z in the new window, click on a line in the moved document) at 150 % and 100 % (and 200 % baseline) | all as designed: edit, undo and tab moved with it; Escape cancelled with no stray window; editor opened on the clicked line (not one off); pages sharp (by eye). Item ticked |
+| 2026-10-22 | GPD-DAVE WSLg (Weston/XWayland, 200 %) | `a3111b4`, `MegaPDF-linux-x64` from ci.yml run 39792746643 | #711 item 4: real Windows-pointer drag 200 px down with an unsaved edit; Menu key / right click then Move Tab to New Window; Ctrl+Z | new window made with the edit; Undone. after Ctrl+Z; but window placed at X (10,10) not at the release point, Shift+F10 did not open the menu (Menu key did), WSLg repaint/scale broke after the new window (first window unresponsive); item left open, #773 |
+
+### #711 items 3 and 6: a real tab drag and VoiceOver on the Mac
+
+| date | machine | build | what | result |
+|---|---|---|---|---|
+| 2026-10-22 | Mac mini, scratch clone `~/mp-711` (removed) | `origin/main` a3111b4 + #767 one-liner | item 8, `--window-tabs-check`, no change, design order, deliberate failure | exit **0** with `[FAIL]` lines and no summary; fixed by #767 (exit 1) |
+| 2026-10-22 | Mac mini | same | item 3, real `cliclick` drag: Merge All Windows, unsaved edit, tab dragged 250 pt out, ⌘Z in the new window | new window holds the dirty edit, undo works, both windows draw (393 to 5,190 distinct colours per region), AppKit's preview is window-shaped |
+| 2026-10-22 | Mac mini | same, "Prefer tabs: Always" set and deleted | item 3 step 5: tab dragged onto another window's tab bar (windows not overlapping) | joined: right window 3 tabs, left 2; three earlier tries onto a covered tab bar did not merge |
+| 2026-10-22 | Mac mini | same | item 3 step 6: ⌘W Don't Save, ⌘Q with a dirty tab | prompt each time, Don't Save closes, app quits on the last window or on ⌘Q |
+| 2026-10-22 | Mac mini | same | item 3, defects found | #770 (one 95 % CPU wedge in the tab drag loop, not reproduced in two repeats), #771 (Window menu lacks the tab commands after a fresh launch) |
+| 2026-10-22 | Mac mini, VoiceOver (caption panel) | same | item 6: Move Tab to New Window via System Events | no new-window caption (Finder, same invocation, equally silent) |
+| 2026-10-22 | Mac mini, VoiceOver | same | item 6: Move Tab to New Window with real clicks | `MegaPDF, has new, window` |
+| 2026-10-22 | Mac mini, VoiceOver | same | item 6: real drag of a tab out | `Now in, forms.pdf — MegaPDF, window, Open, button, group` |
+
+### #614: hosted iOS CI beside the standing runner
+
+See tools/mac-mini.md, "The standing runner against hosted". Three dispatched hosted runs
+(runner=hosted): 39818409951 green in 55 min 51 s, 39845022875 red in 53 min 33 s on one
+iPad reading-mode UI test, 39868868578 green in 47 min 59 s. The mini's median job is 15 min
+46 s with a median queue of 15 minutes.
+
+## Cross-block wrap hyphens (#781), 2026-10-23
+
+PR #783, branch `wip/781-hyphen-join`. A wrap hyphen at the end of a block whose continuation is
+the first word of the NEXT block (the paragraph builder cut the block at that line) was emitted as
+two words; the fidelity reference joins them, so each costs 3 unmatched words. The fix moves that
+one word into the prefix's block with the hyphen stripped (`JoinHyphenAcrossBlocks`,
+`core/megapdf_structure.cpp`). Fix 2 of the plan (per-leaf median pitch) was not needed and was not
+built; fix 3 (class (b), interleaved columns) was out of scope.
+
+Run on kdocker3, `main` at 4f7f4a5 and the branch built side by side in throwaway `megapdf:base`
+containers (the pinned PDFium, `megapdf-cli 2.3.0`), the three batteries over all five corpora,
+corpora read-only, then removed. Disk counts 4,158 / 1,493 / 134 / 90 / 28; every battery visited
+every document. **Zero crashes, zero hangs, zero bad CLI exits in every cell, baseline and branch.**
+
+| corpus | 2.3.0 gate | `main` here | branch | unmatched, main to branch | documents better / worse |
+|---|---:|---:|---:|---:|---|
+| vendor | 0.997394 (first run) | 0.997394 | **0.998199** | 912 to 630 | 6 / 0 |
+| private | 0.998997 | 0.999004 | 0.999069 | 10,804 to 10,105 | 74 / 0 |
+| Canadian | 0.999932 | 0.999932 | 0.999938 | 33 to 30 | 1 / 0 |
+| UN | 0.999136 | 0.999801 | 0.999801 | 351 to 351 | 0 / 0 |
+| public | 0.976157 (2 hangs) | 0.980576 | 0.981815 | 621,389 to 581,492 | 46 / 0 |
+
+Internal API and `megapdf-cli` agree to the last digit in every cell. Why `main` differs from the
+2.3.0 column: #496 (UN segmentation, d3f3093 and eccb737) landed after 2.3.0, and #704 removed the
+two public hangs; the branch is compared with `main` on the same machine, not with the 2.3.0 digits.
+Gated tau medians (tagged pages) are identical to three places: private 0.951, public 0.978,
+Canadian 0.994, UN 0.967, vendor 0.986. **The informational poppler-agreement tau median moved on
+public only, 0.989 to 0.988** (private 0.992, vendor 0.995, Canadian 0.996, UN 0.998 unchanged): of
+22,942 public pages 3,496 went down and 336 went up, none by 0.05 or more, all inside the 46
+documents that changed. The likely mechanism, **not measured**, is a joined word that no longer
+pairs with the two halves `pdftotext -layout` never joins.
+
+Markdown is identical to the baseline in every cell (private 2,982 extracted / 1,102 textless / 12
+password-gated, public 937 / 543 / 5, Canadian 134, UN 83 / 7, vendor 26; 0 cmark failures and 0
+cmark timeouts). **Pages:** 0 qpdf failures, 0 count mismatches, 0 write failures and 0 crashes or hangs in every cell; public's 9 "REFUSED, other" are the known #445, as in the 2.3.0 gate; the private and public summaries differ from the baseline's only in elapsed seconds.
+
+**What changed in the output.** Documents whose dumped text changed: vendor 6, private 74, Canadian
+1, public 46, UN 0. Joins counted by diffing the two dumps line by line (counts only; no document
+text was read into any record): vendor 86, private 233, Canadian 1, public 11,402 (the public
+count is dominated by a few very large documents; the diff script could not align 4 of them, so
+treat it as a lower bound). No document got worse in unmatched words.
+
+**The first version did harm and was changed.** Without the "drawn next" condition (the
+continuation must be the character PDFium drew right after the hyphen) the join took the first
+lowercase word of whatever block came next in reading order. Private: F1 0.999057, 74 documents
+better and **30 worse** (a wrong word glued on, +1 unmatched word each) while the aggregate still
+rose. Vendor 0.998124 with 135 joins against 86 now. With the condition: 0 worse everywhere. A
+second version joined a soft hyphen before any character; one private document of digits with soft
+hyphens lost a match, so soft hyphens now need the lowercase test too.
+
+**Compound words.** A wrap-flagged hyphen in a real compound ("well-" then "known") is joined, as
+`BuildPieces` already joins it inside a block and as the reference joins it; no more conservative
+rule exists without leaving the reference. Shape on private, 233 joins: 98 have the joined word
+standing unhyphenated elsewhere in the same document, 46 have the hyphenated form elsewhere (a
+probable compound split at a line end), 89 have neither. A literal U+002D that PDFium did not flag
+is not joined across blocks (the in-block join does join it). A continuation that starts with an
+accented letter is not joined (#728/#756: unchanged, neither fixed nor worsened).
+
+**Tests.** `test_structure_cross_block_hyphen`, five checks (join; a block that was only the
+continuation is absorbed; uppercase continuation left alone; a lowercase block that is not drawn
+next left alone; a mid-line compound hyphen untouched). The first two fail on unmodified `main`,
+verified by building the test file against the main engine. No golden changed.
+
+**Not verified.** Windows, macOS, iOS, Android and the .NET apps beyond what hosted CI says;
+the tagged path (#358), the furniture and leftover builders, which this does not touch; the
+redaction battery; rendered Markdown beyond cmark parsing it. The pages battery cannot reach this
+change (it edits pages, not text) and was run for the record only, with `--jobs 4` instead of the
+sequential default to fit the session. Scratch (dumps of every document's text) lived under
+`~/megapdf-781fix-*` on kdocker3 and was deleted.
 
 ## Reporting
 

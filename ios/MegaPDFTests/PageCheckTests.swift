@@ -327,7 +327,8 @@ final class PageCheckTests: XCTestCase {
         model.save()
         try await waitUntil("the second save finishes") { !model.isSaving && !model.busy.isBlocked }
         XCTAssertFalse(model.isDirty, "nothing changed during this one")
-        XCTAssertEqual(model.statusMessage, String(localized: "Saved"))
+        XCTAssertEqual(model.notice, String(localized: "Saved"))
+        XCTAssertNil(model.statusMessage, "a confirmation is a notice, not an alert (#631)")
         model.close()
     }
 

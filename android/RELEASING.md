@@ -309,7 +309,7 @@ MegaPDF: rellena y firma PDF
 Rellena, marca y firma un PDF. Sin cuenta y sin nube.
 ```
 
-**Full description** [4000] (3827)
+**Full description** [4000] (3825)
 ```
 Abrir. Corregir. Guardar. Listo.
 
@@ -319,7 +319,7 @@ Marca cualquier casilla
 Toca una casilla y queda marcada, tanto en campos de formulario interactivos reales como en simples cuadros impresos. MegaPDF reconoce las casillas dibujadas que otras aplicaciones tratan como simple decoración.
 
 Escribe en cualquier línea
-Toca donde va la respuesta y escríbela. Elige el tamaño y el tipo de fuente (sans, serif o monoespaciada) para que lo que agregues combine con el formulario que estás completando. Arrástralo a su lugar, o tócalo de nuevo para corregir un error. Todo lo que agregas es texto real en el que se puede buscar, no un adhesivo pegado sobre la página.
+Toca donde va la respuesta y escríbela. Elige el tamaño y el tipo de fuente (sans, serif o monoespaciada) para que lo que añadas combine con el formulario que estás completando. Arrástralo a su lugar, o tócalo de nuevo para corregir un error. Todo lo que añades es texto real en el que se puede buscar, no un adhesivo pegado sobre la página.
 
 Corrige el texto del propio documento
 ¿Fecha equivocada? ¿Nombre mal escrito? Toca la línea y vuelve a escribirla. MegaPDF conserva la fuente del propio documento siempre que puede y te avisa cuando tuvo que usar una parecida. Si un cambio alterara el resto de la página, te lo dice en lugar de mover cosas en silencio. Deshacer devuelve el original exactamente como estaba.
@@ -331,7 +331,7 @@ Firma con convicción
 Dibuja tu firma con el dedo, escribe tu nombre o usa una foto de la que tienes en papel; el fondo blanco desaparece automáticamente. Tus firmas se quedan en una biblioteca privada en tu dispositivo; coloca una en un documento y muévela y cámbiale el tamaño hasta que quede justo sobre la línea.
 
 Guarda sin miedo
-Guardar escribe sobre el archivo original, de forma segura. MegaPDF revisa primero cada guardado, así que uno fallido nunca puede corromper el archivo que alguien te envió. O conserva el original y guarda una copia. Exportar como Markdown escribe el texto del documento (títulos, listas, los valores ingresados) como archivo Markdown y deja el PDF tal como estaba. También puedes ponerle una contraseña a un documento o quitársela.
+Guardar escribe sobre el archivo original, de forma segura. MegaPDF revisa primero cada guardado, así que uno fallido nunca puede corromper el archivo que alguien te envió. O conserva el original y guarda una copia. Exportar como Markdown escribe el texto del documento (títulos, listas, los valores introducidos) como archivo Markdown y deja el PDF tal como estaba. También puedes ponerle una contraseña a un documento o quitársela.
 
 Encuentra cualquier palabra
 Busca en todo el documento mientras escribes: cada coincidencia se ilumina y el contador dice cuántas hay, así que la única cláusula que necesitas en un contrato de alquiler de cuarenta páginas está a unos toques de distancia.
@@ -340,7 +340,7 @@ Lee el documento, no la aplicación
 El modo de lectura quita las barras de herramientas de la pantalla y deja solo la página. Con él vienen los colores de página: Sepia para una lectura larga, Noche para una habitación a oscuras; y Noche invierte también las imágenes, deliberadamente. MegaPDF puede abrir todos los documentos de esa forma.
 
 Pon las páginas en orden
-Gira una página que llegó de lado, elimina una, arrastra las páginas al orden correcto, inserta una página en blanco, agrega las páginas de otro PDF o guarda algunas páginas como su propio archivo. Cada acción es un solo paso, y un solo Deshacer la revierte.
+Gira una página que llegó de lado, elimina una, arrastra las páginas al orden correcto, inserta una página en blanco, añade las páginas de otro PDF o guarda algunas páginas como su propio archivo. Cada acción es un solo paso, y un solo Deshacer la revierte.
 
 Privado por diseño
 MegaPDF no te pide ningún permiso y no realiza ninguna conexión de red. Tus documentos y tu firma nunca salen de tu dispositivo: no hay ningún servidor al que puedan ir. La aplicación es de código abierto, así que cualquiera puede verificarlo.

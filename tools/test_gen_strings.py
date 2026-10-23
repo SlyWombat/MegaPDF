@@ -23,7 +23,7 @@ class SpanishDerivation(unittest.TestCase):
 
     def test_es_whole_words(self):
         self.assertEqual(g.to_spain("videoteca"), "videoteca")
-        self.assertEqual(g.to_spain("llenarlo"), "llenarlo")
+        self.assertEqual(g.to_spain("llenarlos"), "llenarlos")
 
     def test_es_article_agreement(self):
         self.assertEqual(g.to_spain("Guarda la computadora"), "Guarda el ordenador")

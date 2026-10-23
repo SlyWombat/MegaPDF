@@ -7653,6 +7653,103 @@ void test_structure_wrap_hyphen_across_indent() {
     }
 }
 
+// --------------------------------------------------------------------------
+// #781: a wrap hyphen at the END of a block whose continuation starts the NEXT block. The
+// paragraph builder cut the block at that line (here by a wide vertical gap, in the corpus by
+// the pitch rule), so BuildPieces never saw the two halves together. The fidelity reference
+// joins them; the engine now moves the continuation word to the prefix's block. The negative
+// cases pin what must NOT join: an uppercase continuation, and a compound hyphen that is not at
+// a block end.
+// --------------------------------------------------------------------------
+
+namespace {
+
+struct CrossBlockResult {
+    bool ok = false;
+    std::vector<std::string> blocks;
+};
+
+CrossBlockResult load_block_texts(const std::vector<unsigned char>& bytes, const char* label) {
+    CrossBlockResult r;
+    megapdf_document* d = megapdf_open(bytes.data(), bytes.size(), nullptr);
+    check(d != nullptr, std::string("structure cross-block hyphen ") + label + ": opens");
+    if (d == nullptr) return r;
+    megapdf_structure* s = megapdf_structure_load(d, 0, 1, MEGAPDF_STRUCTURE_DEFAULT, nullptr);
+    check(s != nullptr, std::string("structure cross-block hyphen ") + label + ": loads");
+    if (s != nullptr) {
+        r.ok = true;
+        for (size_t i = 0; i < megapdf_block_count(s); i++) r.blocks.push_back(block_text_ascii(s, i, MEGAPDF_BLOCK_TEXT));
+        megapdf_structure_free(s);
+    }
+    megapdf_close(d);
+    return r;
+}
+
+std::string join_blocks(const std::vector<std::string>& b) {
+    std::string out;
+    for (const auto& t : b) out += "[" + t + "]";
+    return out;
+}
+
+}  // namespace
+
+void test_structure_cross_block_hyphen() {
+    {
+        // The continuation is a lowercase word at the start of the next block: it moves up.
+        auto r = load_block_texts(plain_text_pdf(text_at(72, 700, "The grid supplies alimen-") +
+                                                 text_at(72, 640, "tation to the whole plant today.") +
+                                                 text_at(72, 628, "Another sentence follows here.")),
+                                  "lowercase");
+        check(r.ok && r.blocks.size() == 2 && r.blocks[0] == "The grid supplies alimentation" &&
+                  r.blocks[1] == "to the whole plant today. Another sentence follows here.",
+              "structure cross-block hyphen: a block-final wrap hyphen takes the next block's first word (#781)",
+              join_blocks(r.blocks));
+    }
+    {
+        // The next block was only that word: the block goes, the paragraph after it stays.
+        auto r = load_block_texts(plain_text_pdf(text_at(72, 700, "The grid supplies alimen-") +
+                                                 text_at(72, 640, "tation") +
+                                                 text_at(72, 580, "Another paragraph starts here.")),
+                                  "one-word block");
+        check(r.ok && r.blocks.size() == 2 && r.blocks[0] == "The grid supplies alimentation" &&
+                  r.blocks[1] == "Another paragraph starts here.",
+              "structure cross-block hyphen: a next block that was only the continuation is absorbed (#781)",
+              join_blocks(r.blocks));
+    }
+    {
+        // Uppercase after the hyphen: BuildPieces' own strip test says no, so nothing moves.
+        auto r = load_block_texts(plain_text_pdf(text_at(72, 700, "The grid supplies alimen-") +
+                                                 text_at(72, 640, "Tation is a proper name here.")),
+                                  "uppercase");
+        check(r.ok && r.blocks.size() == 2 && r.blocks[0] == "The grid supplies alimen-" &&
+                  r.blocks[1] == "Tation is a proper name here.",
+              "structure cross-block hyphen: an uppercase continuation is not joined (#781)",
+              join_blocks(r.blocks));
+    }
+    {
+        // The next block in reading order starts with a lowercase word, but the producer drew the
+        // hyphen's real continuation right after it, lower on the page: the unrelated word that
+        // reading order happens to put next must not be glued on.
+        auto r = load_block_texts(plain_text_pdf(text_at(72, 700, "The grid supplies alimen-") +
+                                                 text_at(72, 580, "tation was drawn second.") +
+                                                 text_at(72, 640, "unrelated words sit here today.")),
+                                  "not drawn next");
+        check(r.ok && !r.blocks.empty() && r.blocks[0] == "The grid supplies alimen-",
+              "structure cross-block hyphen: a lowercase block that is not the next thing drawn is not joined (#781)",
+              join_blocks(r.blocks));
+    }
+    {
+        // A compound hyphen in the middle of a line, and a block that does not end in one: untouched.
+        auto r = load_block_texts(plain_text_pdf(text_at(72, 700, "The well-known grid supplies power") +
+                                                 text_at(72, 640, "tation is lowercase but nothing wraps.")),
+                                  "compound");
+        check(r.ok && r.blocks.size() == 2 && r.blocks[0] == "The well-known grid supplies power" &&
+                  r.blocks[1] == "tation is lowercase but nothing wraps.",
+              "structure cross-block hyphen: a mid-line compound hyphen is left alone (#781)",
+              join_blocks(r.blocks));
+    }
+}
+
 void test_structure_tagged(const std::string& repo) {
     Doc d(repo + "/structure/tagged.pdf");
     if (!d.doc) { check(false, "structure tagged: opens"); return; }
@@ -10799,6 +10896,7 @@ int main(int argc, char** argv) {
     test_structure_no_stray_control_characters(argv[1], argv[2], std::string(MEGAPDF_REPO_FIXTURES));
     test_structure_tm_scaled_size(std::string(MEGAPDF_REPO_FIXTURES));
     test_structure_wrap_hyphen_across_indent();
+    test_structure_cross_block_hyphen();
     test_structure_span_font(std::string(MEGAPDF_REPO_FIXTURES));
     test_structure_tagged(std::string(MEGAPDF_REPO_FIXTURES));
     test_structure_tiny_font_size(std::string(MEGAPDF_REPO_FIXTURES));

@@ -72,4 +72,43 @@ class TextSelectionTest {
         // The owner's open has every permission whatever the bits say.
         assertTrue(DocumentCapabilities.fromSecurity(noCopy.copy(hasFullAccess = true)).canCopyText)
     }
+
+    // "alpha beta  gamma delta": the words as caret ranges, with a space between the first two and
+    // two between the last, the way the core answers them.
+    private val words = listOf(0..5, 6..10, 12..17, 18..23)
+    private fun wordAtChar(i: Int): IntRange? = words.firstOrNull { i >= it.first && i < it.last }
+    private fun step(sel: TextSelection, start: Boolean, later: Boolean) =
+        steppedHandleCaret(sel, start, later, length = 23, wordAtChar = ::wordAtChar)
+
+    @Test
+    fun `the end handle moves to the end of the next word and the previous one`() {
+        val alpha = TextSelection(0, anchor = 0, focus = 5)
+        assertEquals(10, step(alpha, start = false, later = true))
+        assertEquals(17, step(TextSelection(0, 0, 10), start = false, later = true))
+        assertEquals(23, step(TextSelection(0, 0, 17), start = false, later = true))
+        assertEquals(5, step(TextSelection(0, 0, 10), start = false, later = false))
+        // Part-way through a word, later finishes it and earlier abandons it.
+        assertEquals(10, step(TextSelection(0, 0, 8), start = false, later = true))
+        assertEquals(5, step(TextSelection(0, 0, 8), start = false, later = false))
+    }
+
+    @Test
+    fun `the start handle moves to the start of the next word and the previous one`() {
+        assertEquals(6, step(TextSelection(0, 0, 17), start = true, later = true))
+        assertEquals(12, step(TextSelection(0, 6, 23), start = true, later = true))
+        assertEquals(0, step(TextSelection(0, 6, 17), start = true, later = false))
+        assertEquals(6, step(TextSelection(0, 8, 17), start = true, later = false))
+        assertEquals(12, step(TextSelection(0, 10, 23), start = true, later = true))
+    }
+
+    @Test
+    fun `a handle has nowhere to go at the page's edge or against the other end`() {
+        assertNull(step(TextSelection(0, 18, 23), start = false, later = true))
+        assertNull(step(TextSelection(0, 0, 5), start = true, later = false))
+        // The ends never meet: the only word before the end handle is the one already selected.
+        assertNull(step(TextSelection(0, 0, 5), start = false, later = false))
+        assertNull(step(TextSelection(0, 6, 10), start = true, later = true))
+        // A selection read backwards steps the same ends.
+        assertEquals(10, step(TextSelection(0, anchor = 5, focus = 0), start = false, later = true))
+    }
 }

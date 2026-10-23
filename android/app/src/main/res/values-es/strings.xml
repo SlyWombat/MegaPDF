@@ -28,7 +28,7 @@
     <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
     <string name="back">Atrás</string>
     <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
-    <string name="add">Agregar</string>
+    <string name="add">Añadir</string>
     <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
     <string name="clear">Borrar</string>
     <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
@@ -195,7 +195,7 @@
     <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
     <string name="dynamic_xfa_banner_title">Hecho para Adobe Reader</string>
     <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
-    <string name="dynamic_xfa_banner_body">Este formulario está diseñado para llenarse con Adobe Reader. MegaPDF no puede llenarlo, pero aún puedes verlo, guardarlo, compartirlo y exportarlo.</string>
+    <string name="dynamic_xfa_banner_body">Este formulario está diseñado para rellenarse con Adobe Reader. MegaPDF no puede rellenarlo, pero aún puedes verlo, guardarlo, compartirlo y exportarlo.</string>
     <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
     <string name="dynamic_xfa_get_reader">Obtener Adobe Reader</string>
     <!-- The same address the form's own placeholder page points to (Adobe's stable short link). -->
@@ -214,7 +214,7 @@
     <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
     <string name="signed_overwrite_remove_signature">Quitar también la firma, que ya no será válida</string>
     <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
-    <string name="signed_overwrite_remove_offer">Si se deja, viaja con el archivo guardado y sigue afirmando que describe un archivo que ya no describe, de modo que MegaPDF y otros lectores reportan ese archivo como firmado. El documento que abriste no cambia en ningún caso: esto solo afecta al archivo que se escribe. Y una firma digital indica que un archivo no ha cambiado desde que se firmó: nunca ha impedido que alguien abra este documento, así que un archivo guardado sin ella lo pueden leer exactamente las mismas personas.</string>
+    <string name="signed_overwrite_remove_offer">Si se deja, viaja con el archivo guardado y sigue afirmando que describe un archivo que ya no describe, de modo que MegaPDF y otros lectores indican que ese archivo está firmado. El documento que abriste no cambia en ningún caso: esto solo afecta al archivo que se escribe. Y una firma digital indica que un archivo no ha cambiado desde que se firmó: nunca ha impedido que alguien abra este documento, así que un archivo guardado sin ella pueden leerlo exactamente las mismas personas.</string>
     <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
     <string name="signed_copy_notice">Guardado. La copia lleva la firma digital del documento, y ya no es válida.</string>
     <!-- #576: shown once, quietly, after a Save a copy that removed the signature instead. -->
@@ -223,11 +223,11 @@
 
     <!-- Added text -->
     <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
-    <string name="add_text">Agregar texto</string>
+    <string name="add_text">Añadir texto</string>
     <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
     <string name="edit_text">Editar texto</string>
     <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
-    <string name="add_text_hint">Se agregará donde tocaste. Pulsa Enter para iniciar una nueva línea.</string>
+    <string name="add_text_hint">Se añadirá donde tocaste. Pulsa Enter para iniciar una nueva línea.</string>
     <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
     <string name="edit_text_hint">Esto reemplaza el texto que tocaste.</string>
     <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
@@ -237,9 +237,9 @@
     <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
     <string name="tap_to_place_text">Toca la página donde debe ir el texto</string>
     <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
-    <string name="text_untagged">Este texto lo agregó una versión anterior y no se puede editar aquí</string>
+    <string name="text_untagged">Este texto lo añadió una versión anterior y no se puede editar aquí</string>
     <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
-    <string name="text_add_failed">No se pudo agregar ese texto</string>
+    <string name="text_add_failed">No se pudo añadir ese texto</string>
     <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
     <string name="text_change_failed">No se pudo cambiar ese texto</string>
 
@@ -290,7 +290,7 @@
     <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
     <string name="add_from_photos">Foto</string>
     <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
-    <string name="no_signatures_yet">Aún no hay firmas. Dibuja una con el dedo o agrega una foto de tu firma sobre papel blanco; el fondo se quita automáticamente.</string>
+    <string name="no_signatures_yet">Aún no hay firmas. Dibuja una con el dedo o añade una foto de tu firma sobre papel blanco; el fondo se quita automáticamente.</string>
     <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
     <string name="tap_to_place_signature">Toca la página donde debe ir la firma</string>
     <!-- Library sheet (#99): card actions and the two small dialogs behind its menu. -->
@@ -318,11 +318,11 @@
     <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
     <string name="type_signature_preview_hint">Tu nombre, como firma</string>
     <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
-    <string name="type_signature_add">Agregar</string>
+    <string name="type_signature_add">Añadir</string>
     <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
     <string name="signature_default_name">Firma %1$d</string>
     <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
-    <string name="signature_added">Firma agregada</string>
+    <string name="signature_added">Firma añadida</string>
     <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
     <string name="signature_import_failed">No se pudo importar la firma.</string>
     <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
@@ -358,7 +358,7 @@
     <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
     <string name="busy_inserting_page">Insertando página…</string>
     <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
-    <string name="busy_adding_pages">Agregando páginas…</string>
+    <string name="busy_adding_pages">Añadiendo páginas…</string>
     <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
     <string name="busy_progress_of_pages">Página %1$d de %2$d</string>
     <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
@@ -613,7 +613,7 @@
     <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
     <string name="pages_insert_blank">Insertar página en blanco</string>
     <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
-    <string name="pages_add_from_file">Agregar páginas desde un archivo…</string>
+    <string name="pages_add_from_file">Añadir páginas desde un archivo…</string>
     <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
     <string name="pages_save_selection">Guardar páginas como…</string>
 
@@ -626,7 +626,7 @@
     <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
     <string name="permission_ask_editing">El autor de este documento pidió que no se modifique su contenido.</string>
     <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
-    <string name="permission_ask_assembly">El autor de este documento pidió que no se reordenen, quiten ni agreguen sus páginas.</string>
+    <string name="permission_ask_assembly">El autor de este documento pidió que no se reordenen, quiten ni añadan sus páginas.</string>
     <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
     <string name="permission_ask_extraction">El autor de este documento pidió que no se copie nada de él.</string>
     <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
@@ -643,11 +643,11 @@
     <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
     <string name="page_moved">Página movida a la posición %1$d.</string>
     <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
-    <string name="page_inserted">Página en blanco agregada como página %1$d.</string>
+    <string name="page_inserted">Página en blanco añadida como página %1$d.</string>
     <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
-    <string name="page_added">1 página agregada.</string>
+    <string name="page_added">1 página añadida.</string>
     <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
-    <string name="pages_added">%1$d páginas agregadas.</string>
+    <string name="pages_added">%1$d páginas añadidas.</string>
     <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
     <string name="page_saved_as">1 página guardada.</string>
     <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
@@ -660,13 +660,13 @@
     <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
     <string name="pages_refused_title">No se cambió nada</string>
     <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
-    <string name="pages_refused_restricted">Este documento no permite girar, eliminar, mover ni agregar sus páginas. La contraseña del propietario sí lo permitiría.</string>
+    <string name="pages_refused_restricted">Este documento no permite girar, eliminar, mover ni añadir sus páginas. La contraseña del propietario sí lo permitiría.</string>
     <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
     <string name="pages_refused_source_password">Ese archivo necesita una contraseña, así que MegaPDF no puede sacar páginas de él.</string>
     <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
-    <string name="pages_refused_source_restricted">Ese archivo no permite que se copie nada de él, así que sus páginas no se pueden agregar aquí.</string>
+    <string name="pages_refused_source_restricted">Ese archivo no permite que se copie nada de él, así que sus páginas no se pueden añadir aquí.</string>
     <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
-    <string name="pages_refused_fields">Esas páginas llevan un campo de formulario cuyo nombre pertenece a un grupo de campos, y este documento ya tiene un campo con ese nombre. MegaPDF no puede cambiarle el nombre sin dañar el formulario, así que no agregó nada para no estropearlo.</string>
+    <string name="pages_refused_fields">Esas páginas llevan un campo de formulario cuyo nombre pertenece a un grupo de campos, y este documento ya tiene un campo con ese nombre. MegaPDF no puede cambiarle el nombre sin dañar el formulario, así que no añadió nada para no estropearlo.</string>
     <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
     <string name="pages_refused_last_page">Un PDF debe conservar al menos una página.</string>
     <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
@@ -681,6 +681,14 @@
     <string name="select_copy_forbidden">Este documento no permite copiar su texto.</string>
     <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
     <string name="select_copied">Copiado</string>
+    <!-- ES-REVIEW #710 — new, not yet read by the reviewer. -->
+    <string name="selection_start_handle">Inicio de la selección</string>
+    <!-- ES-REVIEW #710 — new, not yet read by the reviewer. -->
+    <string name="selection_end_handle">Fin de la selección</string>
+    <!-- ES-REVIEW #710 — new, not yet read by the reviewer. -->
+    <string name="selection_next_word">Palabra siguiente</string>
+    <!-- ES-REVIEW #710 — new, not yet read by the reviewer. -->
+    <string name="selection_previous_word">Palabra anterior</string>
     <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
     <string name="form_field_read_only">Este campo es de solo lectura.</string>
 </resources>

@@ -54,6 +54,27 @@ final class PdfSelectableText: @unchecked Sendable {
         return Int(start)..<Int(end)
     }
 
+    /// The carets either side of the word that holds character `index` (0 ..< `length`), the
+    /// same word and the same punctuation rule a long press selects. The core finds a word by
+    /// a point, so this asks about the middle of the character's own box.
+    func word(containingCharacter index: Int) -> Range<Int>? {
+        guard index >= 0, index < length, let box = rects(from: index, to: index + 1).first else { return nil }
+        return word(atX: (box.left + box.right) / 2, y: (box.bottom + box.top) / 2)
+    }
+
+    /// The caret one word on from `caret` (the end of the word that starts there or holds it),
+    /// or one word back (the start of the word before it, or of the word it is inside). Nil at
+    /// the first or last word of the page, where there is nowhere to go. This is what a
+    /// VoiceOver user's swipe up and down on a handle moves it by (#710).
+    func caret(byWordFrom caret: Int, forward: Bool) -> Int? {
+        if forward {
+            guard caret >= 0, caret < length, let word = word(containingCharacter: caret) else { return nil }
+            return word.upperBound
+        }
+        guard caret > 0, caret <= length, let word = word(containingCharacter: caret - 1) else { return nil }
+        return word.lowerBound
+    }
+
     /// The text between two carets, in either order, with `\n` between lines: what the
     /// pasteboard gets (iOS's own line ending, so no conversion). Plain text only.
     func text(from a: Int, to b: Int) -> String {

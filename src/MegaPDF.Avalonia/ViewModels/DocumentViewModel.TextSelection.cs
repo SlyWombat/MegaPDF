@@ -147,6 +147,29 @@ public sealed partial class DocumentViewModel
     }
 
     /// <summary>
+    /// The start of the selected text as a screen reader should say it (#710): at most
+    /// <see cref="PdfTextSelection.SpokenLimit"/> characters, read off the UI thread when there is
+    /// a window. Null when nothing is selected, the selection moved on while this was reading (a
+    /// newer announcement is on its way), or the document closed.
+    /// </summary>
+    internal async Task<string?> ReadSelectionPreviewAsync()
+    {
+        if (_selectableText is not { } cache || TextSelection.IsEmpty)
+            return null;
+        var anchor = TextSelection.Anchor!.Value;
+        var focus = TextSelection.Focus!.Value;
+        try
+        {
+            var preview = await OffUiThread(() => PdfTextSelection.Preview(anchor, focus, cache.Get));
+            return TextSelection.Anchor == anchor && TextSelection.Focus == focus && preview.Length > 0 ? preview : null;
+        }
+        catch (Exception ex) when (ex is ObjectDisposedException or InvalidOperationException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
     /// Whether Copy may go ahead; when the document asked not to be copied from, the status line
     /// says so instead and nothing is copied.
     /// </summary>

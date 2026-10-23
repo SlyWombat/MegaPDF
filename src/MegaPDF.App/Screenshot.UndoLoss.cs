@@ -57,6 +57,9 @@ internal static partial class Screenshot
         }
         finally
         {
+            // The flatten setting is the real one on this machine (AppSettings persists on set), so
+            // it goes back first: a throw from the tab close below must not leave it changed (#633).
+            fixtureTab.FlattenOnSave = flattenAtStart;
             DialogGate.Current?.Hide();
             foreach (var tab in window.Shell.Documents.Where(t => !ReferenceEquals(t, fixtureTab)).ToList())
             {
@@ -64,7 +67,6 @@ internal static partial class Screenshot
                 tab.HasUnsavedChanges = false;
                 await window.CloseTabAsync(tab);
             }
-            fixtureTab.FlattenOnSave = flattenAtStart;
             try { Directory.Delete(scratch, recursive: true); } catch { /* best-effort scratch cleanup */ }
         }
 

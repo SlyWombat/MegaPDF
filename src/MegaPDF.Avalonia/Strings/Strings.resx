@@ -1577,6 +1577,14 @@
     <value>The author of this document asked that nothing be copied out of it.</value>
     <comment>#710: why Copy is unavailable on a document without the copy permission; #558's extraction-class wording. Selecting still works</comment>
   </data>
+  <data name="TextSelectionAnnounced" xml:space="preserve">
+    <value>Selected: {0}</value>
+    <comment>#710: what a screen reader says when a text selection settles (drag released, word or Select All chosen, Shift+arrow pause); {0} is the first 80 characters of the selected text, with an ellipsis when it is longer. Spoken only, never shown</comment>
+  </data>
+  <data name="TextCopiedAnnounced" xml:space="preserve">
+    <value>Copied</value>
+    <comment>#710: what a screen reader says after a successful copy of the selected text. Spoken only, never shown</comment>
+  </data>
   <data name="UndoLossTitle" xml:space="preserve">
     <value>Your changes can't be undone after this</value>
     <comment>#633: the title of the question put before a save or a password change takes away the undo history. Shared by both reasons</comment>

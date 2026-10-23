@@ -483,5 +483,9 @@
     <!-- Selecting and copying text (#710), and read-only form fields (#712) -->
     <string name="select_copy_forbidden">This document doesn\'t allow copying its text.</string>
     <string name="select_copied">Copied</string>
+    <string name="selection_start_handle">Start of selection</string>
+    <string name="selection_end_handle">End of selection</string>
+    <string name="selection_next_word">Next word</string>
+    <string name="selection_previous_word">Previous word</string>
     <string name="form_field_read_only">This field is read-only.</string>
 </resources>

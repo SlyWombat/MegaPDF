@@ -308,6 +308,19 @@ ES_419_TO_ES_ES = [
     ("Presiona", "Pulsa"), ("presiona", "pulsa"), ("Presionar", "Pulsar"), ("presionar", "pulsar"),
     ("Llenar", "Rellenar"), ("llenar", "rellenar"), ("Llena", "Rellena"), ("llena", "rellena"),
     ("llenado", "rellenado"), ("llenada", "rellenada"),
+    ("llenarse", "rellenarse"), ("llenarlo", "rellenarlo"),
+    ("presionada", "pulsada"), ("presionado", "pulsado"),
+    # Spain says introducir where Latin America says ingresar (the store copy's
+    # "los valores que ingresaste").
+    ("ingresaste", "introdujiste"), ("ingresados", "introducidos"),
+    # Spain reads añadir where Latin America reads agregar (Fable, #724). Every
+    # inflection the catalogues and store copy use, with its capitalisation.
+    ("Agregar", "Añadir"), ("agregar", "añadir"), ("AGREGAR", "AÑADIR"),
+    ("Agregando", "Añadiendo"), ("Agrega", "Añade"), ("agrega", "añade"),
+    ("agregas", "añades"), ("agregues", "añadas"), ("agreguen", "añadan"),
+    ("Agrégalo", "Añádelo"), ("agregó", "añadió"), ("agregará", "añadirá"),
+    ("agregaron", "añadieron"), ("agregadas", "añadidas"), ("agregada", "añadida"),
+    ("agregado", "añadido"),
     # Not a word but a person: the demo signatory in the store captures, who has a
     # different name per listing language (D7, Dave 2026-10-21).
     ("Sofía Ramírez", "Lucía Fernández"),

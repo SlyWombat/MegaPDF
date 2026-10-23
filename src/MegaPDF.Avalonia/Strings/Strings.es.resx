@@ -908,7 +908,7 @@
     <comment>ES-REVIEW #724 — new, not yet read by the reviewer. #576: Dave's tick, in the dialog body rather than a fourth button — a button would be a different destination and compete with the two already there, while a tick modifies the destination already chosen. Ticked by default. His own sketch said "the invalid signature"; the tense is wrong before the save that invalidates it, which is the only change from his words</comment>
   </data>
   <data name="SignedSaveRemoveOffer" xml:space="preserve">
-    <value>Si se deja, viaja con el archivo guardado y sigue afirmando que describe un archivo que ya no describe, de modo que MegaPDF y otros lectores informan de ese archivo como firmado. El documento que abriste no cambia en ningún caso: esto solo afecta al archivo que se escribe. Y una firma digital indica que un archivo no ha cambiado desde que se firmó: nunca ha impedido que alguien abra este documento, así que un archivo guardado sin ella lo puede leer exactamente la misma gente.</value>
+    <value>Si se deja, viaja con el archivo guardado y sigue afirmando que describe un archivo que ya no describe, de modo que MegaPDF y otros lectores indican que ese archivo está firmado. El documento que abriste no cambia en ningún caso: esto solo afecta al archivo que se escribe. Y una firma digital indica que un archivo no ha cambiado desde que se firmó: nunca ha impedido que alguien abra este documento, así que un archivo guardado sin ella pueden leerlo exactamente las mismas personas.</value>
     <comment>ES-REVIEW #724 — new, not yet read by the reviewer. #576, #602: what the tick means. Three things it must keep saying — the original file is untouched (removing a signature from a document you did not sign is a meaningful act), the choice reaches only the file being written, and a digital signature is not encryption and never was: nothing here may let someone think the document was protected, or that removing the signature exposes it</comment>
   </data>
   <data name="SaveACopyButton" xml:space="preserve">
@@ -1707,6 +1707,14 @@
   <data name="CopyWithheld" xml:space="preserve">
     <value>El autor de este documento pidió que no se copie nada de él.</value>
     <comment>ES-REVIEW #724 — new, not yet read by the reviewer. #710: why Copy is unavailable on a document without the copy permission; #558's extraction-class wording. Selecting still works</comment>
+  </data>
+  <data name="TextSelectionAnnounced" xml:space="preserve">
+    <value>Seleccionado: {0}</value>
+    <comment>ES-REVIEW #710 — new, not yet read by the reviewer. #710: what a screen reader says when a text selection settles (drag released, word or Select All chosen, Shift+arrow pause); {0} is the first 80 characters of the selected text, with an ellipsis when it is longer. Spoken only, never shown</comment>
+  </data>
+  <data name="TextCopiedAnnounced" xml:space="preserve">
+    <value>Copiado</value>
+    <comment>ES-REVIEW #710 — new, not yet read by the reviewer. #710: what a screen reader says after a successful copy of the selected text. Spoken only, never shown</comment>
   </data>
   <data name="UndoLossTitle" xml:space="preserve">
     <value>Tus cambios no se podrán deshacer después</value>

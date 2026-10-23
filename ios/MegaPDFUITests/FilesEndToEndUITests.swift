@@ -71,7 +71,7 @@ final class FilesEndToEndUITests: XCTestCase {
     func test3_controlSaveACopy() {
         open("e2e-control")
         saveACopy()
-        acknowledgeAlerts(until: "Saved", timeout: 30)
+        waitForNotice("Saved", timeout: 30)
         closeDocument()
     }
 
@@ -87,17 +87,17 @@ final class FilesEndToEndUITests: XCTestCase {
         open("e2e-save")
         addText("E2E SAVED TEXT", at: (72, 600))
         tapSave()
-        acknowledgeAlerts(until: "Saved", timeout: 30)
+        waitForNotice("Saved", timeout: 30)
         addText("E2E COPY TEXT", at: (72, 540))
         saveACopy()
-        acknowledgeAlerts(until: "Saved", timeout: 30)
+        waitForNotice("Saved", timeout: 30)
         // The name on screen is the copy's from here on. Printed rather than asserted: iOS 26's
         // sheet has no name field, so what Keep Both called the copy is the script's to check.
         print("E2E note: after Save a copy the title reads "
               + "\"\(app.navigationBars.firstMatch.identifier)\"")
         addText("E2E AFTER COPY TEXT", at: (72, 480))
         tapSave()
-        acknowledgeAlerts(until: "Saved", timeout: 30)
+        waitForNotice("Saved", timeout: 30)
         closeDocument(discardIfAsked: true)
     }
 
@@ -168,7 +168,7 @@ final class FilesEndToEndUITests: XCTestCase {
 
         let t2 = Date()
         saveACopy(exporterTimeout: 300)
-        acknowledgeAlerts(until: "Saved", timeout: 300)
+        waitForNotice("Saved", timeout: 300)
         print(String(format: "E2E 1GB save a copy: %.2f s (from the command to Saved)", Date().timeIntervalSince(t2)))
         closeDocument()
     }
@@ -266,6 +266,7 @@ final class FilesEndToEndUITests: XCTestCase {
 
     /// Save sits in the navigation bar, or folds into the system overflow on a narrow phone.
     private func tapSave() {
+        waitForNoticeToClear()
         let save = app.navigationBars.buttons["Save"].firstMatch
         if save.waitForExistence(timeout: 5) && save.isHittable {
             waitEnabled(save, "Save")
@@ -292,6 +293,7 @@ final class FilesEndToEndUITests: XCTestCase {
     }
 
     private func saveACopy(exporterTimeout: TimeInterval = 30) {
+        waitForNoticeToClear()
         let more = app.buttons["viewerMore"].firstMatch
         XCTAssertTrue(more.waitForExistence(timeout: 10), dump("no More menu"))
         more.tap()
@@ -320,6 +322,36 @@ final class FilesEndToEndUITests: XCTestCase {
         save.tap()
         let keepBoth = app.buttons["Keep Both"].firstMatch
         if keepBoth.waitForExistence(timeout: 3) { keepBoth.tap() }
+    }
+
+    /// Waits for any notice banner left over from the last command to go (#631), so a "Saved"
+    /// already on screen cannot satisfy the wait for the next one. Notices are deliberately not
+    /// pinned in this suite: `test4` saves three times, and a pinned first "Saved" would answer
+    /// the second wait. Called before the command that is about to be waited on.
+    private func waitForNoticeToClear() {
+        let banner = app.staticTexts["noticeBanner"]
+        _ = waitForGone(banner, timeout: 6)
+    }
+
+    /// Waits for the self-clearing banner to say `title` (#631): "Saved" is a notice now, so
+    /// there is no alert to acknowledge. An alert that appears instead fails the test with its
+    /// text -- "Save failed -- use Save a copy." is the #572 failure this suite exists to catch,
+    /// and "Saved" with a redaction summary is the alert's job (`test1`, `test2`). The banner
+    /// lives four seconds and is polled every quarter of one.
+    private func waitForNotice(_ title: String, timeout: TimeInterval) {
+        let banner = app.staticTexts["noticeBanner"]
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            let alert = app.alerts.firstMatch
+            if alert.exists {
+                let texts = alert.staticTexts.allElementsBoundByIndex.map(\.label)
+                XCTFail(dump("an alert came where the \"\(title)\" notice was expected: \(texts)"))
+                return
+            }
+            if banner.exists, banner.label == title { return }
+            pause(0.25)
+        }
+        XCTFail(dump("no \"\(title)\" notice in \(Int(timeout)) s"))
     }
 
     /// Dismisses alerts as they come. With a title, waits until an alert with that title has

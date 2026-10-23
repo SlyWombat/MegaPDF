@@ -7,7 +7,10 @@ import androidx.compose.ui.test.down
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.moveBy
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.up
@@ -85,6 +88,62 @@ class TextSelectCopyTest {
         assertTrue(rule.viewModel.copySelectedText())
         assertEquals(expected, clipboardText())
         assertNull("Copy releases the selection, as a text view does", rule.viewModel.textSelection)
+    }
+
+    /**
+     * TalkBack's way to move a handle (#710): the handle is found by its spoken name and its custom
+     * action is run by its spoken label, which is what TalkBack's actions menu does. The label and
+     * the name come from the app's own resources, so a rename in any locale keeps the test honest.
+     */
+    private fun runHandleAction(handleName: String, label: String) {
+        val node = rule.onNodeWithContentDescription(handleName).fetchSemanticsNode()
+        val action = node.config[SemanticsActions.CustomActions].first { it.label == label }
+        rule.runOnUiThread { assertTrue("$label did not move the handle", action.action()) }
+        rule.waitForIdle()
+    }
+
+    @Test
+    fun theEndHandleExtendsByAWordWithoutADragAndCopyHoldsOneMoreWord() {
+        val file = Fixtures.testAsset("selection.pdf", "select-talkback-end-710.pdf")
+        val facts = PageFacts.of(file)
+        rule.open(file)
+        clearClipboard()
+        longPressAlpha(facts)
+        assertEquals("alpha", rule.viewModel.selectedTextForCopy())
+
+        val end = Fixtures.appContext.getString(R.string.selection_end_handle)
+        val next = Fixtures.appContext.getString(R.string.selection_next_word)
+        val previous = Fixtures.appContext.getString(R.string.selection_previous_word)
+        rule.waitUntil(SETTLE_MS) { rule.onAllNodesWithContentDescription(end).fetchSemanticsNodes().isNotEmpty() }
+
+        // After "alpha" in reading order comes the next line's "Left", then "two".
+        runHandleAction(end, next)
+        assertEquals("alpha\nLeft", rule.viewModel.selectedTextForCopy())
+        runHandleAction(end, next)
+        assertEquals("alpha\nLeft two", rule.viewModel.selectedTextForCopy())
+        runHandleAction(end, previous)
+        assertEquals("alpha\nLeft", rule.viewModel.selectedTextForCopy())
+
+        assertTrue(rule.viewModel.copySelectedText())
+        assertEquals("alpha\nLeft", clipboardText())
+    }
+
+    @Test
+    fun theStartHandleStepsBackAWordAndForwardAgain() {
+        val file = Fixtures.testAsset("selection.pdf", "select-talkback-start-710.pdf")
+        val facts = PageFacts.of(file)
+        rule.open(file)
+        longPressAlpha(facts)
+
+        val start = Fixtures.appContext.getString(R.string.selection_start_handle)
+        val next = Fixtures.appContext.getString(R.string.selection_next_word)
+        val previous = Fixtures.appContext.getString(R.string.selection_previous_word)
+        rule.waitUntil(SETTLE_MS) { rule.onAllNodesWithContentDescription(start).fetchSemanticsNodes().isNotEmpty() }
+
+        runHandleAction(start, previous)
+        assertEquals("one alpha", rule.viewModel.selectedTextForCopy())
+        runHandleAction(start, next)
+        assertEquals("alpha", rule.viewModel.selectedTextForCopy())
     }
 
     @Test

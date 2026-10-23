@@ -28,6 +28,9 @@ final class SaveACopyExportUITests: XCTestCase {
         app.launchArguments += ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
         // So `DocumentOpening.wait` waits for the open to finish, not just for the page (#706).
         app.launchArguments += [PageInput.launchArgument]
+        // "Saved" and "Exported" are the self-clearing banner now (#631); pinned, it outlives the
+        // wait. A later wait cannot be satisfied by an earlier one: the labels differ.
+        app.launchArguments += ["-uiTestPinNotices"]
     }
 
     /// One page, one line of real text. Written out here rather than shared with
@@ -93,30 +96,24 @@ final class SaveACopyExportUITests: XCTestCase {
         }
     }
 
-    /// Waits for the app's own completion alert and returns its title, then dismisses it.
+    /// Waits for the app's own completion notice (#631), which says what finished.
     /// Which word it is matters as much as that it appeared: "Saved" is a copy of the
     /// document, "Exported" is the one-way Markdown export (#386), and with one exporter
     /// serving both kinds, a result delivered to the wrong completion would say the wrong one.
-    @discardableResult
-    private func acknowledgeCompletion(expected: String) -> String {
-        guard let alert = ExportSheet.completionAlert(in: app) else {
-            XCTFail(dump("no completion alert"))
-            return ""
+    /// An alert in its place fails at once: that is a "Save failed ...", not a confirmation.
+    private func expectCompletionNotice(_ expected: String) {
+        if let failure = ExportSheet.completionNotice(in: app, expected: expected) {
+            XCTFail(dump(failure))
         }
-        let title = alert.staticTexts.firstMatch.label
-        XCTAssertTrue(alert.staticTexts[expected].waitForExistence(timeout: 5),
-                      dump("the completion alert said \"\(title)\", not \"\(expected)\""))
-        alert.buttons.firstMatch.tap()
-        return title
     }
 
     /// Save a copy, end to end through the real sheet: the sheet appears, Save writes a file,
-    /// and the app says "Saved".
+    /// and the app says "Saved" with a notice.
     func testSaveACopyPresentsTheExportSheet() {
         launchWithADocument("MegaPDF Save A Copy Test")
         tapInMoreMenu(identifier: "viewerSaveCopy", label: "Save a copy")
         saveOnTheExportSheet("Save a copy")
-        acknowledgeCompletion(expected: "Saved")
+        expectCompletionNotice("Saved")
     }
 
     /// Both exports in one session, which is the shape #589 actually was: each worked alone
@@ -128,10 +125,10 @@ final class SaveACopyExportUITests: XCTestCase {
 
         tapInMoreMenu(identifier: "viewerExportMarkdown", label: "Export as Markdown")
         saveOnTheExportSheet("Markdown")
-        acknowledgeCompletion(expected: "Exported")
+        expectCompletionNotice("Exported")
 
         tapInMoreMenu(identifier: "viewerSaveCopy", label: "Save a copy")
         saveOnTheExportSheet("Save a copy")
-        acknowledgeCompletion(expected: "Saved")
+        expectCompletionNotice("Saved")
     }
 }
