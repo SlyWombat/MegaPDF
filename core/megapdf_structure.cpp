@@ -2523,6 +2523,119 @@ int ComputeConfidence(const PageWork& pw, bool too_many_columns, const std::vect
     return (std::max)(0, (std::min)(100, score));
 }
 
+// #781: a wrap hyphen at the end of a block whose continuation is the first word of the NEXT
+// block.
+//
+// BuildPieces joins a hyphen-ending line only to the next line of the same block. When the
+// paragraph builder cuts the block at that line (the pitch rule against a median dragged down by
+// side-by-side columns, a left-edge or indent break), the hyphen is stranded: `alimen-` ends one
+// block and `tation` starts the next, and the fidelity reference, which reads PDFium's content
+// order and joins them, counts one word where this side counts two (3 unmatched words each; on
+// the vendor corpus 336 of 912, #781). Measured, not assumed: 120 of the 184 breaks after a
+// hyphen-ending line were the pitch rule.
+//
+// The repair moves that ONE word. The block boundary stays where the paragraph builder put it
+// (a real paragraph break must not be erased by a hyphen), the prefix's block takes the
+// continuation word with the hyphen stripped, and the next block loses its first word. Only the
+// cases BuildPieces' own join decides the same way are touched, and no more:
+//   - the prefix's last character is one PDFium flagged as a wrap hyphen (Char::is_hyphen), or a
+//     soft hyphen. A literal U+002D/U+2010 PDFium did not flag is NOT joined here, although
+//     BuildPieces does join those inside a block: the reference does not, and across a block
+//     boundary there is no line geometry to say it was a wrap. A lone "-" word is not a prefix.
+//   - the next block is a PARAGRAPH (never a heading, list item or figure) whose first word
+//     starts with an ASCII lowercase letter, BuildPieces' own `strip` test. Uppercase, a digit
+//     or an accented letter leave both blocks alone, which is also what keeps #728/#756's
+//     accented continuation exactly as stranded as it was.
+//   - the prefix's block is a PARAGRAPH or LIST_ITEM.
+// `groups[k]` holds block k's line indices; `content` and `groups` are parallel. A next block
+// whose only content was that word is removed.
+void JoinHyphenAcrossBlocks(const PageWork& pw, std::vector<BlockImpl>* content,
+                            const std::vector<std::vector<int>>& groups) {
+    const size_t n = content->size();
+    if (n < 2 || groups.size() != n) return;
+    const TextView view = ViewOf(pw);
+    std::vector<int> tail(n, -1);        // word index appended to block k
+    std::vector<char> skip_first(n, 0);  // block k's first word was handed to block k-1
+    bool any = false;
+    for (size_t k = 0; k + 1 < n; k++) {
+        BlockImpl& a = (*content)[k];
+        BlockImpl& b = (*content)[k + 1];
+        if (a.info.kind != MEGAPDF_BLOCK_PARAGRAPH && a.info.kind != MEGAPDF_BLOCK_LIST_ITEM) continue;
+        if (b.info.kind != MEGAPDF_BLOCK_PARAGRAPH) continue;
+        const auto& ga = groups[k];
+        const auto& gb = groups[k + 1];
+        if (ga.empty() || gb.empty() || tail[k] >= 0) continue;
+        const Line& a_last = pw.lines[static_cast<size_t>(ga.back())];
+        const Line& b_first = pw.lines[static_cast<size_t>(gb.front())];
+        if (b_first.words.empty() || a_last.words.empty()) continue;
+        // A list item's marker is not a prefix, and a first line already handed on has nothing
+        // left to end on.
+        size_t a_first_word = (a.info.kind == MEGAPDF_BLOCK_LIST_ITEM && ga.size() == 1) ? 1 : 0;
+        if (skip_first[k] && ga.size() == 1) a_first_word = 1;
+        if (a_last.words.size() <= a_first_word) continue;
+        const Word& last_word = pw.words[static_cast<size_t>(a_last.words.back())];
+        if (last_word.chars.size() < 2) continue;
+        const Char& last_char = pw.chars[static_cast<size_t>(last_word.chars.back())];
+        const auto last_cps = WordCodepoints(pw.chars, last_word);
+        const bool soft = !last_cps.empty() && last_cps.back() == kSoftHyphen;
+        if (!last_char.is_hyphen && !soft) continue;
+        const int next_word_index = b_first.words.front();
+        const auto next_cps = WordCodepoints(pw.chars, pw.words[static_cast<size_t>(next_word_index)]);
+        if (next_cps.empty()) continue;
+        if (!soft && !IsAsciiLower(next_cps[0])) continue;
+        tail[k] = next_word_index;
+        skip_first[k + 1] = 1;
+        any = true;
+    }
+    if (!any) return;
+
+    std::vector<char> drop(n, 0);
+    for (size_t k = 0; k < n; k++) {
+        if (tail[k] < 0 && !skip_first[k]) continue;
+        BlockImpl& blk = (*content)[k];
+        const auto& g = groups[k];
+        std::vector<Line> local;
+        std::vector<int> idx;
+        local.reserve(g.size() + 1);
+        for (int li : g) {
+            idx.push_back(static_cast<int>(local.size()));
+            local.push_back(pw.lines[static_cast<size_t>(li)]);
+        }
+        if (tail[k] >= 0) {
+            const Word& w = pw.words[static_cast<size_t>(tail[k])];
+            Line synthetic;
+            synthetic.words.push_back(tail[k]);
+            synthetic.l = w.l; synthetic.b = w.b; synthetic.r = w.r; synthetic.t = w.t;
+            idx.push_back(static_cast<int>(local.size()));
+            local.push_back(std::move(synthetic));
+        }
+        size_t first_offset = blk.info.kind == MEGAPDF_BLOCK_LIST_ITEM ? 1 : 0;
+        if (skip_first[k]) first_offset = 1;
+        const auto pieces = BuildPieces(TextView{view.chars, view.words, local}, idx, first_offset);
+        if (pieces.empty()) {
+            drop[k] = 1;
+            continue;
+        }
+        blk.spans = SliceIntoSpans(pieces);
+        blk.text = ConcatSpanText(blk.spans);
+        if (skip_first[k] && pw.lines[static_cast<size_t>(g.front())].words.size() <= 1 && g.size() > 1) {
+            // The first line held only the handed-over word: the block's extent is the rest.
+            double l = 1e18, bb = 1e18, r = -1e18, t = -1e18;
+            for (size_t gi = 1; gi < g.size(); gi++) {
+                const Line& gl = pw.lines[static_cast<size_t>(g[gi])];
+                l = (std::min)(l, gl.l); bb = (std::min)(bb, gl.b); r = (std::max)(r, gl.r); t = (std::max)(t, gl.t);
+            }
+            blk.info.bounds = megapdf_rect{l, bb, r, t};
+        }
+    }
+    std::vector<BlockImpl> kept;
+    kept.reserve(n);
+    for (size_t k = 0; k < n; k++) {
+        if (!drop[k]) kept.push_back(std::move((*content)[k]));
+    }
+    *content = std::move(kept);
+}
+
 struct PageResult {
     std::vector<BlockImpl> blocks;
     int confidence = 100;
@@ -2559,6 +2672,7 @@ PageResult BuildPageContent(const megapdf_page* page, PageWork* pw, int page_ind
     const std::vector<double> list_clusters = ComputeListDepthClusters(*pw, order, body_size, marker_ctx);
 
     std::vector<BlockImpl> content;
+    std::vector<std::vector<int>> groups;   // #781: content[k]'s line indices
     size_t i = 0;
     while (i < order.size()) {
         BlockImpl block;
@@ -2566,9 +2680,13 @@ PageResult BuildPageContent(const megapdf_page* page, PageWork* pw, int page_ind
                                                marker_ctx, page_index, &block);
         block.info.source = MEGAPDF_STRUCTURE_SOURCE_HEURISTIC;
         content.push_back(std::move(block));
+        // GatherOneBlock consumes consecutive entries of `order`, so the block's lines are that run.
+        groups.emplace_back(order.begin() + static_cast<std::ptrdiff_t>(i),
+                            order.begin() + static_cast<std::ptrdiff_t>((std::min)(order.size(), i + (std::max<size_t>)(1, consumed))));
         i += (std::max<size_t>)(1, consumed);
     }
     DemoteFalsePositiveHeadingRuns(&content);
+    JoinHyphenAcrossBlocks(*pw, &content, groups);   // #781
     BlockImpl leftover;
     if (BuildLeftoverParagraph(*pw, page_index, &leftover)) {
         leftover.info.source = MEGAPDF_STRUCTURE_SOURCE_HEURISTIC;
