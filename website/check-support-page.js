@@ -190,6 +190,14 @@ const titles = (doc) => [...doc.querySelectorAll("#hits .hit h4")].map((h) => h.
               "MegaPDF support " + doc3.getElementById("refshow").textContent);
     }
 
+    // #635: the page used to promise "one person" and "no ticket robot". The mailbox is now
+    // sorted by software and decided by a person (privacy policy section 4, support-triage), so
+    // those two phrases would contradict the policy the page is deployed with.
+    check("the page no longer promises 'ticket robot' or 'to one person'",
+          !/ticket robot/i.test(HTML) && !/to one person/i.test(HTML),
+          [/ticket robot/i.test(HTML) && "ticket robot", /to one person/i.test(HTML) && "to one person"]
+              .filter(Boolean).join(", "));
+
     // Every answer must be reachable by its own terms, or it is dead weight on the page.
     // A fresh page, because "Not it" above is remembered for the rest of that visit.
     const dom2 = load();

@@ -156,6 +156,13 @@ convention below, which that system consumes, and the policy paragraph that disc
 (§4, `id="support-triage"`). Link the system's repo here once Dave creates it:
 **support system repo: not yet created.**
 
+**An obligation the support system inherits.** §4 promises: "If that software ever uses an
+outside service to read your message, this policy will name the service before it does."
+So the support-system repo may not send a message to a language model or any other outside
+service until this policy names that service, deployed first (the ordering §11 promises).
+Whether every message gets a reply, flagged or not, is that system's design, not
+MegaPDF's; record the rule there when the repo exists.
+
 **The convention** (it is an interface, so `check_support()` refuses a page that stops
 building the subject, and `check-support-page.js` pins every combination):
 
