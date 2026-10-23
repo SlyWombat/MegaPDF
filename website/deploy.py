@@ -244,6 +244,9 @@ def check_linux(snap):
 # that silently never appears.
 SUPPORT_PLATFORMS = {"all", "windows", "mac", "ios", "android", "linux"}
 SUPPORT_ADDRESS = "info@electricrv.ca"
+# The start of every support subject: "MegaPDF support MP-YYMMDD-XXXX [Platform] [Kind]".
+# The Outlook rule on the mailbox and the in-house support system both read it (#635).
+SUPPORT_SUBJECT_PREFIX = '"MegaPDF support " + reference()'
 
 
 def check_support(include_privacy):
@@ -276,6 +279,23 @@ def check_support(include_privacy):
         raise SystemExit('--support: privacy/index.html has no id="support" section, so '
                          "the support page would link an anchor that is not there and "
                          "would go up undisclosed. Add the section to the policy first.")
+
+    # #635: the mailbox this page writes to is read and answered by an automated
+    # system, and the policy says so in the paragraph with this anchor. The page and the
+    # sentence go up together or not at all, the same ordering the section above has.
+    if 'id="support-triage"' not in policy:
+        raise SystemExit('--support: privacy/index.html has no id="support-triage" '
+                         "paragraph. Support mail is read and answered by an automated "
+                         "system (#635), and the policy has to say so before, or in the "
+                         "same deploy as, the page that sends mail to it.")
+
+    # #635: the support system sorts mail by the subject this page writes, so the
+    # subject's shape is an interface, not wording. See website/README.md, 'The support
+    # mailbox'. Refuse a page that no longer builds it.
+    if SUPPORT_SUBJECT_PREFIX not in page:
+        raise SystemExit(f"--support: the support page no longer builds a subject that "
+                         f"starts {SUPPORT_SUBJECT_PREFIX!r}. The Outlook rule and the "
+                         "support system key on it (#635); change them first.")
 
     if SUPPORT_ADDRESS not in page:
         raise SystemExit(f"--support: the support page never names {SUPPORT_ADDRESS}. "
@@ -381,7 +401,8 @@ def check_support(include_privacy):
                          "<!--linux:live--> region, so that link 404s on a deploy without "
                          "--linux. Move it inside one.")
     return (f"support/ checked: {len(blocks)} answers, all matchable; "
-            f'privacy/ carries the id="support" section and goes up with it')
+            f'privacy/ carries the id="support" section and the id="support-triage" '
+            "paragraph and goes up with it")
 
 
 def _empty():
