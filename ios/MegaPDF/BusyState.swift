@@ -24,6 +24,8 @@ enum BusyLabel: Equatable {
     case exportingText
     /// Serialising the print copy (#675), before the system print sheet has anything to show.
     case preparingToPrint
+    /// Shrink for email (#593), counting pictures.
+    case shrinking
 
     var text: String {
         switch self {
@@ -35,6 +37,7 @@ enum BusyLabel: Equatable {
         case .searching: return String(localized: "Searching…")
         case .exportingText: return String(localized: "Exporting…")
         case .preparingToPrint: return String(localized: "Preparing to print…")
+        case .shrinking: return String(localized: "Making a smaller copy…")
         }
     }
 }

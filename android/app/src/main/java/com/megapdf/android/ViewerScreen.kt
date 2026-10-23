@@ -223,6 +223,8 @@ fun ViewerScreen(
     onSaveAs: () -> Unit,
     /** Export as Markdown (#386, #409): its own row, never a format of Save a copy. */
     onExportMarkdown: () -> Unit = {},
+    /** Shrink for email (#593): a smaller copy of the document as it is on screen, never a change to it. */
+    onShrink: () -> Unit = {},
     // Redaction (SDD §3.8 / F7, #173). Marks are not page content: the core keeps them and
     // never writes them, so the screen draws them and nothing here is in the raster.
     redactMode: Boolean = false,
@@ -911,6 +913,14 @@ fun ViewerScreen(
                                     text = { Text(stringResource(R.string.export_markdown)) },
                                     enabled = !isSaving && !documentLocked,
                                     onClick = { menuOpen = false; onExportMarkdown() },
+                                )
+                                // Shrink for email (#593): like the export above, it reads the
+                                // document as it is on screen and changes nothing about it; the
+                                // result sheet offers Share first, then Save a copy.
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.shrink_for_email)) },
+                                    enabled = !isSaving && !documentLocked,
+                                    onClick = { menuOpen = false; onShrink() },
                                 )
                                 DropdownMenuItem(
                                     text = { Text(stringResource(R.string.share)) },
@@ -1778,7 +1788,7 @@ internal fun BusyStrip(indicator: BusyIndicator) {
         )
         if (done != null && total != null) {
             Text(
-                stringResource(R.string.busy_progress_of_pages, done, total),
+                stringResource(label.progressId, done, total),
                 style = MaterialTheme.typography.labelSmall,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp),
             )

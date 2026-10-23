@@ -138,6 +138,27 @@
     <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
     <string name="markdown_export_failed">No se pudo exportar como Markdown.</string>
 
+    <!-- Shrink for email (#593): una copia reducida del documento tal como está en pantalla,
+         con Compartir primero y luego Guardar una copia. El documento abierto nunca se modifica. -->
+    <!-- ES-REVIEW #593 — new with Shrink for email, not yet read by the reviewer. -->
+    <string name="shrink_for_email">Reducir para correo electrónico</string>
+    <!-- ES-REVIEW #593 — new with Shrink for email, not yet read by the reviewer. -->
+    <string name="shrink_ready_title">Copia reducida lista</string>
+    <!-- ES-REVIEW #593 — new with Shrink for email, not yet read by the reviewer. -->
+    <string name="shrink_ready_body">Antes: %1$s, ahora: %2$s.</string>
+    <!-- ES-REVIEW #593 — new with Shrink for email, not yet read by the reviewer. -->
+    <string name="shrink_original_unchanged">El documento que tienes abierto queda sin cambios.</string>
+    <!-- ES-REVIEW #593 — new with Shrink for email, not yet read by the reviewer. -->
+    <string name="shrink_nothing">Las imágenes de este documento ya son pequeñas; no hay nada que reducir.</string>
+    <!-- ES-REVIEW #593 — new with Shrink for email, not yet read by the reviewer. -->
+    <string name="shrink_not_smaller">Reducir no haría este documento más pequeño.</string>
+    <!-- ES-REVIEW #593 — new with Shrink for email, not yet read by the reviewer. -->
+    <string name="shrink_failed">No se pudo reducir.</string>
+    <!-- ES-REVIEW #593 — new with Shrink for email, not yet read by the reviewer. -->
+    <string name="shrink_file_name">%1$s - reducido</string>
+    <!-- ES-REVIEW #593 — new with Shrink for email, not yet read by the reviewer. -->
+    <string name="smaller_copy_saved">Copia reducida guardada</string>
+
     <!-- Document security (#131): restricted documents, the owner password, and the Password command. -->
     <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
     <string name="security_restricted_notice">El autor de este documento pidió que no se modifique. Aun así puedes modificarlo; MegaPDF te lo advertirá antes.</string>
@@ -361,6 +382,10 @@
     <string name="busy_adding_pages">Añadiendo páginas…</string>
     <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
     <string name="busy_progress_of_pages">Página %1$d de %2$d</string>
+    <!-- ES-REVIEW #593 — new with Shrink for email, not yet read by the reviewer. -->
+    <string name="busy_shrinking">Creando una copia reducida…</string>
+    <!-- ES-REVIEW #593 — new with Shrink for email, not yet read by the reviewer. -->
+    <string name="busy_progress_of_pictures">Imagen %1$d de %2$d</string>
     <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
     <string name="stop">Detener</string>
     <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->

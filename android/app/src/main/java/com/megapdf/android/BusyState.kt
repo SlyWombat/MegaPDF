@@ -9,8 +9,12 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-/** What the app is busy with (#145); each has its label in the string catalogue. */
-enum class BusyLabel(val stringId: Int) {
+/**
+ * What the app is busy with (#145); each has its label in the string catalogue, and
+ * [progressId] words its count ("Page 3 of 10", "Picture 3 of 10"), so the strip is the one
+ * place a count is worded and this class stays free of nouns.
+ */
+enum class BusyLabel(val stringId: Int, val progressId: Int = R.string.busy_progress_of_pages) {
     OPENING(R.string.busy_opening),
     SAVING(R.string.saving),
     VERIFYING_SAVE(R.string.busy_verifying_save),
@@ -34,6 +38,8 @@ enum class BusyLabel(val stringId: Int) {
     MOVING_PAGE(R.string.busy_moving_page),
     INSERTING_PAGE(R.string.busy_inserting_page),
     ADDING_PAGES(R.string.busy_adding_pages),
+    /** Shrink for email (#593), counting the pictures the core has looked at. */
+    SHRINKING(R.string.busy_shrinking, R.string.busy_progress_of_pictures),
 }
 
 /** Where page-level work shows its spinner: a page, and the line on it when there is one. */

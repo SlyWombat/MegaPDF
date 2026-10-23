@@ -17,7 +17,7 @@ Each cell says two things and both are checked against the code:
 | `GAP` | the feature is **missing** where it should exist — the #571 shape |
 | `+m` | a by-hand step in `TESTING.md` / `docs/RELEASING.md` covers it too |
 
-235 pairings: 142 UI, 59 eng, 14 —, 14 n/a, 6 GAP.
+235 pairings: 144 UI, 59 eng, 14 —, 14 n/a, 4 GAP.
 
 This map is about *what is covered*, not whether the covering tests pass — that is the
 other jobs' business — and it does not replace the by-hand pass in `docs/RELEASING.md`
@@ -28,7 +28,7 @@ other jobs' business — and it does not replace the by-hand pass in `docs/RELEA
 This is the part worth reading. A map that only restated what passes would not be
 worth checking in.
 
-### Missing feature — absent where it should exist (6)
+### Missing feature — absent where it should exist (4)
 
 Nothing is failing; nothing is looking. #571 (Linux had an About window with no route to it) and #3 (Android had no whiteout at all) were both this.
 
@@ -38,8 +38,6 @@ Nothing is failing; nothing is looking. #571 (Linux had an About window with no 
 | A withheld permission is said out loud, and the person may continue (`permission-override`) | linux | same as macOS. | #558 |
 | A withheld permission is said out loud, and the person may continue (`permission-override`) | macos | same as Windows — the shared MegaPDF.Core DocumentCapabilities both desktops consume is the half that has to change, so these two land together. | #558 |
 | A withheld permission is said out loud, and the person may continue (`permission-override`) | windows | still refuses. DocumentCapabilities.cs reads the bits and the toolbar greys out what the author withheld; megapdf_security_override() is in the core and unbound in CoreNative.cs. | #558 |
-| Shrink for email (`shrink`) | android | no shrink on Android either, for the same reason and with the same silence. | — |
-| Shrink for email (`shrink`) | ios | no shrink on iOS. Nothing in the source says it was decided against, and a phone mailing a scan is the case it exists for. | — |
 
 ### Present, nothing automated (14)
 
@@ -190,7 +188,7 @@ The shared core proves the operation. Nothing proves this platform reaches it co
 | **Share** | n/a | n/a | n/a | eng+m | UI+m |
 | **Password — set, change, remove, and opening a protected document** | UI | eng | eng | eng | eng |
 | **A withheld permission is said out loud, and the person may continue** | GAP | GAP | GAP | GAP | UI |
-| **Shrink for email** | UI+m | UI+m | UI+m | GAP | GAP |
+| **Shrink for email** | UI+m | UI+m | UI+m | UI | UI |
 | **Print** | —+m | —+m | UI+m | eng+m | eng+m |
 | **Progress and Stop on long operations** | UI | UI | UI | UI | UI |
 
@@ -538,8 +536,8 @@ show*: each one has a working refusal, so no test fails — they are walls that 
 - **Windows** — UI+m. coverage: UI/VM. reachable from `src/MegaPDF.App/MainWindow.xaml::ShrinkButton`. tests: `.github/workflows/ci.yml::Run-Check "progress"`, `.github/workflows/ci.yml::Run-Check "shrink-notice"`, `tests/MegaPDF.Core.Tests/ImageShrinkerTests.cs::Shrink`, `tests/MegaPDF.Core.Tests/SmallerCopyGateTests.cs::SmallerCopyGate`, `tests/MegaPDF.Core.Tests/ImageCompressionTests.cs::Compress`. by hand: `TESTING.md::**Shrink for email**`. progress and a deterministic in-loop Stop, with no partial file left behind. #632: the outcome is an InfoBar (ShrinkNoticeBar), never a dialog — shrink-notice drives the real command on a picture-less document and raises the success bar without the picker. #6: a copy that is not strictly smaller than the file on disk is never offered or saved; shrink-notice drives the real byte gate (StageSmallerCopyAsync) and shows the not-smaller notice, and SmallerCopyGateTests decides on bytes in the core.
 - **macOS** — UI+m. coverage: UI/VM. reachable from `src/MegaPDF.Avalonia/Views/MainWindow.Toolbar.cs::CommandEntry(Strings.Shrink`. tests: `src/MegaPDF.Avalonia/Program.cs::CheckProgressAndCancel`, `tests/MegaPDF.Core.Tests/ImageShrinkerTests.cs::Shrink`, `tests/MegaPDF.Core.Tests/SmallerCopyGateTests.cs::SmallerCopyGate`, `tests/MegaPDF.Core.Tests/ImageCompressionTests.cs::Compress`. by hand: `TESTING.md::**Shrink for email**`. stoppability and the rule that the open document is never what shrink was working on.
 - **Linux** — UI+m. coverage: UI/VM. reachable from `src/MegaPDF.Avalonia/Views/MainWindow.Toolbar.cs::CommandEntry(Strings.Shrink`. tests: `src/MegaPDF.Avalonia/Program.cs::CheckProgressAndCancel`, `tests/MegaPDF.Core.Tests/ImageShrinkerTests.cs::Shrink`, `tests/MegaPDF.Core.Tests/SmallerCopyGateTests.cs::SmallerCopyGate`, `tests/MegaPDF.Core.Tests/ImageCompressionTests.cs::Compress`. by hand: `TESTING.md::**Shrink for email**`. same as macOS.
-- **iOS/iPadOS** — GAP. absent (gap). no shrink on iOS. Nothing in the source says it was decided against, and a phone mailing a scan is the case it exists for.
-- **Android** — GAP. absent (gap). no shrink on Android either, for the same reason and with the same silence.
+- **iOS/iPadOS** — UI. coverage: UI/VM. reachable from `ios/MegaPDF/ViewerView.swift::Shrink for email`. tests: `core/tests/core_tests.cpp::test_shrink_progress_and_cancel`, `ios/MegaPDFTests/ShrinkTests.swift::testShrinkReplacesTheOversizedImage`, `ios/MegaPDFTests/ShrinkTests.swift::testARaisedFlagStopsTheShrink`, `ios/MegaPDFTests/ShrinkTests.swift::testTheModelOffersASmallerCopyAndTheDocumentIsUnchanged`, `ios/MegaPDFTests/ShrinkTests.swift::testACopyThatIsNotSmallerIsNotOffered`, `ios/MegaPDFUITests/ShrinkForEmailUITests.swift::testShrinkForEmailOffersShareAndSave`, `ios/MegaPDFUITests/ShrinkForEmailUITests.swift::testShrinkForEmailWithAMarkAsksTheRedactionQuestionAndCancelMakesNothing`, `ios/ui-test-lanes.txt::iphone/ShrinkForEmailUITests`. #593: the core's megapdf_shrink_images_cancellable with an ImageIO encoder, run off the engine actor so the open document keeps rendering. Shrinks what is on screen, unsaved edits included (Dave, 2026-10-21); the result sheet offers ShareLink first, then Save to Files through the one file exporter (#589), and the copy is never adopted as the open document (#572). Progress and Stop in the busy strip, counting pictures.
+- **Android** — UI. coverage: UI/VM. reachable from `android/app/src/main/java/com/megapdf/android/ViewerScreen.kt::R.string.shrink_for_email`. tests: `core/tests/core_tests.cpp::test_shrink_progress_and_cancel`, `android/engine/src/androidTest/java/com/megapdf/engine/ShrinkEngineTest.kt::shrinkReplacesTheOversizedImageAndTheSavedCopyIsSmaller`, `android/engine/src/androidTest/java/com/megapdf/engine/ShrinkEngineTest.kt::aRaisedFlagStopsTheShrink`, `android/app/src/androidTest/java/com/megapdf/android/ShrinkForEmailTest.kt::shrinkForEmailOffersASmallerCopyAndLeavesTheDocumentAlone`, `android/app/src/androidTest/java/com/megapdf/android/ShrinkForEmailTest.kt::shrinkForEmailWithAMarkAsksTheRedactionQuestionAndCancelMakesNothing`, `android/app/src/androidTest/java/com/megapdf/android/ShrinkForEmailTest.kt::aCopyThatIsNotSmallerIsNotOffered`, `android/app/src/test/java/com/megapdf/android/DocumentCapabilitiesTest.kt::shrinkNeedsModify`, `android/app/src/test/java/com/megapdf/android/ShareFileTest.kt::a shrunk copy is named`. #593: the core's megapdf_shrink_images_cancellable, bound over JNI with Bitmap.compress as the encoder, run off the engine thread so the open document keeps rendering. Shrinks what is on screen, unsaved edits included (Dave, 2026-10-21); the result sheet offers Share first, then Save a copy, and the open document is never adopted or changed. Progress and Stop in the busy strip, counting pictures.
 
 ### Print (`print`)
 
@@ -554,7 +552,7 @@ show*: each one has a working refusal, so no test fails — they are walls that 
 - **Windows** — UI. coverage: UI/VM. reachable from `src/MegaPDF.App/MainWindow.xaml::BusyCancelButton`. tests: `.github/workflows/ci.yml::Run-Check "progress"`, `tests/MegaPDF.Core.Tests/BusyStateTests.cs::Busy`.
 - **macOS** — UI. coverage: UI/VM. reachable from `src/MegaPDF.Avalonia/Views/MainWindow.axaml::BusyStrip`. tests: `src/MegaPDF.Avalonia/Program.cs::CheckProgressAndCancel`, `src/MegaPDF.Avalonia/Program.cs::CheckBusyStripControls`, `tests/MegaPDF.Core.Tests/BusyStateTests.cs::Busy`.
 - **Linux** — UI. coverage: UI/VM. reachable from `src/MegaPDF.Avalonia/Views/MainWindow.axaml::BusyStrip`. tests: `src/MegaPDF.Avalonia/Program.cs::CheckProgressAndCancel`, `src/MegaPDF.Avalonia/Program.cs::CheckBusyStripControls`, `tests/MegaPDF.Core.Tests/BusyStateTests.cs::Busy`.
-- **iOS/iPadOS** — UI. coverage: UI/VM. reachable from `ios/MegaPDF/ViewerView.swift::busyStop`. tests: `ios/MegaPDFTests/BusyStateTests.swift::class`, `ios/MegaPDFTests/NoticeLifetimeTests.swift::class`, `ios/MegaPDFTests/ProgressAndStopTests.swift::class`, `ios/MegaPDFUITests/ProgressStripUITests.swift::testAScanShowsItsCountAndCanBeStoppedFromTheStrip`, `ios/ui-test-lanes.txt::iphone/ProgressStripUITests`. the timing state machine, the progress and Stop layer, and a UI test that reads the count line and presses the Stop in a running app — which is how the Stop's hit area was found to be 15.7 points tall. Search has progress and Stop, extract has Stop, a save has neither on purpose (#145); shrink does not exist on this platform.
+- **iOS/iPadOS** — UI. coverage: UI/VM. reachable from `ios/MegaPDF/ViewerView.swift::busyStop`. tests: `ios/MegaPDFTests/BusyStateTests.swift::class`, `ios/MegaPDFTests/NoticeLifetimeTests.swift::class`, `ios/MegaPDFTests/ProgressAndStopTests.swift::class`, `ios/MegaPDFUITests/ProgressStripUITests.swift::testAScanShowsItsCountAndCanBeStoppedFromTheStrip`, `ios/ui-test-lanes.txt::iphone/ProgressStripUITests`. the timing state machine, the progress and Stop layer, and a UI test that reads the count line and presses the Stop in a running app — which is how the Stop's hit area was found to be 15.7 points tall. Search has progress and Stop, extract has Stop, a save has neither on purpose (#145); shrink has progress (pictures) and Stop (#593).
 - **Android** — UI. coverage: UI/VM. reachable from `android/app/src/main/java/com/megapdf/android/ViewerScreen.kt::BusyStopSnackbar`. tests: `android/app/src/test/java/com/megapdf/android/BusyStateTest.kt::class`, `android/app/src/test/java/com/megapdf/android/PageOperationBusyLabelTest.kt::class`, `android/app/src/androidTest/java/com/megapdf/android/PageToolsProgressTest.kt::class`.
 
 ### Undo and redo (`undo-redo`)
@@ -708,6 +706,8 @@ These are the exceptions, each with its reason.
 | `ios/MegaPDFUITests/PageInput.swift` | the shared page taps, ⋯ menu and export sheet for the UI suites (#681, #706), driven by the app's -uiTestInputProbe: a harness with no assertion of its own, and every suite that calls it is on the map |
 | `ios/MegaPDFTests/ModelOpening.swift` | the same wait for the unit suites (#599), replacing nine identical private copies; a harness, not a test |
 | `android/app/src/androidTest/java/com/megapdf/android/TestPdfs.kt` | fixture builder for the instrumented suite, not a test |
+| `android/app/src/androidTest/java/com/megapdf/android/LargeImagePdf.kt` | fixture builder for the instrumented suite (#593), not a test |
+| `android/engine/src/androidTest/java/com/megapdf/engine/LargeImagePdf.kt` | fixture builder for the engine's device tests (#593), not a test |
 | `android/app/src/androidTest/java/com/megapdf/android/ViewerHarness.kt` | Compose harness for the instrumented suite, not a test |
 | `android/app/src/test/java/com/megapdf/android/ScaffoldTest.kt` | toolchain smoke test — proves Gradle and JUnit are wired, covers no feature |
 | `android/engine/src/test/java/com/megapdf/engine/EngineScaffoldTest.kt` | toolchain smoke test, as ScaffoldTest |

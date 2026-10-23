@@ -15,6 +15,10 @@ struct ViewerView: View {
     /// A Markdown export of the document's text (#386) -- a one-way, lossy export, not another
     /// Save-a-copy format; see `ViewerModel.exportMarkdownFile`.
     let onExportMarkdown: () -> Void
+    /// Shrink for email (#593): a smaller copy of what is on screen; never a change to the document.
+    let onShrink: () -> Void
+    /// Save to Files from the shrink result: the staged copy, for the one file exporter (#589).
+    let onSaveShrunk: (URL) -> Void
     let onClose: () -> Void
 
     @State private var zoom: CGFloat = 1
@@ -42,6 +46,8 @@ struct ViewerView: View {
     /// rather than a guessed coordinate — `MoreMenuAnchorKey` below reports it here.
     @State private var moreMenuAnchor: CGRect = .zero
     @State private var settingsOpen = false
+    /// The shrunk copy Save to Files asked for, presented from the result sheet's onDismiss (#593).
+    @State private var pendingShrunkSave: URL?
 
     // MARK: - reading mode's view state (#506, #512)
 
@@ -617,6 +623,20 @@ struct ViewerView: View {
                     ShareSheet(activityItems: [url], anchor: moreMenuAnchor)
                 }
             }
+            // Shrink for email's result (#593). The exporter for Save to Files is presented from
+            // onDismiss, once this sheet has gone, never from its button (#589's family of bug).
+            .sheet(item: $model.shrinkReady, onDismiss: {
+                if let url = pendingShrunkSave {
+                    pendingShrunkSave = nil
+                    onSaveShrunk(url)
+                } else {
+                    model.finishShrunkExport(saved: false)
+                }
+            }) { ready in
+                ShrinkReadySheet(ready: ready,
+                                 onSaveToFiles: { pendingShrunkSave = ready.url; model.shrinkReady = nil },
+                                 onDone: { model.shrinkReady = nil })
+            }
             // The confirmation #173 asks for, before either save path writes anything: what
             // redaction does, that it cannot be undone once saved, and Save a copy as the
             // DEFAULT action — the reversible choice, because the other cannot be taken back.
@@ -837,6 +857,16 @@ struct ViewerView: View {
                 }
                     .disabled(model.isSaving || model.fileCommandsBlocked)
                     .accessibilityIdentifier("viewerExportMarkdown")
+                // #593: a smaller copy of the document as it is on screen, offered for Share
+                // first, then Save to Files. Like the export above, it changes nothing about
+                // the document. Like the export, it asks the redaction question first: a
+                // copy made to be emailed is the worst place for marked-but-unapplied
+                // content to go (coordinator, 2026-10-22).
+                Button("Shrink for email") {
+                    if model.redactionMarkCount > 0 { redactConfirm = .shrink } else { onShrink() }
+                }
+                    .disabled(!model.capabilities.canShrink || model.isSaving || model.fileCommandsBlocked)
+                    .accessibilityIdentifier("viewerShrink")
                 // #378: hands the document to the OS's own share sheet (Mail, Messages,
                 // AirDrop, another PDF app, whatever is installed) rather than a
                 // MegaPDF-drawn destination list. Unsaved changes ask first, through the
@@ -1143,6 +1173,13 @@ struct ViewerView: View {
         Button("Export as Markdown") {
             redactConfirm = nil
             Task { if await model.applyRedactions(reportWithSave: true) { onExportMarkdown() } }
+        }
+        // #593: the same, for a copy made to be emailed. The marked content is removed from
+        // the document in memory first; the shrink then reads that, and the open document is
+        // left with the removal unsaved, as after the export.
+        Button("Shrink for email") {
+            redactConfirm = nil
+            Task { if await model.applyRedactions(reportWithSave: true) { onShrink() } }
         }
         Button("Overwrite the original") {
             redactConfirm = nil
@@ -1927,7 +1964,7 @@ struct RedactBand: Equatable {
 }
 
 /// Which save the redaction confirmation was raised from (#173).
-enum RedactSaveChoice { case overwrite, copy, markdown }
+enum RedactSaveChoice { case overwrite, copy, markdown, shrink }
 
 /// Icon beside title, or the icon alone, for the iPad's tool strip (#172). Its own style
 /// rather than a ternary between `.titleAndIcon` and `.iconOnly`, which are two types.

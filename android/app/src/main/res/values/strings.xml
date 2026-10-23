@@ -89,6 +89,20 @@
     <string name="exported_markdown">Exported as Markdown</string>
     <string name="markdown_export_failed">Couldn\'t export as Markdown.</string>
 
+    <!-- Shrink for email (#593): a smaller copy of the document as it is on screen, offered for
+         Share first, then Save a copy. The open document is never changed. -->
+    <string name="shrink_for_email">Shrink for email</string>
+    <string name="shrink_ready_title">Smaller copy ready</string>
+    <!-- The sizes before and after, from the platform's file-size formatter. -->
+    <string name="shrink_ready_body">Was %1$s, now %2$s.</string>
+    <string name="shrink_original_unchanged">The document you have open is unchanged.</string>
+    <string name="shrink_nothing">The pictures in this document are already small — nothing to shrink.</string>
+    <string name="shrink_not_smaller">Shrinking wouldn\'t make this document any smaller.</string>
+    <string name="shrink_failed">Couldn\'t shrink.</string>
+    <!-- The shrunk copy's file name: the document's name without .pdf, then this. -->
+    <string name="shrink_file_name">%1$s - smaller</string>
+    <string name="smaller_copy_saved">Smaller copy saved</string>
+
     <!-- Document security (#131): restricted documents, the owner password, and the Password command. -->
     <!-- #558: reworded. It used to read "The owner of this document restricted changes to it. To
          edit it, unlock it with the owner password from the menu." — which said a wall was there
@@ -245,6 +259,9 @@
     <!-- The strip's count line for a cancellable, per-item sweep (#145): its own line rather than
          folded into the label, so a screen reader is not asked to announce it once per item. -->
     <string name="busy_progress_of_pages">Page %1$d of %2$d</string>
+    <!-- Shrink for email (#593): the strip's label, and its count, which is of pictures. -->
+    <string name="busy_shrinking">Making a smaller copy…</string>
+    <string name="busy_progress_of_pictures">Picture %1$d of %2$d</string>
     <!-- Busy strip Stop (#145): the word that abandons work in progress, as distinct from Cancel,
          which abandons a question. -->
     <string name="stop">Stop</string>

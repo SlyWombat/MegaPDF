@@ -1809,15 +1809,35 @@ tests = [
 manual = "TESTING.md::**Shrink for email**"
 note = "same as macOS."
 [feature.ios]
-presence = "absent"
-coverage = "n/a"
-absence = "gap"
-note = "no shrink on iOS. Nothing in the source says it was decided against, and a phone mailing a scan is the case it exists for."
+presence = "present"
+entry = "ios/MegaPDF/ViewerView.swift::Shrink for email"
+coverage = "ui"
+tests = [
+  "core/tests/core_tests.cpp::test_shrink_progress_and_cancel",
+  "ios/MegaPDFTests/ShrinkTests.swift::testShrinkReplacesTheOversizedImage",
+  "ios/MegaPDFTests/ShrinkTests.swift::testARaisedFlagStopsTheShrink",
+  "ios/MegaPDFTests/ShrinkTests.swift::testTheModelOffersASmallerCopyAndTheDocumentIsUnchanged",
+  "ios/MegaPDFTests/ShrinkTests.swift::testACopyThatIsNotSmallerIsNotOffered",
+  "ios/MegaPDFUITests/ShrinkForEmailUITests.swift::testShrinkForEmailOffersShareAndSave",
+  "ios/MegaPDFUITests/ShrinkForEmailUITests.swift::testShrinkForEmailWithAMarkAsksTheRedactionQuestionAndCancelMakesNothing",
+  "ios/ui-test-lanes.txt::iphone/ShrinkForEmailUITests",
+]
+note = "#593: the core's megapdf_shrink_images_cancellable with an ImageIO encoder, run off the engine actor so the open document keeps rendering. Shrinks what is on screen, unsaved edits included (Dave, 2026-10-21); the result sheet offers ShareLink first, then Save to Files through the one file exporter (#589), and the copy is never adopted as the open document (#572). Progress and Stop in the busy strip, counting pictures."
 [feature.android]
-presence = "absent"
-coverage = "n/a"
-absence = "gap"
-note = "no shrink on Android either, for the same reason and with the same silence."
+presence = "present"
+entry = "android/app/src/main/java/com/megapdf/android/ViewerScreen.kt::R.string.shrink_for_email"
+coverage = "ui"
+tests = [
+  "core/tests/core_tests.cpp::test_shrink_progress_and_cancel",
+  "android/engine/src/androidTest/java/com/megapdf/engine/ShrinkEngineTest.kt::shrinkReplacesTheOversizedImageAndTheSavedCopyIsSmaller",
+  "android/engine/src/androidTest/java/com/megapdf/engine/ShrinkEngineTest.kt::aRaisedFlagStopsTheShrink",
+  "android/app/src/androidTest/java/com/megapdf/android/ShrinkForEmailTest.kt::shrinkForEmailOffersASmallerCopyAndLeavesTheDocumentAlone",
+  "android/app/src/androidTest/java/com/megapdf/android/ShrinkForEmailTest.kt::shrinkForEmailWithAMarkAsksTheRedactionQuestionAndCancelMakesNothing",
+  "android/app/src/androidTest/java/com/megapdf/android/ShrinkForEmailTest.kt::aCopyThatIsNotSmallerIsNotOffered",
+  "android/app/src/test/java/com/megapdf/android/DocumentCapabilitiesTest.kt::shrinkNeedsModify",
+  "android/app/src/test/java/com/megapdf/android/ShareFileTest.kt::a shrunk copy is named",
+]
+note = "#593: the core's megapdf_shrink_images_cancellable, bound over JNI with Bitmap.compress as the encoder, run off the engine thread so the open document keeps rendering. Shrinks what is on screen, unsaved edits included (Dave, 2026-10-21); the result sheet offers Share first, then Save a copy, and the open document is never adopted or changed. Progress and Stop in the busy strip, counting pictures."
 
 [[feature]]
 id = "print"
@@ -1903,7 +1923,7 @@ tests = [
   "ios/MegaPDFUITests/ProgressStripUITests.swift::testAScanShowsItsCountAndCanBeStoppedFromTheStrip",
   "ios/ui-test-lanes.txt::iphone/ProgressStripUITests",
 ]
-note = "the timing state machine, the progress and Stop layer, and a UI test that reads the count line and presses the Stop in a running app — which is how the Stop's hit area was found to be 15.7 points tall. Search has progress and Stop, extract has Stop, a save has neither on purpose (#145); shrink does not exist on this platform."
+note = "the timing state machine, the progress and Stop layer, and a UI test that reads the count line and presses the Stop in a running app — which is how the Stop's hit area was found to be 15.7 points tall. Search has progress and Stop, extract has Stop, a save has neither on purpose (#145); shrink has progress (pictures) and Stop (#593)."
 [feature.android]
 presence = "present"
 entry = "android/app/src/main/java/com/megapdf/android/ViewerScreen.kt::BusyStopSnackbar"
@@ -2542,6 +2562,14 @@ why = "the same wait for the unit suites (#599), replacing nine identical privat
 [[exempt]]
 ref = "android/app/src/androidTest/java/com/megapdf/android/TestPdfs.kt"
 why = "fixture builder for the instrumented suite, not a test"
+
+[[exempt]]
+ref = "android/app/src/androidTest/java/com/megapdf/android/LargeImagePdf.kt"
+why = "fixture builder for the instrumented suite (#593), not a test"
+
+[[exempt]]
+ref = "android/engine/src/androidTest/java/com/megapdf/engine/LargeImagePdf.kt"
+why = "fixture builder for the engine's device tests (#593), not a test"
 
 [[exempt]]
 ref = "android/app/src/androidTest/java/com/megapdf/android/ViewerHarness.kt"

@@ -216,6 +216,9 @@ internal object PdfiumNative {
         handle: Long, pages: IntArray?, outPathUtf8: ByteArray, cancel: Long,
     ): Int
 
+    /** [status, considered, replaced]. `cancel` is a megapdf_cancel handle or 0 (#593). */
+    external fun nativeShrinkImages(handle: Long, cancel: Long, callbacks: ShrinkCallbacks): IntArray
+
     // megapdf_write_options.format (megapdf_core.h, #386).
     const val WRITE_FORMAT_TEXT = 0
     const val WRITE_FORMAT_MARKDOWN = 1

@@ -92,6 +92,20 @@ class DocumentCapabilitiesTest {
     }
 
     @Test
+    fun shrinkNeedsModify() {
+        // #593: the desktops' CanShrink, the modify bit and nothing else, in both directions.
+        assertTrue(DocumentCapabilities.fromSecurity(restricted(PdfPermissions.MODIFY)).canShrink)
+        assertFalse(
+            DocumentCapabilities.fromSecurity(
+                restricted(PdfPermissions.ALL and PdfPermissions.MODIFY.inv()),
+            ).canShrink,
+        )
+        assertTrue(DocumentCapabilities.FULL.canShrink)
+        val owner = PdfSecurity(isEncrypted = true, revision = 6, permissions = 0, hasFullAccess = true)
+        assertTrue(DocumentCapabilities.fromSecurity(owner).canShrink)
+    }
+
+    @Test
     fun `modify allows body text, redaction and text boxes, but not filling in`() {
         val c = DocumentCapabilities.fromSecurity(restricted(PdfPermissions.MODIFY))
         assertTrue(c.canEditContent && c.canAddText)

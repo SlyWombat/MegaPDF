@@ -112,7 +112,7 @@ private const val PAGES_SUFFIX = "-pages"
  * iOS): an export reads the document's text, so an unapplied mark would leak straight into
  * the `.md` file if the question were skipped.
  */
-private enum class RedactConfirm { SAVE, EXPORT }
+private enum class RedactConfirm { SAVE, EXPORT, SHRINK }
 
 @Composable
 fun MegaPdfApp(viewModel: ViewerViewModel = viewModel(), screenshotState: String? = null) {
@@ -146,6 +146,19 @@ fun MegaPdfApp(viewModel: ViewerViewModel = viewModel(), screenshotState: String
     val exportMarkdown = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("text/markdown")
     ) { uri -> uri?.let { viewModel.exportMarkdown(it) } }
+    // Save a copy from the Shrink for email result (#593): a PDF picker of its own, for #409's
+    // reason, and never Save As — the shrunk copy is not the document being edited. Backing out
+    // of the picker drops the copy, as dismissing the sheet does.
+    val saveShrunk = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/pdf")
+    ) { uri -> if (uri != null) viewModel.saveShrunkCopy(uri) else viewModel.discardShrunkCopy() }
+    // The result sheet steps aside while that picker is up, without dropping the copy. Saveable,
+    // so a recreation behind the picker does not bring the sheet back over its result.
+    var shrunkSaveAsked by androidx.compose.runtime.saveable.rememberSaveable {
+        androidx.compose.runtime.mutableStateOf(false)
+    }
+    val shrinkReady = viewModel.shrinkReady
+    LaunchedEffect(shrinkReady) { if (shrinkReady == null) shrunkSaveAsked = false }
     val pickSignatureImage = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia()
     ) { uri -> uri?.let { viewModel.importSignature(it) } }
@@ -361,6 +374,17 @@ fun MegaPdfApp(viewModel: ViewerViewModel = viewModel(), screenshotState: String
                         exportMarkdown.launch(markdownExportName(state.displayName))
                     }
                 },
+                // Shrink for email (#593): what is on screen, unsaved edits included (Dave,
+                // 2026-10-21); the open document is never touched. The copy is made to be
+                // emailed, so marked-but-unapplied redactions are asked about first, exactly
+                // as Export as Markdown asks (coordinator, 2026-10-22).
+                onShrink = {
+                    if (viewModel.redactionMarkCount > 0) {
+                        redactConfirm = RedactConfirm.SHRINK
+                    } else {
+                        viewModel.shrinkForEmail()
+                    }
+                },
                 capabilities = viewModel.capabilities,
                 isDynamicXfa = state.isDynamicXfa,
                 isSignedOverwritePending = viewModel.isSignedOverwritePending,
@@ -499,6 +523,9 @@ fun MegaPdfApp(viewModel: ViewerViewModel = viewModel(), screenshotState: String
             // the default action — the reversible choice, because the other one cannot be
             // taken back.
             //
+            // Opened for Shrink for email (#593) it ends in Shrink for email or Cancel, the
+            // marked content removed in memory first, as for the export.
+            //
             // Opened for an export (#409), the same question ends in Export as Markdown or
             // Cancel: the marked content is removed from the document in memory and the
             // export then reads it — and the document is left with unsaved changes, because
@@ -529,6 +556,8 @@ fun MegaPdfApp(viewModel: ViewerViewModel = viewModel(), screenshotState: String
                                         if (viewModel.applyRedactions()) createDocument.launch(redactedName(state.displayName))
                                     RedactConfirm.EXPORT ->
                                         if (viewModel.applyRedactionsForExport()) exportMarkdown.launch(markdownExportName(state.displayName))
+                                    RedactConfirm.SHRINK ->
+                                        if (viewModel.applyRedactionsForExport()) viewModel.shrinkForEmail()
                                 }
                             }
                         }) {
@@ -537,6 +566,7 @@ fun MegaPdfApp(viewModel: ViewerViewModel = viewModel(), screenshotState: String
                                     when (ask) {
                                         RedactConfirm.SAVE -> R.string.redact_save_copy
                                         RedactConfirm.EXPORT -> R.string.export_markdown
+                                        RedactConfirm.SHRINK -> R.string.shrink_for_email
                                     }
                                 )
                             )
@@ -553,12 +583,25 @@ fun MegaPdfApp(viewModel: ViewerViewModel = viewModel(), screenshotState: String
                                 stringResource(
                                     when (ask) {
                                         RedactConfirm.SAVE -> R.string.redact_overwrite
-                                        RedactConfirm.EXPORT -> R.string.cancel
+                                        RedactConfirm.EXPORT, RedactConfirm.SHRINK -> R.string.cancel
                                     }
                                 )
                             )
                         }
                     },
+                )
+            }
+
+            // Shrink for email's result (#593): Share first, then Save a copy.
+            if (shrinkReady != null && !shrunkSaveAsked) {
+                ShrinkReadySheet(
+                    ready = shrinkReady,
+                    onShare = viewModel::shareShrunkCopy,
+                    onSave = {
+                        shrunkSaveAsked = true
+                        saveShrunk.launch(shrinkReady.file.name)
+                    },
+                    onDismiss = viewModel::discardShrunkCopy,
                 )
             }
 
