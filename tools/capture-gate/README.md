@@ -1,8 +1,8 @@
 # The capture gate — a runbook
 
 The last thing before a store submission is a person looking at every capture
-(#146 §3). There are about a hundred of them across five platforms and three
-languages, and looking at a hundred images is how the eye stops seeing: the
+(#146 §3). There are about a hundred of them across five platforms and up to five
+languages (three until Spanish, #724), and looking at a hundred images is how the eye stops seeing: the
 stale signature, the selection box left on a name, the English file name in a
 French dialog, the spell-check underline and the Wi-Fi badge all reached a
 review set with someone looking straight at them.
@@ -75,7 +75,7 @@ whether it passed — a note you can disagree with beats a tick you cannot.
 | `person` | the demo person matches the listing language, accents intact (needs OCR) |
 | `zoom` | the zoom chip reads the pinned value (needs OCR) |
 | `privacy` | no home-folder path is legible on the image (needs OCR) |
-| `language` | no English UI word on a French capture (needs OCR) |
+| `language` | no English UI word on a French or Spanish capture (needs OCR) |
 | `siblings` | the same pose in another language is the same layout, the same status bar and the same amount of accent |
 | `chrome` | within one language, the status bar does not vary, and nothing modal is dimming one shot |
 | `certified` | with `--against`, how much this image differs from the one that was signed off |
@@ -133,6 +133,11 @@ Two things to know about the reader:
   "Termine". So `person` compares names unaccented and checks only that the
   accents are *there*, and `language` looks for English words whose French
   counterpart shares no letters with them.
+- **Spanish is read with the same models.** `eng+fra` reads Spanish Latin text well
+  enough for both checks (it drops the accents, as it does French's), so no
+  `tesseract-ocr-spa` is needed. The demo people are Sofía Ramírez (`es-419`) and Lucía
+  Fernández (`es-ES`); the folders a Spanish set may be filed under are `es-419` / `es-MX`
+  and `es-ES` / `es` (`stores.LANG_DIRS`).
 - **It cannot read a toolbar.** Layout analysis throws away a row of icons with
   three-letter labels under them. `zoom` therefore cuts the toolbar into its
   separate controls and reads each one as a single line, which finds "100 %"

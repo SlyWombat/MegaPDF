@@ -11,7 +11,7 @@
 # step: from just before the name to just past it, on the "Name:" line.
 param([int]$X1 = 850, [int]$Y1 = 520, [int]$X2 = 1040, [int]$Y2 = 556,
       [switch]$Save, [string]$Out, [string]$Name = "07-redact",
-      [ValidateSet('en-US', 'fr-CA', 'fr-FR')][string]$Lang = 'en-US')
+      [ValidateSet('en-US', 'fr-CA', 'fr-FR', 'es-419', 'es-ES')][string]$Lang = 'en-US')
 . (Join-Path $PSScriptRoot "lib.ps1")
 
 function Drag-InShot($h, $x1, $y1, $x2, $y2) {
@@ -45,7 +45,10 @@ Park $h
 Shot $h $Name
 if (-not $Save) { return }
 
-$resw = Join-Path $PSScriptRoot "..\..\src\MegaPDF.App\Strings\$Lang\Resources.resw"
+# The catalogue folder is the language tag, except Latin American Spanish: on Windows the
+# neutral Strings\es folder is es-419's (docs/localisation.md), there is no Strings\es-419.
+$dir = if ($Lang -eq 'es-419') { 'es' } else { $Lang }
+$resw = Join-Path $PSScriptRoot "..\..\src\MegaPDF.App\Strings\$dir\Resources.resw"
 [xml]$catalogue = Get-Content $resw -Encoding UTF8
 function Str($name) { ($catalogue.root.data | Where-Object { $_.name -eq $name }).value }
 

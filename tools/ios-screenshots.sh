@@ -12,7 +12,9 @@
 # Android's eight-slot Play set does not apply here); see PR #651 for the open question.
 #
 # Usage: tools/ios-screenshots.sh [lang] [out-dir]
-#   lang     en (default), fr-CA or fr
+#   lang     en (default), fr-CA, fr, es-419 or es (#724: es-419 is Latin American
+#            Spanish and es is Spain's, as fr is France's; the app's es-419 and es
+#            localizations, so the catalog is Apple's own convention)
 #   out-dir  default artifacts/store/screenshots-ios/<lang>
 # Needs a simulator build already in $DERIVED_DATA (default ~/dd-ios), as
 # tools/ios-demo-video.sh leaves one; otherwise builds it.
@@ -39,6 +41,13 @@ LANG_ARGS=()
 case "$LANG_TAG" in
     fr-CA) LANG_ARGS=(-AppleLanguages "(fr-CA)" -AppleLocale fr_CA) ;;
     fr)    LANG_ARGS=(-AppleLanguages "(fr)" -AppleLocale fr_FR) ;;
+    # Spanish (#724). On iOS the bare `es` localization is Spain's and `es-419` is Latin
+    # America's (docs/localisation.md); the locale picks the number and date formats.
+    es-419) LANG_ARGS=(-AppleLanguages "(es-419)" -AppleLocale es_MX) ;;
+    es)    LANG_ARGS=(-AppleLanguages "(es)" -AppleLocale es_ES) ;;
+    en)    ;;
+    # A typo here used to fall through to English and shoot a whole set in the wrong language.
+    *) echo "lang must be en, fr-CA, fr, es-419 or es" >&2; exit 1 ;;
 esac
 
 pick_device() {

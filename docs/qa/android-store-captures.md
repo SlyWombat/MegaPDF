@@ -14,8 +14,8 @@ deliberate act in the Play Console.
 | Workflow | **Android Screenshots** (`.github/workflows/android-screenshots.yml`), `workflow_dispatch` |
 | Script | `android/scripts/capture-screenshots.sh` — the same file runs locally |
 | Device | `profile: pixel_6`, `api-level: 33` → **1080 × 2400 at 420 dpi** (411 × 914 dp). `tools/android-qa/make-store-avds.sh` builds that geometry and a 1600 × 2560 tablet on the same image. |
-| Languages | `en`, `fr-CA`, `fr-FR`, one artifact each (`MEGAPDF_LANG`) |
-| States | `reading text-edit sign pages text search redact home` — the eight listing slots in listing order (#613), 8 images per language, 24 in all |
+| Languages | `en`, `fr-CA`, `fr-FR`, `es-419`, `es-ES` (#724), one artifact each (`MEGAPDF_LANG`; the tag goes to `cmd locale set-app-locales` as it is) |
+| States | `reading text-edit sign pages text search redact home` — the eight listing slots in listing order (#613), 8 images per language, 40 in all |
 
 The app poses itself: `--es screenshot <state>` on the launch intent puts the view
 model straight into the state (`ViewerViewModel.applyScreenshotMode`). Nothing is
@@ -26,7 +26,7 @@ To shoot the same set on any machine with an emulator on that geometry:
 ```bash
 cd android
 ./gradlew :app:assembleDebug
-for L in en fr-CA fr-FR; do MEGAPDF_LANG=$L bash scripts/capture-screenshots.sh; done
+for L in en fr-CA fr-FR es-419 es-ES; do MEGAPDF_LANG=$L bash scripts/capture-screenshots.sh; done
 # images land in /tmp/shots/<language>/
 ```
 
@@ -74,8 +74,9 @@ Each of these has been a defect at least once, so each is named:
   (without it SystemUI draws the "no internet" badge over the icon, because the
   emulator has no validated connection), mobile hidden, notifications hidden.
 - **The demo person.** `screenshot_text` per language — Jane Whitfield, Hélène
-  Bélanger (fr-CA), Céline Lefèvre (fr-FR). It is the one string that differs
-  between the two Frenches in this set; everything else is identical by design.
+  Bélanger (fr-CA), Céline Lefèvre (fr-FR), Sofía Ramírez (es-419), Lucía Fernández
+  (es-ES). It is the one string that differs between the two Frenches in this set;
+  everything else is identical by design.
 - **The pose's word on itself.** `applyScreenshotMode` logs `::error::` under the tag
   `megapdf-screenshot` when a state cannot do what it promises — the `redact` pose
   finding no line to mark, or asking for a mark twice and getting none, or any state
@@ -110,7 +111,7 @@ Look at every image. A set ships only when all of this holds:
    bump landed after the first gate set. Confirm `versionName` in the built APK
    (`aapt2 dump badging`) before shooting, not in the gradle file.
 7. **No stray dialogs** — only the one each state is posing.
-8. **Identical poses across the three languages.** `en` should differ from the two
+8. **Identical poses across the languages.** `en` should differ from the two
    Frenches everywhere but agree in layout. The two Frenches share their chrome —
    the app's fr-FR catalogue is derived from fr-CA — and differ in the **document**
    wherever one is on screen, which since #310 is France's own text rather than
@@ -119,7 +120,10 @@ Look at every image. A set ships only when all of this holds:
    say the two differed only in `text`, which stopped being true when #310 gave
    fr-FR its own agreement and was never corrected.) `home` is the one shot with
    no document on it; the two Frenches are not byte-identical there either, so
-   the gate's "this screen did not translate" check has nothing to except.
+   the gate's "this screen did not translate" check has nothing to except. The two
+   Spanishes are the same story one level up (#724): the document is `demo-es.pdf`
+   (*arrendamiento*, Latin American) or `demo-es-ES.pdf` (*alquiler*, Spain), named by
+   `screenshot_demo_asset` in `values-b+es+419` and in the neutral `values-es`.
 9. **No state missed its pose.** The step reports this itself, and names the states; a
    red run still uploaded its images, so the ones it named are the ones not to read.
 
@@ -181,7 +185,7 @@ one reads as a different app from the seven behind it.
 **`reading` and `pages` open a different document from the other six.** A grid
 of one thumbnail is a picture of nothing and the floating bar would read "Page 1
 of 1", so both open `assets/demo-pages.pdf` (or `demo-fr-pages.pdf` /
-`demo-fr-FR-pages.pdf`): the same filled, ticked, signed page 1, followed by the
+`demo-fr-FR-pages.pdf` / `demo-es-pages.pdf` / `demo-es-ES-pages.pdf`): the same filled, ticked, signed page 1, followed by the
 four sections the agreement names and a landscape rate schedule. Six pages, each
 laid out differently enough to be told apart at thumbnail size, per locale in its
 own usage (#310). It is opened under the same document name as the one-page one,

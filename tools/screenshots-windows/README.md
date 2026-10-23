@@ -23,8 +23,8 @@ PowerShell, but `Click-InShot`, `^o` and the pickers work (2026-09-13).
 
 ## Run order
 
-`Shoot-Set.ps1 -Lang <en-US|fr-CA|fr-FR> -Dir <en|fr-CA|fr-FR>` runs the whole
-sequence for one language: it refuses unless the installed package is the version
+`Shoot-Set.ps1 -Lang <en-US|fr-CA|fr-FR|es-419|es-ES> -Dir <en|fr-CA|fr-FR|es-419|es-ES>`
+runs the whole sequence for one language: it refuses unless the installed package is the version
 to be shot, and afterwards it moves the probe and in-between frames into `work/`,
 so the language folder holds only the eight listing images `tools/capture-gate`
 reads (`gate.py --store microsoft artifacts/store/screenshots`).
@@ -77,7 +77,8 @@ Windows draws, and Find highlights one hit.
 
 All three are copied to a staging folder under **display names in the set's own
 language** before anything is shot (`D:\Documents\Rentals` in English,
-`D:\Documents\Locations` in French). Three places put a file name on camera — the
+`D:\Documents\Locations` in French, `D:\Documents\Arrendamientos` in es-419 and
+`D:\Documents\Alquileres` in es-ES). Three places put a file name on camera — the
 title bar, the tab, and reading mode's floating bar — and the 2.0 and 2.1 sets
 shipped "blank-agreement.pdf" on their French images. The folder is on camera too,
 in the home slot's recents list, which is why it is a drive and two plain folders
@@ -307,6 +308,53 @@ window could leave a "Ctrl+F" accelerator tip painted over the page. That tip wa
 the app's bug, not the harness's: the window's shortcuts gave their host grid a
 tooltip (#226, fixed in 2.0). Parking off the window is still the habit, because
 it keeps any hover state out of the frame.
+
+## Spanish screenshots (#724)
+
+The same run again for `es-419` (Latin American Spanish) and `es-ES` (Spain), after the
+French sets. Not shot yet: the rigs were extended first so the run starts from `main`.
+The sets go in `artifacts/store/screenshots/es-419/` and `es-ES/`; `tools/capture-gate`
+reads those folder names (and the Store listing languages are `es-mx` and `es-es`).
+
+    # 0. the display at 150 %, in its OWN powershell process (as for every language)
+    .\Set-Scale.ps1 150
+    # 1. fresh staging documents for the language
+    python3 tools/screenshots-windows/gen_store_docs.py artifacts/store/screenshots/es-419 --lang es-419
+    python3 tools/screenshots-windows/gen_store_docs.py artifacts/store/screenshots/es-ES  --lang es-ES
+    # 2. the set; the coordinates are the French ones until a probe shows otherwise
+    .\Shoot-Set.ps1 -Lang es-419 -Dir es-419 -TileX1 82 -TileY1 527 -TileX2 223 -TileY2 527
+    .\Shoot-Set.ps1 -Lang es-ES  -Dir es-ES  -TileX1 82 -TileY1 527 -TileX2 223 -TileY2 527
+    # 3. the scale back, and the language setting back to "" if it was changed by hand
+    .\Set-Scale.ps1 200
+
+- **The language is the tag.** `Set-Language.ps1 -Lang es-419|es-ES` writes
+  `"Language": "es-419"` or `"es-ES"` (the two values `AppLanguage.Choices` holds), with no
+  BOM, exactly as it does for French. Never switch the machine's own display language.
+- **Packaged build only.** The unpackaged dev build leaves the `x:Uid` toolbar labels in
+  Windows' language whatever `--language` says (`AppLanguage.cs`), so a Spanish set shot from
+  it would have an English toolbar. The package is the one the Store carries
+  (`Shoot-Set.ps1 -Version` refuses any other). Installing it is the step that has needed
+  Dave at the console in the past (the certificate trust, UAC); see `tools/Store-Submission.md`
+  and `tools/windows-qa/qa-safety.ps1` before touching packages, and never remove a
+  Store-signed one.
+- **The catalogue folders.** `Shot-Redact.ps1` and `Shot-Shrink.ps1` read the language's own
+  `.resw` for the redacted and smaller-copy file names (`-censurado`, `- reducido`). For
+  es-419 that is `Strings\es` (the neutral folder is Latin American on the desktops), for
+  es-ES `Strings\es-ES`; the scripts map it, so pass `-Lang es-419`.
+- **The documents.** `gen_store_docs.py --lang es-419|es-ES` writes the same rental agreement,
+  scan and twelve-page terms on the same layout: every y coordinate and the signature line
+  are the English frame's. The customer is *Sofía Ramirez* / *Lucía Fernandez* and the
+  on-camera fix puts the accent back (`Nombre: Sofía Ramírez`, `Nombre: Lucía Fernández`,
+  typed from code points by `Shoot-Set.ps1`). Spain's page uses *alquiler*, *recogida*,
+  metric lines and euros; Latin America's *arrendamiento*, *recolección* and `$`. The find term is *equipo* in both (no accent, on 11 of the 12 pages).
+- **Width check before shooting (the toolbar).** The Store frame, 2500 px at 150 %, is 1667
+  effective px, and French needs about 1610. Spanish labels are not measured yet. On the
+  packaged build with `"Language": "es-419"`, take the probe frame (`Setup-Frame.ps1 ...
+  -Name probe-frame`) and look at the toolbar: every command must show icon and label and
+  nothing may have dropped into More. If any label is gone, or the toolbar needs more than
+  1667, report it before shooting (the figure is `labelled needs N effective px` on the
+  `toolbar:` line `--screenshot` prints, which only an unpackaged launch can show; the
+  packaged number is bracketed with `Test-FullBreakpoint.ps1 -Widths`, as French's was).
 
 ## Privacy — this is not optional
 

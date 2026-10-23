@@ -6,7 +6,7 @@
 # dialog's UI Automation subtree (131 descendants, every one of them a column header, a
 # list item or the search box), so there is nothing to read the suggestion out of.
 param([Parameter(Mandatory=$true)][string]$Pdf, [string]$Out,
-      [ValidateSet('en-US', 'fr-CA', 'fr-FR')][string]$Lang = 'en-US')
+      [ValidateSet('en-US', 'fr-CA', 'fr-FR', 'es-419', 'es-ES')][string]$Lang = 'en-US')
 . (Join-Path $PSScriptRoot "lib.ps1")
 $h = (Get-Process -Name MegaPDF | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1).MainWindowHandle
 Front $h
@@ -22,7 +22,9 @@ Shot $h "s4a-scan-open"
 Click-Btn ($AE::FromHandle($h)) "ShrinkButton" | Out-Null
 Start-Sleep -Seconds 12                              # downsample + re-encode before the save picker
 if (-not $Out) {
-    $resw = Join-Path $PSScriptRoot "..\..\src\MegaPDF.App\Strings\$Lang\Resources.resw"
+    # Latin American Spanish is the neutral Strings\es folder (docs/localisation.md).
+    $dir = if ($Lang -eq 'es-419') { 'es' } else { $Lang }
+    $resw = Join-Path $PSScriptRoot "..\..\src\MegaPDF.App\Strings\$dir\Resources.resw"
     [xml]$catalogue = Get-Content $resw -Encoding UTF8
     $format = ($catalogue.root.data | Where-Object { $_.name -eq "SmallerFileName" }).value
     $base = [System.IO.Path]::GetFileNameWithoutExtension($Pdf)

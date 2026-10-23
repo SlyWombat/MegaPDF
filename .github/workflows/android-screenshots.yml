@@ -4,7 +4,8 @@ name: Android Screenshots
 # app's `--es screenshot <state>` launch extra — the eight listing slots #613
 # settled on 2026-10-01, in listing order
 # (reading / text-edit / sign / pages / text / search / redact / home), once per
-# listing language (#91): en, fr-CA and fr-FR each get their own artifact.
+# listing language (#91): en, fr-CA, fr-FR, es-419 and es-ES (#724) each get their own
+# artifact.
 # Download the artifact; tools/play_submit.py-style API upload puts them on
 # the listing.
 # What has to be true of the images before they go anywhere, and how to shoot
@@ -18,7 +19,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        language: [en, fr-CA, fr-FR]
+        language: [en, fr-CA, fr-FR, es-419, es-ES]
     defaults:
       run:
         working-directory: android

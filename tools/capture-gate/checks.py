@@ -522,8 +522,9 @@ def privacy(shot, profile) -> list[Finding]:
     return [_ok("privacy", "no home-folder path on screen")]
 
 
-# Words that belong to the English build and have a French counterpart in
-# every screen of a French set. One of them on a French capture means a string
+# Words that belong to the English build and have a French (or Spanish)
+# counterpart in every screen of a French (or Spanish) set. One of them on a
+# French capture means a string
 # came from the wrong place — which is how "scanned-agreement - smaller.pdf"
 # reached both French Windows sets, from an English `-Out` typed on the command
 # line rather than from the app's own SmallerFileName resource.
@@ -539,9 +540,15 @@ ENGLISH_MARKERS = (
 
 
 def language_purity(shot, profile) -> list[Finding]:
-    """No English left in a French set."""
-    if not shot.lang or not shot.lang.startswith("fr"):
-        return [_skip("language", "only the French sets are checked for this")]
+    """No English left in a French or Spanish set (#724 added the Spanish).
+
+    The markers are English words, so one list serves both languages. None of
+    them is a word of either: the whole-word match is what keeps "cancel" from
+    matching *cancelar*, "redact" *redactar*, and so on.
+    """
+    if not shot.lang or not shot.lang.startswith(("fr", "es")):
+        return [_skip("language", "only the French and Spanish sets are checked for this")]
+    which = "Spanish" if shot.lang.startswith("es") else "French"
     text = im.ocr(shot.path)
     if text is None:
         return [_skip("language", "needs tesseract to read the screen")]
@@ -563,11 +570,11 @@ def language_purity(shot, profile) -> list[Finding]:
                                   f"{shot.lang} capture — a string that did not "
                                   f"come from the catalogue?")]
     if excused:
-        return [_ok("language", "no English UI words on a French capture — "
+        return [_ok("language", f"no English UI words on a {which} capture — "
                                 + "; ".join(f"{w!r} is this reader's misreading "
                                             f"of {misreads[w]}"
                                             for w in excused))]
-    return [_ok("language", "no English UI words on a French capture")]
+    return [_ok("language", f"no English UI words on a {which} capture")]
 
 
 def against_reference(shot, reference: str | None) -> list[Finding]:
