@@ -1815,6 +1815,7 @@ tests = [
   "ios/MegaPDFTests/ShrinkTests.swift::testARaisedFlagStopsTheShrink",
   "ios/MegaPDFTests/ShrinkTests.swift::testTheModelOffersASmallerCopyAndTheDocumentIsUnchanged",
   "ios/MegaPDFUITests/ShrinkForEmailUITests.swift::testShrinkForEmailOffersShareAndSave",
+  "ios/MegaPDFUITests/ShrinkForEmailUITests.swift::testShrinkForEmailWithAMarkAsksTheRedactionQuestionAndCancelMakesNothing",
   "ios/ui-test-lanes.txt::iphone/ShrinkForEmailUITests",
 ]
 note = "#593: the core's megapdf_shrink_images_cancellable with an ImageIO encoder, run off the engine actor so the open document keeps rendering. Shrinks what is on screen, unsaved edits included (Dave, 2026-10-21); the result sheet offers ShareLink first, then Save to Files through the one file exporter (#589), and the copy is never adopted as the open document (#572). Progress and Stop in the busy strip, counting pictures."
@@ -1827,6 +1828,7 @@ tests = [
   "android/engine/src/androidTest/java/com/megapdf/engine/ShrinkEngineTest.kt::shrinkReplacesTheOversizedImageAndTheSavedCopyIsSmaller",
   "android/engine/src/androidTest/java/com/megapdf/engine/ShrinkEngineTest.kt::aRaisedFlagStopsTheShrink",
   "android/app/src/androidTest/java/com/megapdf/android/ShrinkForEmailTest.kt::shrinkForEmailOffersASmallerCopyAndLeavesTheDocumentAlone",
+  "android/app/src/androidTest/java/com/megapdf/android/ShrinkForEmailTest.kt::shrinkForEmailWithAMarkAsksTheRedactionQuestionAndCancelMakesNothing",
   "android/app/src/test/java/com/megapdf/android/DocumentCapabilitiesTest.kt::shrinkNeedsModify",
   "android/app/src/test/java/com/megapdf/android/ShareFileTest.kt::a shrunk copy is named",
 ]

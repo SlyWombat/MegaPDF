@@ -2,8 +2,20 @@
   "sourceLanguage" : "en",
   "strings" : {
     "%@ - smaller" : {
-      "comment" : "#593: the shrunk copy's file name; %@ is the document's name without .pdf. FR-REVIEW #593 — new with Shrink for email, not yet read by the reviewer.",
+      "comment" : "#593: the shrunk copy's file name; %@ is the document's name without .pdf. FR-REVIEW #593 — new with Shrink for email, not yet read by the reviewer. ES-REVIEW #593 — new with Shrink for email, not yet read by the reviewer.",
       "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ - reducido"
+          }
+        },
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ - reducido"
+          }
+        },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
@@ -2368,8 +2380,20 @@
       }
     },
     "Couldn't shrink." : {
-      "comment" : "#593: Shrink for email failed. FR-REVIEW #593 — new with Shrink for email, not yet read by the reviewer.",
+      "comment" : "#593: Shrink for email failed. FR-REVIEW #593 — new with Shrink for email, not yet read by the reviewer. ES-REVIEW #593 — new with Shrink for email, not yet read by the reviewer.",
       "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se pudo reducir."
+          }
+        },
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se pudo reducir."
+          }
+        },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
@@ -3487,8 +3511,20 @@
       }
     },
     "Making a smaller copy…" : {
-      "comment" : "#593: the busy strip while Shrink for email runs. FR-REVIEW #593 — new with Shrink for email, not yet read by the reviewer.",
+      "comment" : "#593: the busy strip while Shrink for email runs. FR-REVIEW #593 — new with Shrink for email, not yet read by the reviewer. ES-REVIEW #593 — new with Shrink for email, not yet read by the reviewer.",
       "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Creando una copia reducida…"
+          }
+        },
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Creando una copia reducida…"
+          }
+        },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
@@ -5363,8 +5399,20 @@
       }
     },
     "Picture %lld of %lld" : {
-      "comment" : "#593: the busy strip's count line while Shrink for email runs; pictures looked at, of all of them. FR-REVIEW #593 — new with Shrink for email, not yet read by the reviewer.",
+      "comment" : "#593: the busy strip's count line while Shrink for email runs; pictures looked at, of all of them. FR-REVIEW #593 — new with Shrink for email, not yet read by the reviewer. ES-REVIEW #593 — new with Shrink for email, not yet read by the reviewer.",
       "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Imagen %1$lld de %2$lld"
+          }
+        },
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Imagen %1$lld de %2$lld"
+          }
+        },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
@@ -6453,8 +6501,20 @@
       }
     },
     "Save to Files" : {
-      "comment" : "#593: the result sheet's second action; iOS's own name for the Files app. FR-REVIEW #593 — new with Shrink for email, not yet read by the reviewer.",
+      "comment" : "#593: the result sheet's second action; iOS's own name for the Files app. FR-REVIEW #593 — new with Shrink for email, not yet read by the reviewer. ES-REVIEW #593 — new with Shrink for email, not yet read by the reviewer.",
       "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Guardar en Archivos"
+          }
+        },
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Guardar en Archivos"
+          }
+        },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
@@ -6992,8 +7052,20 @@
       }
     },
     "Shrink for email" : {
-      "comment" : "More menu (#593): row label. A smaller copy of the document as it is on screen; the open document is never changed. FR-REVIEW #593 — new with Shrink for email, not yet read by the reviewer.",
+      "comment" : "More menu (#593): row label. A smaller copy of the document as it is on screen; the open document is never changed. FR-REVIEW #593 — new with Shrink for email, not yet read by the reviewer. ES-REVIEW #593 — new with Shrink for email, not yet read by the reviewer.",
       "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reducir para correo electrónico"
+          }
+        },
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reducir para correo electrónico"
+          }
+        },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
@@ -7009,8 +7081,20 @@
       }
     },
     "Shrinking wouldn't make this document any smaller." : {
-      "comment" : "#593: the shrunk copy came out no smaller than the document, so it is not offered. FR-REVIEW #593 — new with Shrink for email, not yet read by the reviewer.",
+      "comment" : "#593: the shrunk copy came out no smaller than the document, so it is not offered. FR-REVIEW #593 — new with Shrink for email, not yet read by the reviewer. ES-REVIEW #593 — new with Shrink for email, not yet read by the reviewer.",
       "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reducir no haría este documento más pequeño."
+          }
+        },
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reducir no haría este documento más pequeño."
+          }
+        },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
@@ -7171,8 +7255,20 @@
       }
     },
     "Smaller copy ready" : {
-      "comment" : "#593: title of the Shrink for email result sheet. FR-REVIEW #593 — new with Shrink for email, not yet read by the reviewer.",
+      "comment" : "#593: title of the Shrink for email result sheet. FR-REVIEW #593 — new with Shrink for email, not yet read by the reviewer. ES-REVIEW #593 — new with Shrink for email, not yet read by the reviewer.",
       "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copia reducida lista"
+          }
+        },
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copia reducida lista"
+          }
+        },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
@@ -7188,8 +7284,20 @@
       }
     },
     "Smaller copy saved" : {
-      "comment" : "#593: alert after Save to Files wrote the shrunk copy. FR-REVIEW #593 — new with Shrink for email, not yet read by the reviewer.",
+      "comment" : "#593: alert after Save to Files wrote the shrunk copy. FR-REVIEW #593 — new with Shrink for email, not yet read by the reviewer. ES-REVIEW #593 — new with Shrink for email, not yet read by the reviewer.",
       "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copia reducida guardada"
+          }
+        },
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copia reducida guardada"
+          }
+        },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
@@ -7669,8 +7777,20 @@
       }
     },
     "The document you have open is unchanged." : {
-      "comment" : "#593: under Was/now on the result sheet. FR-REVIEW #593 — new with Shrink for email, not yet read by the reviewer.",
+      "comment" : "#593: under Was/now on the result sheet. FR-REVIEW #593 — new with Shrink for email, not yet read by the reviewer. ES-REVIEW #593 — new with Shrink for email, not yet read by the reviewer.",
       "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El documento que tienes abierto queda sin cambios."
+          }
+        },
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El documento que tienes abierto queda sin cambios."
+          }
+        },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
@@ -7889,8 +8009,20 @@
       }
     },
     "The pictures in this document are already small — nothing to shrink." : {
-      "comment" : "#593: Shrink for email found nothing worth re-encoding; no sheet is shown. FR-REVIEW #593 — new with Shrink for email, not yet read by the reviewer.",
+      "comment" : "#593: Shrink for email found nothing worth re-encoding; no sheet is shown. FR-REVIEW #593 — new with Shrink for email, not yet read by the reviewer. ES-REVIEW #593 — new with Shrink for email, not yet read by the reviewer.",
       "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Las imágenes de este documento ya son pequeñas; no hay nada que reducir."
+          }
+        },
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Las imágenes de este documento ya son pequeñas; no hay nada que reducir."
+          }
+        },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
@@ -9153,8 +9285,20 @@
       }
     },
     "Was %@, now %@." : {
-      "comment" : "#593: the result sheet; the file sizes before and after, from ByteCountFormatter. FR-REVIEW #593 — new with Shrink for email, not yet read by the reviewer.",
+      "comment" : "#593: the result sheet; the file sizes before and after, from ByteCountFormatter. FR-REVIEW #593 — new with Shrink for email, not yet read by the reviewer. ES-REVIEW #593 — new with Shrink for email, not yet read by the reviewer.",
       "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Antes: %1$@, ahora: %2$@."
+          }
+        },
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Antes: %1$@, ahora: %2$@."
+          }
+        },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",

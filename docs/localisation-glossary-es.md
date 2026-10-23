@@ -165,6 +165,7 @@ refers to the same row in the French file.
 | Not found | No encontrado |  |
 | {0} of {1} | {0} de {1} | contador de coincidencias y de páginas |
 | Page {0} of {1} | Página {0} de {1} |  |
+| Picture {0} of {1} | Imagen {0} de {1} | #593, barra de progreso al reducir para correo electrónico |
 | Extract text | Extraer texto | #142, #168, #356 |
 | Markdown | Markdown | sin cambios, como en las demás plataformas |
 | Export as Markdown | Exportar como Markdown | #386, #409: *Exportar*, no *Guardar*, en todas las plataformas |
@@ -286,6 +287,9 @@ refers to the same row in the French file.
 | Save first | Guarda primero |  |
 | Nothing to shrink | Nada que reducir |  |
 | Smaller copy saved | Copia reducida guardada |  |
+| Smaller copy ready | Copia reducida lista | #593, título de la hoja de resultado en los teléfonos |
+| The document you have open is unchanged. | El documento que tienes abierto queda sin cambios. | #593, bajo “Antes/ahora” en la hoja de resultado de los teléfonos |
+| Shrinking wouldn't make this document any smaller. | Reducir no haría este documento más pequeño. | #593, teléfonos; #6 lo reutiliza en los escritorios |
 | Was {0} MB, now {1} MB. Saved as {2}, ready to email. | Antes: {0} MB; ahora: {1} MB. Guardada como {2}, lista para enviar por correo electrónico. |  |
 | Saved | Guardado |  |
 | Saving… | Guardando… |  |
@@ -349,6 +353,7 @@ refers to the same row in the French file.
 | Services | Servicios | confirmar con Edit.loctable de TextEdit antes de fijar, como en #191 |
 | Show in Finder | Mostrar en el Finder |  |
 | Show in Files | Mostrar en Archivos |  |
+| Save to Files | Guardar en Archivos | #593, hoja de resultado de iOS; el nombre que Apple da a la app Archivos, como en la fila anterior |
 | {0}, in {1} | {0}, en {1} |  |
 | Not found · {0} | No encontrado · {0} |  |
 | iCloud Drive | iCloud Drive |  |

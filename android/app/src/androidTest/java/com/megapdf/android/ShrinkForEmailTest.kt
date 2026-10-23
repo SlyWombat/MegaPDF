@@ -12,6 +12,7 @@ import androidx.test.espresso.intent.matcher.IntentMatchers.hasAction
 import androidx.test.espresso.intent.matcher.IntentMatchers.hasExtra
 import androidx.test.espresso.intent.matcher.IntentMatchers.hasType
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.megapdf.engine.PdfRect
 import org.hamcrest.CoreMatchers.allOf
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
@@ -76,5 +77,39 @@ class ShrinkForEmailTest {
         assertFalse(rule.viewModel.isDirty)
         assertArrayEquals(sourceBytes, source.readBytes())
         assertEquals(null, rule.viewModel.shrinkReady)
+    }
+
+    /**
+     * A copy made to be emailed is the worst place for marked-but-unapplied content to go, and
+     * the phones shrink what is on screen (D6), so Shrink for email asks the redaction question
+     * first, as Export as Markdown does (coordinator, 2026-10-22). Cancel is the safe answer: no
+     * result sheet, no file, and the mark is still on the page to be applied or removed.
+     */
+    @Test
+    fun shrinkForEmailWithAMarkAsksTheRedactionQuestionAndCancelMakesNothing() {
+        val source = Fixtures.written("shrink-593-marked.pdf", LargeImagePdf.bytes(1))
+        val sourceBytes = source.readBytes()
+        rule.open(source)
+        // The picture sits at (100, 600) and is 72 pt square: mark it as a drag across it would.
+        rule.viewModel.markForRedaction(0, PdfRect(100.0, 600.0, 172.0, 672.0))
+        rule.waitUntil(SETTLE_MS) { rule.viewModel.redactionMarkCount == 1 }
+
+        rule.menu(str(R.string.shrink_for_email))
+
+        // The question, with the shrink as its action, and nothing started behind it.
+        rule.waitForText(str(R.string.redact_confirm_title))
+        assertEquals(null, rule.viewModel.shrinkReady)
+        assertFalse(rule.viewModel.busy.locksDocument)
+
+        rule.clickText(str(R.string.cancel))
+        rule.waitForGone(androidx.compose.ui.test.hasText(str(R.string.redact_confirm_title)))
+
+        // Cancel leaves no result sheet, no copy in the share folder, and the mark in place.
+        assertEquals(null, rule.viewModel.shrinkReady)
+        assertEquals(1, rule.viewModel.redactionMarkCount)
+        val copy = java.io.File(shareDirectory(Fixtures.appContext.cacheDir),
+            str(R.string.shrink_file_name, "shrink-593-marked") + ".pdf")
+        assertFalse("no shrunk copy was made", copy.exists())
+        assertArrayEquals(sourceBytes, source.readBytes())
     }
 }

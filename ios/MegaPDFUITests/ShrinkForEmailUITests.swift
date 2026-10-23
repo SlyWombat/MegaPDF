@@ -98,4 +98,42 @@ final class ShrinkForEmailUITests: XCTestCase {
                       dump("the completion alert did not say \"Smaller copy saved\""))
         alert.buttons.firstMatch.tap()
     }
+
+    /// A copy made to be emailed is the worst place for marked-but-unapplied content to go, and
+    /// the phones shrink what is on screen (D6), so with a mark pending Shrink for email asks the
+    /// redaction question first, exactly as Export as Markdown does (coordinator, 2026-10-22).
+    /// Cancel is the safe answer: no result sheet, and nothing was started behind the question.
+    /// `-screenshot redact` opens the demo agreement with one line marked, as `RedactionUITests`
+    /// relies on.
+    func testShrinkForEmailWithAMarkAsksTheRedactionQuestionAndCancelMakesNothing() {
+        app.launchArguments = ["-screenshot", "redact",
+                               "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        app.launch()
+
+        let row = app.buttons["viewerShrink"].firstMatch
+        if let failure = PageInput.openMoreMenu(in: app, for: row) {
+            XCTFail(dump(failure))
+            return
+        }
+        XCTAssertTrue(PageInput.waitEnabled(row), dump("Shrink for email stayed disabled"))
+        row.tap()
+
+        XCTAssertTrue(app.staticTexts["Remove the marked content?"].waitForExistence(timeout: 10),
+                      dump("Shrink for email with a mark did not ask the redaction question"))
+        // The shrink is one of the question's answers, beside Cancel. A confirmation dialog's
+        // buttons are looked for anywhere in the app (an action sheet on the phone).
+        XCTAssertTrue(app.descendants(matching: .button)["Shrink for email"].waitForExistence(timeout: 5),
+                      dump("the question has no Shrink for email"))
+        let cancel = app.descendants(matching: .button)["Cancel"].firstMatch
+        XCTAssertTrue(cancel.exists, dump("the question has no Cancel"))
+        cancel.tap()
+
+        // Cancelled: the question is gone, and no strip, no result sheet and no alert followed.
+        let gone = NSPredicate(format: "exists == false")
+        expectation(for: gone, evaluatedWith: app.staticTexts["Remove the marked content?"])
+        waitForExpectations(timeout: 10)
+        XCTAssertFalse(app.navigationBars["Smaller copy ready"].waitForExistence(timeout: 3),
+                       dump("Cancel still produced a result sheet"))
+        XCTAssertFalse(app.buttons["busyStop"].exists, dump("Cancel still started a shrink"))
+    }
 }
