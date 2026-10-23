@@ -2304,6 +2304,14 @@ at or above 0.9981. The cause is not diagnosed (#781). Whether this corpus gates
 reported like the public corpus's known figure is Dave's call; it is registered but not made a
 gate. A new corpus has no earlier run, so nothing here is a regression.
 
+**After #781's cross-block hyphen join (2026-10-23, see "Cross-block wrap hyphens (#781)" below):
+F1 0.998199, internal API and `megapdf-cli` the same to the last digit; unmatched words 912 to 630.**
+The cause #781 found was stranded wrap hyphens (845 of the 912 unmatched words); the join takes
+282 of the unmatched words back, from the 336 the diagnosis put in class (a) (the continuation is
+the first word of the very next block). The other 509 (class (b): columns or cells interleaved into
+one block) are untouched, so the corpus passes by about 0.0002, roughly 35 words. Whether it gates
+a release is still Dave's call.
+
 ## Phone downloads corpus, first run (2026-10-18)
 
 Dave offered the PDFs on the Pixel 4 XL's Downloads folder for private testing. 58 files; 37 were
@@ -2863,6 +2871,76 @@ See tools/mac-mini.md, "The standing runner against hosted". Three dispatched ho
 (runner=hosted): 39818409951 green in 55 min 51 s, 39845022875 red in 53 min 33 s on one
 iPad reading-mode UI test, 39868868578 green in 47 min 59 s. The mini's median job is 15 min
 46 s with a median queue of 15 minutes.
+
+## Cross-block wrap hyphens (#781), 2026-10-23
+
+PR #783, branch `wip/781-hyphen-join`. A wrap hyphen at the end of a block whose continuation is
+the first word of the NEXT block (the paragraph builder cut the block at that line) was emitted as
+two words; the fidelity reference joins them, so each costs 3 unmatched words. The fix moves that
+one word into the prefix's block with the hyphen stripped (`JoinHyphenAcrossBlocks`,
+`core/megapdf_structure.cpp`). Fix 2 of the plan (per-leaf median pitch) was not needed and was not
+built; fix 3 (class (b), interleaved columns) was out of scope.
+
+Run on kdocker3, `main` at 4f7f4a5 and the branch built side by side in throwaway `megapdf:base`
+containers (the pinned PDFium, `megapdf-cli 2.3.0`), the three batteries over all five corpora,
+corpora read-only, then removed. Disk counts 4,158 / 1,493 / 134 / 90 / 28; every battery visited
+every document. **Zero crashes, zero hangs, zero bad CLI exits in every cell, baseline and branch.**
+
+| corpus | 2.3.0 gate | `main` here | branch | unmatched, main to branch | documents better / worse |
+|---|---:|---:|---:|---:|---|
+| vendor | 0.997394 (first run) | 0.997394 | **0.998199** | 912 to 630 | 6 / 0 |
+| private | 0.998997 | 0.999004 | 0.999069 | 10,804 to 10,105 | 74 / 0 |
+| Canadian | 0.999932 | 0.999932 | 0.999938 | 33 to 30 | 1 / 0 |
+| UN | 0.999136 | 0.999801 | 0.999801 | 351 to 351 | 0 / 0 |
+| public | 0.976157 (2 hangs) | 0.980576 | 0.981815 | 621,389 to 581,492 | 46 / 0 |
+
+Internal API and `megapdf-cli` agree to the last digit in every cell. Why `main` differs from the
+2.3.0 column: #496 (UN segmentation, d3f3093 and eccb737) landed after 2.3.0, and #704 removed the
+two public hangs; the branch is compared with `main` on the same machine, not with the 2.3.0 digits.
+Gated tau medians (tagged pages) are identical to three places: private 0.951, public 0.978,
+Canadian 0.994, UN 0.967, vendor 0.986. **The informational poppler-agreement tau median moved on
+public only, 0.989 to 0.988** (private 0.992, vendor 0.995, Canadian 0.996, UN 0.998 unchanged): of
+22,942 public pages 3,496 went down and 336 went up, none by 0.05 or more, all inside the 46
+documents that changed. The likely mechanism, **not measured**, is a joined word that no longer
+pairs with the two halves `pdftotext -layout` never joins.
+
+Markdown is identical to the baseline in every cell (private 2,982 extracted / 1,102 textless / 12
+password-gated, public 937 / 543 / 5, Canadian 134, UN 83 / 7, vendor 26; 0 cmark failures and 0
+cmark timeouts). **Pages:** 0 qpdf failures, 0 count mismatches, 0 write failures and 0 crashes or hangs in every cell; public's 9 "REFUSED, other" are the known #445, as in the 2.3.0 gate; the private and public summaries differ from the baseline's only in elapsed seconds.
+
+**What changed in the output.** Documents whose dumped text changed: vendor 6, private 74, Canadian
+1, public 46, UN 0. Joins counted by diffing the two dumps line by line (counts only; no document
+text was read into any record): vendor 86, private 233, Canadian 1, public 11,402 (the public
+count is dominated by a few very large documents; the diff script could not align 4 of them, so
+treat it as a lower bound). No document got worse in unmatched words.
+
+**The first version did harm and was changed.** Without the "drawn next" condition (the
+continuation must be the character PDFium drew right after the hyphen) the join took the first
+lowercase word of whatever block came next in reading order. Private: F1 0.999057, 74 documents
+better and **30 worse** (a wrong word glued on, +1 unmatched word each) while the aggregate still
+rose. Vendor 0.998124 with 135 joins against 86 now. With the condition: 0 worse everywhere. A
+second version joined a soft hyphen before any character; one private document of digits with soft
+hyphens lost a match, so soft hyphens now need the lowercase test too.
+
+**Compound words.** A wrap-flagged hyphen in a real compound ("well-" then "known") is joined, as
+`BuildPieces` already joins it inside a block and as the reference joins it; no more conservative
+rule exists without leaving the reference. Shape on private, 233 joins: 98 have the joined word
+standing unhyphenated elsewhere in the same document, 46 have the hyphenated form elsewhere (a
+probable compound split at a line end), 89 have neither. A literal U+002D that PDFium did not flag
+is not joined across blocks (the in-block join does join it). A continuation that starts with an
+accented letter is not joined (#728/#756: unchanged, neither fixed nor worsened).
+
+**Tests.** `test_structure_cross_block_hyphen`, five checks (join; a block that was only the
+continuation is absorbed; uppercase continuation left alone; a lowercase block that is not drawn
+next left alone; a mid-line compound hyphen untouched). The first two fail on unmodified `main`,
+verified by building the test file against the main engine. No golden changed.
+
+**Not verified.** Windows, macOS, iOS, Android and the .NET apps beyond what hosted CI says;
+the tagged path (#358), the furniture and leftover builders, which this does not touch; the
+redaction battery; rendered Markdown beyond cmark parsing it. The pages battery cannot reach this
+change (it edits pages, not text) and was run for the record only, with `--jobs 4` instead of the
+sequential default to fit the session. Scratch (dumps of every document's text) lived under
+`~/megapdf-781fix-*` on kdocker3 and was deleted.
 
 ## Reporting
 
