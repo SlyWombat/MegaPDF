@@ -344,11 +344,11 @@ Llena, marca y firma PDF
 ¿Te enviaron un PDF para firmar? Ábrelo, toca las casillas, coloca tu firma y guarda. Listo en menos de un minuto, sin cuenta ni suscripción.
 ```
 
-**Description** [4000] (3786)
+**Description** [4000] (3789)
 ```
 Abrir. Corregir. Guardar. Listo.
 
-MegaPDF hace el trabajo que la mayoría de la gente realmente tiene con un PDF: alguien te envió un formulario y necesitas devolverlo llenado, marcado y firmado. Sin cuenta. Sin suscripción. Sin nube. Todo sucede en tu dispositivo.
+MegaPDF hace el trabajo que la mayoría de la gente realmente tiene con un PDF: alguien te envió un formulario y necesitas devolverlo completado, marcado y firmado. Sin cuenta. Sin suscripción. Sin nube. Todo sucede en tu dispositivo.
 
 Marca cualquier casilla
 Toca una casilla y queda marcada, tanto en campos de formulario interactivos reales como en simples cuadros impresos. MegaPDF reconoce las casillas dibujadas que otras aplicaciones tratan como simple decoración.
@@ -439,11 +439,11 @@ Rellena, marca y firma PDF
 ¿Te enviaron un PDF para firmar? Ábrelo, toca las casillas, coloca tu firma y guarda. Listo en menos de un minuto, sin cuenta ni suscripción.
 ```
 
-**Description** [4000] (3781)
+**Description** [4000] (3782)
 ```
 Abrir. Corregir. Guardar. Listo.
 
-MegaPDF hace el trabajo que la mayoría de la gente realmente tiene con un PDF: alguien te envió un formulario y necesitas devolverlo rellenado, marcado y firmado. Sin cuenta. Sin suscripción. Sin nube. Todo sucede en tu dispositivo.
+MegaPDF hace el trabajo que la mayoría de la gente realmente tiene con un PDF: alguien te envió un formulario y necesitas devolverlo completado, marcado y firmado. Sin cuenta. Sin suscripción. Sin nube. Todo sucede en tu dispositivo.
 
 Marca cualquier casilla
 Toca una casilla y queda marcada, tanto en campos de formulario interactivos reales como en simples cuadros impresos. MegaPDF reconoce las casillas dibujadas que otras aplicaciones tratan como simple decoración.
@@ -679,11 +679,11 @@ MegaPDF est volontairement simple : il ne vous noie pas sous les barres d'outil
 ¿Te enviaron un PDF para firmar? Ábrelo, haz clic en las casillas, coloca tu firma y guarda. Listo en menos de un minuto, sin cuenta ni suscripción.
 ```
 
-**Description** [4000] (3856)
+**Description** [4000] (3859)
 ```
 Abrir. Corregir. Guardar. Listo.
 
-MegaPDF hace el trabajo que la mayoría de la gente realmente tiene con un PDF: alguien te envió un formulario y necesitas devolverlo llenado, marcado y firmado, en tu propio Mac.
+MegaPDF hace el trabajo que la mayoría de la gente realmente tiene con un PDF: alguien te envió un formulario y necesitas devolverlo completado, marcado y firmado, en tu propio Mac.
 
 Marca cualquier casilla
 Haz clic en una casilla y queda marcada, tanto en campos de formulario reales como en simples cuadros impresos. MegaPDF reconoce las casillas dibujadas que otras aplicaciones tratan como simple decoración.
@@ -730,11 +730,11 @@ MegaPDF es deliberadamente simple: no te entierra en barras de herramientas. Abr
 ¿Te enviaron un PDF para firmar? Ábrelo, haz clic en las casillas, coloca tu firma y guarda. Listo en menos de un minuto, sin cuenta ni suscripción.
 ```
 
-**Description** [4000] (3852)
+**Description** [4000] (3853)
 ```
 Abrir. Corregir. Guardar. Listo.
 
-MegaPDF hace el trabajo que la mayoría de la gente realmente tiene con un PDF: alguien te envió un formulario y necesitas devolverlo rellenado, marcado y firmado, en tu propio Mac.
+MegaPDF hace el trabajo que la mayoría de la gente realmente tiene con un PDF: alguien te envió un formulario y necesitas devolverlo completado, marcado y firmado, en tu propio Mac.
 
 Marca cualquier casilla
 Haz clic en una casilla y queda marcada, tanto en campos de formulario reales como en simples cuadros impresos. MegaPDF reconoce las casillas dibujadas que otras aplicaciones tratan como simple decoración.
