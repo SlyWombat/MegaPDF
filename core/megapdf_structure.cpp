@@ -2539,7 +2539,8 @@ int ComputeConfidence(const PageWork& pw, bool too_many_columns, const std::vect
 // continuation word with the hyphen stripped, and the next block loses its first word. Only the
 // cases BuildPieces' own join decides the same way are touched, and no more:
 //   - the prefix's last character is one PDFium flagged as a wrap hyphen (Char::is_hyphen), or a
-//     soft hyphen. A literal U+002D/U+2010 PDFium did not flag is NOT joined here, although
+//     soft hyphen (BuildPieces joins a soft hyphen whatever follows; here it also needs the
+//     lowercase test below, because a soft hyphen in a run of digits was measured to cost a match). A literal U+002D/U+2010 PDFium did not flag is NOT joined here, although
 //     BuildPieces does join those inside a block: the reference does not, and across a block
 //     boundary there is no line geometry to say it was a wrap. A lone "-" word is not a prefix.
 //   - the continuation is the character the producer drew right after the hyphen (PDFium's own
@@ -2584,7 +2585,7 @@ void JoinHyphenAcrossBlocks(const PageWork& pw, std::vector<BlockImpl>* content,
         const int next_word_index = b_first.words.front();
         const auto next_cps = WordCodepoints(pw.chars, pw.words[static_cast<size_t>(next_word_index)]);
         if (next_cps.empty()) continue;
-        if (!soft && !IsAsciiLower(next_cps[0])) continue;
+        if (!IsAsciiLower(next_cps[0])) continue;
         // The continuation must be what the producer drew NEXT: the character right after the
         // hyphen in PDFium's order (`chars` holds only real, non-whitespace characters, so
         // consecutive indices are consecutive in the content). Without this, a prefix ending a
