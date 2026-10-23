@@ -3295,10 +3295,12 @@ public partial class MainWindow : Window
             // is there, so asking first meant a document with nothing to shrink
             // left a 0-byte file behind — or destroyed the file the user picked to
             // overwrite — while reporting that nothing had happened (#59).
-            var (result, staged) = await vm.PrepareShrunkCopyAsync();
+            var (result, staged, notSmaller) = await vm.PrepareShrunkCopyAsync();
             if (staged is null)
             {
-                vm.Status = Strings.NothingToShrink;
+                // Two different answers: nothing was worth re-encoding, or something was and the
+                // copy still is not smaller than the file on disk (#6). Neither saves anything.
+                vm.Status = notSmaller ? Strings.ShrinkNotSmaller : Strings.NothingToShrink;
                 return;
             }
             using var stagedCopy = staged;

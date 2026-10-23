@@ -1244,16 +1244,17 @@ public sealed partial class DocumentViewModel : ObservableObject, IDisposable
     /// <summary>
     /// Prepares a smaller copy, without touching any destination.
     ///
-    /// Returns a staged copy only when something was actually re-encoded, and the caller
+    /// Returns a staged copy only when something was actually re-encoded and the result is
+    /// strictly smaller than the file on disk (#6; otherwise NotSmaller is true), and the caller
     /// must not open a destination before it has that answer. Opening one is
     /// destructive on its own — Avalonia's writable stream truncates — so deciding
     /// afterwards meant a document with nothing to shrink left a 0-byte file
     /// behind, or destroyed whichever file the user chose to overwrite, while the
     /// status line said nothing had happened (#59).
     /// </summary>
-    public (ImageShrinker.Result Result, VerifiedSave.StagedCopy? Copy) PrepareShrunkCopy()
+    public (ImageShrinker.Result Result, VerifiedSave.StagedCopy? Copy, bool NotSmaller) PrepareShrunkCopy()
     {
-        (ImageShrinker.Result Result, VerifiedSave.StagedCopy? Copy) prepared = (new ImageShrinker.Result(0), null);
+        (ImageShrinker.Result Result, VerifiedSave.StagedCopy? Copy, bool NotSmaller) prepared = (new ImageShrinker.Result(0), null, false);
         RunSynchronously(async () => prepared = await PrepareShrunkCopyAsync());
         return prepared;
     }
@@ -1264,18 +1265,18 @@ public sealed partial class DocumentViewModel : ObservableObject, IDisposable
     /// temporary file, not as bytes, so a document of any size shrinks without being held in
     /// memory (#147); the caller writes it where the person chooses and disposes it.
     /// </remarks>
-    public async Task<(ImageShrinker.Result Result, VerifiedSave.StagedCopy? Copy)> PrepareShrunkCopyAsync()
+    public async Task<(ImageShrinker.Result Result, VerifiedSave.StagedCopy? Copy, bool NotSmaller)> PrepareShrunkCopyAsync()
     {
         if (DocumentPath is not { } path)
         {
             // Not the same as "nothing to shrink": we have no file to read. Saying
             // so beats reporting that the pictures are already small (#68).
             Status = Strings.ReopenBeforeShrinking;
-            return (new ImageShrinker.Result(0), (VerifiedSave.StagedCopy?)null);
+            return (new ImageShrinker.Result(0), (VerifiedSave.StagedCopy?)null, false);
         }
 
         if (_document is not { } document || Busy.IsBusy)
-            return (new ImageShrinker.Result(0), (VerifiedSave.StagedCopy?)null);
+            return (new ImageShrinker.Result(0), (VerifiedSave.StagedCopy?)null, false);
 
         // The longest operation on either desktop, and the one with the best claim on both halves
         // of #145's P2 (#145). Measured on the synthetic large fixtures, with a stub encoder so
@@ -1300,18 +1301,24 @@ public sealed partial class DocumentViewModel : ObservableObject, IDisposable
                 var result = ImageShrinker.Shrink(copy, Platform.SkiaJpeg.Encode,
                                                   progress: busy.Report, cancellationToken: token);
                 if (result.ImagesReplaced == 0)
-                    return (result, (VerifiedSave.StagedCopy?)null);
+                    return (result, (VerifiedSave.StagedCopy?)null, false);
 
                 // The staging write is deliberately outside the cancellable part: past this point
                 // the images are re-encoded and a cancel would throw the whole forty seconds away
                 // for the sake of the second or so the write takes.
-                return (result, VerifiedSave.ToStagedFile(_engine, copy));
+                //
+                // Replacing images is not the same as a smaller file (#6): the copy is offered only
+                // if its bytes are strictly below the file on disk, which is what the person would
+                // otherwise attach. Otherwise the staged file is deleted, and the caller opens no
+                // destination and saves nothing.
+                var staged = SmallerCopyGate.StageIfSmaller(_engine, copy, new FileInfo(path).Length);
+                return (result, staged, staged is null);
             });
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested)
         {
             Status = Strings.WorkStopped;
-            return (new ImageShrinker.Result(0), (VerifiedSave.StagedCopy?)null);
+            return (new ImageShrinker.Result(0), (VerifiedSave.StagedCopy?)null, false);
         }
     }
 

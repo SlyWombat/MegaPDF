@@ -592,6 +592,9 @@
   <data name="NothingToShrink" xml:space="preserve">
     <value>The pictures in this document are already small — nothing to shrink.</value>
   </data>
+  <data name="ShrinkNotSmaller" xml:space="preserve">
+    <value>Shrinking wouldn't make this document any smaller.</value>
+  </data>
   <data name="SmallerCopySavedOne" xml:space="preserve">
     <value>Saved a smaller copy: {0} picture re-encoded.</value>
   </data>
