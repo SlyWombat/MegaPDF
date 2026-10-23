@@ -319,7 +319,7 @@ public sealed partial class DocumentView : UserControl
         ViewModel.ClearPageFocus();
 
         // The double-click that may follow takes this click back (OnPageDoubleTappedForWord).
-        _lastPageTap = (Environment.TickCount64, pageView.Index);
+        _lastPageTap = (Environment.TickCount64, pageView.Index, pagePoint);
         await RoutePageActivationAsync(pageGrid, pageView, pagePoint, ++_pageTapGeneration);
     }
 
@@ -518,8 +518,10 @@ public sealed partial class DocumentView : UserControl
 
     /// <summary>
     /// Double-click on an added text box reopens the inline editor to change its
-    /// characters (single-click selects it for move/nudge, SDD §3.3). Fires when the
-    /// box isn't yet selected; once selected, its chrome handles the double-tap instead.
+    /// characters (single-click selects it for move/nudge, SDD §3.3). Fires when both taps of
+    /// the pair land on the page itself, which for a box that is not yet selected they do not:
+    /// the first selects it and puts chrome over it, and the second, on that chrome, is read by
+    /// <see cref="OnPageTappedAfterAnother"/> (#775). Once selected, the chrome's own handler has it.
     /// </summary>
     private async void OnPageDoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
     {

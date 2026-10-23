@@ -28,6 +28,11 @@ import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalTextToolbar
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.megapdf.engine.SelectableText
@@ -35,6 +40,9 @@ import kotlin.math.roundToInt
 
 internal const val SELECTION_START_HANDLE_TAG = "selection-start-handle"
 internal const val SELECTION_END_HANDLE_TAG = "selection-end-handle"
+
+/** How far from a character's own middle the word probe may land and still count as on it. */
+private const val STEP_PROBE_TOLERANCE_POINTS = 1.0
 
 /**
  * The selected text of one page (#710), drawn in the theme's own selection colours, with Android's
@@ -70,6 +78,20 @@ internal fun TextSelectionOverlay(
     val currentSelection by rememberUpdatedState(selection)
     val currentRects by rememberUpdatedState(rects)
 
+    // Moves one end of the selection a word, as the handles' TalkBack actions do. Each probe is
+    // the word under the middle of one character's rectangle, so "a word" is the core's own,
+    // the one a long-press selects. Answers false when there is no word to go to.
+    val stepHandle: (Boolean, Boolean) -> Boolean = { isStart, later ->
+        val now = currentSelection
+        val caret = steppedHandleCaret(now, isStart, later, selectable.length) { i ->
+            selectable.rects(i, i + 1).firstOrNull()?.let { r ->
+                selectable.wordAt((r.left + r.right) / 2, (r.bottom + r.top) / 2, STEP_PROBE_TOLERANCE_POINTS)
+            }
+        }
+        val moved = caret?.let { now.withHandleAt(isStart, it) }
+        if (moved == null || moved == now) false else { onChange(moved); true }
+    }
+
     BoxWithConstraints(Modifier.fillMaxSize().onGloballyPositioned {
         origin = it.positionInRoot()
         pagePixels = Size(it.size.width.toFloat(), it.size.height.toFloat())
@@ -94,6 +116,9 @@ internal fun TextSelectionOverlay(
             val handleSize = 40.dp
             val handleSizePx = with(density) { handleSize.toPx() }
             for (isStart in listOf(true, false)) {
+                val handleName = stringResource(if (isStart) R.string.selection_start_handle else R.string.selection_end_handle)
+                val nextWord = stringResource(R.string.selection_next_word)
+                val previousWord = stringResource(R.string.selection_previous_word)
                 val (px, py) = if (isStart) anchors.first else anchors.second
                 val tip = Offset(px.toFloat() * sx, (pageSize.heightPoints - py).toFloat() * sy)
                 // The start handle's body hangs to the left of its tip and the end handle's to the
@@ -103,8 +128,16 @@ internal fun TextSelectionOverlay(
                     Modifier
                         .offset { IntOffset(left.roundToInt(), tip.y.roundToInt()) }
                         .size(handleSize)
-                        // A tag, not a label: the handle has no words, and the instrumented test drags it.
                         .testTag(if (isStart) SELECTION_START_HANDLE_TAG else SELECTION_END_HANDLE_TAG)
+                        // What TalkBack says, and the way to move the handle without dragging it: a
+                        // screen-reader user cannot drag, so each end steps a word at a time (#710).
+                        .semantics {
+                            contentDescription = handleName
+                            customActions = listOf(
+                                CustomAccessibilityAction(nextWord) { stepHandle(isStart, true) },
+                                CustomAccessibilityAction(previousWord) { stepHandle(isStart, false) },
+                            )
+                        }
                         .pointerInput(isStart) {
                             // Not detectDragGestures: that leaves the down event unconsumed, so the
                             // page's own detector, further up, goes on timing a long-press and

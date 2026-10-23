@@ -1,3 +1,4 @@
+import os
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -116,6 +117,36 @@ enum PageTileDrag {
     static let inThisProcess = isADragSource(arguments: ProcessInfo.processInfo.arguments)
 }
 
+/// `-uiTestGridTrace` (#640): the pages grid says what it did and when, for the measurement in
+/// `PagesGridTouchUITests`. Logs to the unified log and counts taps per tile; nothing else
+/// changes, and nothing but a UI test passes it.
+enum PagesGridTrace {
+    static let requested = ProcessInfo.processInfo.arguments.contains("-uiTestGridTrace")
+    private static let log = Logger(subsystem: "com.megapdf.ios", category: "pages-grid")
+    static func note(_ event: @autoclosure () -> String) {
+        guard requested else { return }
+        let text = event()
+        log.notice("\(text, privacy: .public)")
+    }
+}
+
+/// Puts the number of taps a tile has received in its accessibility value, under
+/// `-uiTestGridTrace` only (#640), so a UI test can ask whether a touch *landed* rather than
+/// whether the accessibility tree calls the tile hittable. An ordinary launch's tiles carry no
+/// value at all.
+private struct TileTapProbe: ViewModifier {
+    let count: Int
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if PagesGridTrace.requested {
+            content.accessibilityValue(Text(verbatim: "taps \(count)"))
+        } else {
+            content
+        }
+    }
+}
+
 /// `.onDrag`, unless this process is a UI test that asked for the tile not to be a drag source.
 ///
 /// A modifier rather than an `if` around the tile, so that everything hung on the tile after it
@@ -157,6 +188,8 @@ struct PagesPanel: View {
     /// value is enough — and it has to be measured rather than assumed, because which *half* of a
     /// tile a finger let go over is the whole of what a drop means.
     @State private var tileWidth: CGFloat = 120
+    /// Taps per tile, kept only under `-uiTestGridTrace` (#640).
+    @State private var tileTaps: [Int: Int] = [:]
 
     private var pageCount: Int { model.pageCount }
 
@@ -182,7 +215,9 @@ struct PagesPanel: View {
             }
         }
         .background(panelBackground)
+        .onAppear { PagesGridTrace.note("panel appear \(presentation)") }
         .onPreferenceChange(PageTileWidthKey.self) { width in
+            PagesGridTrace.note("tileWidth \(width)")
             if width > 0 { tileWidth = width }
         }
         // Deliberately no identifier on this container. `accessibilityIdentifier` on a SwiftUI
@@ -334,12 +369,12 @@ struct PagesPanel: View {
                 ForEach(Array(0..<pageCount), id: \.self) { index in
                     tile(index)
                         .onAppear {
+                            PagesGridTrace.note("tile appear \(index)")
                             visible.insert(index)
-                            pushThumbnailWindow()
                         }
                         .onDisappear {
+                            PagesGridTrace.note("tile disappear \(index)")
                             visible.remove(index)
-                            pushThumbnailWindow()
                         }
                 }
             }
@@ -350,6 +385,16 @@ struct PagesPanel: View {
                 .foregroundStyle(.secondary)
                 .padding(.bottom, 16)
                 .accessibilityHidden(true)
+        }
+        // One thumbnail-window push per settled change of the realised range (#640), not one per
+        // tile from inside the layout pass that realises it: each push cancels and restarts the
+        // render task and republishes the model mid-layout, which is N restarts per opening.
+        // 50 ms coalesces a row realised in one pass and is well under a thumbnail's own render
+        // time. `.task(id:)` cancels the previous run when `visible` changes, so it needs no state.
+        .task(id: visible) {
+            try? await Task.sleep(nanoseconds: 50_000_000)
+            guard !Task.isCancelled else { return }
+            pushThumbnailWindow()
         }
         .modifier(SidebarInk(active: presentation == .sidebar))
     }
@@ -416,6 +461,7 @@ struct PagesPanel: View {
 
     @ViewBuilder
     private func tile(_ index: Int) -> some View {
+        let _ = PagesGridTrace.note("tile body \(index)")
         let selected = model.pageSelection.contains(index)
         VStack(spacing: 4) {
             ZStack(alignment: .topTrailing) {
@@ -439,6 +485,8 @@ struct PagesPanel: View {
         }
         .contentShape(Rectangle())
         .onTapGesture {
+            PagesGridTrace.note("tile tap \(index)")
+            if PagesGridTrace.requested { tileTaps[index, default: 0] += 1 }
             if model.pagesSelecting {
                 model.togglePageSelection(index)
             } else {
@@ -470,6 +518,7 @@ struct PagesPanel: View {
             model.movePage(from: index, to: index + 1)
         }
         .accessibilityIdentifier("pageTile-\(index)")
+        .modifier(TileTapProbe(count: tileTaps[index] ?? 0))
     }
 
     @ViewBuilder
@@ -552,6 +601,7 @@ struct PagesPanel: View {
 
     private func pushThumbnailWindow() {
         guard let first = visible.min(), let last = visible.max() else { return }
+        PagesGridTrace.note("window \(first)-\(last)")
         model.updateThumbnailWindow(first: first, last: last)
     }
 }

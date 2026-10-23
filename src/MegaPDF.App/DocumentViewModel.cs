@@ -276,7 +276,10 @@ public partial class DocumentViewModel(Func<Window> host, AppSettings settings, 
         switch (await dialog.ShowOneAtATimeAsync())
         {
             case ContentDialogResult.Primary:
-                await SaveCommand.ExecuteAsync(null);
+                // #633: the document is going, and its history with it, so this save does not ask.
+                _savingFromSaveChangesPrompt = true;
+                try { await SaveCommand.ExecuteAsync(null); }
+                finally { _savingFromSaveChangesPrompt = false; }
                 return !HasUnsavedChanges;
             case ContentDialogResult.Secondary:
                 return true;
@@ -562,6 +565,37 @@ public partial class DocumentViewModel(Func<Window> host, AppSettings settings, 
     [ObservableProperty]
     private string _securityNotice = "";
 
+    /// <summary>What Shrink for email finished with (#632): the smaller copy's sizes, or that
+    /// there was nothing to shrink. A notice, not a dialog: nothing failed, nothing to decide.</summary>
+    [ObservableProperty]
+    private string _shrinkNoticeTitle = "";
+
+    [ObservableProperty]
+    private string _shrinkNotice = "";
+
+    [ObservableProperty]
+    private InfoBarSeverity _shrinkNoticeSeverity = InfoBarSeverity.Success;
+
+    [ObservableProperty]
+    private bool _isShrinkNoticeOpen;
+
+    private void ShowShrinkNotice(string title, string message, InfoBarSeverity severity)
+    {
+        ShrinkNoticeTitle = title;
+        ShrinkNotice = message;
+        ShrinkNoticeSeverity = severity;
+        IsShrinkNoticeOpen = true;
+        // Spoken as well: a bar at the foot of the page is easy to miss (as ShowPageToolNotice).
+        Announced?.Invoke(message);
+    }
+
+    /// <summary>The success half of <see cref="ShrinkForEmailAsync"/>, split out so the
+    /// self-test can raise it without the save picker, which cannot be driven headless.</summary>
+    internal void ReportSmallerCopySaved(long originalBytes, long newBytes, string fileName) =>
+        ShowShrinkNotice(Strings.SmallerCopySavedTitle,
+            Strings.SmallerCopySavedNotice(originalBytes / 1024.0 / 1024, newBytes / 1024.0 / 1024, fileName),
+            InfoBarSeverity.Success);
+
     /// <summary>
     /// True for the life of this open when the document is dynamic XFA (#456, #457):
     /// it opens, reports a plausible page count and draws a page, but that page is
@@ -717,6 +751,7 @@ public partial class DocumentViewModel(Func<Window> host, AppSettings settings, 
         IsRestrictedNoticeOpen = Capabilities.IsRestricted;
         IsRecoveryOffNoticeOpen = openedWithPassword;
         IsSecurityNoticeOpen = false;
+        IsShrinkNoticeOpen = false;
         // #457: read alongside Capabilities/Security, the other document-level facts
         // this open reads once. A hybrid-XFA document, an ordinary AcroForm, or one
         // with no form at all never sets this.
@@ -733,6 +768,7 @@ public partial class DocumentViewModel(Func<Window> host, AppSettings settings, 
         HasUnsavedChanges = false;
         DiscardHeldPages();   // #174: pages the previous document's history was holding for an undo
         _undoStack.Clear();
+        _undoLossAcknowledged = false;   // #633: a reopened document asks again
         _pageWarnings.Reset();
         ResetPagesPane();     // #174: nothing of the previous document is selected or tiled
         // Marks belong to the document that carried them (#329): the old count and the old
@@ -2312,6 +2348,56 @@ public partial class DocumentViewModel(Func<Window> host, AppSettings settings, 
         return true;
     }
 
+    /// <summary>#633: the flatten question was answered Save for this open document; reset when one is adopted.</summary>
+    private bool _undoLossAcknowledged;
+
+    /// <summary>#633: this save answers "Save changes?" before the document goes (close, replace, unlock) — the history goes too, so nothing is asked.</summary>
+    private bool _savingFromSaveChangesPrompt;
+
+    /// <summary>For the `undo-loss` self-test: answers the question instead of showing it.</summary>
+    internal Func<UndoLossReason, bool>? AnswerUndoLossForTest { get; set; }
+
+    /// <summary>How many times the question has been put. For the self-test.</summary>
+    internal int UndoLossAsked { get; private set; }
+
+    /// <summary>
+    /// #633: before a step that clears the undo history, says so. True to go on. Asks only when
+    /// there is something to undo; for the flatten reason, only while FlattenOnSave is on and
+    /// only once per open document.
+    /// </summary>
+    private async Task<bool> ConfirmUndoLossAsync(UndoLossReason reason)
+    {
+        if (!_undoStack.CanUndo || _savingFromSaveChangesPrompt)
+            return true;
+        if (reason == UndoLossReason.Flatten && (!FlattenOnSave || _undoLossAcknowledged))
+            return true;
+
+        UndoLossAsked++;
+        bool goOn;
+        if (AnswerUndoLossForTest is { } answer)
+            goOn = answer(reason);
+        else
+        {
+            if (window.Content?.XamlRoot is not { } xamlRoot)
+                return true;
+            // The action is the default and Cancel is Escape: the document is saved either
+            // way, so Enter must never be the key that silently does not save.
+            var dialog = new ContentDialog
+            {
+                Title = Strings.UndoLossTitle,
+                Content = reason == UndoLossReason.Flatten ? Strings.UndoLossFlattenBody : Strings.UndoLossPasswordBody,
+                PrimaryButtonText = reason == UndoLossReason.Flatten ? Strings.Save : Strings.Continue,
+                CloseButtonText = Strings.Cancel,
+                DefaultButton = ContentDialogButton.Primary,
+                XamlRoot = xamlRoot,
+            };
+            goOn = await dialog.ShowOneAtATimeAsync() == ContentDialogResult.Primary;
+        }
+        if (goOn && reason == UndoLossReason.Flatten)
+            _undoLossAcknowledged = true;
+        return goOn;
+    }
+
     /// <summary>
     /// #476, #481: the warning before Save overwrites a signed original — the one
     /// destructive path (Dave's framing: filling in a form and saving a copy under your
@@ -2547,6 +2633,11 @@ public partial class DocumentViewModel(Func<Window> host, AppSettings settings, 
         if (!await ConfirmAndApplyRedactionsAsync(alreadySavingACopy: false))
             return;
 
+        // #633: after every other confirmation, immediately before the write. Not inside
+        // SaveCoreAsync, which the self-tests call directly.
+        if (!await ConfirmUndoLossAsync(UndoLossReason.Flatten))
+            return;
+
         await SaveCoreAsync();
     }
 
@@ -2701,6 +2792,11 @@ public partial class DocumentViewModel(Func<Window> host, AppSettings settings, 
             }
             return;
         }
+
+        // #633: after the picker (a Markdown export, above, never flattens and is never asked)
+        // and before RemoveDigitalSignatures, so a Cancel does not take the signature out for nothing.
+        if (!await ConfirmUndoLossAsync(UndoLossReason.Flatten))
+            return;
 
         // #576: the picker is past, so this is the moment the person's answer takes effect.
         // It reaches only the bytes about to be written — the file the document was opened
@@ -2876,7 +2972,7 @@ public partial class DocumentViewModel(Func<Window> host, AppSettings settings, 
 
             if (replaced == 0)
             {
-                await ShowErrorAsync(Strings.NothingToShrinkTitle, Strings.NothingToShrinkBody);
+                ShowShrinkNotice(Strings.NothingToShrinkTitle, Strings.NothingToShrinkBody, InfoBarSeverity.Informational);
                 return;
             }
 
@@ -2906,8 +3002,7 @@ public partial class DocumentViewModel(Func<Window> host, AppSettings settings, 
             }
 
             var newBytes = new FileInfo(file.Path).Length;
-            await ShowErrorAsync(Strings.SmallerCopySavedTitle,
-                Strings.SmallerCopySavedBody(originalBytes / 1024.0 / 1024, newBytes / 1024.0 / 1024, Path.GetFileName(file.Path)));
+            ReportSmallerCopySaved(originalBytes, newBytes, Path.GetFileName(file.Path));
         }
         finally
         {
@@ -3147,6 +3242,10 @@ public partial class DocumentViewModel(Func<Window> host, AppSettings settings, 
             await UnlockAsync();
             return;
         }
+
+        // #633: every branch below writes and reopens the document, which clears the undo history.
+        if (!await ConfirmUndoLossAsync(UndoLossReason.PasswordChange))
+            return;
 
         var fileName = Path.GetFileName(DocumentPath);
         if (!security.IsEncrypted)
@@ -3429,3 +3528,6 @@ public partial class DocumentViewModel(Func<Window> host, AppSettings settings, 
 
 /// <summary>The size and face an added text box is being given (#43).</summary>
 public sealed record TextStyleChoice(double FontSize, string FontName);
+
+/// <summary>Why a step is about to clear the undo history (#633).</summary>
+internal enum UndoLossReason { Flatten, PasswordChange }

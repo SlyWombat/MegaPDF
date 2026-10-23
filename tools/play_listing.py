@@ -9,7 +9,8 @@ by-hand production step that android/RELEASING.md describes.
 
     play_listing.py status                          read-only: listings, images, tracks
     play_listing.py push <captures> [--production <vc>] [--commit]
-    play_listing.py contact [--phone <number>|--phone ''] [--commit]   the public contact details (#417)
+    play_listing.py contact [--phone <number>|--phone ''] [--website <url>] [--commit]
+                                                    the public contact details (#417, #662)
                                                     one edit: text, screenshots, and
                                                     optionally a production release;
                                                     validated always, committed only
@@ -23,7 +24,8 @@ leaves the 10-inch set on Play exactly as it is, for a release that shot no new 
 <captures> may be `--text-only` instead: the listing text and the release notes
 are set or compared, and the screenshots on Play are left exactly as they are.
 
-<captures> holds {phone,tablet}/{en,fr-CA,fr-FR}/android-<pose>.png.
+<captures> holds {phone,tablet}/{en,fr-CA,fr-FR,es-419,es-ES}/android-<pose>.png; the poses and their
+order are in tools/store_slots.py.
 Key: PLAY_SA_PATH (a file) or PLAY_SA_JSON, as play_submit.py takes it.
 """
 import hashlib
@@ -33,27 +35,17 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import play_submit as ps  # noqa: E402
+import store_slots  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BASE = f"/androidpublisher/v3/applications/{ps.PACKAGE}"
 UPLOAD = f"/upload/androidpublisher/v3/applications/{ps.PACKAGE}"
-LOCALES = {"en-CA": "en", "fr-CA": "fr-CA", "fr-FR": "fr-FR"}   # Play -> capture folder
-# Listing order. The source of truth is the capture gate's play profile,
-# tools/capture-gate/stores.py -> "order", and this list must stay equal to its
-# first eight entries (the gate keeps `viewer` and `draw` behind them because the
-# QA matrix still shoots both, but Play takes eight and neither is a listing slot
-# since #613).
-#
-# Keeping a second copy here has already cost a release: when #613 renamed the
-# slots, this list still read ["viewer", "text-edit", "text", "search", "sign",
-# "draw", "home", "redact"] and `listing push` died on "missing
-# .../android-viewer.png" during the 2.2.0 submission. The same stale-copy bug hit
-# tools/asc_publish.py at the same time, where it was worse: it uploaded 1 of 7
-# screenshots to the Mac listing and exited 0. If you change the slots, change
-# them here too - or better, see #656 and make this read from the profile.
-ORDER = ["reading", "text-edit", "sign", "pages", "text", "search", "redact", "home"]
+LOCALES = {"en-CA": "en", "fr-CA": "fr-CA", "fr-FR": "fr-FR",
+           "es-419": "es-419", "es-ES": "es-ES"}   # Play -> capture folder
 IMAGE_TYPES = {"phone": "phoneScreenshots", "tablet": "tenInchScreenshots"}
 LIMITS = {"title": 30, "shortDescription": 80, "fullDescription": 4000, "notes": 500}
+CONTACT_WEBSITE = "https://electricrv.ca/megapdf/support/"   # #662: Play shows it under "App support"
+CONTACT_EMAIL = "info@electricrv.ca"
 
 
 def copy_by_language():
@@ -62,7 +54,8 @@ def copy_by_language():
     body = text.split("<!-- copy-by-language -->", 1)[1].split("<!-- /copy-by-language -->", 1)[0]
     out = {}
     for sec in re.split(r"^### ", body, flags=re.M)[1:]:
-        loc = re.search(r"`([a-z]{2}-[A-Z]{2})`", sec.splitlines()[0]).group(1)
+        # "es-419" is a region code of three digits, not two letters (#724).
+        loc = re.search(r"`([a-z]{2}-(?:[A-Z]{2}|[0-9]{3}))`", sec.splitlines()[0]).group(1)
         fields = dict(re.findall(
             r"\*\*(Title|Short description|Full description|Release notes)\*\*[^\n]*\n```\n(.*?)\n```",
             sec, flags=re.S))
@@ -71,6 +64,12 @@ def copy_by_language():
         for k, lim in LIMITS.items():
             if len(out[loc][k]) > lim:
                 raise SystemExit(f"{loc} {k} is {len(out[loc][k])} > {lim}")
+        # tools/gen_listing_copy.py writes PENDING where a language's release notes are not
+        # written yet (they are made with docs/release-notes/<ver>/ at release time). That
+        # text is a note to the maintainer and must never reach Play.
+        if out[loc]["notes"].startswith("PENDING"):
+            raise SystemExit(f"{loc}: the release notes are still PENDING; write them in "
+                             f"docs/release-notes/<ver>/google-play.md and regenerate the copy")
     missing = set(LOCALES) - set(out)
     if missing:
         raise SystemExit(f"no copy for {sorted(missing)}")
@@ -78,7 +77,8 @@ def copy_by_language():
 
 
 def shots(captures, device, folder):
-    files = [os.path.join(captures, device, folder, f"android-{p}.png") for p in ORDER]
+    files = [os.path.join(captures, device, folder, f)
+             for f in store_slots.listing_files("play", device)]
     for f in files:
         if not os.path.isfile(f):
             raise SystemExit(f"missing {f}")
@@ -124,26 +124,40 @@ def cmd_status():
         e.discard()
 
 
-def cmd_contact(phone=None, commit=False):
+def cmd_contact(phone=None, website=None, commit=False):
     """The store listing's public contact details (Play Console -> Store settings).
 
-    Prints the email and website as they are and only whether a phone is set and
-    whether it is the agreed placeholder -- the number itself is never printed
-    (#417). With --phone, sets it; committed only with --commit.
+    Prints the email and website as they are, with a verdict on the website, and
+    only whether a phone is set and whether it is the agreed placeholder -- the
+    number itself is never printed (#417). With --phone / --website, sets them in
+    one PATCH (and the email too when the read showed it empty, since Play rejects
+    a details edit without one); committed only with --commit.
     """
     e = Edit()
     try:
         d = e.call("GET", "/details")
         cur = d.get("contactPhone") or ""
         digits = re.sub(r"\D", "", cur)
-        print(f"contact email: {d.get('contactEmail')}  website: {d.get('contactWebsite')}")
+        verdict = "the support page" if d.get("contactWebsite") == CONTACT_WEBSITE else "NOT the support page"
+        print(f"contact email: {d.get('contactEmail')}  website: {d.get('contactWebsite')}  ({verdict})")
         print("contact phone: " + ("not set" if not cur else
               ("the 888 555 placeholder" if digits.endswith("5551222") or digits.endswith("5551212")
                else f"SET, {len(digits)} digits, NOT the placeholder")))
+        body = {}
         if phone is not None:
-            d["contactPhone"] = phone
-            e.call("PATCH", "/details", body={"contactPhone": phone})
-            print("contact phone <- " + ("(cleared)" if phone == "" else "the given number"))
+            body["contactPhone"] = phone
+        if website is not None:
+            body["contactWebsite"] = website
+        if body and not d.get("contactEmail"):
+            body["contactEmail"] = CONTACT_EMAIL
+        if body:
+            e.call("PATCH", "/details", body=body)
+            if phone is not None:
+                print("contact phone <- " + ("(cleared)" if phone == "" else "the given number"))
+            if website is not None:
+                print(f"contact website <- {website}")
+            if "contactEmail" in body:
+                print(f"contact email <- {CONTACT_EMAIL} (the read showed it empty)")
             if commit:
                 e.call("POST", ":commit")
                 print("edit committed")
@@ -248,7 +262,10 @@ def main(argv):
         phone = None
         if "--phone" in argv:
             phone = argv[argv.index("--phone") + 1]
-        cmd_contact(phone, "--commit" in argv)
+        website = None
+        if "--website" in argv:
+            website = argv[argv.index("--website") + 1]
+        cmd_contact(phone, website, "--commit" in argv)
     elif argv[0] == "readback":
         sys.exit(1 if cmd_readback(captures, vc, "--phone-only" in argv) else 0)
     else:

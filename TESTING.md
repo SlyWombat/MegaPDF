@@ -389,6 +389,7 @@ permanently instead of being fetched or copied per run:
 | private (Canadian forms) | `~/pdf-test-ca` | 135 documents | same |
 | private (UN) | `~/pdf-test-un` | 90 documents | same |
 | public | `~/pdf-public` | **1,494 documents, 4.3 GB** (#609, 2026-10-01) | `tools/stress/public-corpus/fetch.sh ~/pdf-public` |
+| private (vendor manuals) | `~/pdf-test-vendor` | 28 documents, 77 MB (2026-10-22) | never re-fetched; third-party copyright, internal test use only, never committed. `manifest.tsv` holds a sha256 per file |
 
 Point any battery at `~/pdf-public` exactly as at `~/megapdf-public-corpus` above — it is
 the same corpus, just not re-downloaded:
@@ -2270,6 +2271,47 @@ wait is now 180 s: it guards against a hang, not the read time.
 search finds those); a highlight is a whole word, not a slice of it; a drawing-only page is read
 (only a uniform blank sheet is skipped); reading is on demand inside Find, not a background pass.
 
+## Vendor manuals corpus, first run (2026-10-23)
+
+Dave's 27 CNC vendor manuals (Carbide 3D, PocketNC, Roland, Shaper, Stepcraft, Tormach, from the
+CaseMaker research behind #664 and #665) plus `R02P032 Installation.pdf` are staged read-only at
+`~/pdf-test-vendor` on kdocker3: 28 documents (921 pages in the 26 that open). None was in any of the other four
+corpora. They are third-party copyright, so the folder is never committed or redistributed, and
+batteries are pointed at it exactly as at the others. Two Stepcraft files are truncated at 1,048,576
+bytes on purpose (#665) and must stay that way.
+
+Run on kdocker3 at `fcff3df` in a throwaway `megapdf:base` container built from a clean clone
+(`megapdf-cli 2.3.0`, PDFium at 33 patches), `structure-battery.sh --reference --cli`,
+`markdown-battery.sh` and `pages-battery.sh`, corpus mounted read-only, then removed. Disk count 28,
+visited 28 in every battery. **Zero crashes, zero hangs, zero bad exit codes in all three.**
+
+| battery | result |
+|---|---|
+| structure | 26 opened, 2 unreadable. **Token F1 0.997394 against the 0.998 gate (fail), the same through `megapdf-cli`.** Order tau median 0.986 on 197 tagged pages; poppler agreement tau median 0.995 on 909 pages |
+| markdown | 26 extracted, 2 unreadable, 0 cmark failures, 0 cmark timeouts |
+| pages | rotate, delete, move, blank, import-self and import-pair 0 qpdf failures, 0 count mismatches, 0 write failures; extract 26 ok |
+
+The two unreadable documents are the two truncated Stepcraft manuals. `megapdf-cli extract` on each
+prints "the file looks incomplete: 1.0 MB present, the PDF's own index says 2.4 MB" (7.0 MB for the
+other) and exits 10, so #665's behaviour holds on the real files it came from. Two Roland MDX-50
+guides carry owner restrictions; the pages battery reports them as restricted and refuses the
+edits.
+
+**The structure gate fails on this corpus: five documents** (`stepcraft/manual-uccnc-quickstart`
+0.9848, `roland/MDX-50_InstallGuide_EN` 0.9888, `roland/MDX-50_users-manual_apac` 0.9896,
+`roland/MDX-50_UserManual_EN` 0.9934, `roland/3d-tech-brief` 0.9957); the other 21 that opened are
+at or above 0.9981. The cause is not diagnosed (#781). Whether this corpus gates a release or is
+reported like the public corpus's known figure is Dave's call; it is registered but not made a
+gate. A new corpus has no earlier run, so nothing here is a regression.
+
+**After #781's cross-block hyphen join (2026-10-23, see "Cross-block wrap hyphens (#781)" below):
+F1 0.998199, internal API and `megapdf-cli` the same to the last digit; unmatched words 912 to 630.**
+The cause #781 found was stranded wrap hyphens (845 of the 912 unmatched words); the join takes
+282 of the unmatched words back, from the 336 the diagnosis put in class (a) (the continuation is
+the first word of the very next block). The other 509 (class (b): columns or cells interleaved into
+one block) are untouched, so the corpus passes by about 0.0002, roughly 35 words. Whether it gates
+a release is still Dave's call.
+
 ## Phone downloads corpus, first run (2026-10-18)
 
 Dave offered the PDFs on the Pixel 4 XL's Downloads folder for private testing. 58 files; 37 were
@@ -2458,6 +2500,447 @@ data folder to `D:\megapdf-qa\backup-<timestamp>\` and compares them when PowerS
 install and remove packages only through it: a Store-signed package is never removed. Its own
 checks were run on GPD-DAVE against stand-in folders and stand-in package objects (no package
 was installed or removed).
+
+## The huge-image cache check counts bytes, not milliseconds (#698), 2026-10-21
+
+`test_huge_image_render_cache` (`core/tests/core_tests.cpp`) asserted that a cache hit rendered at
+least 4x faster than the decode. That failed on two hosted runners at once (Windows missed by
+2 ms: 28 x 4 = 112 against 110), and the ratio has a floor, because a hit still resamples and
+composites the kept copy. It now opens its fixture with `megapdf_open_file` and asserts on
+`megapdf_testing_bytes_read()`, the bytes PDFium read through the core's file callback during
+each render. PDFium patch 0024 keeps the image's 1.2 MB stream in the file, so a render that
+decodes reads it all and one drawn from the page's image cache reads none. Threshold 64 KiB
+(0024's own boundary). Timings are printed, never asserted. No PDFium change.
+
+The printed line, `PDFium patches 33` (`pdfium-7934-megapdf-2b3b415e86b1`), Debug build, whole
+core suite green on both:
+
+| machine | first | again (2nd/3rd) | larger | zoom out | zoom in again | ms (same order) |
+|---|---|---|---|---|---|---|
+| kdocker3, Ubuntu 24.04 container, ASan | 1,200,001 | 0 / 0 | 1,200,001 | 0 | 0 | 63, 2/1, 128, 8, 21 |
+| Mac mini, Apple silicon, no ASan | 1,200,001 | 0 / 0 | 1,200,001 | 0 | 0 | 37, 1/1, 69, 5, 12 |
+
+So the cache is not missing on the Mac (the hosted macOS run's 61 ms had raised that question):
+every hit read 0 bytes. Negative control, a local edit never committed: render `second` through
+a second `Page` of the same document (each page has its own image cache). On both machines
+"rendering the page again does not decode the image again" failed with `1200001, 0 bytes read`
+and nothing else in the test failed on the Mac. (The kdocker3 negative run was in a container
+without the fixtures directory, so it also printed 135 unrelated "opens" failures; the
+positive run there, with fixtures, was green.)
+
+## Wrap hyphens on a block's first line (#496), 2026-10-22
+
+One UN document scored 0.9935 in its Spanish edition against 0.9996 to 1.0000 in its five siblings
+(#496, after #532 had already taken it from 0.9662). The cause is not Spanish and not the page
+count. A numbered paragraph, or a paragraph whose first line is indented, was cut after its first
+line by `GatherOneBlock`, so a wrap hyphen ending that line sat at a block boundary. `BuildPieces`
+joins a hyphen only to the next line of the same block; measure 1's reference side
+(`JoinLineWrapHyphens`) joins across blocks. One word became two engine tokens and one reference
+token. Spanish wraps with hyphens far more often than the other editions, which is the whole of
+why it alone crossed the gate.
+
+**Machine and build.** kdocker3, a throwaway `megapdf:base` container, the corpora mounted
+read-only, a scratch directory under `/home/claude` removed afterwards. Two builds of the same
+tree, same pinned PDFium (33 patches), same `structure_check`: `base` is `main` at `244849d`,
+`fix` is `main` plus this branch's three commits. Structure battery with `--reference --cli`, and
+the Markdown battery, over all four corpora, base and fix running side by side.
+
+**Step 1, re-baseline.** The base build reproduces the 2026-10-20 re-run exactly on every corpus
+(table below, "base" columns), so #710's 184 lines in `megapdf_structure.cpp` did not move the
+baseline. For the document: Spanish 0.993529 (84,516 matched of 85,250 engine and 84,883
+reference tokens), the five siblings 1.000000 (Arabic), 0.999626 (Chinese), 0.999742 (English),
+0.999933 (French), 1.000000 (Russian). 20.1 content blocks per page (not the 85,544 blocks of the
+`Tf`/`Tm` bug, so #532 has not regressed). Spanish engine tokens exceed the reference's by 367 and
+exactly 734 engine tokens have no match: the two-for-one shape of a split word.
+
+**Steps 2 and 3, `structure_check hyphendiag`.** New diagnostic mode (numbers only; `--dump`
+writes token pairs to a `PRIVATE`-marked directory). Self-check on generated one-page documents:
+`bb_hyphen=1` on each of the three fixtures of the new unit test, `bb_hyphen=0` on
+`tm-scaled-size.pdf`. On the document's Spanish edition:
+
+| block-boundary wrap hyphens (A ends in a hyphen, B begins lowercase) | count | share of 367 |
+|---|---:|---:|
+| `LIST_ITEM` > `PARAGRAPH`, B's left = A's left (continuation under the number) | 179 | 48.8% |
+| `LIST_ITEM` > `PARAGRAPH`, B 2.5 em left of A (indented number, continuation at the margin) | 144 | 39.2% |
+| `PARAGRAPH` > `PARAGRAPH`, B 2.5 em left of A (indented first line) | 44 | 12.0% |
+
+Every one has A a single line, B below A and the two overlapping horizontally, so none is a column
+or page break (H1 prime) and none has a heading as B. `fid_if_joined` is 1.000000 for the Spanish
+edition with `split`, `merge` and `other` all 0: the 367 are the whole gap, none of it justified
+text (H2), one font (H3) or the literal-hyphen fallback (H4). English has 13 such hyphens
+(0.999742 to 0.999979 if joined) and French 4 (0.999933 to 1.000000).
+
+**Steps 4 and 5, three commits, each measured on its own** (UN corpus, structure battery):
+
+| build | Spanish | English | French | UN aggregate |
+|---|---:|---:|---:|---:|
+| base | 0.993529 | 0.999742 | 0.999933 | 0.999136 |
+| + a list item also continues at its number's left edge; a paragraph's second line may sit up to 4 em left of an indented first line | 0.997457 | 1.000000 | 1.000000 | 0.999555 |
+| + the same allowance for an indented list item's second line | **1.000000** | 1.000000 | 1.000000 | **0.999801** |
+
+Arabic, Chinese and Russian do not move. Content blocks per page for the Spanish edition: 20.1
+(base), 16.4, 14.1.
+
+The design's 4a (the marker's own left edge) and 4b (the indented first line) are the first
+commit and together explain 223 of 367 (60.8%), which meets the design's "at least half" rule but
+reaches only 0.997457, short of the 0.998 gate. The other 144 are the indented-number shape the
+design's own H1 row anticipates (`LIST_ITEM` > `PARAGRAPH`, `ldelta_em` above 1) but its 4a text
+does not cover; commit three is the same first-line allowance applied to the number. It is kept
+as a separate commit so it can be dropped.
+
+`kFirstLineIndentMaxEm` is 4.0, the design's default. The design's rule for setting it (the
+largest `PARAGRAPH` > `PARAGRAPH` bucket, 2.5, rounded up to a whole em) would give 3.0, but the
+design's own test fixture indents the first line 36 pt at 10 pt, 3.6 em, so 3.0 would fail it.
+The document's real indent is 2.4 em and fits either.
+
+**Tests.** `test_structure_wrap_hyphen_across_indent` (`core/tests/core_tests.cpp`), three
+generated fixtures. Without the change the first two fail four checks (3 and 2 blocks, the
+hyphen kept); against the first commit alone the third fails two (3 blocks, the hyphen kept);
+with the branch the whole core suite is green, `test_structure_goldens` included, so no golden
+moved. The design's first fixture put the text at x=108 behind a number at x=72, a 22 pt gap that
+the line split (`kLineSplitFontSizeFactor`, 2 em, 20 pt) cuts into two lines before any block
+rule sees it; the fixture here puts the text at x=100.
+
+**The gate, four corpora, base against fix** (`--reference --cli`; F1 identical through
+`megapdf-cli`):
+
+| corpus | F1 base | F1 fix | tau (vs tree) | pages F1 < 0.9 | crashes / hangs / bad CLI exits | Markdown extracted / cmark failures |
+|---|---:|---:|---:|---:|---|---|
+| private | 0.998997 | 0.999004 | 0.951 = 0.951 | 33 = 33 | 0 / 0 / 0 | 2,982 = 2,982 / 0 |
+| public | 0.980019 | 0.980576 | 0.978 = 0.978 | 53 to 52 | 0 / 0 / 0 | 937 = 937 / 0 |
+| Canadian | 0.999932 | 0.999932 | 0.994 = 0.994 | 0 = 0 | 0 / 0 / 0 | 134 = 134 / 0 |
+| UN | 0.999136 | 0.999801 | 0.967 = 0.967 | 8 = 8 | 0 / 0 / 0 | 83 = 83 / 0 |
+
+Nothing fell on any measure the gate reads. The public corpus still fails the F1 gate for its
+known reason (#498); it moved up, not down. Opened counts and the Markdown output counts are
+identical to the 2026-10-20 re-run.
+
+**One informational number did move, and is stated here rather than left to be found.** Measure
+3, agreement with `pdftotext -layout`, is not gated. Its median fell by 0.001 on the UN corpus
+(0.999 to 0.998) and on the public corpus (0.990 to 0.989); private (0.992) and Canadian (0.996)
+did not move. The likely cause, not separately measured, is a list item now reading as one block where it
+was two, which changes the token order a little against poppler's. UN: 92 of 3,752 pages changed, 85 of them
+down, the largest by 0.022. Public: 3,964 of 22,942 pages, 3,681 down, the largest by 0.031.
+Private: 16 of 17,379 pages. No page crosses 0.9 in either direction (the count of pages under
+0.9 is identical on every corpus). The order against the document's own structure tree moved on
+4 pages in all.
+
+**Not run.** The pages and redaction batteries: they do not read block grouping. Hosted CI, and
+the Windows, Mac, iOS and Android builds: the change is in `core/`, which every platform links,
+but only the Linux build was exercised here.
+
+**Spanish wrap hyphens before an accented letter** (`compa-` / `ñía`) are never joined by the
+engine or the reference, because both test the next letter against ASCII lowercase. The measure
+cannot see it, so it does not explain any of this; widening one side alone would move the gate
+for an unrelated reason. Left for its own issue, as the design says.
+
+## Shrink-for-email survey, baseline (#6), 2026-10-21
+
+The measurement step of #6, taken before any policy change: what `megapdf_shrink_images` does to the
+corpora today, and what the candidate bilevel / grey / transparency rules would do instead.
+`tools/shrink-survey/` (`shrink_survey.cpp` built with `-DMEGAPDF_SHRINK_SURVEY=ON`, `run.sh`,
+`summarise.py`). Aggregates only; the per-image output lives outside the repo and holds path hashes,
+never a name. kdocker3, `megapdf:base` container with `libjpeg-turbo8-dev`, corpora mounted read-only,
+6 jobs, 300 s per document, PDFium patches 33, `origin/main` 244849d plus this tool. No product code
+changed.
+
+**This is not quite the design's tool.** The design reads each image's outcome from a decision hook
+inside `megapdf_shrink_images_cancellable`; neither exists until #593's core step lands, and this step
+must not touch that engine. So the baseline decision is computed in the tool from the published facts
+(`megapdf_images_load`, then the 150 dpi / 1.2 / 100 KB / 8 KB / 0.9 rules), and the engine's own
+`megapdf_shrink_images` runs on the same document as a cross-check: the two replaced counts agree on
+**every one of the 4,084 + 1,482 documents** (0 disagreements). Sizes are libjpeg-turbo's; WIC and
+ImageIO differ at the same nominal quality, so a gate read here is indicative for Windows and iOS, not
+exact. Image bytes are summed per placement (one shared image drawn twice counts twice, as shrink sees
+it), so they can exceed the file's size.
+
+| | private (`~/pdf-test`) | public (`~/pdf-public`) |
+|---|---|---|
+| documents visited | 4,158 of 4,337 on disk (same population as every other battery: 179 files are named `.PDF` and `find -name '*.pdf'` does not see them) | 1,493 of 1,777 manifest rows (the staged 1,494, less one `.Pdf`; 283 stated exclusions printed by the run) |
+| result | 4,084 ok, 62 unreadable, 12 encrypted | 1,482 ok, 5 encrypted, 4 unreadable, **2 timeouts at 300 s** |
+| images / documents holding any | 177,076 / 3,214 | 11,041 / 251 |
+| inside form XObjects | 4,234 images, 61.1 MB | 40 images, 0.2 MB |
+| stored image bytes | 2,554.2 MB | 670.2 MB |
+| documents with at least one image replaced today | 1,485 (36.4%) | 107 (7.2%) |
+| image bytes saved by today's rules | 1,647.3 MB over 5,774 images | 59.3 MB over 567 images |
+| time per document, median / p90 / max | 28 / 518 / 19,752 ms | 3 / 145 / 228,252 ms |
+| `megapdf_shrink_images` alone, median / p90 / max | 5 / 202 / 10,378 ms | 0 / 16 / 73,620 ms |
+
+Run time was 178 s (private) and 316 s (public). The public max (228 s) is a document that finished just inside
+the 300 s bound. The two timeouts are the two largest staged documents, 1.6 GB and 2.1 GB; the survey's own
+work (a walk that decodes bit depth, a render and five encodes per candidate, a rewrite, the shrink, a second
+rewrite) is what ran past the bound, so a timeout here is not evidence about shrink alone. A re-run of those two at a 3,000 s bound
+is reported in the last paragraph.
+
+**Today's rules by kind**, one row per kind. "Not rendered" means the loop skips the image without rendering it (under
+8 KB, or right-sized and under 100 KB, or under 8 px). "In forms" images are never reached, so they appear in the image
+count and in neither outcome column.
+
+Private:
+
+| kind | images | stored MB | replaced | kept small | JPEG saves under 10%, kept | in forms | saved MB |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| colour DCT | 3,376 | 1,492.1 | 3,023 | 0 | 353 | 0 | 1,072.0 |
+| grey DCT | 1,302 | 496.4 | 1,081 | 0 | 221 | 0 | 315.4 |
+| colour Flate/none/other | 1,139 | 240.0 | 1,004 | 0 | 135 | 0 | 218.0 |
+| not rendered | 126,675 | 142.3 | 0 | 125,093 | 0 | 1,582 | 0.0 |
+| bilevel CCITT | 22,753 | 88.9 | 293 | 20,711 | 827 | 922 | 4.4 |
+| colour JPX | 129 | 30.0 | 22 | 0 | 107 | 0 | 12.9 |
+| grey Flate/none/other | 403 | 30.0 | 304 | 0 | 99 | 0 | 20.9 |
+| bilevel Flate/none/other | 20,630 | 25.3 | 24 | 18,529 | 373 | 1,704 | 0.3 |
+| grey JPX | 21 | 5.5 | 1 | 0 | 20 | 0 | 3.0 |
+| bilevel JBIG2 | 648 | 3.7 | 22 | 498 | 102 | 26 | 0.4 |
+
+Public:
+
+| kind | images | stored MB | replaced | kept small | JPEG saves under 10%, kept | in forms | saved MB |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| colour DCT | 1,494 | 357.9 | 160 | 0 | 1,334 | 0 | 23.0 |
+| colour JPX | 1,031 | 218.8 | 11 | 0 | 1,020 | 0 | 4.6 |
+| bilevel CCITT | 638 | 47.7 | 187 | 100 | 351 | 0 | 20.7 |
+| grey DCT | 253 | 26.9 | 123 | 0 | 130 | 0 | 6.8 |
+| not rendered | 7,510 | 13.0 | 0 | 7,470 | 0 | 40 | 0.0 |
+| colour Flate/none/other | 18 | 3.0 | 17 | 0 | 1 | 0 | 2.8 |
+| grey Flate/none/other | 80 | 2.2 | 69 | 0 | 11 | 0 | 1.4 |
+| bilevel Flate/none/other | 13 | 0.6 | 0 | 9 | 4 | 0 | 0.0 |
+| bilevel JBIG2 | 4 | 0.0 | 0 | 4 | 0 | 0 | 0.0 |
+
+In the public corpus CCITT bilevel is 7.1% of all image bytes (conformance fixtures among them), and today's loop
+replaces 187 of those images for 20.7 MB, 35% of that corpus's savings. In the private corpus "bilevel" images are
+mostly strips and stencil masks: 20,711 of 22,753 CCITT images are under the size gates.
+
+**The five gates, read** (the design's thresholds):
+
+| gate | number | private | public | outcome |
+|---|---|---|---|---|
+| G1 | median `rgb_q80 / rgb_q75` on grey candidates (p90; bytes-weighted) | **1.098** (1.121; 1.108), 1,417 images, 519 MB | **1.047** (1.085; 1.048), 329 images | under 1.25 in both: 0.80 ships. At 0.80 the 10% rule keeps 7 more private images and none public |
+| G2 | median `grey_q75 / rgb_q75` | **0.943** (0.968; 0.955) | **0.947** (0.967; 0.964) | not under 0.85: no single-channel follow-up |
+| G3 | bilevel Flate/none/other bytes, share of all image bytes | **1.0%** (CCITT 3.5%, JBIG2 0.1%) | **0.1%** (CCITT 7.1%) | under 5%: no G4 encoder follow-up |
+| G4 | stored bytes inside form XObjects, share | **2.4%** | **0.0%** | under 5%: no follow-up |
+| G5 | images tripping R5 with no `/SMask`, `/Mask`, `/ImageMask` | **130 of 1,236**: 617 `/SMask`, 87 `/Mask`, 391 `/ImageMask`, 11 inline (not resolvable by dictionary), 130 none | **24 of 29**: 2 `/SMask`, 3 `/ImageMask`, 24 none | **tripped, and the remedy does not apply:** see below |
+
+**G5.** Every R5 trip was checked against its image dictionary (`pikepdf`; 1,236 + 29, not a sample of
+10), matching each to its image by page and drawing order and confirming the width and height. The
+design's remedy is to widen the excluded border to 2 px and re-run. That was done at 2 px and at 4 px:
+private trips 1,236 -> 1,224 -> 1,205, public 29 -> 29 -> 29. The 130 do not move, so the ring is not
+their cause. They are almost entirely transparent (alpha 0, black underneath; median 2.8% of pixels,
+p90 68%, up to 98.7%) and sit in 56 documents. Every one of the 93 pages involved carries a clip (91 a
+path clip, 2 a text-clip render mode); the one dissected (a 600 x 1000 photograph on a page with text
+render mode 7) rendered 356 opaque pixels of 150,000. The rendered bitmap applies the object's clip, and
+the clip is not an image mask. R5 as written (pixel alpha, any source) keeps these images, which is the
+safe direction; the images with alpha off the ring carry 71.6 MB (4.3%) of the private corpus's savings
+and 3.0 MB (5.1%) of the public's. Today's loop encodes such an image's RGB with the alpha thrown away
+(transparent pixels are black); what that does to the page was not looked at here.
+
+**What leaving bilevel alone gives up:** private 339 bilevel images of 5,774 replaced today, 5.11 MB of
+1,647 MB (0.3%), and in 38 of 1,485 documents the bilevel images are the only ones replaced; public 187
+images, 20.7 MB (35.0%), in no document alone. The private "scanned letters" are mostly not bilevel: the
+grey bucket (DCT grey 1,302 images, 496 MB; Flate grey 400, 30 MB) is where scans live.
+
+**D7, "never larger", measured at the file.** A plain `megapdf_save` rewrite of the unshrunk document is
+already as large as or larger than the original in 1,246 of 4,084 private documents (30.5%) and 586 of
+1,482 public (39.5%); public median change among rewritten documents +29%. After shrink, 1,021 private
+documents (231 with at least one image replaced) and 588 public (66 replaced) are not smaller than the
+original; in the private corpus 87 of the 231 replaced-and-larger documents have a rewrite that is
+smaller than the original, so shrink itself made them bigger. For those 87, 70 (80%) draw one image
+object more than once, against 20 of 150 (13%) of documents that shrank normally. That is consistent
+with `megapdf_shrink_images` replacing each placement separately, so a shared image becomes N JPEGs;
+it was shown by association, not by inspecting the output. The whole private corpus goes 3,240 MB ->
+1,827 MB; the public corpus goes 977 MB -> 1,007 MB (up, from rewrite growth on small fixtures).
+
+**The two timed-out documents, alone at a 3,000 s bound.** The 1.6 GB one is a 1,710-page JPEG 2000 scan (the
+export #696 measured). It finished in 2,727 s with the other workload on the machine (one core, 1.4 GB peak): every
+one of its 1,710 images was replaced, the file went from 1,566 MB to 590 MB (62% smaller, a plain rewrite alone is
+1,581 MB), and `megapdf_shrink_images` by itself took **2,391 s, about 40 minutes**, with no progress callback or way
+to stop it. The 2.1 GB one was stopped by the run's owner after about 14 minutes, not at the bound, so it has no
+number.
+
+Not done here, by design: the after-run (needs Phase 2), per-image timing on the phones, and anything
+on Windows or iOS encoders. Rerun with `tools/shrink-survey/run.sh <megapdf_shrink_survey> <corpus>
+<out> --jobs 6` then `summarise.py <out>/survey.jsonl --md`; build `cmake -S core -B build
+-DMEGAPDF_SHRINK_SURVEY=ON`.
+
+## `--window-tabs-check` exits non-zero when an assertion fails (#711), 2026-10-22
+
+The 2026-10-21 note on #711 said one `--window-tabs-check` run printed `[FAIL]` lines and exited 0.
+Measured on the Mac mini: it can. Avalonia's default `ShutdownMode` is `OnLastWindowClose`, and the
+check closes windows itself (Close Window, the closing step of the run). When an earlier assertion
+failed, the check's own close steps took the wrong path and closed the last window, so the process
+ended with exit 0 before `Finish` ran: `[FAIL]` lines, no `::error::window-tabs-check: N check(s) failed`
+line. The fix sets `ShutdownMode.OnExplicitShutdown` in the `--window-tabs-check` block of
+`App.axaml.cs`, so only `desktop.Shutdown(code)` ends the process.
+
+All runs: Mac mini, scratch clone of `origin/main` (a3111b4) with the one-file change below as
+stated, built with `tools/build-macos-app.sh osx-arm64`, output redirected to a file (no pipe).
+
+| change | files given | exit | what the run printed |
+|---|---|---|---|
+| none | `fixture.pdf forms.pdf` (two) | 1 | `[FAIL] three PDFs were given`, `::error::...1 check(s) failed` |
+| none, plus a deliberate `Check(..., false)` before the final `foreach` (scratch only) | `fixture.pdf forms.pdf demo.pdf` | **0** | two `[FAIL]` lines (B has no editable text at the click point in `forms.pdf`), the run stopped after "undo after the round trip", **no** summary line, the deliberate failure never ran |
+| none, the same deliberate failure | `demo.pdf fixture.pdf forms.pdf` | 1 | all 30 usual lines, the deliberate `[FAIL]`, `1 check(s) failed` |
+| `OnExplicitShutdown` | `fixture.pdf forms.pdf` | 1 | same as the first row |
+| `OnExplicitShutdown`, deliberate failure | `fixture.pdf forms.pdf demo.pdf` | 1 | six `[FAIL]` lines including the deliberate one, `6 check(s) failed` (the run now reaches `Finish`) |
+| `OnExplicitShutdown`, deliberate failure | `demo.pdf fixture.pdf forms.pdf` | 1 | the deliberate `[FAIL]`, `1 check(s) failed` |
+| `OnExplicitShutdown`, no deliberate failure | `demo.pdf fixture.pdf forms.pdf` | 0 | 30 `[PASS]`, `window-tabs-check: PASS`, no hang, `pgrep MegaPDF` empty |
+
+The argument order matters: the check clicks body text at (78, 186) on its second file and edits
+there, so `fixture.pdf forms.pdf demo.pdf` (the order #711's remaining-work list gives) fails two
+checks on its own; `demo.pdf fixture.pdf forms.pdf` is the order that passes on a clean build.
+
+## Wave 2: real-input, VoiceOver and hosted-CI runs (#710, #711, #614), 2026-10-22
+
+One day's verification of select-and-copy (#710), tab tear-out (#711) and the standing iOS runner
+(#614) on the real machines: GPD-DAVE, the Mac mini, WSLg, the kdocker2/3 builders and the
+hosted macOS runners. Each row is one run; the issues hold the per-step detail. What the day
+found and fixed: the Windows word double-click (#774) and text-box double-click (#775) never
+received a DoubleTapped (the two taps hit different elements), fixed in #777; VoiceOver never
+spoke the app's live-region announcements on the Mac (#778), fixed in #779 by posting AppKit's
+own announcement request; `--window-tabs-check` could exit 0 after `[FAIL]` (#767). Still open
+and unmilestoned: #770, #771, #773, #776.
+
+### #710 desktop items 1 and 2: the real routes and the real double-click (before the fixes)
+
+| date | machine | build | what | result |
+|---|---|---|---|---|
+| 2026-10-22 | GPD-DAVE (2560x1600, 150 %), elevated launch, person's launch (`MEGAPDF_USER_DATA` scratch) | `a3111b4`, Release win-x64 unpackaged | #710 desktop item 1: real input (`mouse_event` with real move events + `SendKeys`) on `selection.pdf` and `owner-only.pdf`: drag + Ctrl+C, right-click then mouse-click Copy (`TextCopyItem` by UI Automation), Ctrl+A + Ctrl+C, no-copy document | all PASS: clipboard equals the expected text with `\r\n` (6-line drag; 16-line whole document); `owner-only.pdf`: clipboard unchanged, notice shown, Copy disabled with reason. Note: a drag whose moves are `SetCursorPos` warps (the shape of `Drag` in tools/windows-qa/common.ps1) starts no selection; use `MOUSEEVENTF_MOVE\|ABSOLUTE` |
+| 2026-10-22 | GPD-DAVE, same | `a3111b4` | #710 desktop item 2: real double-click on "charlie" and "bravo" (gaps 20-350 ms), single click on a body line, added text box double-click | **FAIL**: the word double-click opens the line editor and selects nothing at every gap (#774); single click opens the editor (PASS); first double-click on an unselected added text box only selects it, the second opens the editor (#775) |
+| 2026-10-22 | Mac mini (macOS 26, 2560x1440 @1x), person's launch (`MEGAPDF_USER_DATA` scratch), fresh clone `~/mp-710` | `a3111b4`, `tools/build-macos-app.sh osx-arm64` | #710 desktop item 1: `cliclick` drag, Cmd+C, Edit > Copy and Cmd+A, Cmd+C through System Events, right-click > Copy, no-copy document | all PASS: `pbpaste` equals the expected text with `\n` (104-byte drag, 257-byte whole document); `owner-only.pdf`: Edit > Copy disabled, sentinel unchanged by Cmd+C and the menu, popup shows Copy greyed + reason. Note: `cliclick kp:return` and `kp:esc` did not reach the app; System Events `key code 36` / `53` did |
+| 2026-10-22 | Mac mini, same | `a3111b4` | #710 desktop item 2: `cliclick dc:` on "charlie", single click press/release, added text box double-click (also CGEvents at 120 and 300 ms) | word double-click PASS (`charlie`, no editor); single click opens on release (PASS); added text box: first double-click only selects, second opens the editor (#775) |
+| 2026-10-22 | GPD-DAVE WSLg, pointer driven from the Windows side, text read from the Windows clipboard | `a3111b4`, `MegaPDF-linux-x64` from ci.yml run 39792746643 | #710 desktop items 1 and 2: drag + Ctrl+C, right-click > Copy, Ctrl+A + Ctrl+C, no-copy document, double-click, single click, added text box | PASS: the three copies (the clipboard mirror carried the text with `\n`), `owner-only.pdf` Ctrl+C unchanged with the notice in the status bar, word double-click (`charlie`), single click opens on release. NOT SHOWN: the right-click menu on `owner-only.pdf` (#776, app or WSLg not told apart). FAIL: added text box first double-click only selects (#775) |
+
+### #710 desktop items 3, 4 and 5: announcement, auto-scroll while held, Mac highlight colour
+
+| date | machine | build | what | result |
+|---|---|---|---|---|
+| 2026-10-22 | GPD-DAVE (2560x1600, 150 %), person's launch (`MEGAPDF_USER_DATA` scratch), Windows UI lock held | `e709ac7`, Release win-x64 unpackaged | #710 desktop item 3 (Windows, listener half): real input (`mouse_event` with real move events + `SendKeys`) on `selection.pdf` while a UI Automation notification listener (`IUIAutomation5.AddNotificationEventHandler`, desktop root, subtree; a throwaway C# tool) logged `UIA_NotificationEventId`. Narrator NOT run (Dave's) | the app raises, kind 2 / processing 1 / activity `page-focus`: `Selected: Left two bravo and more Left three charlie Left four delta Left five echo Right…` after the drag, `Copied` after Ctrl+C, `Selected: Selection Columns Left one alpha Left two bravo and more Left three charlie Left…` after Ctrl+A. Word double-click: no notification (#774 opened the line editor). Proves what the app raises, not what Narrator speaks |
+| 2026-10-22 | Mac mini (macOS 26.7.1, 2560x1440 @1x), person's launch, VoiceOver on with the caption panel (`SCREnableCaptionPanel`), mini lock held | `e709ac7`, `tools/build-macos-app.sh osx-arm64` | #710 desktop item 3 (Mac): real drag, double-click, Cmd+A, Cmd+C; caption panel frames captured around each; the app's accessibility tree read after each | **FAIL (#778)**: the tree holds `Selected: ...` / `Selected: charlie` / `Copied`, VoiceOver speaks none of them (panel showed only `Select All`, `Copy`, `Left three charlie, text`); the older reading-mode live region is silent the same way; `libAvaloniaNative.dylib` has no `NSAccessibilityPostNotification` symbol. VoiceOver prefs removed afterwards; osascript to VoiceOver raised a TCC prompt, answered Don't Allow |
+| 2026-10-22 | GPD-DAVE, same | `e709ac7` | #710 desktop item 4 (Windows): window 1278x889 (not maximised), press on page 1, drag to 40 px below the window, still for 2.6 s with `CopyFromScreen` shots only, release, Ctrl+C | PASS: pages scrolled during the hold to "Page 2 of 2"; clipboard ran through the last page 2 line (14 lines, `\r\n`); the listener's `Selected:` notification came 4 ms after the release |
+| 2026-10-22 | Mac mini, same | `e709ac7` | #710 desktop item 4 (Mac): window 1200x540 points (not maximised), `cliclick dd:`, 12 `dm:`, `w:2500`, `du:`; shots mid-hold; Cmd+C | PASS: scrolled to "Page 2 of 2" during the hold, page 2 text highlighted mid-hold, clipboard 14 lines with `\n` |
+| 2026-10-22 | GPD-DAVE WSLg, pointer from the Windows side, text read from the Windows clipboard | `e709ac7`, `MegaPDF-linux-x64` from ci.yml run 39832937133 | #710 desktop item 4 (Linux): the window as it opened (fills the screen), press on page 1, drag to 40 px below the page area (inside the status bar), still 2.6 s, release, Ctrl+C | PASS: scrolled to "Page 2 of 2", page 2 highlighted mid-hold, clipboard 14 lines with `\n`. A resize of the WSLg window from outside left its content clipped (not a product measurement) |
+| 2026-10-22 | Mac mini, same | `e709ac7` | #710 desktop item 5: `defaults write -g AppleHighlightColor "1.000000 0.874510 0.701961 Orange"`, launch, real drag, `screencapture`, sample the pixels between glyphs; delete the default, relaunch, repeat | PASS: orange (254, 241, 229) with the override, accent blue (226, 240, 255) without; `defaults read` absent before, after the delete, and at the end |
+
+### #710 item 2 after the fixes (#774, #775; PR #777)
+
+| date | machine | build | what | result |
+|---|---|---|---|---|
+| 2026-10-22 | GPD-DAVE (150 %), Windows UI lock | `857ae61` (PR #777) | Windows `--screenshot-state` select-copy and the states that touch DocumentView text/selection | select-copy 64/64 (was 40; +24 for the second-click decision and the text box); whiteout-text 28/28, fill 17/17, form-flow 29/29, redact 19/19, reading exit 0. Fail-first: with the fix switched off select-copy is 56 passed, 8 failed (the new word and text-box checks). Hosted Windows UI self-test green on the same head |
+| 2026-10-22 | kdocker3, `megapdf:dotnet` container under Xvfb | `857ae61` | Linux `--self-test` (whole), Avalonia headless `CheckTextSelection` with real click-count-2 double-clicks, Core tests | 936 PASS, exit 0; Core tests 574/574. Fail-first: without `TryEditTextBoxAt` the box's "second click opens the editor" and "with its own text" checks fail, everything else passes |
+| 2026-10-22 | Mac mini (macOS 26), fresh clone | `857ae61` | macOS `--self-test` | 925 PASS, exit 0 |
+| 2026-10-22 | GPD-DAVE (win-x64), mini (`cliclick`), WSLg (CI `MegaPDF-linux-x64`), person's launches | `857ae61` | #710 desktop item 2 re-verified with real input: word double-click copy, text-box double-click, single click | PASS on all three (clipboard `charlie`, no editor; text box editor opens on the first double-click; single click opens the line editor). Before (`a3111b4`/`e709ac7`): Windows FAIL (#774), all three FAIL on the box (#775) |
+
+### #778: Mac VoiceOver speaks the announcements (PR #779)
+
+| date | machine | build | what | result |
+|---|---|---|---|---|
+| 2026-10-22 | Mac mini (macOS 26.7.1, arm64), VoiceOver caption panel | `origin/main` 186d958 | drag, double-click, ⌘A, ⌘C, ⇧⌘R with real `cliclick` input | fail-first: no `Selected:`, `Copied` or `Reading mode on` caption; only VoiceOver's own focus and menu speech |
+| 2026-10-22 | Mac mini, VoiceOver | PR #779 (6a712ce's `Announce` path) | the same five actions | `Selected: Left two bravo…`, `Selected: charlie`, `Selected: Selection Columns…`, `Copied`, `Reading mode on` / `off`; ⌘A+⌘C 60 ms apart ends on `Copied`; 4 of 5 double-clicks announced |
+| 2026-10-22 | Mac mini | 6a712ce | `--self-test` | 934 PASS, 0 FAIL, exit 0 |
+| 2026-10-22 | kdocker3 | 6a712ce | Core tests; Linux `--self-test` under Xvfb | 574/0; 944 PASS, 0 FAIL |
+| 2026-10-22 | kdocker3 | 6a712ce with the `NativeAnnouncer?.Invoke` line commented out | Linux `--self-test` | 6 FAIL (the #778 hand-over checks), exit 1 |
+
+### #710 iOS: adjustable handles, Command-C on the iPad, no-copy path (PR #772)
+
+| date | machine | build | what | result |
+|---|---|---|---|---|
+| 2026-10-22 | Mac mini, iPhone 17 Pro + iPad Pro 13" simulators, iOS 26.5, build 32ac588 | #710 iOS: SelectCopyUITests (VoiceOver-adjustable handle step, Command-C on iPad, no-copy path); FormTextUITests, BodyTextEditUITests regression; unit suite 366 | iPhone 4 pass 1 skip, iPad 5/5; regression 7/7 + 3/3; unit 366/0; fail-first mutations each red |
+
+### #711 items 2 and 4: Windows at other scales, Linux under WSLg
+
+| date | machine | build | what | result |
+|---|---|---|---|---|
+| 2026-10-22 | GPD-DAVE (2560x1600; scale 150 %, 100 %, restored to 200 %), elevated launches | `a3111b4` (origin/main), Release win-x64 unpackaged | #711 item 2: `--screenshot-state tab-move fixture.pdf` | exit 0, 70 PASS / 0 FAIL at 150 % and 100 % (70/0 at 200 %, exit not captured); `closes by itself` passed on all three |
+| 2026-10-22 | GPD-DAVE, same | `a3111b4` | #711 item 2: real SendInput drags (tear-out 250 px with an unsaved edit, drop onto another strip, Escape mid-drag, Ctrl+Z in the new window, click on a line in the moved document) at 150 % and 100 % (and 200 % baseline) | all as designed: edit, undo and tab moved with it; Escape cancelled with no stray window; editor opened on the clicked line (not one off); pages sharp (by eye). Item ticked |
+| 2026-10-22 | GPD-DAVE WSLg (Weston/XWayland, 200 %) | `a3111b4`, `MegaPDF-linux-x64` from ci.yml run 39792746643 | #711 item 4: real Windows-pointer drag 200 px down with an unsaved edit; Menu key / right click then Move Tab to New Window; Ctrl+Z | new window made with the edit; Undone. after Ctrl+Z; but window placed at X (10,10) not at the release point, Shift+F10 did not open the menu (Menu key did), WSLg repaint/scale broke after the new window (first window unresponsive); item left open, #773 |
+
+### #711 items 3 and 6: a real tab drag and VoiceOver on the Mac
+
+| date | machine | build | what | result |
+|---|---|---|---|---|
+| 2026-10-22 | Mac mini, scratch clone `~/mp-711` (removed) | `origin/main` a3111b4 + #767 one-liner | item 8, `--window-tabs-check`, no change, design order, deliberate failure | exit **0** with `[FAIL]` lines and no summary; fixed by #767 (exit 1) |
+| 2026-10-22 | Mac mini | same | item 3, real `cliclick` drag: Merge All Windows, unsaved edit, tab dragged 250 pt out, ⌘Z in the new window | new window holds the dirty edit, undo works, both windows draw (393 to 5,190 distinct colours per region), AppKit's preview is window-shaped |
+| 2026-10-22 | Mac mini | same, "Prefer tabs: Always" set and deleted | item 3 step 5: tab dragged onto another window's tab bar (windows not overlapping) | joined: right window 3 tabs, left 2; three earlier tries onto a covered tab bar did not merge |
+| 2026-10-22 | Mac mini | same | item 3 step 6: ⌘W Don't Save, ⌘Q with a dirty tab | prompt each time, Don't Save closes, app quits on the last window or on ⌘Q |
+| 2026-10-22 | Mac mini | same | item 3, defects found | #770 (one 95 % CPU wedge in the tab drag loop, not reproduced in two repeats), #771 (Window menu lacks the tab commands after a fresh launch) |
+| 2026-10-22 | Mac mini, VoiceOver (caption panel) | same | item 6: Move Tab to New Window via System Events | no new-window caption (Finder, same invocation, equally silent) |
+| 2026-10-22 | Mac mini, VoiceOver | same | item 6: Move Tab to New Window with real clicks | `MegaPDF, has new, window` |
+| 2026-10-22 | Mac mini, VoiceOver | same | item 6: real drag of a tab out | `Now in, forms.pdf — MegaPDF, window, Open, button, group` |
+
+### #614: hosted iOS CI beside the standing runner
+
+See tools/mac-mini.md, "The standing runner against hosted". Three dispatched hosted runs
+(runner=hosted): 39818409951 green in 55 min 51 s, 39845022875 red in 53 min 33 s on one
+iPad reading-mode UI test, 39868868578 green in 47 min 59 s. The mini's median job is 15 min
+46 s with a median queue of 15 minutes.
+
+## Cross-block wrap hyphens (#781), 2026-10-23
+
+PR #783, branch `wip/781-hyphen-join`. A wrap hyphen at the end of a block whose continuation is
+the first word of the NEXT block (the paragraph builder cut the block at that line) was emitted as
+two words; the fidelity reference joins them, so each costs 3 unmatched words. The fix moves that
+one word into the prefix's block with the hyphen stripped (`JoinHyphenAcrossBlocks`,
+`core/megapdf_structure.cpp`). Fix 2 of the plan (per-leaf median pitch) was not needed and was not
+built; fix 3 (class (b), interleaved columns) was out of scope.
+
+Run on kdocker3, `main` at 4f7f4a5 and the branch built side by side in throwaway `megapdf:base`
+containers (the pinned PDFium, `megapdf-cli 2.3.0`), the three batteries over all five corpora,
+corpora read-only, then removed. Disk counts 4,158 / 1,493 / 134 / 90 / 28; every battery visited
+every document. **Zero crashes, zero hangs, zero bad CLI exits in every cell, baseline and branch.**
+
+| corpus | 2.3.0 gate | `main` here | branch | unmatched, main to branch | documents better / worse |
+|---|---:|---:|---:|---:|---|
+| vendor | 0.997394 (first run) | 0.997394 | **0.998199** | 912 to 630 | 6 / 0 |
+| private | 0.998997 | 0.999004 | 0.999069 | 10,804 to 10,105 | 74 / 0 |
+| Canadian | 0.999932 | 0.999932 | 0.999938 | 33 to 30 | 1 / 0 |
+| UN | 0.999136 | 0.999801 | 0.999801 | 351 to 351 | 0 / 0 |
+| public | 0.976157 (2 hangs) | 0.980576 | 0.981815 | 621,389 to 581,492 | 46 / 0 |
+
+Internal API and `megapdf-cli` agree to the last digit in every cell. Why `main` differs from the
+2.3.0 column: #496 (UN segmentation, d3f3093 and eccb737) landed after 2.3.0, and #704 removed the
+two public hangs; the branch is compared with `main` on the same machine, not with the 2.3.0 digits.
+Gated tau medians (tagged pages) are identical to three places: private 0.951, public 0.978,
+Canadian 0.994, UN 0.967, vendor 0.986. **The informational poppler-agreement tau median moved on
+public only, 0.989 to 0.988** (private 0.992, vendor 0.995, Canadian 0.996, UN 0.998 unchanged): of
+22,942 public pages 3,496 went down and 336 went up, none by 0.05 or more, all inside the 46
+documents that changed. The likely mechanism, **not measured**, is a joined word that no longer
+pairs with the two halves `pdftotext -layout` never joins.
+
+Markdown is identical to the baseline in every cell (private 2,982 extracted / 1,102 textless / 12
+password-gated, public 937 / 543 / 5, Canadian 134, UN 83 / 7, vendor 26; 0 cmark failures and 0
+cmark timeouts). **Pages:** 0 qpdf failures, 0 count mismatches, 0 write failures and 0 crashes or hangs in every cell; public's 9 "REFUSED, other" are the known #445, as in the 2.3.0 gate; the private and public summaries differ from the baseline's only in elapsed seconds.
+
+**What changed in the output.** Documents whose dumped text changed: vendor 6, private 74, Canadian
+1, public 46, UN 0. Joins counted by diffing the two dumps line by line (counts only; no document
+text was read into any record): vendor 86, private 233, Canadian 1, public 11,402 (the public
+count is dominated by a few very large documents; the diff script could not align 4 of them, so
+treat it as a lower bound). No document got worse in unmatched words.
+
+**The first version did harm and was changed.** Without the "drawn next" condition (the
+continuation must be the character PDFium drew right after the hyphen) the join took the first
+lowercase word of whatever block came next in reading order. Private: F1 0.999057, 74 documents
+better and **30 worse** (a wrong word glued on, +1 unmatched word each) while the aggregate still
+rose. Vendor 0.998124 with 135 joins against 86 now. With the condition: 0 worse everywhere. A
+second version joined a soft hyphen before any character; one private document of digits with soft
+hyphens lost a match, so soft hyphens now need the lowercase test too.
+
+**Compound words.** A wrap-flagged hyphen in a real compound ("well-" then "known") is joined, as
+`BuildPieces` already joins it inside a block and as the reference joins it; no more conservative
+rule exists without leaving the reference. Shape on private, 233 joins: 98 have the joined word
+standing unhyphenated elsewhere in the same document, 46 have the hyphenated form elsewhere (a
+probable compound split at a line end), 89 have neither. A literal U+002D that PDFium did not flag
+is not joined across blocks (the in-block join does join it). A continuation that starts with an
+accented letter is not joined (#728/#756: unchanged, neither fixed nor worsened).
+
+**Tests.** `test_structure_cross_block_hyphen`, five checks (join; a block that was only the
+continuation is absorbed; uppercase continuation left alone; a lowercase block that is not drawn
+next left alone; a mid-line compound hyphen untouched). The first two fail on unmodified `main`,
+verified by building the test file against the main engine. No golden changed.
+
+**Not verified.** Windows, macOS, iOS, Android and the .NET apps beyond what hosted CI says;
+the tagged path (#358), the furniture and leftover builders, which this does not touch; the
+redaction battery; rendered Markdown beyond cmark parsing it. The pages battery cannot reach this
+change (it edits pages, not text) and was run for the record only, with `--jobs 4` instead of the
+sequential default to fit the session. Scratch (dumps of every document's text) lived under
+`~/megapdf-781fix-*` on kdocker3 and was deleted.
 
 ## Reporting
 

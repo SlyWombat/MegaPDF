@@ -18,6 +18,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <functional>
+#include <future>
 #include <mutex>
 #include <thread>
 #include <cctype>
@@ -26,6 +27,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <initializer_list>
 #include <iterator>
 #include <map>
 #include <set>
@@ -1666,6 +1668,44 @@ std::vector<unsigned char> image_pdf(int px, double pt) {
     char content[128];
     std::snprintf(content, sizeof content, "q %.0f 0 0 %.0f 100 600 cm /Im1 Do Q", pt, pt);
     add("<< /Length " + std::to_string(std::strlen(content)) + " >>\nstream\n" + content + "\nendstream");
+    const size_t xref = pdf.size();
+    pdf += "xref\n0 " + std::to_string(offsets.size() + 1) + "\n0000000000 65535 f \n";
+    for (size_t off : offsets) { char line[32]; std::snprintf(line, sizeof line, "%010zu 00000 n \n", off); pdf += line; }
+    pdf += "trailer\n<< /Size " + std::to_string(offsets.size() + 1) + " /Root 1 0 R >>\nstartxref\n" + std::to_string(xref) + "\n%%EOF\n";
+    return std::vector<unsigned char>(pdf.begin(), pdf.end());
+}
+
+// #593: `pages` pages, each drawing `per_page` raw RGB images of `px` × `px` at `pt` × `pt`
+// points, every image its own XObject (so each is stored at px × px × 3 bytes).
+std::vector<unsigned char> images_pdf(int pages, int px, double pt, int per_page = 1) {
+    std::string pdf = "%PDF-1.4\n";
+    std::vector<size_t> offsets;
+    auto add = [&](const std::string& body) { offsets.push_back(pdf.size()); pdf += std::to_string(offsets.size()) + " 0 obj\n" + body + "\nendobj\n"; };
+    const int stride = 2 + per_page;   // page, its images, its content
+    auto page_obj = [&](int k) { return 3 + k * stride; };
+    add("<< /Type /Catalog /Pages 2 0 R >>");
+    std::string kids;
+    for (int k = 0; k < pages; k++) kids += std::to_string(page_obj(k)) + " 0 R ";
+    add("<< /Type /Pages /Kids [" + kids + "] /Count " + std::to_string(pages) + " >>");
+    std::string pixels(static_cast<size_t>(px) * px * 3, '\0');
+    for (size_t i = 0; i < pixels.size(); i += 3) { pixels[i] = static_cast<char>(40); pixels[i + 1] = static_cast<char>(80); pixels[i + 2] = static_cast<char>(200); }
+    for (int k = 0; k < pages; k++) {
+        std::string xobjects;
+        std::string content;
+        for (int i = 0; i < per_page; i++) {
+            xobjects += "/Im" + std::to_string(i + 1) + " " + std::to_string(page_obj(k) + 1 + i) + " 0 R ";
+            char draw[128];
+            std::snprintf(draw, sizeof draw, "q %.0f 0 0 %.0f %d 600 cm /Im%d Do Q ", pt, pt, 100 + i * 150, i + 1);
+            content += draw;
+        }
+        add("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /XObject << " + xobjects + ">> >> /Contents " +
+            std::to_string(page_obj(k) + 1 + per_page) + " 0 R >>");
+        for (int i = 0; i < per_page; i++) {
+            add("<< /Type /XObject /Subtype /Image /Width " + std::to_string(px) + " /Height " + std::to_string(px) +
+                " /ColorSpace /DeviceRGB /BitsPerComponent 8 /Length " + std::to_string(pixels.size()) + " >>\nstream\n" + pixels + "\nendstream");
+        }
+        add("<< /Length " + std::to_string(content.size()) + " >>\nstream\n" + content + "\nendstream");
+    }
     const size_t xref = pdf.size();
     pdf += "xref\n0 " + std::to_string(offsets.size() + 1) + "\n0000000000 65535 f \n";
     for (size_t off : offsets) { char line[32]; std::snprintf(line, sizeof line, "%010zu 00000 n \n", off); pdf += line; }
@@ -3435,6 +3475,183 @@ struct OpenDoc {
     OpenDoc& operator=(const OpenDoc&) = delete;
 };
 
+// #593: megapdf_shrink_images_cancellable. The rules are megapdf_shrink_images()'s (tested in
+// test_save_flatten_images, which now runs through this function as a wrapper); here, progress,
+// the cancel flag, the lock let go during the encode, a close mid-run, and the stale-index guard.
+struct ShrinkProbe {
+    int encodes = 0;
+    int releases = 0;
+    std::vector<std::pair<int, int>> progress;
+    std::function<void(int)> on_encode;            // given the encode's 1-based number
+    std::function<void(int, int)> on_progress;
+    std::function<void()> on_release;
+};
+
+int probe_encode(void* ctx, const unsigned char*, int, int, double, unsigned char** out, size_t* len) {
+    auto* probe = static_cast<ShrinkProbe*>(ctx);
+    probe->encodes++;
+    if (probe->on_encode) probe->on_encode(probe->encodes);
+    *out = const_cast<unsigned char*>(kTinyJpeg);
+    *len = sizeof kTinyJpeg;
+    return 1;
+}
+
+void probe_release(void* ctx, unsigned char*) {
+    auto* probe = static_cast<ShrinkProbe*>(ctx);
+    probe->releases++;
+    if (probe->on_release) probe->on_release();
+}
+
+void probe_progress(void* ctx, int done, int total) {
+    auto* probe = static_cast<ShrinkProbe*>(ctx);
+    probe->progress.emplace_back(done, total);
+    if (probe->on_progress) probe->on_progress(done, total);
+}
+
+std::string pairs(const std::vector<std::pair<int, int>>& v) {
+    std::string s;
+    for (const auto& p : v) s += "(" + std::to_string(p.first) + "," + std::to_string(p.second) + ")";
+    return s;
+}
+
+void test_shrink_progress_and_cancel() {
+    // 64 px drawn at 20 pt: oversized (target 42 px) and 12,288 bytes stored, so every image is
+    // re-encoded, and the 632-byte JPEG is far under 90% of it.
+    const auto three = images_pdf(3, 64, 20);
+
+    // (a) Progress before the first image and after each one; both counts filled.
+    {
+        OpenDoc d(three);
+        ShrinkProbe probe;
+        int counts[MEGAPDF_SHRINK_COUNTS] = {-1, -1};
+        const int status = megapdf_shrink_images_cancellable(d.doc, probe_encode, probe_release, probe_progress, &probe, nullptr,
+                                                             counts, MEGAPDF_SHRINK_COUNTS);
+        const std::vector<std::pair<int, int>> expected{{0, 3}, {1, 3}, {2, 3}, {3, 3}};
+        check(status == MEGAPDF_OK, "shrink (#593): a three-image run returns OK", std::to_string(status));
+        check(probe.progress == expected, "shrink (#593): progress is (0,3) then one call per image", pairs(probe.progress));
+        check(counts[MEGAPDF_SHRINK_CONSIDERED] == 3 && counts[MEGAPDF_SHRINK_REPLACED] == 3, "shrink (#593): considered 3, replaced 3",
+              std::to_string(counts[0]) + " " + std::to_string(counts[1]));
+        check(probe.encodes == 3 && probe.releases == 3, "shrink (#593): every encoded buffer is released",
+              std::to_string(probe.encodes) + " " + std::to_string(probe.releases));
+    }
+
+    // (b) A flag raised during the second progress call (after the first image) stops the run.
+    {
+        OpenDoc d(three);
+        ShrinkProbe probe;
+        megapdf_cancel* cancel = megapdf_cancel_new();
+        probe.on_progress = [&](int done, int) { if (done == 1) megapdf_cancel_raise(cancel); };
+        int counts[MEGAPDF_SHRINK_COUNTS] = {-1, -1};
+        const int status = megapdf_shrink_images_cancellable(d.doc, probe_encode, probe_release, probe_progress, &probe, cancel,
+                                                             counts, MEGAPDF_SHRINK_COUNTS);
+        check(status == MEGAPDF_ERR_CANCELLED, "shrink (#593): a raised flag returns CANCELLED", std::to_string(status));
+        check(counts[MEGAPDF_SHRINK_CONSIDERED] == 1 && probe.encodes == 1, "shrink (#593): it stops before the second image",
+              std::to_string(counts[0]) + " considered, " + std::to_string(probe.encodes) + " encodes");
+        megapdf_cancel_free(cancel);
+    }
+
+    // (c) The lock is let go during the encode: a call on another document completes meanwhile.
+    // With the lock held for the whole run it could not return until the shrink did. The future
+    // lives outside the encode, so against a whole-run lock this fails rather than deadlocks.
+    {
+        OpenDoc d(images_pdf(1, 64, 20));
+        OpenDoc other(images_pdf(2, 16, 20));
+        ShrinkProbe probe;
+        std::future<int> pages;
+        bool completed = false;
+        probe.on_encode = [&](int) {
+            pages = std::async(std::launch::async, [&] { return megapdf_page_count(other.doc); });
+            completed = pages.wait_for(std::chrono::seconds(2)) == std::future_status::ready;
+        };
+        const int status = megapdf_shrink_images_cancellable(d.doc, probe_encode, probe_release, nullptr, &probe, nullptr, nullptr, 0);
+        check(status == MEGAPDF_OK && completed && pages.valid() && pages.get() == 2,
+              "shrink (#593): another document's call completes while the encode runs", std::to_string(status));
+    }
+
+    // (d) Its document closed during the encode: the close waits for the run, which then stops,
+    // and nothing is used after it is freed (ASan on Linux).
+    {
+        std::vector<unsigned char> copy = three;
+        megapdf_document* doc = megapdf_open(copy.data(), copy.size(), nullptr);
+        ShrinkProbe probe;
+        std::atomic<bool> started{false};
+        std::atomic<bool> closed{false};
+        bool closed_during_encode = true;
+        bool closed_at_release = true;
+        probe.on_release = [&] { closed_at_release = closed.load(); };
+        std::thread close_thread;
+        probe.on_encode = [&](int n) {
+            if (n != 1) return;
+            close_thread = std::thread([&] {
+                started = true;
+                megapdf_close(doc);
+                closed = true;
+            });
+            for (int i = 0; i < 200 && !started; i++) std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            std::this_thread::sleep_for(std::chrono::milliseconds(200));
+            closed_during_encode = closed.load();
+        };
+        int counts[MEGAPDF_SHRINK_COUNTS] = {-1, -1};
+        const int status = megapdf_shrink_images_cancellable(doc, probe_encode, probe_release, probe_progress, &probe, nullptr,
+                                                             counts, MEGAPDF_SHRINK_COUNTS);
+        if (close_thread.joinable()) close_thread.join();
+        check(status == MEGAPDF_ERR_CANCELLED, "shrink (#593): closing its document mid-run stops it", std::to_string(status));
+        // The release on the stopping path runs after the run saw the close and before it
+        // returned: the close must still be waiting then.
+        check(!closed_during_encode && !closed_at_release && closed.load(),
+              "shrink (#593): the close waits until the run has stopped");
+        check(counts[MEGAPDF_SHRINK_CONSIDERED] == 1 && counts[MEGAPDF_SHRINK_REPLACED] == 0 && probe.releases == 1,
+              "shrink (#593): a run stopped after an encode replaces nothing and still releases the buffer",
+              std::to_string(counts[0]) + " " + std::to_string(counts[1]) + " " + std::to_string(probe.releases));
+    }
+
+    // (e) Every page regenerated during the first encode: the list's object indices may name other
+    // objects now, so nothing is replaced, and the run still ends OK.
+    {
+        OpenDoc d(three);
+        ShrinkProbe probe;
+        int flattened = MEGAPDF_ERR_ARGUMENT;
+        probe.on_encode = [&](int n) { if (n == 1) flattened = megapdf_flatten_all(d.doc); };
+        int counts[MEGAPDF_SHRINK_COUNTS] = {-1, -1};
+        const int status = megapdf_shrink_images_cancellable(d.doc, probe_encode, probe_release, probe_progress, &probe, nullptr,
+                                                             counts, MEGAPDF_SHRINK_COUNTS);
+        check(flattened == MEGAPDF_OK && status == MEGAPDF_OK && counts[MEGAPDF_SHRINK_REPLACED] == 0 &&
+                  counts[MEGAPDF_SHRINK_CONSIDERED] == 3 && probe.encodes == 1 && probe.releases == 1,
+              "shrink (#593): pages changed mid-run are skipped, not written at stale indices",
+              std::to_string(status) + " " + std::to_string(counts[0]) + " " + std::to_string(counts[1]) + " " + std::to_string(probe.encodes));
+    }
+
+    // (g) Two pictures on one page: our own replacement of the first regenerates the page, which
+    // must not make the second look changed by someone else.
+    {
+        OpenDoc d(images_pdf(1, 64, 20, 2));
+        ShrinkProbe probe;
+        int counts[MEGAPDF_SHRINK_COUNTS] = {-1, -1};
+        const int status = megapdf_shrink_images_cancellable(d.doc, probe_encode, probe_release, nullptr, &probe, nullptr,
+                                                             counts, MEGAPDF_SHRINK_COUNTS);
+        check(status == MEGAPDF_OK && counts[MEGAPDF_SHRINK_CONSIDERED] == 2 && counts[MEGAPDF_SHRINK_REPLACED] == 2,
+              "shrink (#593): both pictures on one page are replaced",
+              std::to_string(status) + " " + std::to_string(counts[0]) + " " + std::to_string(counts[1]));
+    }
+
+    // Arguments and the slot contract: only min(count_slots, MEGAPDF_SHRINK_COUNTS) slots are
+    // written, and they are zeroed even when the call is refused.
+    {
+        int counts[3] = {7, 7, 7};
+        check(megapdf_shrink_images_cancellable(nullptr, probe_encode, nullptr, nullptr, nullptr, nullptr, counts, 3) == MEGAPDF_ERR_ARGUMENT &&
+                  counts[0] == 0 && counts[1] == 0 && counts[2] == 7,
+              "shrink (#593): a null document is refused, the known slots zeroed, the rest untouched");
+        OpenDoc d(three);
+        check(megapdf_shrink_images_cancellable(d.doc, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0) == MEGAPDF_ERR_ARGUMENT,
+              "shrink (#593): a null encoder is refused");
+        ShrinkProbe probe;
+        int one[2] = {-1, 7};
+        megapdf_shrink_images_cancellable(d.doc, probe_encode, probe_release, nullptr, &probe, nullptr, one, 1);
+        check(one[0] == 3 && one[1] == 7, "shrink (#593): one slot asked for, one slot written",
+              std::to_string(one[0]) + " " + std::to_string(one[1]));
+    }
+}
+
 int first_line_object(const megapdf_page* page, size_t line = 0) {
     megapdf_text* t = megapdf_text_load(page, MEGAPDF_TEXT_ALL);
     int index = -1;
@@ -5008,72 +5225,125 @@ void test_large_image_stand_ins() {
 // image cache in a usable form, so every render of its page inflated the whole stream again,
 // however small the render. The patch keeps a copy reduced towards the render size for the
 // page's life. Renders through the page handle must come out the same each time, show the
-// image's content, and after the first be far faster than decoding it.
+// image's content, and after the first be drawn from the page's image cache, which the test
+// sees as the image's stream not being read from the file again (#698). Counted, never timed:
+// a ratio of two wall-clock times on a shared runner measures the runner as much as the cache.
 void test_huge_image_render_cache() {
-    const int side = 5000;   // 75 MB of RGB decoded, over PDFium's 60 MB "huge image" line
-    OpenDoc d(big_image_pdf("q 612 0 0 792 0 0 cm /Im1 Do Q", 0, false, side));
-    OpenDoc fresh(big_image_pdf("q 612 0 0 792 0 0 cm /Im1 Do Q", 0, false, side));
-    check(d.doc != nullptr && fresh.doc != nullptr, "huge image cache: the page opens");
-    if (d.doc == nullptr || fresh.doc == nullptr) return;
-    Page p(d.doc, 0), q(fresh.doc, 0);
-    auto render = [](const megapdf_page* page, int w, int h, double* ms) {
-        std::vector<unsigned char> px(static_cast<size_t>(w) * h * 4);
-        const auto started = std::chrono::steady_clock::now();
-        const int rc = megapdf_render(page, px.data(), w, h, w * 4, MEGAPDF_RENDER_BGRA);
-        if (ms != nullptr) *ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count();
-        if (rc != MEGAPDF_OK) px.clear();
-        return px;
-    };
-    const int w = 306, h = 396;
-    double first_ms = 0, second_ms = 0, third_ms = 0;
-    const auto first = render(p.page, w, h, &first_ms);
-    const auto second = render(p.page, w, h, &second_ms);
-    const auto third = render(p.page, w, h, &third_ms);
-    check(!first.empty() && first == second && second == third, "huge image cache: repeated renders of the page are identical");
+    namespace fs = std::filesystem;
+    std::error_code ec;
+#if defined(_WIN32)
+    const long long pid = static_cast<long long>(_getpid());
+#else
+    const long long pid = static_cast<long long>(getpid());
+#endif
+    const fs::path dir = fs::temp_directory_path(ec) / ("megapdf-core-huge-image-" + std::to_string(pid));
+    fs::remove_all(dir, ec);
+    fs::create_directories(dir, ec);
+    check(!ec, "huge image cache: a scratch folder", ec.message());
 
-    // What the image holds: eight vertical grey bands, each 30 levels apart, darkening
-    // downwards by one level per 16 image rows (modulo 256).
-    int wrong = 0, sampled = 0;
-    for (int band = 0; band < 8 && !first.empty(); band++) {
-        for (int k = 1; k <= 5; k++) {
-            const int x = static_cast<int>((band + 0.5) * w / 8), y = k * h / 6;
-            const int row = static_cast<int>((y + 0.5) * side / h);
-            const int expected = (band * 30 + row / 16) % 256;
-            if (expected < 12 || expected > 243) continue;   // next to a wrap, where averaging mixes both sides
-            const unsigned char* px = &first[(static_cast<size_t>(y) * w + x) * 4];
-            sampled++;
-            if (std::abs(px[0] - expected) > 10 || std::abs(px[1] - expected) > 10 || std::abs(px[2] - expected) > 10) wrong++;
+    const int side = 5000;   // 75 MB of RGB decoded, over PDFium's 60 MB "huge image" line
+    const auto fixture = big_image_pdf("q 612 0 0 792 0 0 cm /Im1 Do Q", 0, false, side);
+    const fs::path file = dir / "huge-image.pdf";
+    {
+        std::ofstream out(file, std::ios::binary | std::ios::trunc);
+        out.write(reinterpret_cast<const char*>(fixture.data()), static_cast<std::streamsize>(fixture.size()));
+    }
+    {
+        // Opened from the file, not from memory: patch 0024 keeps the image's stream in the
+        // file, and only a document read through the core's own callback has its reads counted.
+        struct FileDoc {
+            megapdf_document* doc = nullptr;
+            explicit FileDoc(const std::string& path) : doc(megapdf_open_file(path.c_str(), nullptr)) {}
+            ~FileDoc() { megapdf_close(doc); }
+        };
+        FileDoc d(file.u8string());
+        OpenDoc fresh(fixture);   // only the pixel reference for large_fresh
+        check(d.doc != nullptr && fresh.doc != nullptr, "huge image cache: the page opens", megapdf_last_error_message());
+        if (d.doc != nullptr && fresh.doc != nullptr) {
+            Page p(d.doc, 0), q(fresh.doc, 0);
+            auto render = [](megapdf_document* doc, const megapdf_page* page, int w, int h, double* ms, unsigned long long* read) {
+                std::vector<unsigned char> px(static_cast<size_t>(w) * h * 4);
+                const unsigned long long before = megapdf_testing_bytes_read(doc);
+                const auto started = std::chrono::steady_clock::now();
+                const int rc = megapdf_render(page, px.data(), w, h, w * 4, MEGAPDF_RENDER_BGRA);
+                if (ms != nullptr) *ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count();
+                if (read != nullptr) *read = megapdf_testing_bytes_read(doc) - before;
+                if (rc != MEGAPDF_OK) px.clear();
+                return px;
+            };
+            const int w = 306, h = 396;
+            double first_ms = 0, second_ms = 0, third_ms = 0;
+            unsigned long long first_read = 0, second_read = 0, third_read = 0;
+            const auto first = render(d.doc, p.page, w, h, &first_ms, &first_read);
+            const auto second = render(d.doc, p.page, w, h, &second_ms, &second_read);
+            const auto third = render(d.doc, p.page, w, h, &third_ms, &third_read);
+            check(!first.empty() && first == second && second == third, "huge image cache: repeated renders of the page are identical");
+
+            // What the image holds: eight vertical grey bands, each 30 levels apart, darkening
+            // downwards by one level per 16 image rows (modulo 256).
+            int wrong = 0, sampled = 0;
+            for (int band = 0; band < 8 && !first.empty(); band++) {
+                for (int k = 1; k <= 5; k++) {
+                    const int x = static_cast<int>((band + 0.5) * w / 8), y = k * h / 6;
+                    const int row = static_cast<int>((y + 0.5) * side / h);
+                    const int expected = (band * 30 + row / 16) % 256;
+                    if (expected < 12 || expected > 243) continue;   // next to a wrap, where averaging mixes both sides
+                    const unsigned char* px = &first[(static_cast<size_t>(y) * w + x) * 4];
+                    sampled++;
+                    if (std::abs(px[0] - expected) > 10 || std::abs(px[1] - expected) > 10 || std::abs(px[2] - expected) > 10) wrong++;
+                }
+            }
+            check(sampled > 20 && wrong == 0, "huge image cache: the render shows the image's bands",
+                  std::to_string(wrong) + " of " + std::to_string(sampled) + " samples off");
+
+            // A larger render afterwards is not drawn from the smaller copy: the same as on a page
+            // that never rendered small.
+            double large_ms = 0;
+            unsigned long long large_read = 0;
+            const auto large = render(d.doc, p.page, 1224, 1584, &large_ms, &large_read);
+            const auto large_fresh = render(fresh.doc, q.page, 1224, 1584, nullptr, nullptr);
+            check(!large.empty() && large == large_fresh, "huge image cache: a larger render matches a page that never rendered small");
+
+            // Zooming out and back in again: the smaller render draws from the larger copy, and
+            // keeps it, so the larger render after it does not decode the image again.
+            double small_again_ms = 0, large_again_ms = 0;
+            unsigned long long small_again_read = 0, large_again_read = 0;
+            const auto small_again = render(d.doc, p.page, w, h, &small_again_ms, &small_again_read);
+            const auto large_again = render(d.doc, p.page, 1224, 1584, &large_again_ms, &large_again_read);
+            check(!small_again.empty() && !large_again.empty() && large_again == large,
+                  "huge image cache: zooming out and in again renders the same");
+
+            // PDFium patch 0024 keeps every stream of 64 KiB or more in the file, and this image's
+            // stream is about 1.2 MB: a render that decodes the image reads it all again, and one
+            // drawn from the page's image cache reads none of it. Counted, never timed (#698): a
+            // ratio of two wall-clock times on a shared runner failed on two runners at once. The
+            // timings below are for the log only; do not assert on them.
+            constexpr unsigned long long kDecodeReads = 64 * 1024;
+            std::printf("huge image cache: bytes read first %llu, again %llu/%llu, larger %llu, out %llu, in again %llu; "
+                        "ms %.0f, %.0f/%.0f, %.0f, %.0f, %.0f (PDFium patches %d)\n",
+                        first_read, second_read, third_read, large_read, small_again_read, large_again_read,
+                        first_ms, second_ms, third_ms, large_ms, small_again_ms, large_again_ms, MEGAPDF_PDFIUM_PATCHES);
+            if (MEGAPDF_PDFIUM_PATCHES >= 25) {
+                const auto read_list = [](std::initializer_list<unsigned long long> reads) {
+                    std::string out;
+                    for (const unsigned long long r : reads) out += (out.empty() ? "" : ", ") + std::to_string(r);
+                    return out + " bytes read";
+                };
+                check(first_read >= kDecodeReads, "huge image cache: the first render decodes the image from the file",
+                      read_list({first_read}));
+                check(second_read < kDecodeReads && third_read < kDecodeReads,
+                      "huge image cache: rendering the page again does not decode the image again (patch 0025)",
+                      read_list({second_read, third_read}));
+                check(large_read >= kDecodeReads,
+                      "huge image cache: a render larger than the kept copy decodes the image again (patch 0025)",
+                      read_list({large_read}));
+                check(small_again_read < kDecodeReads && large_again_read < kDecodeReads,
+                      "huge image cache: zooming out and in again does not decode the image again (patch 0025)",
+                      read_list({small_again_read, large_again_read}));
+            }
         }
     }
-    check(sampled > 20 && wrong == 0, "huge image cache: the render shows the image's bands",
-          std::to_string(wrong) + " of " + std::to_string(sampled) + " samples off");
-
-    // A larger render afterwards is not drawn from the smaller copy: the same as on a page
-    // that never rendered small.
-    double large_ms = 0;
-    const auto large = render(p.page, 1224, 1584, &large_ms);
-    const auto large_fresh = render(q.page, 1224, 1584, nullptr);
-    check(!large.empty() && large == large_fresh, "huge image cache: a larger render matches a page that never rendered small");
-
-    // Zooming out and back in again: the smaller render draws from the larger copy, and
-    // keeps it, so the larger render after it does not decode the image again.
-    double small_again_ms = 0, large_again_ms = 0;
-    const auto small_again = render(p.page, w, h, &small_again_ms);
-    const auto large_again = render(p.page, 1224, 1584, &large_again_ms);
-    check(!small_again.empty() && !large_again.empty() && large_again == large,
-          "huge image cache: zooming out and in again renders the same");
-
-    const double again_ms = std::min(second_ms, third_ms);
-    std::printf("huge image cache: first render %.0f ms, again %.0f ms; larger %.0f ms, out %.0f ms, in again %.0f ms (PDFium patches %d)\n",
-                first_ms, again_ms, large_ms, small_again_ms, large_again_ms, MEGAPDF_PDFIUM_PATCHES);
-    if (MEGAPDF_PDFIUM_PATCHES >= 25) {
-        check(again_ms * 4 < first_ms, "huge image cache: rendering the page again does not decode the image again (patch 0025)",
-              std::to_string(static_cast<int>(first_ms)) + " ms, then " + std::to_string(static_cast<int>(again_ms)) + " ms");
-        check(large_again_ms * 4 < large_ms && small_again_ms * 4 < large_ms,
-              "huge image cache: zooming out and in again does not decode the image again (patch 0025)",
-              std::to_string(static_cast<int>(large_ms)) + " ms, then " + std::to_string(static_cast<int>(small_again_ms)) + " and " +
-                  std::to_string(static_cast<int>(large_again_ms)) + " ms");
-    }
+    fs::remove_all(dir, ec);   // after the documents close, so the file is never deleted while open
 }
 
 // #137: megapdf_text_editable() caches its verdict per object, and a change to the page moves
@@ -7245,6 +7515,241 @@ void test_structure_no_stray_control_characters(const std::string& fixtures, con
           std::to_string(total));
 }
 
+// --------------------------------------------------------------------------
+// #496: a wrap hyphen at the end of a block's FIRST line is never joined, because BuildPieces
+// joins a line only to the next line of the SAME block, and the reference side of measure 1
+// (structure_check's JoinLineWrapHyphens) joins across blocks. On one UN document the Spanish
+// edition wraps with hyphens 367 times and every one of them sat on exactly that boundary: a
+// numbered paragraph whose continuation lines return to the left margin, so GatherOneBlock cut
+// the item after its first line. Three layouts, each with the number or the first line drawn
+// to the right of where the continuation starts.
+// --------------------------------------------------------------------------
+
+namespace {
+
+// A one-page, US Letter, Helvetica document whose page content is `content`.
+std::vector<unsigned char> plain_text_pdf(const std::string& content) {
+    std::string pdf = "%PDF-1.4\n";
+    std::vector<size_t> offsets;
+    auto add = [&](const std::string& body) {
+        offsets.push_back(pdf.size());
+        pdf += std::to_string(offsets.size()) + " 0 obj\n" + body + "\nendobj\n";
+    };
+    add("<< /Type /Catalog /Pages 2 0 R >>");
+    add("<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+    add("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
+        "/Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>");
+    add("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>");
+    add("<< /Length " + std::to_string(content.size()) + " >>\nstream\n" + content + "\nendstream");
+    const size_t xref = pdf.size();
+    pdf += "xref\n0 " + std::to_string(offsets.size() + 1) + "\n0000000000 65535 f \n";
+    for (size_t off : offsets) {
+        char line[32];
+        std::snprintf(line, sizeof line, "%010zu 00000 n \n", off);
+        pdf += line;
+    }
+    pdf += "trailer\n<< /Size " + std::to_string(offsets.size() + 1) + " /Root 1 0 R >>\nstartxref\n" +
+           std::to_string(xref) + "\n%%EOF\n";
+    return std::vector<unsigned char>(pdf.begin(), pdf.end());
+}
+
+// A text-showing operator at (x, y), 10 pt Helvetica.
+std::string text_at(int x, int y, const char* text) {
+    return "BT /F1 10 Tf " + std::to_string(x) + " " + std::to_string(y) + " Td (" + text + ") Tj ET ";
+}
+
+// "12." at the margin, its text 28 pt in, the wrapped word's second half back at the margin, and
+// a second numbered item below. The continuation sits under the NUMBER, not under the text.
+std::vector<unsigned char> numbered_paragraph_hyphen_pdf() {
+    return plain_text_pdf(text_at(72, 700, "12.") + text_at(100, 700, "La Cumbre reconoce la importan-") +
+                          text_at(72, 688, "cia de los compromisos asumidos en materia de desarrollo.") +
+                          text_at(72, 664, "13.") + text_at(100, 664, "El siguiente punto trata de otro asunto."));
+}
+
+// The first line indented 36 pt, the rest at the margin: one paragraph, as a typeset page reads.
+std::vector<unsigned char> indented_paragraph_hyphen_pdf() {
+    return plain_text_pdf(text_at(108, 700, "Los Estados deben adoptar medidas urgen-") +
+                          text_at(72, 688, "tes para aplicar el plan.") +
+                          text_at(72, 676, "Segunda frase del mismo parrafo."));
+}
+
+// A numbered paragraph whose number is itself indented (the "a)", "b)" sub-items of a resolution)
+// with the continuation back at the margin, 24 pt to the LEFT of the number.
+std::vector<unsigned char> indented_numbered_hyphen_pdf() {
+    return plain_text_pdf(text_at(96, 700, "12.") + text_at(124, 700, "La Cumbre reconoce la importan-") +
+                          text_at(72, 688, "cia de los compromisos asumidos en materia de desarrollo.") +
+                          text_at(96, 664, "13.") + text_at(124, 664, "El siguiente punto trata de otro asunto."));
+}
+
+bool block_text_has(const megapdf_structure* s, size_t i, const std::string& needle) {
+    return block_text_ascii(s, i, MEGAPDF_BLOCK_TEXT).find(needle) != std::string::npos;
+}
+
+}  // namespace
+
+void test_structure_wrap_hyphen_across_indent() {
+    {
+        auto bytes = numbered_paragraph_hyphen_pdf();
+        megapdf_document* d = megapdf_open(bytes.data(), bytes.size(), nullptr);
+        check(d != nullptr, "structure wrap-hyphen numbered: opens");
+        if (d != nullptr) {
+            megapdf_structure* s = megapdf_structure_load(d, 0, 1, MEGAPDF_STRUCTURE_DEFAULT, nullptr);
+            check(s != nullptr, "structure wrap-hyphen numbered: loads");
+            if (s != nullptr) {
+                megapdf_block b0{};
+                const bool got0 = megapdf_block_count(s) > 0 && megapdf_block_get(s, 0, &b0) == MEGAPDF_OK;
+                check(megapdf_block_count(s) == 2 && got0 && b0.kind == MEGAPDF_BLOCK_LIST_ITEM,
+                      "structure wrap-hyphen numbered: one item holds both lines (#496)",
+                      std::to_string(megapdf_block_count(s)) + " blocks");
+                check(megapdf_block_count(s) > 0 && block_text_has(s, 0, "importancia") &&
+                          !block_text_has(s, 0, "importan-"),
+                      "structure wrap-hyphen numbered: the wrap hyphen is joined (#496)",
+                      megapdf_block_count(s) > 0 ? block_text_ascii(s, 0, MEGAPDF_BLOCK_TEXT) : "");
+                megapdf_structure_free(s);
+            }
+            megapdf_close(d);
+        }
+    }
+    {
+        auto bytes = indented_paragraph_hyphen_pdf();
+        megapdf_document* d = megapdf_open(bytes.data(), bytes.size(), nullptr);
+        check(d != nullptr, "structure wrap-hyphen indented: opens");
+        if (d != nullptr) {
+            megapdf_structure* s = megapdf_structure_load(d, 0, 1, MEGAPDF_STRUCTURE_DEFAULT, nullptr);
+            check(s != nullptr, "structure wrap-hyphen indented: loads");
+            if (s != nullptr) {
+                check(megapdf_block_count(s) == 1, "structure wrap-hyphen indented: one paragraph (#496)",
+                      std::to_string(megapdf_block_count(s)) + " blocks");
+                check(megapdf_block_count(s) > 0 && block_text_has(s, 0, "urgentes") &&
+                          !block_text_has(s, 0, "urgen-"),
+                      "structure wrap-hyphen indented: the wrap hyphen is joined (#496)",
+                      megapdf_block_count(s) > 0 ? block_text_ascii(s, 0, MEGAPDF_BLOCK_TEXT) : "");
+                megapdf_structure_free(s);
+            }
+            megapdf_close(d);
+        }
+    }
+    {
+        auto bytes = indented_numbered_hyphen_pdf();
+        megapdf_document* d = megapdf_open(bytes.data(), bytes.size(), nullptr);
+        check(d != nullptr, "structure wrap-hyphen indented number: opens");
+        if (d != nullptr) {
+            megapdf_structure* s = megapdf_structure_load(d, 0, 1, MEGAPDF_STRUCTURE_DEFAULT, nullptr);
+            check(s != nullptr, "structure wrap-hyphen indented number: loads");
+            if (s != nullptr) {
+                megapdf_block b0{};
+                const bool got0 = megapdf_block_count(s) > 0 && megapdf_block_get(s, 0, &b0) == MEGAPDF_OK;
+                check(megapdf_block_count(s) == 2 && got0 && b0.kind == MEGAPDF_BLOCK_LIST_ITEM,
+                      "structure wrap-hyphen indented number: one item holds both lines (#496)",
+                      std::to_string(megapdf_block_count(s)) + " blocks");
+                check(megapdf_block_count(s) > 0 && block_text_has(s, 0, "importancia") &&
+                          !block_text_has(s, 0, "importan-"),
+                      "structure wrap-hyphen indented number: the wrap hyphen is joined (#496)",
+                      megapdf_block_count(s) > 0 ? block_text_ascii(s, 0, MEGAPDF_BLOCK_TEXT) : "");
+                megapdf_structure_free(s);
+            }
+            megapdf_close(d);
+        }
+    }
+}
+
+// --------------------------------------------------------------------------
+// #781: a wrap hyphen at the END of a block whose continuation starts the NEXT block. The
+// paragraph builder cut the block at that line (here by a wide vertical gap, in the corpus by
+// the pitch rule), so BuildPieces never saw the two halves together. The fidelity reference
+// joins them; the engine now moves the continuation word to the prefix's block. The negative
+// cases pin what must NOT join: an uppercase continuation, and a compound hyphen that is not at
+// a block end.
+// --------------------------------------------------------------------------
+
+namespace {
+
+struct CrossBlockResult {
+    bool ok = false;
+    std::vector<std::string> blocks;
+};
+
+CrossBlockResult load_block_texts(const std::vector<unsigned char>& bytes, const char* label) {
+    CrossBlockResult r;
+    megapdf_document* d = megapdf_open(bytes.data(), bytes.size(), nullptr);
+    check(d != nullptr, std::string("structure cross-block hyphen ") + label + ": opens");
+    if (d == nullptr) return r;
+    megapdf_structure* s = megapdf_structure_load(d, 0, 1, MEGAPDF_STRUCTURE_DEFAULT, nullptr);
+    check(s != nullptr, std::string("structure cross-block hyphen ") + label + ": loads");
+    if (s != nullptr) {
+        r.ok = true;
+        for (size_t i = 0; i < megapdf_block_count(s); i++) r.blocks.push_back(block_text_ascii(s, i, MEGAPDF_BLOCK_TEXT));
+        megapdf_structure_free(s);
+    }
+    megapdf_close(d);
+    return r;
+}
+
+std::string join_blocks(const std::vector<std::string>& b) {
+    std::string out;
+    for (const auto& t : b) out += "[" + t + "]";
+    return out;
+}
+
+}  // namespace
+
+void test_structure_cross_block_hyphen() {
+    {
+        // The continuation is a lowercase word at the start of the next block: it moves up.
+        auto r = load_block_texts(plain_text_pdf(text_at(72, 700, "The grid supplies alimen-") +
+                                                 text_at(72, 640, "tation to the whole plant today.") +
+                                                 text_at(72, 628, "Another sentence follows here.")),
+                                  "lowercase");
+        check(r.ok && r.blocks.size() == 2 && r.blocks[0] == "The grid supplies alimentation" &&
+                  r.blocks[1] == "to the whole plant today. Another sentence follows here.",
+              "structure cross-block hyphen: a block-final wrap hyphen takes the next block's first word (#781)",
+              join_blocks(r.blocks));
+    }
+    {
+        // The next block was only that word: the block goes, the paragraph after it stays.
+        auto r = load_block_texts(plain_text_pdf(text_at(72, 700, "The grid supplies alimen-") +
+                                                 text_at(72, 640, "tation") +
+                                                 text_at(72, 580, "Another paragraph starts here.")),
+                                  "one-word block");
+        check(r.ok && r.blocks.size() == 2 && r.blocks[0] == "The grid supplies alimentation" &&
+                  r.blocks[1] == "Another paragraph starts here.",
+              "structure cross-block hyphen: a next block that was only the continuation is absorbed (#781)",
+              join_blocks(r.blocks));
+    }
+    {
+        // Uppercase after the hyphen: BuildPieces' own strip test says no, so nothing moves.
+        auto r = load_block_texts(plain_text_pdf(text_at(72, 700, "The grid supplies alimen-") +
+                                                 text_at(72, 640, "Tation is a proper name here.")),
+                                  "uppercase");
+        check(r.ok && r.blocks.size() == 2 && r.blocks[0] == "The grid supplies alimen-" &&
+                  r.blocks[1] == "Tation is a proper name here.",
+              "structure cross-block hyphen: an uppercase continuation is not joined (#781)",
+              join_blocks(r.blocks));
+    }
+    {
+        // The next block in reading order starts with a lowercase word, but the producer drew the
+        // hyphen's real continuation right after it, lower on the page: the unrelated word that
+        // reading order happens to put next must not be glued on.
+        auto r = load_block_texts(plain_text_pdf(text_at(72, 700, "The grid supplies alimen-") +
+                                                 text_at(72, 580, "tation was drawn second.") +
+                                                 text_at(72, 640, "unrelated words sit here today.")),
+                                  "not drawn next");
+        check(r.ok && !r.blocks.empty() && r.blocks[0] == "The grid supplies alimen-",
+              "structure cross-block hyphen: a lowercase block that is not the next thing drawn is not joined (#781)",
+              join_blocks(r.blocks));
+    }
+    {
+        // A compound hyphen in the middle of a line, and a block that does not end in one: untouched.
+        auto r = load_block_texts(plain_text_pdf(text_at(72, 700, "The well-known grid supplies power") +
+                                                 text_at(72, 640, "tation is lowercase but nothing wraps.")),
+                                  "compound");
+        check(r.ok && r.blocks.size() == 2 && r.blocks[0] == "The well-known grid supplies power" &&
+                  r.blocks[1] == "tation is lowercase but nothing wraps.",
+              "structure cross-block hyphen: a mid-line compound hyphen is left alone (#781)",
+              join_blocks(r.blocks));
+    }
+}
+
 void test_structure_tagged(const std::string& repo) {
     Doc d(repo + "/structure/tagged.pdf");
     if (!d.doc) { check(false, "structure tagged: opens"); return; }
@@ -7939,6 +8444,207 @@ void test_write_markdown_goldens(const std::string& repo, const std::string& exp
         {"tiny-font-size", repo + "/structure/tiny-font-size.pdf"},
     };
     for (const Case& c : cases) test_write_markdown_golden(c.name, c.path, expected_dir);
+}
+
+// --------------------------------------------------------------------------
+// #683: megapdf_write_text_recognised(). Scanned pages the caller has read are written as a
+// recognition note and a block quote (Markdown) or the plain paragraphs (text); everything else
+// is byte-for-byte what megapdf_write_text() writes. The goldens scan-recognised.md/.txt are
+// written by hand from the design, not generated from the writer.
+// --------------------------------------------------------------------------
+
+std::string read_text_file(const std::string& path) {
+    std::ifstream in(path, std::ios::binary);
+    return std::string((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+}
+
+void add_recognised(megapdf_recognised* r, int page, const std::u16string& text, double bottom, double top) {
+    const int rc = megapdf_recognised_add_line(r, page, reinterpret_cast<const unsigned short*>(text.data()),
+                                               text.size(), 72, bottom, 540, top);
+    check(rc == MEGAPDF_OK, "recognised: add_line succeeds", std::to_string(rc));
+}
+
+struct RecognisedWrite {
+    int rc = 0;
+    std::string text;
+    std::vector<int> unread;
+    size_t unread_count = 0;
+    int callbacks = 0;
+};
+
+int count_text_sink(void* context, const void* data, size_t size) {
+    auto* r = static_cast<std::pair<TextSink*, int*>*>(context);
+    (*r->second)++;
+    return write_to_text_sink(r->first, data, size);
+}
+
+RecognisedWrite write_recognised(const std::string& path, int format, const megapdf_recognised* rec,
+                                 const megapdf_write_options* opt = nullptr, const megapdf_cancel* cancel = nullptr) {
+    RecognisedWrite w;
+    Doc d(path);
+    if (d.doc == nullptr) { w.rc = MEGAPDF_ERR_ARGUMENT; return w; }
+    TextSink sink;
+    int callbacks = 0;
+    std::pair<TextSink*, int*> ctx(&sink, &callbacks);
+    int pages[64] = {};
+    w.rc = megapdf_write_text_recognised(d.doc, 0, megapdf_page_count(d.doc), format, opt, rec, pages, 64,
+                                         &w.unread_count, count_text_sink, &ctx, cancel);
+    w.text = sink.text;
+    w.callbacks = callbacks;
+    for (size_t i = 0; i < w.unread_count && i < 64; i++) w.unread.push_back(pages[i]);
+    return w;
+}
+
+void test_write_text_recognised(const std::string& repo, const std::string& expected_dir) {
+    const std::string scan = repo + "/structure/scan.pdf";
+    const char* const same_as_plain[] = {"columns", "furniture", "lists",  "headings",        "symbol-bullets",
+                                         "symbol-bullets-document", "tabular-headings", "xobject-text", "scan",
+                                         "empty-page", "mixed",     "tagged", "tagged-wrong", "tiny-font-size"};
+    // (a) With nothing recognised, every case is megapdf_write_text()'s output byte for byte, in both
+    // formats, with and without keep_lines.
+    for (const char* name : same_as_plain) {
+        const std::string path = repo + "/structure/" + name + ".pdf";
+        for (int format : {MEGAPDF_WRITE_TEXT, MEGAPDF_WRITE_MARKDOWN}) {
+            for (int keep : {0, 1}) {
+                Doc d(path);
+                if (d.doc == nullptr) { check(false, std::string("recognised ") + name + ": opens", path); continue; }
+                megapdf_write_options opt{};
+                opt.keep_lines = keep;
+                TextSink plain;
+                const int prc = megapdf_write_text(d.doc, 0, megapdf_page_count(d.doc), format, &opt,
+                                                   write_to_text_sink, &plain, nullptr);
+                megapdf_recognised* empty = megapdf_recognised_new();
+                for (const megapdf_recognised* rec : {static_cast<const megapdf_recognised*>(nullptr),
+                                                      static_cast<const megapdf_recognised*>(empty)}) {
+                    const RecognisedWrite w = write_recognised(path, format, rec, &opt);
+                    check(w.rc == prc && w.text == plain.text,
+                          std::string("recognised ") + name + ": nothing recognised is megapdf_write_text() byte for byte",
+                          w.text);
+                }
+                megapdf_recognised_free(empty);
+            }
+        }
+    }
+
+    // (b) Which pages are still scanned pages.
+    {
+        const RecognisedWrite w = write_recognised(scan, MEGAPDF_WRITE_MARKDOWN, nullptr);
+        check(w.unread_count == 1 && w.unread == std::vector<int>{0}, "recognised scan.pdf: reports page 0 to read",
+              std::to_string(w.unread_count));
+        const RecognisedWrite mixed = write_recognised(repo + "/structure/mixed.pdf", MEGAPDF_WRITE_TEXT, nullptr);
+        check(mixed.unread == std::vector<int>{1}, "recognised mixed.pdf: reports only the scanned middle page");
+        for (const char* name : {"empty-page", "headings"}) {
+            const RecognisedWrite e = write_recognised(repo + "/structure/" + name + ".pdf", MEGAPDF_WRITE_MARKDOWN,
+                                                       nullptr);
+            check(e.unread_count == 0 && e.unread.empty(), std::string("recognised ") + name + ".pdf: nothing to read");
+        }
+        // A capacity of 0 still reports the count, and nothing is written past the array.
+        Doc d(scan);
+        TextSink sink;
+        size_t n = 99;
+        const int rc = megapdf_write_text_recognised(d.doc, 0, 1, MEGAPDF_WRITE_MARKDOWN, nullptr, nullptr, nullptr, 0,
+                                                     &n, write_to_text_sink, &sink, nullptr);
+        check(rc == 0 && n == 1, "recognised scan.pdf: capacity 0 still counts", std::to_string(n));
+    }
+
+    // (c) Three lines: two adjacent, then one after a gap, make two paragraphs.
+    megapdf_recognised* rec = megapdf_recognised_new();
+    check(rec != nullptr, "recognised: handle allocates");
+    add_recognised(rec, 0, u"First line", 700, 712);
+    add_recognised(rec, 0, u"second line", 686, 698);
+    add_recognised(rec, 0, u"Third line", 600, 612);
+    {
+        const RecognisedWrite md = write_recognised(scan, MEGAPDF_WRITE_MARKDOWN, rec);
+        check(md.rc == 0, "recognised scan.pdf md: a recognised page is not a text layer", std::to_string(md.rc));
+        check(md.unread_count == 0, "recognised scan.pdf md: nothing left to read");
+        const std::string golden = read_text_file(expected_dir + "/scan-recognised.md");
+        check(!golden.empty() && md.text == golden, "recognised scan.pdf md: matches scan-recognised.md", md.text);
+        const RecognisedWrite tx = write_recognised(scan, MEGAPDF_WRITE_TEXT, rec);
+        const std::string tgolden = read_text_file(expected_dir + "/scan-recognised.txt");
+        check(!tgolden.empty() && tx.text == tgolden, "recognised scan.pdf txt: matches scan-recognised.txt", tx.text);
+        megapdf_write_options keep{};
+        keep.keep_lines = 1;
+        const RecognisedWrite kl = write_recognised(scan, MEGAPDF_WRITE_MARKDOWN, rec, &keep);
+        check(kl.text.find("> First line\n> second line\n>\n> Third line\n") != std::string::npos,
+              "recognised scan.pdf md: keep_lines keeps the recogniser's lines", kl.text);
+        // The scanned page sits between two text pages and leaves them alone.
+        megapdf_recognised* mid = megapdf_recognised_new();
+        add_recognised(mid, 1, u"Read me", 700, 712);
+        const RecognisedWrite m = write_recognised(repo + "/structure/mixed.pdf", MEGAPDF_WRITE_MARKDOWN, mid);
+        check(m.text == "First page has text.\n\n*[Page 2 is a scanned image, read by text recognition: the text may "
+                        "contain mistakes]*\n\n> Read me\n\nThird page has text too.\n",
+              "recognised mixed.pdf md: only the scanned page changes", m.text);
+        // Lines for a page that has its own text, or no image, are ignored.
+        megapdf_recognised* wrong = megapdf_recognised_new();
+        add_recognised(wrong, 0, u"ignored", 700, 712);
+        const RecognisedWrite ignored = write_recognised(repo + "/structure/mixed.pdf", MEGAPDF_WRITE_MARKDOWN, wrong);
+        const RecognisedWrite plain_mixed = write_recognised(repo + "/structure/mixed.pdf", MEGAPDF_WRITE_MARKDOWN, nullptr);
+        check(ignored.text == plain_mixed.text, "recognised mixed.pdf: lines for a page with text are ignored");
+        const RecognisedWrite blank = write_recognised(repo + "/structure/empty-page.pdf", MEGAPDF_WRITE_MARKDOWN, wrong);
+        check(blank.text == "*[Page 1 has no text layer]*\n", "recognised empty-page.pdf: a blank page is never read",
+              blank.text);
+        megapdf_recognised_free(wrong);
+        megapdf_recognised_free(mid);
+    }
+    megapdf_recognised_free(rec);
+
+    // (d) Recognised text is escaped as the start of a line inside the quote.
+    {
+        megapdf_recognised* esc = megapdf_recognised_new();
+        add_recognised(esc, 0, u"# 5 apples", 700, 712);
+        add_recognised(esc, 0, u"1. x", 686, 698);
+        add_recognised(esc, 0, u"a*b_c", 672, 684);
+        const RecognisedWrite md = write_recognised(scan, MEGAPDF_WRITE_MARKDOWN, esc);
+        check(md.text.find("> \\# 5 apples 1. x a\\*b\\_c\n") != std::string::npos,
+              "recognised md: only the start of the joined paragraph is a line start", md.text);
+        megapdf_write_options keep{};
+        keep.keep_lines = 1;
+        const RecognisedWrite kl = write_recognised(scan, MEGAPDF_WRITE_MARKDOWN, esc, &keep);
+        check(kl.text.find("> \\# 5 apples\n> 1\\. x\n> a\\*b\\_c\n") != std::string::npos,
+              "recognised md: # and 1. are escaped at each line start inside the quote", kl.text);
+        megapdf_recognised_free(esc);
+    }
+
+    // (e) Whitespace-only lines are ignored: the page keeps today's note and is still reported.
+    {
+        megapdf_recognised* blank = megapdf_recognised_new();
+        add_recognised(blank, 0, u"", 700, 712);
+        add_recognised(blank, 0, u"  \u00A0\u3000 ", 686, 698);
+        const RecognisedWrite w = write_recognised(scan, MEGAPDF_WRITE_MARKDOWN, blank);
+        const RecognisedWrite plain = write_recognised(scan, MEGAPDF_WRITE_MARKDOWN, nullptr);
+        check(w.text == plain.text && w.unread == std::vector<int>{0},
+              "recognised scan.pdf: whitespace lines leave today's note and the page still to read", w.text);
+        megapdf_recognised_free(blank);
+    }
+
+    // Handle argument checks.
+    {
+        const unsigned short x = 'x';
+        megapdf_recognised* h = megapdf_recognised_new();
+        check(megapdf_recognised_add_line(nullptr, 0, &x, 1, 0, 0, 1, 1) == MEGAPDF_ERR_ARGUMENT,
+              "recognised: a NULL handle is refused");
+        check(megapdf_recognised_add_line(h, -1, &x, 1, 0, 0, 1, 1) == MEGAPDF_ERR_ARGUMENT,
+              "recognised: a negative page is refused");
+        check(megapdf_recognised_add_line(h, 0, nullptr, 1, 0, 0, 1, 1) == MEGAPDF_ERR_ARGUMENT,
+              "recognised: NULL text with a length is refused");
+        check(megapdf_recognised_add_line(h, 0, nullptr, 0, 0, 0, 1, 1) == MEGAPDF_OK,
+              "recognised: NULL text with length 0 is accepted and ignored");
+        megapdf_recognised_free(h);
+        megapdf_recognised_free(nullptr);
+    }
+
+    // (f) A raised cancel writes nothing.
+    {
+        megapdf_recognised* one = megapdf_recognised_new();
+        add_recognised(one, 0, u"text", 700, 712);
+        megapdf_cancel* cancel = megapdf_cancel_new();
+        megapdf_cancel_raise(cancel);
+        const RecognisedWrite w = write_recognised(scan, MEGAPDF_WRITE_MARKDOWN, one, nullptr, cancel);
+        check(w.rc == MEGAPDF_ERR_CANCELLED && w.callbacks == 0 && w.text.empty(),
+              "recognised: a raised cancel returns CANCELLED and never calls write", std::to_string(w.rc));
+        megapdf_cancel_free(cancel);
+        megapdf_recognised_free(one);
+    }
 }
 
 // --------------------------------------------------------------------------
@@ -10141,6 +10847,7 @@ int main(int argc, char** argv) {
     test_stamps(argv[1]);
     test_whiteouts_and_text_boxes(argv[1]);
     test_save_flatten_images(argv[1]);
+    test_shrink_progress_and_cancel();
     test_protected_save(argv[1]);
     test_security(argv[1]);
     test_remove_protection();
@@ -10188,6 +10895,8 @@ int main(int argc, char** argv) {
     test_structure_rotated_pages(std::string(MEGAPDF_REPO_FIXTURES));
     test_structure_no_stray_control_characters(argv[1], argv[2], std::string(MEGAPDF_REPO_FIXTURES));
     test_structure_tm_scaled_size(std::string(MEGAPDF_REPO_FIXTURES));
+    test_structure_wrap_hyphen_across_indent();
+    test_structure_cross_block_hyphen();
     test_structure_span_font(std::string(MEGAPDF_REPO_FIXTURES));
     test_structure_tagged(std::string(MEGAPDF_REPO_FIXTURES));
     test_structure_tiny_font_size(std::string(MEGAPDF_REPO_FIXTURES));
@@ -10195,6 +10904,7 @@ int main(int argc, char** argv) {
     test_write_text_goldens(std::string(MEGAPDF_REPO_FIXTURES), argv[4]);
     test_write_text_findability(argv[2]);
     test_write_markdown_goldens(std::string(MEGAPDF_REPO_FIXTURES), argv[4]);
+    test_write_text_recognised(std::string(MEGAPDF_REPO_FIXTURES), argv[4]);
     test_image_notes(std::string(MEGAPDF_REPO_FIXTURES), argv[1]);
     test_image_jpx_not_decoded(std::string(MEGAPDF_REPO_FIXTURES));
     test_markdown_round_trips(std::string(MEGAPDF_REPO_FIXTURES), argv[4]);

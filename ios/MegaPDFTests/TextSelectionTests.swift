@@ -93,6 +93,61 @@ final class TextSelectionTests: XCTestCase {
         catch { /* expected */ }
     }
 
+    // MARK: stepping a handle by a word (VoiceOver's adjust gesture)
+
+    func testAStepByWordLandsOnTheWordBoundariesALongPressUses() async throws {
+        let (text, doc) = try await selectable(page: 0)
+        defer { Task { await PdfEngine.shared.close(doc) } }
+        let lines = text.rects(from: 0, to: text.length)
+        let line = lines[2]   // "Left two bravo and more"
+        let bravo = try XCTUnwrap(text.word(atX: line.left + 8.5 * 6.7, y: centre(line).y))
+        XCTAssertEqual(text.text(from: bravo.lowerBound, to: bravo.upperBound), "bravo")
+
+        // Forward from the end of a word: the end of the next one, and on across the line break.
+        let and = try XCTUnwrap(text.caret(byWordFrom: bravo.upperBound, forward: true))
+        XCTAssertEqual(text.text(from: bravo.lowerBound, to: and), "bravo and")
+        let more = try XCTUnwrap(text.caret(byWordFrom: and, forward: true))
+        let next = try XCTUnwrap(text.caret(byWordFrom: more, forward: true))
+        XCTAssertEqual(text.text(from: bravo.lowerBound, to: next), "bravo and more\nLeft")
+
+        // Back from the start of a word: the start of the one before. From inside a word: its own start.
+        let two = try XCTUnwrap(text.caret(byWordFrom: bravo.lowerBound, forward: false))
+        XCTAssertEqual(text.text(from: two, to: bravo.lowerBound), "two")
+        XCTAssertEqual(text.caret(byWordFrom: bravo.lowerBound + 2, forward: false), bravo.lowerBound)
+        // Forward from inside a word: its own end.
+        XCTAssertEqual(text.caret(byWordFrom: bravo.lowerBound + 2, forward: true), bravo.upperBound)
+    }
+
+    func testAStepByWordHasNowhereToGoAtEitherEndOfThePage() async throws {
+        let (text, doc) = try await selectable(page: 0)
+        defer { Task { await PdfEngine.shared.close(doc) } }
+        XCTAssertNil(text.caret(byWordFrom: 0, forward: false))
+        XCTAssertNil(text.caret(byWordFrom: text.length, forward: true))
+        XCTAssertNotNil(text.caret(byWordFrom: 0, forward: true))
+        XCTAssertNotNil(text.caret(byWordFrom: text.length, forward: false))
+    }
+
+    func testAStepNeverFlipsOrEmptiesTheSelection() {
+        var s = PageTextSelection(pageIndex: 0, word: 10..<15)
+        XCTAssertTrue(s.step(.end, to: 21, length: 100))
+        XCTAssertEqual(s.start, 10); XCTAssertEqual(s.end, 21)
+        XCTAssertTrue(s.step(.end, to: 15, length: 100))
+        XCTAssertEqual(s.start, 10); XCTAssertEqual(s.end, 15)
+        // Back onto the start, or past it: nothing moves, where a drag would flip.
+        XCTAssertFalse(s.step(.end, to: 10, length: 100))
+        XCTAssertFalse(s.step(.end, to: 4, length: 100))
+        XCTAssertFalse(s.step(.start, to: 15, length: 100))
+        XCTAssertFalse(s.step(.start, to: 30, length: 100))
+        XCTAssertEqual(s.start, 10); XCTAssertEqual(s.end, 15)
+        XCTAssertTrue(s.step(.start, to: 4, length: 100))
+        XCTAssertEqual(s.start, 4); XCTAssertEqual(s.end, 15)
+        // A step that lands where it already is is not a change.
+        XCTAssertFalse(s.step(.start, to: 4, length: 100))
+        // The page's own ends clamp.
+        XCTAssertTrue(s.step(.end, to: 500, length: 100))
+        XCTAssertEqual(s.end, 100)
+    }
+
     // MARK: the selection value the handles move
 
     func testDraggingTheEndHandleKeepsTheStart() {

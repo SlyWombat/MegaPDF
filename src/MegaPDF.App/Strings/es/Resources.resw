@@ -1,0 +1,1611 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Español (Latinoamérica). Same keys as en-US/Resources.resw, in the same order.
+  Vocabulary: docs/localisation-glossary-es.md. Sin espacio antes de : ; ? ! —
+  signos de apertura ¿ ¡ — comillas “ ”. Neutral `es` so every Latin American
+  locale (es-MX, es-AR, es-US, es-419) resolves to it; es-ES is derived from this
+  file by tools/gen_strings.py es-es (#724).
+-->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+
+  <!-- ===== Toolbar (MainWindow.xaml) ===== -->
+  <data name="SignaturesHeading.Text" xml:space="preserve">
+    <value>Firmas</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="NoSignaturesYet.Text" xml:space="preserve">
+    <value>Aún no hay firmas. Dibuja una, escribe tu nombre o agrega una foto de tu firma sobre papel blanco; el fondo se quita automáticamente.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="RenameSignatureItem.Text" xml:space="preserve">
+    <value>Cambiar nombre</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="DeleteSignatureItem.Text" xml:space="preserve">
+    <value>Eliminar</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="SignatureOptionsButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Cambiar nombre o eliminar</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="SignatureOptionsButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Opciones de la firma</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="AddFromImageLabel.Text" xml:space="preserve">
+    <value>Desde foto</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="TypeSignatureLabel.Text" xml:space="preserve">
+    <value>Escribir</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="DrawSignatureLabel.Text" xml:space="preserve">
+    <value>Dibujar</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="DrawSignatureButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Dibuja una firma con el mouse, el dedo o el lápiz</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="TypeSignatureButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Escribe tu nombre con una fuente de escritura a mano</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="AddSignatureFromImageButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Usa una foto o un escaneo de tu firma</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+
+  <!-- Zoom cluster and its narrow-window flyout -->
+
+  <!-- Settings flyout -->
+  <data name="CheckboxMarkHeading.Text" xml:space="preserve">
+    <value>Marca de las casillas</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="MarkCross.Text" xml:space="preserve">
+    <value>✗  Cruz</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="MarkCheck.Text" xml:space="preserve">
+    <value>✓  Marca de verificación</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="MarkFilledSquare.Text" xml:space="preserve">
+    <value>■  Cuadrado relleno</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="ThemeHeading.Text" xml:space="preserve">
+    <value>Tema</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="ThemeSystem.Text" xml:space="preserve">
+    <value>Según el sistema</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="ThemeLight.Text" xml:space="preserve">
+    <value>Claro</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="ThemeDark.Text" xml:space="preserve">
+    <value>Oscuro</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="LanguageHeading.Text" xml:space="preserve">
+    <value>Idioma</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="LanguageSystem.Text" xml:space="preserve">
+    <value>Según Windows</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="LanguageEnglish.Text" xml:space="preserve">
+    <value>English</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="LanguageFrench.Text" xml:space="preserve">
+    <value>Français (Canada)</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="LanguageFrenchFrance.Text" xml:space="preserve">
+    <value>Français (France)</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="LanguageSpanish.Text" xml:space="preserve">
+    <value>Español (Latinoamérica)</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="LanguageSpanishSpain.Text" xml:space="preserve">
+    <value>Español (España)</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="LanguageRestartNote.Text" xml:space="preserve">
+    <value>Se aplicará la próxima vez que se abra MegaPDF.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="ReopenToggle.Header" xml:space="preserve">
+    <value>Volver a abrir el último archivo al iniciar</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="FlattenToggle.Header" xml:space="preserve">
+    <value>Hacer permanentes las marcas y firmas al guardar</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="AboutPanel.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Acerca de MegaPDF</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="AboutHeading.Text" xml:space="preserve">
+    <value>Acerca de MegaPDF</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="AboutLicense.Text" xml:space="preserve">
+    <value>Libre y de código abierto · Apache-2.0</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="AboutCopyright.Text" xml:space="preserve">
+    <value>© 2026 ElectricRV.ca Corporation. Todos los derechos reservados.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="AboutThanks.Text" xml:space="preserve">
+    <value>Un agradecimiento especial a Mega Woman.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="GitHubLink.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>MegaPDF en GitHub</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="NoticesLink.Content" xml:space="preserve">
+    <value>Avisos de terceros</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="NoticesLink.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Avisos de terceros</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+
+  <!-- Document area -->
+  <data name="EmptyStateText.Text" xml:space="preserve">
+    <value>Arrastra un PDF aquí o haz clic en Abrir</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="RecentHeading.Text" xml:space="preserve">
+    <value>RECIENTES</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="FontNoticeBar.Message" xml:space="preserve">
+    <value>La fuente de este documento no está disponible, así que se usó una similar.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="ScannedHintBar.Message" xml:space="preserve">
+    <value>Esta página es una imagen escaneada: su texto es una imagen y no se puede editar.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="DefaultAppBar.Message" xml:space="preserve">
+    <value>¿Quieres que MegaPDF sea tu aplicación de PDF?</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="ChooseDefaultAppsButton.Content" xml:space="preserve">
+    <value>Elegir aplicaciones predeterminadas</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="RestrictedNoticeBar.Message" xml:space="preserve">
+    <value>El propietario de este documento lo restringió, así que algunas herramientas no están disponibles.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. #131: shown when a document opens without full access</comment>
+  </data>
+  <data name="UnlockButton.Content" xml:space="preserve">
+    <value>Desbloquear…</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. #131: asks for the owner password</comment>
+  </data>
+  <data name="RecoveryOffNoticeBar.Message" xml:space="preserve">
+    <value>La recuperación tras un cierre inesperado está desactivada para los documentos protegidos con contraseña, así que los cambios sin guardar no se podrán restaurar si MegaPDF se cierra de forma inesperada.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. #131, #135</comment>
+  </data>
+  <data name="DynamicXfaNoticeBar.Message" xml:space="preserve">
+    <value>Este formulario está hecho para llenarse con Adobe Reader. Aquí aún puedes verlo, imprimirlo, guardarlo y compartirlo; lo único que no se puede es llenarlo.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. #456, #457: shown when megapdf_document_flags() reports MEGAPDF_DOC_DYNAMIC_XFA</comment>
+  </data>
+  <data name="GetAdobeReaderButton.Content" xml:space="preserve">
+    <value>Obtener Adobe Reader</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. #457: opens the same reader-download page the document's own placeholder text names</comment>
+  </data>
+  <data name="DynamicXfaCannotFill" xml:space="preserve">
+    <value>Este formulario necesita Adobe Reader para llenarse.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. #457: said instead of arming signature/checkmark placement on a dynamic-XFA document</comment>
+  </data>
+  <data name="SignedSaveWarningTitle" xml:space="preserve">
+    <value>Este documento tiene una firma digital</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. #476, #481, #602: Save's confirmation before overwriting a signed original (ordinary/approval signature). Says "digital signature", not just "signed", so it cannot be read as "you have signed this" in a session where the user also placed a signature from the library</comment>
+  </data>
+  <data name="SignedSaveWarningBody" xml:space="preserve">
+    <value>Si guardas sobre este documento, se invalidará su firma digital. Guarda una copia para conservar intacto el original firmado.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. #476, #481</comment>
+  </data>
+  <data name="CertifiedSaveWarningTitle" xml:space="preserve">
+    <value>Este documento está certificado contra cambios</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. #476, #481, #602: shown instead of SignedSaveWarningTitle when the signature carries a /DocMDP certification — measured as the common case, not the rare one, on real signed documents. The title states the certification, which nothing in the Signatures feature claims; the body names the digital signature</comment>
+  </data>
+  <data name="CertifiedSaveWarningBody" xml:space="preserve">
+    <value>La firma digital de este documento lo certifica: su autor declaró que no debe modificarse en absoluto. Si guardas sobre él, esa firma quedará inválida. Guarda una copia para conservar intacto el original firmado.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. #476, #481</comment>
+  </data>
+  <data name="SaveACopyButton" xml:space="preserve">
+    <value>Guardar una copia</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. #476, #481: the signed-document save warning's primary, default action</comment>
+  </data>
+  <data name="OverwriteSignedButton" xml:space="preserve">
+    <value>Sobrescribir el original</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. #476, #481: the signed-document save warning's deliberate, secondary action</comment>
+  </data>
+  <data name="SignatureNotCarriedNotice" xml:space="preserve">
+    <value>La copia lleva la firma digital del original, y ya no es válida.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. #476, #481, #602, #576: said once, quietly, after Save a copy that kept the signature. It used to say the signature "doesn't carry over to this copy", which #576 measured as untrue on every platform that still said it — the signature dictionary does carry over (FPDF_SaveAsCopy re-serialises it), and the copy reports as signed when it is reopened; only its validity does not carry over</comment>
+  </data>
+  <data name="SignedSaveRemoveSignature" xml:space="preserve">
+    <value>Quitar también la firma, que ya no será válida</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. #576: the tick added to this same warning rather than a fourth button — a button would be a different destination competing with the two already there, while a tick modifies the destination already chosen. Ticked by default: by the time this box matters the save has already ended the signature, so the tick chooses between a file that admits it is unsigned and a file that goes on claiming a signature it cannot support</comment>
+  </data>
+  <data name="SignedSaveRemoveOffer" xml:space="preserve">
+    <value>Si se deja, viaja con el archivo guardado y sigue afirmando que describe un archivo que ya no describe, de modo que MegaPDF y otros lectores indican que ese archivo está firmado. El documento que abriste no cambia en ningún caso: esto solo afecta al archivo que se escribe. Y una firma digital indica que un archivo no ha cambiado desde que se firmó: nunca ha impedido que alguien abra este documento, así que un archivo guardado sin ella pueden leerlo exactamente las mismas personas.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. #576: what the tick means. Three things it must keep saying — the original file is untouched, the choice reaches only the file being written, and a digital signature is not encryption and never was. No "encrypt", "password", "protect", "secure", "lock" or "unlock" anywhere near it: those belong to the password feature</comment>
+  </data>
+  <data name="SignatureRemovedNotice" xml:space="preserve">
+    <value>Guardado sin la firma digital del documento. El documento que abriste no ha cambiado.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. #576: said once, quietly, after a save that removed the signature — either Save a copy or Overwrite the original, whichever the tick applied to</comment>
+  </data>
+
+  <!-- Find bar -->
+  <data name="FindScanNote.Text" xml:space="preserve">
+    <value>Leído de una página escaneada: el texto puede contener errores.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Find bar note (#676) under the count while the current match was read from a scanned page by the device's recogniser</comment>
+  </data>
+  <data name="FindNoRecogniserText.Text" xml:space="preserve">
+    <value>No se puede buscar en las páginas escaneadas hasta que Windows tenga el reconocimiento de texto para tu idioma. Agrégalo en la configuración de idioma y luego reinicia MegaPDF.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Find bar note (#687) shown when a search met a scanned page and Windows has no text-recognition language installed; the button below opens Settings</comment>
+  </data>
+  <data name="FindNoRecogniserButton.Content" xml:space="preserve">
+    <value>Abrir la configuración de idioma</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Button (#687) in the find bar note; opens Windows Settings at the language page</comment>
+  </data>
+  <data name="FindQuery.PlaceholderText" xml:space="preserve">
+    <value>Buscar</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="FindQuery.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Buscar en el documento</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="FindPreviousButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Coincidencia anterior (Mayús+Enter)</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="FindPreviousButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Coincidencia anterior</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="FindNextButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Siguiente coincidencia (Enter)</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="FindNextButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Siguiente coincidencia</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="FindCloseButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Cerrar (Esc)</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="FindCloseButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Cerrar búsqueda</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+
+  <!-- Splash (SplashWindow.xaml). Both lines must stay under ~200 px at 10 px:
+       longer runs across the artwork's own "FREE &amp; OPEN SOURCE". -->
+  <data name="SplashCredit.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Copyright 2026 ElectricRV.ca Corporation. Un agradecimiento especial a Mega Woman.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="SplashCopyright.Text" xml:space="preserve">
+    <value>© 2026 ElectricRV.ca Corporation</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="SplashThanks.Text" xml:space="preserve">
+    <value>Un agradecimiento especial a Mega Woman</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+
+  <!-- ===== Package manifest (ms-resource:) ===== -->
+  <data name="AppDescription" xml:space="preserve">
+    <value>Un editor de PDF ligero: abrir, corregir, guardar, listo.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="PdfFileTypeName" xml:space="preserve">
+    <value>Documento PDF</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+
+  <!-- ===== Code (DocumentViewModel.cs) ===== -->
+  <data name="PageN" xml:space="preserve">
+    <value>Página {0}</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. UIA name of a page surface</comment>
+  </data>
+  <data name="PageOf" xml:space="preserve">
+    <value>Página {0} de {1}</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="Save" xml:space="preserve">
+    <value>Guardar</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="SaveWithDot" xml:space="preserve">
+    <value>Guardar ●</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Toolbar label while there are unsaved changes</comment>
+  </data>
+  <data name="NoResults" xml:space="preserve">
+    <value>Sin resultados</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="MatchOf" xml:space="preserve">
+    <value>{0} de {1}</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Find bar: current match of total</comment>
+  </data>
+  <data name="ToolOffNotice" xml:space="preserve">
+    <value>{0} desactivado</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. #268: spoken when Add text, Whiteout or Redact turns off; {0} is the tool's toolbar label</comment>
+  </data>
+  <data name="PlaceSignatureHint" xml:space="preserve">
+    <value>Haz clic en la página para colocar “{0}”</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="WhiteoutHint" xml:space="preserve">
+    <value>Arrastra sobre el área que quieres cubrir; Esc cancela. Cubrir no quita nada; Censurar sí</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="TextBoxHint" xml:space="preserve">
+    <value>Haz clic donde debe ir el texto nuevo; Esc cancela</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="CouldNotOpenTitle" xml:space="preserve">
+    <value>No se pudo abrir ese archivo</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="PageRenderFailed" xml:space="preserve">
+    <value>No se pudo mostrar esta página.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Shown in a page's slot when the engine could not rasterise it (#93)</comment>
+  </data>
+  <data name="CouldNotAddSignatureTitle" xml:space="preserve">
+    <value>No se pudo agregar esa firma</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="CouldNotPlaceSignatureTitle" xml:space="preserve">
+    <value>No se pudo colocar la firma</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="CannotEditTextTitle" xml:space="preserve">
+    <value>No se puede editar este texto</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="CouldNotSaveTitle" xml:space="preserve">
+    <value>No se pudo guardar</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="TrySaveAsHint" xml:space="preserve">
+    <value>Prueba con “Guardar como” para guardar una copia.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="PdfDocumentFilter" xml:space="preserve">
+    <value>Documento PDF</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. File type shown in the save picker</comment>
+  </data>
+  <data name="MarkdownDocumentFilter" xml:space="preserve">
+    <value>Documento Markdown</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. File type shown in the save picker (#386) — a one-way text export, not an alternate save format; see CouldNotExportTitle/ExportedAnnouncement</comment>
+  </data>
+  <data name="CouldNotExportTitle" xml:space="preserve">
+    <value>No se pudo exportar</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Error title for a failed Save As → Markdown export (#386); distinct from CouldNotSaveTitle on purpose — see #386's one-way-export wording</comment>
+  </data>
+  <data name="EditedFileName" xml:space="preserve">
+    <value>{0} - editado</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Suggested name for Save As; {0} is the original name without extension</comment>
+  </data>
+  <data name="SmallerFileName" xml:space="preserve">
+    <value>{0} - reducido</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="SaveFirstTitle" xml:space="preserve">
+    <value>Guarda primero</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="SaveFirstBody" xml:space="preserve">
+    <value>Guarda tus cambios y luego reduce el archivo guardado.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="CouldNotShrinkTitle" xml:space="preserve">
+    <value>No se pudo reducir</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="NothingToShrinkTitle" xml:space="preserve">
+    <value>Nada que reducir</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="NothingToShrinkBody" xml:space="preserve">
+    <value>Las imágenes de este documento ya son pequeñas.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="SmallerCopySavedTitle" xml:space="preserve">
+    <value>Copia reducida guardada</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="SmallerCopySavedNotice" xml:space="preserve">
+    <value>Antes: {0:F1} MB; ahora: {1:F1} MB. Guardada como {2}, lista para enviar por correo electrónico.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="PasswordPlaceholder" xml:space="preserve">
+    <value>Contraseña</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="PasswordWrong" xml:space="preserve">
+    <value>Esa contraseña no era correcta. Inténtalo de nuevo.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="PasswordPrompt" xml:space="preserve">
+    <value>“{0}” está protegido. Escribe su contraseña para abrirlo.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="PasswordRequiredTitle" xml:space="preserve">
+    <value>Se requiere contraseña</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="Open" xml:space="preserve">
+    <value>Abrir</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="Cancel" xml:space="preserve">
+    <value>Cancelar</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="OK" xml:space="preserve">
+    <value>Aceptar</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+
+  <!-- ===== Document security (#131, ADR-004) ===== -->
+  <data name="UnlockTitle" xml:space="preserve">
+    <value>Desbloquear documento</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="UnlockPrompt" xml:space="preserve">
+    <value>El propietario de “{0}” restringió lo que se puede hacer con él. Escribe la contraseña del propietario para usar todas las herramientas.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. {0} is the file name</comment>
+  </data>
+  <data name="UnlockWrong" xml:space="preserve">
+    <value>Esa contraseña no desbloqueó el documento. Inténtalo de nuevo.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="Unlock" xml:space="preserve">
+    <value>Desbloquear</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="SetPasswordTitle" xml:space="preserve">
+    <value>Definir contraseña</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="SetPasswordButton" xml:space="preserve">
+    <value>Definir contraseña</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="ChangePasswordTitle" xml:space="preserve">
+    <value>Cambiar contraseña</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="ChangePasswordButton" xml:space="preserve">
+    <value>Cambiar contraseña</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="SetPasswordBody" xml:space="preserve">
+    <value>Quien abra “{0}” necesitará esta contraseña. MegaPDF no puede recuperarla si se olvida.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. {0} is the file name</comment>
+  </data>
+  <data name="NewPasswordPlaceholder" xml:space="preserve">
+    <value>Contraseña nueva</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="ConfirmPasswordPlaceholder" xml:space="preserve">
+    <value>Confirmar contraseña</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="PasswordEmpty" xml:space="preserve">
+    <value>Escribe una contraseña.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="PasswordsDontMatch" xml:space="preserve">
+    <value>Las contraseñas no coinciden.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="DocumentPasswordTitle" xml:space="preserve">
+    <value>Contraseña del documento</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="ProtectedBody" xml:space="preserve">
+    <value>“{0}” está protegido con una contraseña. Puedes cambiarla o quitarla.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. {0} is the file name</comment>
+  </data>
+  <data name="ChangePasswordEllipsis" xml:space="preserve">
+    <value>Cambiar contraseña…</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="RemovePassword" xml:space="preserve">
+    <value>Quitar contraseña</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="PasswordSetNotice" xml:space="preserve">
+    <value>Contraseña definida.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="PasswordChangedNotice" xml:space="preserve">
+    <value>Contraseña cambiada.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="PasswordRemovedNotice" xml:space="preserve">
+    <value>Contraseña quitada.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="CouldNotChangeSecurityTitle" xml:space="preserve">
+    <value>No se pudo cambiar la contraseña</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+
+  <!-- ===== Code (MainWindow.xaml.cs) ===== -->
+  <data name="TextSizeName" xml:space="preserve">
+    <value>Tamaño del texto</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. UIA name of the size picker in the inline editor</comment>
+  </data>
+  <data name="TextFontName" xml:space="preserve">
+    <value>Fuente del texto</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="EditTextName" xml:space="preserve">
+    <value>Editar texto</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. UIA name of the inline editor</comment>
+  </data>
+  <data name="TypeThenEnterMultiline" xml:space="preserve">
+    <value>Escribe; Mayús+Enter para una línea nueva, Enter al terminar</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. #4: placeholder text on the inline editor while placing new text</comment>
+  </data>
+  <data name="TextSizeSmallName" xml:space="preserve">
+    <value>Pequeño</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. #4: UIA name of the S size chip on the inline editor</comment>
+  </data>
+  <data name="TextSizeMediumName" xml:space="preserve">
+    <value>Mediano</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. #4: UIA name of the M size chip on the inline editor</comment>
+  </data>
+  <data name="TextSizeLargeName" xml:space="preserve">
+    <value>Grande</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. #4: UIA name of the L size chip on the inline editor</comment>
+  </data>
+  <data name="RestoreTitle" xml:space="preserve">
+    <value>¿Restaurar los cambios sin guardar?</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="RestoreBody" xml:space="preserve">
+    <value>{0} se cerró de forma inesperada con cambios sin guardar en {1}.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. {0} app name, {1} file name</comment>
+  </data>
+  <data name="Restore" xml:space="preserve">
+    <value>Restaurar</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="Discard" xml:space="preserve">
+    <value>Descartar</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="SaveChangesTitle" xml:space="preserve">
+    <value>¿Guardar los cambios de {0}?</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="SaveChangesBody" xml:space="preserve">
+    <value>Si no los guardas, se perderán tus cambios.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="DontSave" xml:space="preserve">
+    <value>No guardar</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="AboutVersion" xml:space="preserve">
+    <value>MegaPDF {0}</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="NoticesLoadFailed" xml:space="preserve">
+    <value>No se pudo cargar el archivo de avisos de terceros.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="NoticesTextName" xml:space="preserve">
+    <value>Texto de los avisos de terceros</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="NoticesTitle" xml:space="preserve">
+    <value>Avisos de terceros</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="Close" xml:space="preserve">
+    <value>Cerrar</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="YourNamePlaceholder" xml:space="preserve">
+    <value>Tu nombre</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="TypeSignatureTitle" xml:space="preserve">
+    <value>Escribe tu firma</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="Add" xml:space="preserve">
+    <value>Agregar</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="SignatureNamePlaceholder" xml:space="preserve">
+    <value>Nombre de la firma</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="MySignature" xml:space="preserve">
+    <value>Mi firma</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="Clear" xml:space="preserve">
+    <value>Borrar</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="DrawHint" xml:space="preserve">
+    <value>Dibuja con el mouse, el dedo o el lápiz.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="DrawSignatureTitle" xml:space="preserve">
+    <value>Dibuja tu firma</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+
+  <!-- ===== Error bodies (UserFacing.cs). The engine's own messages are technical
+       English; these are what the person sees first, with the technical detail
+       underneath when nothing better is known. ===== -->
+  <data name="ErrorFileUnreadable" xml:space="preserve">
+    <value>No se pudo leer el archivo.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="ErrorFileTooLarge" xml:space="preserve">
+    <value>Este archivo es demasiado grande para que MegaPDF pueda abrirlo.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. #147: a file of 4 GB or more, past what PDFium can address on Windows</comment>
+  </data>
+  <data name="ErrorNotAPdf" xml:space="preserve">
+    <value>Ese archivo no es un PDF.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="ErrorFileIncomplete" xml:space="preserve">
+    <value>Ese archivo parece estar incompleto. Puede ser una descarga que se detuvo antes de terminar.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. PdfLoadException MEGAPDF_OPEN_ERR_INCOMPLETE (#665)</comment>
+  </data>
+  <data name="ErrorPasswordProtected" xml:space="preserve">
+    <value>El archivo está protegido con contraseña.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="ErrorCouldNotOpen" xml:space="preserve">
+    <value>No se pudo abrir el archivo (error {0}).</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="ErrorSavedCopyUnreadable" xml:space="preserve">
+    <value>No se pudo volver a leer el documento guardado, así que el original quedó intacto.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="ErrorNoUsableFont" xml:space="preserve">
+    <value>Ninguna fuente disponible puede escribir ese texto.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="ErrorNotExtractable" xml:space="preserve">
+    <value>Ese texto forma parte de una imagen escaneada, así que no se puede editar. Cúbrelo con corrector y agrega texto nuevo.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="ErrorLayoutWouldChange" xml:space="preserve">
+    <value>El texto de esta página no se puede modificar sin alterar su diseño: reescribirlo desplazaría el espaciado de otro texto. Cúbrelo con corrector y agrega texto nuevo.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="ErrorLayoutRenderWouldChange" xml:space="preserve">
+    <value>Esta línea no se puede modificar sin que otras partes de la página se vean distintas. Cúbrela con corrector y agrega texto nuevo.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="ErrorLayoutTextWouldMove" xml:space="preserve">
+    <value>Esta línea no se puede modificar sin mover texto de otras partes de la página. Cúbrela con corrector y agrega texto nuevo.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="ErrorUnsupportedSecurity" xml:space="preserve">
+    <value>Este PDF usa un tipo de protección que MegaPDF no puede abrir.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. #131: a security handler PDFium does not support</comment>
+  </data>
+  <data name="ErrorRestricted" xml:space="preserve">
+    <value>El propietario del documento no permite esto. Primero desbloquéalo con la contraseña del propietario.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. #131: DocumentRestrictedException</comment>
+  </data>
+  <data name="ErrorGeneric" xml:space="preserve">
+    <value>Algo salió mal.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+
+  <!-- ===== Signature library cards (#100) ===== -->
+  <data name="SignatureCardName" xml:space="preserve">
+    <value>{0}, firma</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Narrator name of a library card; {0} is the signature's name</comment>
+  </data>
+  <data name="SignatureCardMissingName" xml:space="preserve">
+    <value>{0}, firma, imagen no encontrada</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Narrator name of a library card whose image file has gone (#402); {0} is the signature's name</comment>
+  </data>
+  <data name="SignatureImageMissing.Text" xml:space="preserve">
+    <value>Imagen no encontrada</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Shown in place of a signature's thumbnail when its image file has gone (#402)</comment>
+  </data>
+  <data name="Rename" xml:space="preserve">
+    <value>Cambiar nombre</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="Delete" xml:space="preserve">
+    <value>Eliminar</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="RenameSignatureTitle" xml:space="preserve">
+    <value>Cambiar nombre de la firma</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="DeleteSignatureTitle" xml:space="preserve">
+    <value>¿Eliminar {0}?</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. {0} is the signature's name</comment>
+  </data>
+  <data name="DeleteSignatureBody" xml:space="preserve">
+    <value>Esta acción no se puede deshacer.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="CouldNotRenameSignatureTitle" xml:space="preserve">
+    <value>No se pudo cambiar el nombre de esa firma</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+
+  <!-- ===== Keyboard traversal of the page (SDD §2.2, #2; MainWindow.Keyboard.cs) ===== -->
+  <data name="PagesScroll.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Páginas del documento</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="PagesScroll.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.HelpText" xml:space="preserve">
+    <value>Con Tab te mueves entre campos, casillas y texto. Enter o la barra espaciadora activa. Esc vuelve a la barra de herramientas.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="NothingKeyboardEditable" xml:space="preserve">
+    <value>No se puede cambiar nada de este documento con el teclado.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="RegionCheckboxTicked" xml:space="preserve">
+    <value>Casilla de verificación, activada</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="RegionCheckboxNotTicked" xml:space="preserve">
+    <value>Casilla de verificación, sin activar</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="RegionBoxToTick" xml:space="preserve">
+    <value>Casilla para marcar</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. A drawn (non-form) box</comment>
+  </data>
+  <data name="RegionBoxTicked" xml:space="preserve">
+    <value>Casilla marcada</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. A drawn (non-form) box that already carries a check mark (#2)</comment>
+  </data>
+  <data name="RegionFormField" xml:space="preserve">
+    <value>Campo de formulario</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="RegionTextEditable" xml:space="preserve">
+    <value>Texto, editable</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="RegionAddedText" xml:space="preserve">
+    <value>Texto agregado</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="RegionSignatureOrMark" xml:space="preserve">
+    <value>Firma o marca de verificación</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="RegionCover" xml:space="preserve">
+    <value>Corrector</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. A placed whiteout</comment>
+  </data>
+  <data name="RegionPage" xml:space="preserve">
+    <value>Página</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="PageRegionDescription" xml:space="preserve">
+    <value>Página {0}, {1}</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. {0} page number, {1} region description</comment>
+  </data>
+  <data name="PageRegionControlType" xml:space="preserve">
+    <value>región de página</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. UIA localized control type of the keyboard focus ring; lower case, like "button"</comment>
+  </data>
+  <data name="SignatureSelectedKeyHint" xml:space="preserve">
+    <value>Firma seleccionada. Las teclas de flecha la mueven, Supr la quita y Esc la suelta.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="TextBoxSelectedKeyHint" xml:space="preserve">
+    <value>Texto seleccionado. Las teclas de flecha lo mueven, Enter lo edita, Supr lo quita y Esc lo suelta.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="CoverSelectedKeyHint" xml:space="preserve">
+    <value>Corrector seleccionado. Supr lo quita y Esc lo suelta.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="PlaceSignatureKeyHint" xml:space="preserve">
+    <value>Presiona Tab hasta llegar al lugar de la página donde va la firma y luego presiona Enter.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Announced by Narrator after a signature is picked from the library</comment>
+  </data>
+  <data name="PageRewriteWarningTitle" xml:space="preserve">
+    <value>¿Modificar esta página?</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="PageRewriteWarning" xml:space="preserve">
+    <value>Modificar esta página podría alterar ligeramente partes que no has tocado.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="Continue" xml:space="preserve">
+    <value>Continuar</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="ToolbarOpen" xml:space="preserve">
+    <value>Abrir</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Windows toolbar (#144): label</comment>
+  </data>
+  <data name="ToolbarOpenTip" xml:space="preserve">
+    <value>Abrir un PDF (Ctrl+O)</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Windows toolbar (#144): tooltip</comment>
+  </data>
+  <data name="ToolbarSaveTip" xml:space="preserve">
+    <value>Guardar (Ctrl+S)</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Windows toolbar (#144): tooltip; the label is Save or SaveWithDot</comment>
+  </data>
+  <data name="ToolbarSaveAs" xml:space="preserve">
+    <value>Guardar como</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Windows toolbar (#144): More menu label</comment>
+  </data>
+  <data name="ToolbarSaveAsTip" xml:space="preserve">
+    <value>Guardar una copia (Ctrl+Mayús+S)</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Windows toolbar (#144): tooltip</comment>
+  </data>
+  <data name="ToolbarPassword" xml:space="preserve">
+    <value>Contraseña…</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Windows toolbar (#144): More menu label</comment>
+  </data>
+  <data name="ToolbarPasswordName" xml:space="preserve">
+    <value>Contraseña</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Windows toolbar (#144): UIA name</comment>
+  </data>
+  <data name="ToolbarPasswordTip" xml:space="preserve">
+    <value>Definir, cambiar o quitar la contraseña del documento</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Windows toolbar (#144): tooltip</comment>
+  </data>
+  <data name="ToolbarShrink" xml:space="preserve">
+    <value>Reducir</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Windows toolbar (#144): More menu label</comment>
+  </data>
+  <data name="ToolbarShrinkName" xml:space="preserve">
+    <value>Reducir para correo electrónico</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Windows toolbar (#144): UIA name</comment>
+  </data>
+  <data name="ToolbarShrinkTip" xml:space="preserve">
+    <value>Guardar una copia reducida para correo electrónico</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Windows toolbar (#144): tooltip</comment>
+  </data>
+  <data name="ToolbarPrint" xml:space="preserve">
+    <value>Imprimir</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Windows toolbar (#144): More menu label</comment>
+  </data>
+  <data name="ToolbarPrintTip" xml:space="preserve">
+    <value>Imprimir (Ctrl+P)</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Windows toolbar (#144): tooltip</comment>
+  </data>
+  <data name="ToolbarUndo" xml:space="preserve">
+    <value>Deshacer</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Windows toolbar (#144): label</comment>
+  </data>
+  <data name="ToolbarUndoTip" xml:space="preserve">
+    <value>Deshacer (Ctrl+Z)</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Windows toolbar (#144): tooltip</comment>
+  </data>
+  <data name="ToolbarRedo" xml:space="preserve">
+    <value>Rehacer</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Windows toolbar (#144): label</comment>
+  </data>
+  <data name="ToolbarRedoTip" xml:space="preserve">
+    <value>Rehacer (Ctrl+Y)</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Windows toolbar (#144): tooltip</comment>
+  </data>
+  <data name="ToolbarSignatures" xml:space="preserve">
+    <value>Firmas</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Windows toolbar (#144): label and UIA name</comment>
+  </data>
+  <data name="ToolbarSignaturesTip" xml:space="preserve">
+    <value>Tus firmas</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Windows toolbar (#144): tooltip</comment>
+  </data>
+  <data name="ToolbarWhiteout" xml:space="preserve">
+    <value>Corrector</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Windows toolbar (#144): label</comment>
+  </data>
+  <data name="ToolbarWhiteoutTip" xml:space="preserve">
+    <value>Cubre un área; esto no quita lo que hay debajo</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Windows toolbar (#144): tooltip</comment>
+  </data>
+  <data name="ToolbarAddText" xml:space="preserve">
+    <value>Agregar texto</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Windows toolbar (#144): label</comment>
+  </data>
+  <data name="ToolbarAddTextTip" xml:space="preserve">
+    <value>Agrega texto nuevo en cualquier lugar</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Windows toolbar (#144): tooltip</comment>
+  </data>
+  <data name="ToolbarFind" xml:space="preserve">
+    <value>Buscar</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Windows toolbar (#144): More menu label</comment>
+  </data>
+  <data name="ToolbarFindTip" xml:space="preserve">
+    <value>Buscar en el documento (Ctrl+F)</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Windows toolbar (#144): tooltip</comment>
+  </data>
+  <data name="ToolbarZoomOut" xml:space="preserve">
+    <value>Alejar</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Windows toolbar (#144): UIA name and overflow label</comment>
+  </data>
+  <data name="ToolbarZoomOutTip" xml:space="preserve">
+    <value>Alejar (Ctrl+Menos)</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Windows toolbar (#144): tooltip</comment>
+  </data>
+  <data name="ToolbarZoomIn" xml:space="preserve">
+    <value>Acercar</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Windows toolbar (#144): UIA name and overflow label</comment>
+  </data>
+  <data name="ToolbarZoomInTip" xml:space="preserve">
+    <value>Acercar (Ctrl+Más)</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Windows toolbar (#144): tooltip</comment>
+  </data>
+  <data name="ToolbarZoomLevel" xml:space="preserve">
+    <value>Nivel de zoom</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Windows toolbar (#144): zoom menu button: tooltip and UIA name</comment>
+  </data>
+  <data name="ToolbarActualSize" xml:space="preserve">
+    <value>Tamaño real</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Windows toolbar (#144): zoom menu item</comment>
+  </data>
+  <data name="ToolbarFitWidth" xml:space="preserve">
+    <value>Ajustar al ancho</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Windows toolbar (#144): zoom menu item</comment>
+  </data>
+  <data name="ToolbarFitPage" xml:space="preserve">
+    <value>Página completa</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Windows toolbar (#144): zoom menu item</comment>
+  </data>
+  <data name="ToolbarSettings" xml:space="preserve">
+    <value>Configuración</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Windows toolbar (#144): More menu label, tooltip and UIA name</comment>
+  </data>
+  <data name="ZoomPercent" xml:space="preserve">
+    <value>{0} %</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Windows toolbar (#144): zoom level on the zoom menu button and its presets</comment>
+  </data>
+  <data name="BusyOpening" xml:space="preserve">
+    <value>Abriendo…</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Busy strip while a document opens (#145)</comment>
+  </data>
+  <data name="BusySaving" xml:space="preserve">
+    <value>Guardando…</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Busy strip while a document is saved (#145)</comment>
+  </data>
+  <data name="BusyCheckingSavedFile" xml:space="preserve">
+    <value>Comprobando el archivo guardado…</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Busy strip while the saved bytes are read back (#145)</comment>
+  </data>
+  <data name="BusyExportingMarkdown" xml:space="preserve">
+    <value>Exportando…</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Busy strip while Save As writes a Markdown export (#386) — "Exporting…", not "Saving…", matching #386's iOS wording (PR #390)</comment>
+  </data>
+  <data name="BusyCheckingPage" xml:space="preserve">
+    <value>Comprobando esta página…</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Page spinner while the page check runs before a change (#139, #145)</comment>
+  </data>
+  <data name="BusyApplying" xml:space="preserve">
+    <value>Aplicando…</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Page spinner while a change is applied (#145)</comment>
+  </data>
+  <data name="BusySearching" xml:space="preserve">
+    <value>Buscando…</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Busy strip while the document is searched (#145)</comment>
+  </data>
+  <data name="BusyShrinking" xml:space="preserve">
+    <value>Creando una copia reducida…</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Busy strip while images are re-encoded for email (#145)</comment>
+  </data>
+  <data name="BusyPrinting" xml:space="preserve">
+    <value>Preparando la impresión…</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Busy strip while pages are rendered for the printer (#145)</comment>
+  </data>
+  <data name="BusyRestoring" xml:space="preserve">
+    <value>Restaurando tus ediciones…</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Busy strip while unsaved edits are replayed after a crash (#145)</comment>
+  </data>
+  <data name="BusyPageOfPages" xml:space="preserve">
+    <value>Página {0} de {1}</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Busy strip progress under the label, work counted in pages (#145)</comment>
+  </data>
+  <data name="BusyCancelling" xml:space="preserve">
+    <value>Deteniendo…</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Busy strip, Stop was pressed and the work has not stopped yet (#145)</comment>
+  </data>
+  <data name="CancelThisWork" xml:space="preserve">
+    <value>Detener</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Busy strip button that cancels the work it is reporting (#145)</comment>
+  </data>
+  <data name="SearchCancelled" xml:space="preserve">
+    <value>Búsqueda detenida.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Announced when a search is stopped with the busy strip's Stop (#145)</comment>
+  </data>
+  <data name="BusyCombiningPages" xml:space="preserve">
+    <value>Combinando páginas…</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Busy strip while pages from another file are inserted (#145, #174)</comment>
+  </data>
+  <data name="BusyDeletingPages" xml:space="preserve">
+    <value>Eliminando páginas…</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Busy strip while pages are deleted (#145, #174)</comment>
+  </data>
+  <data name="BusyTurningPages" xml:space="preserve">
+    <value>Girando páginas…</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Busy strip while pages are rotated (#145, #174)</comment>
+  </data>
+  <data name="BusyMovingPage" xml:space="preserve">
+    <value>Moviendo la página…</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Busy strip while a page is moved (#145, #174)</comment>
+  </data>
+  <data name="BusyInsertingPage" xml:space="preserve">
+    <value>Insertando una página…</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Busy strip while a blank page is inserted (#145, #174)</comment>
+  </data>
+  <data name="BusyExtractingPages" xml:space="preserve">
+    <value>Guardando las páginas…</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Busy strip while selected pages are written to a new file (#145, #174)</comment>
+  </data>
+  <data name="BusyPictureOfPictures" xml:space="preserve">
+    <value>Imagen {0} de {1}</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Busy strip progress under the label, work counted in pictures (#145, shrink)</comment>
+  </data>
+  <data name="WorkStopped" xml:space="preserve">
+    <value>Detenido.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Announced when work is stopped with the busy strip's Stop (#145)</comment>
+  </data>
+  <data name="CouldNotPrintTitle" xml:space="preserve">
+    <value>No se pudo imprimir</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Error dialog title when printing fails (#145)</comment>
+  </data>
+  <data name="CouldNotEditTitle" xml:space="preserve">
+    <value>No se pudo hacer ese cambio</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Error dialog title when an edit fails (#145)</comment>
+  </data>
+  <data name="CouldNotRestoreTitle" xml:space="preserve">
+    <value>No se pudieron restaurar tus ediciones</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Error dialog title when a crash-recovery replay fails (#145)</comment>
+  </data>
+  <data name="RecentNotFound" xml:space="preserve">
+    <value>No encontrado</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Shown in place of a recent document's folder when the file has gone (#165)</comment>
+  </data>
+  <data name="RecentItemName" xml:space="preserve">
+    <value>{0}, en {1}</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Narrator name for a recent row: file name, then its folder (#165)</comment>
+  </data>
+  <data name="RecentItemMissingName" xml:space="preserve">
+    <value>{0}, en {1}, no encontrado</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Narrator name for a recent row whose file has gone (#165)</comment>
+  </data>
+  <data name="RecentMissingTitle" xml:space="preserve">
+    <value>No se encuentra este archivo</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Dialog title when a recent document is no longer where it was (#165)</comment>
+  </data>
+  <data name="RecentMissingBody" xml:space="preserve">
+    <value>“{0}” ya no está en {1}. Puede que se haya movido, que se le haya cambiado el nombre o que se haya eliminado.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Dialog body: {0} file name, {1} folder (#165)</comment>
+  </data>
+  <data name="RemoveFromRecent" xml:space="preserve">
+    <value>Quitar de recientes</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Button and context menu item on a recent row (#165)</comment>
+  </data>
+  <data name="RemoveFromRecentItem.Text" xml:space="preserve">
+    <value>Quitar de recientes</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Context menu item on a recent row (#165)</comment>
+  </data>
+  <data name="DrawSignatureName" xml:space="preserve">
+    <value>Dibujar una firma</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Narrator name for the Draw button in the signature library (#146 RC): its label is a child TextBlock, which leaves the button itself unnamed</comment>
+  </data>
+  <data name="TypeSignatureName" xml:space="preserve">
+    <value>Escribir una firma</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="AddFromImageName" xml:space="preserve">
+    <value>Agregar una firma desde una foto</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="ToolbarRedact" xml:space="preserve">
+    <value>Censurar</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Toolbar (#173): label</comment>
+  </data>
+  <data name="ToolbarRedactTip" xml:space="preserve">
+    <value>Quitar contenido del archivo</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Toolbar (#173): tooltip</comment>
+  </data>
+  <data name="RedactHint" xml:space="preserve">
+    <value>Arrastra sobre lo que quieres quitar, selecciona texto o presiona Enter en el elemento con el foco; Esc cancela</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Status hint while the Redact tool is armed (#173)</comment>
+  </data>
+  <data name="RedactMarkName" xml:space="preserve">
+    <value>Marcado para censura</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Screen-reader name of a mark on the page (#173)</comment>
+  </data>
+  <data name="RedactMarkCount" xml:space="preserve">
+    <value>{0} áreas marcadas para censura</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Screen-reader summary of the page's marks (#173)</comment>
+  </data>
+  <data name="RedactMarkCountOne" xml:space="preserve">
+    <value>1 área marcada para censura</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="RedactMarkPlaced" xml:space="preserve">
+    <value>Marcado para censura.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Announced after a mark is placed (#173)</comment>
+  </data>
+  <data name="RedactMarkRemoved" xml:space="preserve">
+    <value>Marca quitada.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="RedactMarksCleared" xml:space="preserve">
+    <value>Se borraron todas las marcas. Puedes deshacerlo para recuperarlas.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Announced after … (More options) → Clear all marks (#329)</comment>
+  </data>
+  <data name="RedactMarkSelectedKeyHint" xml:space="preserve">
+    <value>Marca seleccionada. Las teclas de flecha la mueven, Supr la quita y Esc la suelta.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Keyboard hint once a mark is selected (#329)</comment>
+  </data>
+  <data name="ToolbarClearMarks" xml:space="preserve">
+    <value>Borrar todas las marcas</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. More (…) menu (#329): label of the item</comment>
+  </data>
+  <data name="ToolbarClearMarksTip" xml:space="preserve">
+    <value>Descarta todas las marcas de censura del documento</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. More (…) menu (#329): tooltip</comment>
+  </data>
+  <data name="RedactConfirmTitle" xml:space="preserve">
+    <value>¿Quitar el contenido marcado?</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Confirmation before a redaction is applied on save (#173)</comment>
+  </data>
+  <data name="RedactConfirmBody" xml:space="preserve">
+    <value>La censura quita de forma permanente el contenido marcado. No se podrá deshacer después de guardar.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Confirmation body (#173) — the wording #173 specifies</comment>
+  </data>
+  <data name="RedactSaveCopy" xml:space="preserve">
+    <value>Guardar como copia</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. The default action of the redaction confirmation (#173)</comment>
+  </data>
+  <data name="RedactOverwrite" xml:space="preserve">
+    <value>Sobrescribir el original</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="RedactedFileSuffix" xml:space="preserve">
+    <value>-censurado</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Appended to the file name offered by Save as a copy (#173); no accents — it is a file name</comment>
+  </data>
+  <data name="RedactSummaryOne" xml:space="preserve">
+    <value>1 área censurada: {0}</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Shown after saving (#173); {0} is a list such as "41 characters, 1 image"</comment>
+  </data>
+  <data name="RedactSummaryMany" xml:space="preserve">
+    <value>{0} áreas censuradas: {1}</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="RedactedCharacters" xml:space="preserve">
+    <value>{0} caracteres</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="RedactedCharactersOne" xml:space="preserve">
+    <value>1 carácter</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="RedactedImages" xml:space="preserve">
+    <value>{0} imágenes</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="RedactedImagesOne" xml:space="preserve">
+    <value>1 imagen</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="RedactedFormFields" xml:space="preserve">
+    <value>{0} campos de formulario</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="RedactedFormFieldsOne" xml:space="preserve">
+    <value>1 campo de formulario</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="RedactedAnnotations" xml:space="preserve">
+    <value>{0} anotaciones</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="RedactedAnnotationsOne" xml:space="preserve">
+    <value>1 anotación</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="RedactedNothing" xml:space="preserve">
+    <value>nada</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. The summary's list when a redaction removed no countable content (#173)</comment>
+  </data>
+  <data name="RedactRefusedTitle" xml:space="preserve">
+    <value>No se quitó nada</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Shown when a redaction fails closed (#173)</comment>
+  </data>
+  <data name="RedactRefusedBody" xml:space="preserve">
+    <value>MegaPDF no pudo quitar todo lo que marcaste en la página {0}, así que no quitó nada y dejó el archivo como estaba.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Refusal body (#173); {0} is a page number</comment>
+  </data>
+  <data name="RedactRefusedFont" xml:space="preserve">
+    <value>El texto de esa zona usa una fuente que MegaPDF no puede volver a dibujar alrededor de tus marcas.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="RedactRefusedShared" xml:space="preserve">
+    <value>Parte de esa área se dibuja a partir de un bloque compartido que MegaPDF no puede separar sin riesgo.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="RedactRefusedLayout" xml:space="preserve">
+    <value>Quitarlo cambiaría la página fuera de las áreas que marcaste.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="RedactRefusedOther" xml:space="preserve">
+    <value>MegaPDF no pudo separar ese contenido sin riesgo.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="RedactNeedsPermission" xml:space="preserve">
+    <value>Este documento no permite cambios, así que no se puede censurar.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="RedactFailed" xml:space="preserve">
+    <value>No se pudo terminar la censura y este archivo ya no se puede guardar. Ciérralo y ábrelo de nuevo; no se escribió nada.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. The fail-closed case the rehearsal says cannot happen (#173)</comment>
+  </data>
+  <data name="WhiteoutCoversOnlyTitle" xml:space="preserve">
+    <value>El corrector cubre; no quita nada</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. First-use hint on the Whiteout tool (#173)</comment>
+  </data>
+  <data name="WhiteoutCoversOnlyBody" xml:space="preserve">
+    <value>Todo lo que hay debajo del corrector sigue en el archivo, y otra aplicación puede copiarlo o buscarlo. Para quitarlo del archivo, usa Censurar.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. First-use hint body (#173)</comment>
+  </data>
+  <data name="PageRegionDescriptionWithContent" xml:space="preserve">
+    <value>Página {0}, {1}: {2}</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. {0} page number, {1} what the region is, {2} what it says (#190)</comment>
+  </data>
+  <data name="SavedAnnouncement" xml:space="preserve">
+    <value>Se guardó {0}</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Announced to a screen reader when a save finishes; {0} file name (#190)</comment>
+  </data>
+  <data name="ExportedAnnouncement" xml:space="preserve">
+    <value>Se exportó {0}</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Announced to a screen reader when a Save As → Markdown export finishes; {0} file name (#386) — "Exported", not "Saved": the document itself is not saved by this</comment>
+  </data>
+  <data name="MoreOptions" xml:space="preserve">
+    <value>Más opciones</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Narrator name for the toolbar overflow button when its menu is closed (#170)</comment>
+  </data>
+  <data name="CloseMoreOptions" xml:space="preserve">
+    <value>Cerrar más opciones</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Narrator name for the same button while its menu is open; WinUI's own name is "Less app bar" (#170)</comment>
+  </data>
+
+  <!-- ===== Tabs (#348) ===== -->
+  <data name="CloseTab" xml:space="preserve">
+    <value>Cerrar pestaña</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Ctrl+W; closes the window instead when it is the last tab</comment>
+  </data>
+  <data name="CloseWindow" xml:space="preserve">
+    <value>Cerrar ventana</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+  </data>
+  <data name="NewWindow" xml:space="preserve">
+    <value>Nueva ventana</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Ctrl+Shift+N; opens a second MainWindow</comment>
+  </data>
+  <data name="TabAccessibleName" xml:space="preserve">
+    <value>{0}, pestaña</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Narrator name for a tab header; {0} is the document's file name</comment>
+  </data>
+  <data name="TabAccessibleNameUnsaved" xml:space="preserve">
+    <value>{0}, cambios sin guardar, pestaña</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Narrator name for a tab header with the unsaved dot showing; {0} is the document's file name</comment>
+  </data>
+  <data name="MoveTabToNewWindowItem.Text" xml:space="preserve">
+    <value>Mover la pestaña a una ventana nueva</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Context menu item on a tab (#711); the keyboard and screen reader way to drag a tab off the strip</comment>
+  </data>
+  <data name="TabMoved" xml:space="preserve">
+    <value>Pestaña {0} movida a otra ventana</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Announced by Narrator once a tab has been dragged or moved to another window (#711); {0} is the document's file name</comment>
+  </data>
+  <!-- ===== Reading mode (#504 tier 1, #510 tier 2; docs/reading-mode-plan.md §4) ===== -->
+  <data name="ReadingMode" xml:space="preserve">
+    <value>Modo de lectura</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. The zoom menu and the "…" overflow: the page and nothing else (#504, #168 decision 1)</comment>
+  </data>
+  <data name="ReadingModeTip" xml:space="preserve">
+    <value>Oculta las herramientas y lee la página (Ctrl+H)</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Tooltip of the Reading mode command (#504)</comment>
+  </data>
+  <data name="ReadingModeOn" xml:space="preserve">
+    <value>Modo de lectura activado</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Announced through Narrator on entering reading mode (#504)</comment>
+  </data>
+  <data name="ReadingModeOff" xml:space="preserve">
+    <value>Modo de lectura desactivado</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Announced through Narrator on leaving reading mode (#504)</comment>
+  </data>
+  <data name="ReadingControls" xml:space="preserve">
+    <value>Controles de lectura</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. UIA name of the floating bar in reading mode (#504)</comment>
+  </data>
+  <data name="Exit" xml:space="preserve">
+    <value>Salir</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. The floating bar's last button; its UIA name is the longer ExitReadingMode (#504)</comment>
+  </data>
+  <data name="ExitReadingMode" xml:space="preserve">
+    <value>Salir del modo de lectura</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. UIA name and tooltip of the floating bar's Exit button (#504)</comment>
+  </data>
+  <data name="PreviousPage" xml:space="preserve">
+    <value>Página anterior</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Floating bar: the page before this one. Not the find bar's Previous, which is about matches (#504)</comment>
+  </data>
+  <data name="NextPage" xml:space="preserve">
+    <value>Página siguiente</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Floating bar: the page after this one (#504)</comment>
+  </data>
+  <data name="GoToPage" xml:space="preserve">
+    <value>Ir a la página</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Floating bar: the page number opens a box to type one into (#504)</comment>
+  </data>
+  <data name="PageColoursHeading.Text" xml:space="preserve">
+    <value>Colores de la página</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Settings flyout: Normal / Sepia / Night, applied when the page is drawn and never written to the file (#510)</comment>
+  </data>
+  <data name="PageColoursNormal.Text" xml:space="preserve">
+    <value>Normal</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Page colours: the page as the document draws it (#510)</comment>
+  </data>
+  <data name="PageColoursSepia.Text" xml:space="preserve">
+    <value>Sepia</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Page colours: warm paper (#510)</comment>
+  </data>
+  <data name="PageColoursNight.Text" xml:space="preserve">
+    <value>Noche</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Page colours: inverted luminance (#510)</comment>
+  </data>
+  <data name="NightInvertsNote.Text" xml:space="preserve">
+    <value>El modo noche invierte la página, incluidas las imágenes.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Settings flyout, under Page colours: the trade-off decided on #168 — said plainly rather than left to be found (#510)</comment>
+  </data>
+  <data name="ReadingModeToggle.Header" xml:space="preserve">
+    <value>Abrir los documentos en modo de lectura</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Settings flyout: off by default (#168 decision 2, #510)</comment>
+  </data>
+  <!-- ===== Page tools (#174): the Pages pane, and rotate/delete/reorder/insert/combine/extract ===== -->
+  <data name="ToolbarPages" xml:space="preserve">
+    <value>Páginas</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. The toolbar's Pages control and the pane's heading (#174)</comment>
+  </data>
+  <data name="ToolbarPagesTip" xml:space="preserve">
+    <value>Mostrar las páginas y reorganizarlas (F4)</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Tooltip of the toolbar's Pages control (#174)</comment>
+  </data>
+  <data name="PagesSidebarName" xml:space="preserve">
+    <value>Miniaturas de las páginas</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. UIA name of the Pages pane's grid of tiles (#174)</comment>
+  </data>
+  <data name="PageThumbnailsMenuItem" xml:space="preserve">
+    <value>Miniaturas</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Pages menu: shows and hides the pane (#174)</comment>
+  </data>
+  <data name="PagesPaneOn" xml:space="preserve">
+    <value>Panel de páginas mostrado</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Announced through Narrator when the Pages pane opens (#174)</comment>
+  </data>
+  <data name="PagesPaneOff" xml:space="preserve">
+    <value>Panel de páginas oculto</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Announced through Narrator when the Pages pane closes (#174)</comment>
+  </data>
+  <data name="PageThumbnailName" xml:space="preserve">
+    <value>Página {0}</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. UIA name of one tile in the Pages pane (#174)</comment>
+  </data>
+  <data name="RotatePageRight" xml:space="preserve">
+    <value>Girar a la derecha</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Pages menu and a tile's context menu (#174)</comment>
+  </data>
+  <data name="RotatePageLeft" xml:space="preserve">
+    <value>Girar a la izquierda</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Pages menu and a tile's context menu (#174)</comment>
+  </data>
+  <data name="DeletePageItem" xml:space="preserve">
+    <value>Eliminar página</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Pages menu and a tile's context menu (#174)</comment>
+  </data>
+  <data name="MovePageEarlierItem" xml:space="preserve">
+    <value>Mover la página antes</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Reordering from the keyboard: earlier, not up, because the pane is a grid (#174)</comment>
+  </data>
+  <data name="MovePageLaterItem" xml:space="preserve">
+    <value>Mover la página después</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Reordering from the keyboard (#174)</comment>
+  </data>
+  <data name="InsertBlankPageItem" xml:space="preserve">
+    <value>Insertar página en blanco</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Pages menu (#174)</comment>
+  </data>
+  <data name="InsertPagesFromFileItem" xml:space="preserve">
+    <value>Insertar páginas de un archivo…</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Pages menu: the combine feature (#174)</comment>
+  </data>
+  <data name="ExtractPagesItem" xml:space="preserve">
+    <value>Guardar páginas seleccionadas como…</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Pages menu: the split feature (#174)</comment>
+  </data>
+  <data name="PageSelected" xml:space="preserve">
+    <value>Página {0} seleccionada</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. The pane's heading with one tile selected (#174)</comment>
+  </data>
+  <data name="PagesSelected" xml:space="preserve">
+    <value>{0} páginas seleccionadas</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. The pane's heading with several tiles selected (#174)</comment>
+  </data>
+  <data name="PageTurnedRight" xml:space="preserve">
+    <value>Se giró la página a la derecha.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Announced after a rotation (#174)</comment>
+  </data>
+  <data name="PagesTurnedRight" xml:space="preserve">
+    <value>Se giraron {0} páginas a la derecha.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Announced after a rotation (#174)</comment>
+  </data>
+  <data name="PageTurnedLeft" xml:space="preserve">
+    <value>Se giró la página a la izquierda.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Announced after a rotation (#174)</comment>
+  </data>
+  <data name="PagesTurnedLeft" xml:space="preserve">
+    <value>Se giraron {0} páginas a la izquierda.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Announced after a rotation (#174)</comment>
+  </data>
+  <data name="PageDeleted" xml:space="preserve">
+    <value>Página eliminada. Puedes deshacerlo para recuperarla.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Deleting is one undo step that restores the page itself (#174)</comment>
+  </data>
+  <data name="PagesDeleted" xml:space="preserve">
+    <value>{0} páginas eliminadas. Puedes deshacerlo para recuperarlas.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. As PageDeleted, for a selection (#174)</comment>
+  </data>
+  <data name="PageMoved" xml:space="preserve">
+    <value>Página {0} movida a la posición {1}.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Announced after a reorder (#174)</comment>
+  </data>
+  <data name="BlankPageInserted" xml:space="preserve">
+    <value>Página en blanco agregada como página {0}.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Announced after an insert (#174)</comment>
+  </data>
+  <data name="PagesInsertedFromFile" xml:space="preserve">
+    <value>Se agregaron las páginas de {0}.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Announced after a combine (#174)</comment>
+  </data>
+  <data name="PageSavedAs" xml:space="preserve">
+    <value>Se guardó la página como {0}.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Announced after an extract (#174)</comment>
+  </data>
+  <data name="PagesSavedAs" xml:space="preserve">
+    <value>Se guardaron {0} páginas como {1}.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Announced after an extract (#174)</comment>
+  </data>
+  <data name="DefaultDocumentName" xml:space="preserve">
+    <value>documento</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Suggested file name stem when the document has none (#174)</comment>
+  </data>
+  <data name="ExtractedOnePageName" xml:space="preserve">
+    <value>página {0}</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Suggested file name fragment for an extract (#174)</comment>
+  </data>
+  <data name="ExtractedPageRangeName" xml:space="preserve">
+    <value>páginas {0}-{1}</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Suggested file name fragment for an extract (#174)</comment>
+  </data>
+  <data name="ExtractedPageCountName" xml:space="preserve">
+    <value>{0} páginas</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. Suggested file name fragment for an extract (#174)</comment>
+  </data>
+  <data name="PagesRefusedFormFields" xml:space="preserve">
+    <value>No se pudieron copiar esas páginas: sus campos de formulario pertenecen a un grupo que esta aplicación no puede trasladar, y la copia perdería sus nombres. No ha cambiado nada; aún puedes imprimir el documento o guardar una copia completa.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. MEGAPDF_ERR_FIELDS (#174, #452): the engine refuses about 0.8% of real documents rather than write a form that has quietly lost its field names. Said as what happened and what still works</comment>
+  </data>
+  <data name="CannotDeleteLastPage" xml:space="preserve">
+    <value>Un PDF debe tener al menos una página, así que no se puede eliminar esta. Para conservar solo algunas páginas, usa Guardar páginas seleccionadas como.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. The engine refuses the last page (#174); said as the rule it is, with the way round it</comment>
+  </data>
+  <data name="PageToolsRestricted" xml:space="preserve">
+    <value>Este documento no permite que se cambien sus páginas. La contraseña del propietario lo desbloquearía.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. MEGAPDF_ERR_RESTRICTED for a page operation (#174, ADR-004)</comment>
+  </data>
+  <data name="OtherFileNeedsPassword" xml:space="preserve">
+    <value>Ese PDF necesita una contraseña o no permite copiar contenido de él.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. The file being combined in could not be opened (#174)</comment>
+  </data>
+  <data name="PagesFileProblem" xml:space="preserve">
+    <value>No se pudo leer o escribir ese archivo.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. MEGAPDF_ERR_FILE for an import or an extract (#174)</comment>
+  </data>
+  <data name="PageNoLongerThere" xml:space="preserve">
+    <value>Esa página ya no existe.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. A page operation on an index that has since gone (#174)</comment>
+  </data>
+  <data name="PagesCancelled" xml:space="preserve">
+    <value>Cancelado.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. An extract that was stopped before it finished (#174)</comment>
+  </data>
+  <data name="TextCopy" xml:space="preserve">
+    <value>Copiar</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. #710: the page's context menu (and the Mac's Edit menu): copies the selected text</comment>
+  </data>
+  <data name="TextSelectAll" xml:space="preserve">
+    <value>Seleccionar todo</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. #710: the page's context menu: selects the whole document's text</comment>
+  </data>
+  <data name="CopyWithheld" xml:space="preserve">
+    <value>El autor de este documento pidió que no se copie nada de él.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. #710: why Copy is unavailable on a document without the copy permission; #558's extraction-class wording. Selecting still works</comment>
+  </data>
+  <data name="TextSelectionAnnounced" xml:space="preserve">
+    <value>Seleccionado: {0}</value>
+    <comment>ES-REVIEW #710 — new, not yet read by the reviewer. #710: what a screen reader says when a text selection settles (drag released, word or Select All chosen, Shift+arrow pause); {0} is the first 80 characters of the selected text, with an ellipsis when it is longer. Spoken only, never shown</comment>
+  </data>
+  <data name="TextCopiedAnnounced" xml:space="preserve">
+    <value>Copiado</value>
+    <comment>ES-REVIEW #710 — new, not yet read by the reviewer. #710: what a screen reader says after a successful copy of the selected text. Spoken only, never shown</comment>
+  </data>
+  <data name="UndoLossTitle" xml:space="preserve">
+    <value>Tus cambios no se podrán deshacer después</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. #633: the title of the question put before a save or a password change takes away the undo history. Shared by both reasons</comment>
+  </data>
+  <data name="UndoLossFlattenBody" xml:space="preserve">
+    <value>La opción “Hacer permanentes las marcas y firmas al guardar” está activada, así que este guardado incorpora tus cambios a la página. MegaPDF no te lo volverá a preguntar mientras este documento esté abierto.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. #633: the body when the reason is a save with the flatten setting on; asked once per open document (the #558 rule). Names the Windows setting, FlattenToggle.Header</comment>
+  </data>
+  <data name="UndoLossPasswordBody" xml:space="preserve">
+    <value>Definir, cambiar o quitar una contraseña guarda el documento y lo vuelve a abrir. Después, no podrás deshacer lo que hayas hecho hasta ahora.</value>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. #633: the body when the reason is the Password command, which writes the file and reopens it (ADR-004 section 6); asked every time. The French uses the verb, never the bare noun Annuler (also Cancel)</comment>
+  </data>
+</root>

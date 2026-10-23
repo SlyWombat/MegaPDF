@@ -36,6 +36,8 @@ final class PageToolsUITests: XCTestCase {
         app = XCUIApplication()
         app.launchArguments = ["-AppleLanguages", "(en)", "-AppleLocale", "en_US",
                                "-uiTestZoomProbes", "-uiTestPinNotices",
+                               // So `DocumentOpening.wait` waits for the open to finish (#681).
+                               PageInput.launchArgument,
                                // The tiles are not drag sources here, and `PageTileDrag` says
                                // why at length (#599): a tile that is both a drag source and a
                                // context-menu host leaves a *synthesised* long press with a
@@ -257,11 +259,13 @@ final class PageToolsUITests: XCTestCase {
             XCTAssertTrue(appears(button), dump("no Pages button on the strip"))
             tap(button, "the strip's Pages button")
         } else {
-            let more = app.buttons["viewerMore"].firstMatch
-            XCTAssertTrue(appears(more), dump("no More menu"))
-            tap(more, "the ⋯ menu")
+            // Run 39291554032 lost the ⋯ tap itself: five seconds later there was no menu on
+            // screen at all. `openMoreMenu` taps again only when the menu is visibly not open.
             let row = app.buttons["viewerPages"].firstMatch
-            XCTAssertTrue(appears(row, timeout: 5), dump("the ⋯ menu has no Pages row"))
+            if let failure = PageInput.openMoreMenu(in: app, for: row) {
+                XCTFail(dump(failure))
+                return
+            }
             tap(row, "the ⋯ menu's Pages row")
         }
         waitFor("pages on")
@@ -452,18 +456,21 @@ final class PageToolsUITests: XCTestCase {
     /// The reorder every tile carries without a drag: unusable with a screen reader is exactly
     /// what a drag is, so these are the ones that have to exist.
     ///
-    /// Driven on **tile 1** rather than tile 2, and that is not arbitrary (#599). `pageTile-2`
-    /// — the first tile of the iPad grid's second row — intermittently refuses to be touched
-    /// at all: `isHittable` stays false for ten seconds and more in about one opening of the
-    /// panel in eight, and XCUITest then declines the gesture outright, `Failed to synthesize
-    /// event: Not hittable`. It is that one tile, with the right frame, an unchanged subtree,
-    /// nothing over it, and at the same rate however this suite is launched, so it is a
-    /// property of the screen and **not** of this test; `docs/qa/ios-screen-inventory.md` §10c
-    /// has the measurements and says plainly that it wants a look of its own, because a tile a
-    /// test cannot touch may be a tile a finger cannot touch. Any middle tile proves the same
-    /// claim, so this one asks a tile that the platform will actually hand over, and the
-    /// grid's second row is still pressed by `testMoveToPutsThePageAtThePositionTyped`
-    /// (tile 3). If that tile ever starts doing it too, `settle` says so in the log.
+    /// Driven on **tile 1** rather than tile 2, and that is not arbitrary (#599, #640).
+    /// `pageTile-2` — the first tile of the iPad grid's second row — reports `isHittable ==
+    /// false` on about one fresh launch in six, for as long as anything watches (more than 15 s
+    /// measured), and XCUITest then declines a gesture on it outright: `Failed to synthesize
+    /// event: Not hittable`. #640 measured it: it is the first opening of the panel after a
+    /// launch and no later one (0 of 48 openings by toggling), it is that tile with the right
+    /// frame and nothing that stops a touch over it, it does not depend on the test probes or
+    /// on the thumbnail window pushes, and **a touch at the tile's centre lands every time** (12 of 12 sent
+    /// during one) and clears it. So it is XCUITest's accessibility verdict and not a lost touch
+    /// for a person, and `PagesGridTouchUITests` asserts the touch. It is still the reason
+    /// this test is aimed at a tile whose `isHittable` can be waited for: any middle tile
+    /// proves the same claim, and the grid's second row is still pressed by
+    /// `testMoveToPutsThePageAtThePositionTyped` (tile 3). `docs/qa/ios-screen-inventory.md`
+    /// §10c has the figures. Do not move this back to tile 2 until a relaunch measurement of
+    /// 48 openings shows no episode.
     func testMoveEarlierAndMoveLaterAreOnEveryTilesMenu() {
         launch(with: fourPages)
         openPages()

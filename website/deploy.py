@@ -37,8 +37,14 @@ apt/ holds a complete repository whose signature verifies against apt/megapdf.gp
 and whose .deb is the version linux/index.html offers. `--snap` does the same for
 the `snap:` regions of linux/index.html, for when the Snap Store listing is live.
 
-`--dry-run` reads nothing but the working tree: no .env, no network, no UAPI
-call. It is the only mode that is safe to run from a machine that is not Dave's.
+`--dry-run` never opens the login file and contacts nothing. It checks that the file
+is where a real deploy will look, and says so on its own line, so it is safe to run
+from any machine. On a machine without the file that line says NOT FOUND, which is
+expected anywhere but the release machine.
+
+The login file is `Lighting Arduino/.env` beside the main checkout, found from git's
+common directory, so a worktree finds the same file as the shared checkout (#668).
+`MEGAPDF_DEPLOY_ENV_DIR=<folder>` overrides the folder.
 
 `--only` uploads just the named parts of the tree, for a partial release. Linux 2.0
 went out before the stores approved 2.0, so only its parts went up, next to the
@@ -78,7 +84,34 @@ import urllib.request
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SITE = os.path.join(REPO, "website", "megapdf")
-ENV_PATH = os.path.join(os.path.dirname(REPO), "Lighting Arduino", ".env")
+ENV_DIR_VARIABLE = "MEGAPDF_DEPLOY_ENV_DIR"   # the folder holding the cPanel .env (#668); a path, never the file's contents
+ENV_FILE_NAME = ".env"
+
+
+def default_env_dir(repo=REPO):
+    """The Lighting Arduino folder beside the MAIN checkout (#668).
+
+    From a worktree at <main>/.claude/worktrees/<name>, `dirname(REPO)` is
+    <main>/.claude/worktrees, which is wrong. git's common directory is the main
+    checkout's .git from either place: relative (".git") from the main checkout,
+    absolute from a worktree, and joining it onto `repo` handles both. Outside git
+    (an unpacked tarball), it falls back to beside this tree, as before.
+    """
+    try:
+        common = subprocess.run(["git", "-C", repo, "rev-parse", "--git-common-dir"],
+                                capture_output=True, text=True, check=True).stdout.strip()
+        main_checkout = os.path.dirname(os.path.normpath(os.path.join(repo, common)))
+    except (OSError, subprocess.CalledProcessError):
+        main_checkout = repo
+    return os.path.join(os.path.dirname(main_checkout), "Lighting Arduino")
+
+
+def env_path():
+    """Where the login file is looked for, and whether the override chose it.
+    Never opens it: the dry run only asks whether it is there."""
+    override = os.environ.get(ENV_DIR_VARIABLE, "").strip()
+    folder = os.path.expanduser(override) if override else default_env_dir()
+    return os.path.join(folder, ENV_FILE_NAME), bool(override)
 DEFAULT_DEST = "/public_html/megapdf"
 
 CTX = ssl.create_default_context()
@@ -88,11 +121,16 @@ CTX.verify_mode = ssl.CERT_NONE
 
 class Server:
     """The UAPI endpoint. Constructed only when something is actually uploaded,
-    so --dry-run needs no .env and works anywhere."""
+    so --dry-run never opens the login file."""
 
-    def __init__(self):
+    def __init__(self, path):
         env = {}
-        with open(ENV_PATH) as f:
+        if not os.path.isfile(path):
+            raise SystemExit(
+                f"deploy.py: no login file at {path}\n"
+                f"  Set {ENV_DIR_VARIABLE} to the folder that holds the cPanel .env "
+                f"(website/README.md, Deploying). Nothing was uploaded.")
+        with open(path) as f:
             for line in f:
                 line = line.strip()
                 if line and not line.startswith("#") and "=" in line:
@@ -475,6 +513,10 @@ def main():
     chosen = plan(dest, args.privacy, args.linux, args.support)
     if args.only:
         chosen = only(chosen, args.only)
+    login_path, login_overridden = env_path()
+    # A real deploy reads the login file before anything is staged, so a missing
+    # one stops here with no temporary folder left behind (#668).
+    server = None if args.dry_run else Server(login_path)
     tmp, targets = staged(chosen, live)
     if args.landing:
         # Uploads keep the local file's name, so the landing page goes up from a
@@ -513,12 +555,17 @@ def main():
               + (" — privacy/ included" if args.privacy else " — privacy/ untouched"))
         print(linux_note)
         print(support_note)
+        where = f"from ${ENV_DIR_VARIABLE}" if login_overridden else "beside the main checkout"
+        if os.path.isfile(login_path):
+            print(f"Login file ({where}): {login_path} — found")
+        else:
+            print(f"Login file ({where}): {login_path} — NOT FOUND. A real deploy stops here; "
+                  f"set {ENV_DIR_VARIABLE} to the folder that holds it.")
         print("To do it for real, run the same command without --dry-run.")
         shutil.rmtree(tmp, ignore_errors=True)
         return 0
 
     failures = 0
-    server = Server()
     # No mkdir: this server's UAPI has no Fileman/mkdir ("could not find the
     # function"), and Fileman/upload_files creates every missing directory in a
     # file's path by itself. Seen on the Linux 2.0 deploy (2026-09-19), which

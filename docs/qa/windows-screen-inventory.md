@@ -67,6 +67,7 @@ Check every surface in en, fr-CA and fr-FR, light and dark, at effective widths 
 - [ ] **Restricted notice** with an Unlock button (the owner doesn't allow changes, #131). M, `encrypted`/restricted fixtures
 - [ ] **Recovery-off notice:** recovery is off for a document opened with a password. M
 - [ ] **Security notice:** password set, changed or removed. M
+- [ ] **Shrink notice:** Smaller copy saved (before and after sizes, Success) or Nothing to shrink (Informational) (#632). R `shrink-notice`
 - [ ] **Placement hint** while placing. H
 - [ ] **Default-app card**, "Make MegaPDF your PDF app?", with its Choose default apps button: first run, once. M
 
@@ -82,14 +83,13 @@ Check every surface in en, fr-CA and fr-FR, light and dark, at effective widths 
   
   M
 - [ ] **Page rewrite warning** before an edit that rewrites the page (`PageRewriteWarningTitle`, #139). M
+- [ ] **Your changes can't be undone after this** — flatten or password wording (#633). Save (default) or Continue / Cancel; reached by a save with "Make marks & signatures permanent when saving" on and an edit, or the Password command with an edit. R `undo-loss`
 - [ ] **Signature dialogs:** Type signature, Draw signature, Rename signature, Delete signature "name"? M
 - [ ] **Third-party notices** (scrolling text, or the notices-load-failed message). M
 - [ ] **Messages** (`ShowErrorAsync`, with OK):
   - Could not open
   - Could not save (with the Save as hint)
   - Save first (before Shrink)
-  - Nothing to shrink
-  - Smaller copy saved (the before and after sizes)
   - Could not shrink
   - Could not edit
   - Can't edit this text: the layout guard refusals (`CannotEditTextTitle`)

@@ -29,16 +29,18 @@ pricing. Done that way for 1.7.0 on 2026-09-11.
 
 | Field | Value |
 |---|---|
-| **Support URL** | `https://github.com/SlyWombat/MegaPDF` |
-| **Marketing URL** (optional) | `https://electricrv.ca/megapdf/` *(landing page — issue #25; use the GitHub URL until it's live)* |
+| **Support URL** | `https://electricrv.ca/megapdf/support/` *(the support page, live since 2026-10-02, #418/#662)* |
+| **Marketing URL** (optional) | `https://electricrv.ca/megapdf/` |
 | **Privacy Policy URL** | `https://electricrv.ca/megapdf/privacy/` *(hosted on electricrv.ca alongside SlyLED's — created by issue #25; the page must be live before submission. Same for Google Play's listing.)* |
 
 <!-- copy-by-language -->
 ## Copy by language
 
-App Store Connect → the version page → **Localizations**: **English (Canada)** is the primary language; add **French (Canada)** and **French**. Every field for every language is below as a block that pastes as-is. Character limits are in brackets with the actual count beside them.
+App Store Connect → the version page → **Localizations**: **English (Canada)** is the primary language; add **French (Canada)** and **French**. Every field for every language is below as a block that pastes as-is. Character limits are in brackets with the actual count beside them. Since #724 add **Spanish (Mexico)** (`es-MX`, App Store Connect has no es-419) and **Spanish (Spain)** (`es-ES`).
 
 *French copy was translated by the build assistant against `docs/localisation-glossary.md` and signed off by a francophone reviewer for 2.0 (2026-09-18, #242); new copy gets the same read before it goes live. The France variant is derived from the Canadian one by `tools/gen_listing_copy.py`.*
+
+*Spanish copy was written by the build assistant against `docs/localisation-glossary-es.md` and is **ES-REVIEW #724: not yet read by the reviewer**. Fable's approval, recorded on #724, gates it; nothing Spanish is pasted into a store before then. The Spain variant is derived from the Latin American one by `tools/gen_listing_copy.py` (`spain()`), with no punctuation pass.*
 
 ### English (Canada) — `en-CA`
 
@@ -325,6 +327,196 @@ redact: Caviardez : c'est retiré, pas seulement couvert.
 home: Pas de compte. Pas de cloud. Pas de suivi.
 ```
 
+### Español (México) — `es-MX`
+
+**Name** [30] (7)
+```
+MegaPDF
+```
+
+**Subtitle** [30] (24)
+```
+Llena, marca y firma PDF
+```
+
+**Promotional text** [170] (141)
+```
+¿Te enviaron un PDF para firmar? Ábrelo, toca las casillas, coloca tu firma y guarda. Listo en menos de un minuto, sin cuenta ni suscripción.
+```
+
+**Description** [4000] (3786)
+```
+Abrir. Corregir. Guardar. Listo.
+
+MegaPDF hace el trabajo que la mayoría de la gente realmente tiene con un PDF: alguien te envió un formulario y necesitas devolverlo llenado, marcado y firmado. Sin cuenta. Sin suscripción. Sin nube. Todo sucede en tu dispositivo.
+
+Marca cualquier casilla
+Toca una casilla y queda marcada, tanto en campos de formulario interactivos reales como en simples cuadros impresos. MegaPDF reconoce las casillas dibujadas que otras aplicaciones tratan como simple decoración.
+
+Escribe en cualquier línea
+Toca donde va la respuesta y escríbela. Elige el tamaño y el tipo de fuente (sans, serif o monoespaciada) para que lo que agregues combine con el formulario que estás completando. Arrástralo a su lugar, o tócalo de nuevo para corregir un error. Todo lo que agregas es texto real en el que se puede buscar, no un adhesivo pegado sobre la página.
+
+Corrige el texto del propio documento
+¿Fecha equivocada? ¿Nombre mal escrito? Toca la línea y vuelve a escribirla. MegaPDF conserva la fuente del propio documento siempre que puede y te avisa cuando tuvo que usar una parecida. Si un cambio alterara el resto de la página, te lo dice en lugar de mover cosas en silencio. Deshacer devuelve el original exactamente como estaba.
+
+Censura, y de verdad desaparece
+Selecciona lo que tiene que desaparecer (un nombre, una dirección, una imagen) y MegaPDF lo quita del archivo en lugar de taparlo. Lo que había debajo desaparece: ninguna otra aplicación puede copiarlo ni buscarlo.
+
+Firma con convicción
+Dibuja tu firma con el dedo o fotografía la que tienes en papel; el fondo blanco desaparece automáticamente. Tus firmas se quedan en una biblioteca privada en tu dispositivo; coloca una en un documento y muévela y cámbiale el tamaño hasta que quede justo sobre la línea.
+
+Guarda sin miedo
+Guardar escribe sobre el archivo original, de forma segura. MegaPDF verifica cada documento antes de tocar tu original, así que un guardado fallido nunca puede corromper el archivo que alguien te envió. O conserva el original y guarda una copia. Exportar como Markdown escribe el texto del documento (títulos, listas, los valores que ingresaste) como archivo Markdown y deja el PDF tal como estaba.
+
+Encuentra cualquier palabra
+Busca en todo el documento mientras escribes: cada coincidencia se ilumina y el contador dice cuántas hay, así que la única cláusula que necesitas en un contrato de arrendamiento de cuarenta páginas está a unos toques de distancia.
+
+Lee el documento, no la aplicación
+El modo de lectura quita las barras de herramientas de la pantalla y deja solo la página. Con él vienen los colores de página: Sepia para una lectura larga, Noche para una habitación a oscuras; y Noche invierte también las imágenes, deliberadamente. MegaPDF puede abrir todos los documentos de esa forma.
+
+Pon las páginas en orden
+Gira una página que llegó de lado, elimina una, arrastra las páginas al orden correcto, inserta una página en blanco, agrega las páginas de otro PDF o guarda algunas páginas como su propio archivo. Cada acción es un solo paso, y un solo Deshacer la revierte.
+
+Privado por diseño
+MegaPDF no solicita ningún permiso y no realiza ninguna conexión de red. Tus documentos y tu firma nunca salen de tu dispositivo: no hay ningún servidor al que puedan ir. La aplicación es de código abierto, así que cualquiera puede verificarlo.
+
+Funciona con todo
+Abre un PDF desde Mail, Archivos, iCloud Drive o cualquier aplicación que comparta uno (MegaPDF está entre las aplicaciones que ofrecen para abrirlo) y devuélvelo con Compartir. Los documentos que completas y firmas aquí son PDF estándar: se abren perfectamente en cualquier otra aplicación de PDF.
+
+MegaPDF es deliberadamente simple: no te entierra en barras de herramientas. Abre, corrige, guarda. Listo.
+```
+
+**Keywords** [100] (91)
+```
+llenar,completar,formulario,casilla,editor,buscar,documento,anotar,lector,censurar,contrato
+```
+
+**What's new** [4000] (127) — 2.3, from `docs/release-notes/2.3/app-store.md`
+```
+PENDING: the Español (Latinoamérica) release notes are written with docs/release-notes/2.3/app-store.md at release time (#724).
+```
+
+**Screenshot captions** (optional overlay text) — iPhone 6.9", 9 files, in this order
+```
+reading: El modo de lectura deja solo la página, esa que marcaste y firmaste
+text-edit: Corrige un error en el propio documento
+sign: Tus firmas, guardadas en tu dispositivo
+draw: Dibújala una vez, úsala en todas partes
+pages: Gira, reordena, elimina: un solo Deshacer lo revierte todo
+text: Escribe en la línea en blanco, con tu tamaño y tu fuente
+search: Encuentra cualquier palabra, en todas las páginas
+redact: Censurar quita el contenido. No solo lo tapa.
+home: Sin cuenta. Sin nube. Sin rastreo.
+```
+
+**Screenshot captions** (optional overlay text) — iPad 13", 9 files, in this order
+```
+pages: Tu propia barra de herramientas y las páginas en una barra lateral: hecho para la pantalla grande
+reading: Y luego desaparece: el modo de lectura deja solo la página
+text-edit: Corrige un error en el propio documento
+sign: Tus firmas, guardadas en tu dispositivo
+draw: Dibújala una vez, úsala en todas partes
+text: Escribe en la línea en blanco, con tu tamaño y tu fuente
+search: Encuentra cualquier palabra, en todas las páginas
+redact: Censurar quita el contenido. No solo lo tapa.
+home: Sin cuenta. Sin nube. Sin rastreo.
+```
+
+### Español (España) — `es-ES`
+
+**Name** [30] (7)
+```
+MegaPDF
+```
+
+**Subtitle** [30] (26)
+```
+Rellena, marca y firma PDF
+```
+
+**Promotional text** [170] (141)
+```
+¿Te enviaron un PDF para firmar? Ábrelo, toca las casillas, coloca tu firma y guarda. Listo en menos de un minuto, sin cuenta ni suscripción.
+```
+
+**Description** [4000] (3781)
+```
+Abrir. Corregir. Guardar. Listo.
+
+MegaPDF hace el trabajo que la mayoría de la gente realmente tiene con un PDF: alguien te envió un formulario y necesitas devolverlo rellenado, marcado y firmado. Sin cuenta. Sin suscripción. Sin nube. Todo sucede en tu dispositivo.
+
+Marca cualquier casilla
+Toca una casilla y queda marcada, tanto en campos de formulario interactivos reales como en simples cuadros impresos. MegaPDF reconoce las casillas dibujadas que otras aplicaciones tratan como simple decoración.
+
+Escribe en cualquier línea
+Toca donde va la respuesta y escríbela. Elige el tamaño y el tipo de fuente (sans, serif o monoespaciada) para que lo que añadas combine con el formulario que estás completando. Arrástralo a su lugar, o tócalo de nuevo para corregir un error. Todo lo que añades es texto real en el que se puede buscar, no un adhesivo pegado sobre la página.
+
+Corrige el texto del propio documento
+¿Fecha equivocada? ¿Nombre mal escrito? Toca la línea y vuelve a escribirla. MegaPDF conserva la fuente del propio documento siempre que puede y te avisa cuando tuvo que usar una parecida. Si un cambio alterara el resto de la página, te lo dice en lugar de mover cosas en silencio. Deshacer devuelve el original exactamente como estaba.
+
+Censura, y de verdad desaparece
+Selecciona lo que tiene que desaparecer (un nombre, una dirección, una imagen) y MegaPDF lo quita del archivo en lugar de taparlo. Lo que había debajo desaparece: ninguna otra aplicación puede copiarlo ni buscarlo.
+
+Firma con convicción
+Dibuja tu firma con el dedo o fotografía la que tienes en papel; el fondo blanco desaparece automáticamente. Tus firmas se quedan en una biblioteca privada en tu dispositivo; coloca una en un documento y muévela y cámbiale el tamaño hasta que quede justo sobre la línea.
+
+Guarda sin miedo
+Guardar escribe sobre el archivo original, de forma segura. MegaPDF verifica cada documento antes de tocar tu original, así que un guardado fallido nunca puede corromper el archivo que alguien te envió. O conserva el original y guarda una copia. Exportar como Markdown escribe el texto del documento (títulos, listas, los valores que introdujiste) como archivo Markdown y deja el PDF tal como estaba.
+
+Encuentra cualquier palabra
+Busca en todo el documento mientras escribes: cada coincidencia se ilumina y el contador dice cuántas hay, así que la única cláusula que necesitas en un contrato de alquiler de cuarenta páginas está a unos toques de distancia.
+
+Lee el documento, no la aplicación
+El modo de lectura quita las barras de herramientas de la pantalla y deja solo la página. Con él vienen los colores de página: Sepia para una lectura larga, Noche para una habitación a oscuras; y Noche invierte también las imágenes, deliberadamente. MegaPDF puede abrir todos los documentos de esa forma.
+
+Pon las páginas en orden
+Gira una página que llegó de lado, elimina una, arrastra las páginas al orden correcto, inserta una página en blanco, añade las páginas de otro PDF o guarda algunas páginas como su propio archivo. Cada acción es un solo paso, y un solo Deshacer la revierte.
+
+Privado por diseño
+MegaPDF no solicita ningún permiso y no realiza ninguna conexión de red. Tus documentos y tu firma nunca salen de tu dispositivo: no hay ningún servidor al que puedan ir. La aplicación es de código abierto, así que cualquiera puede verificarlo.
+
+Funciona con todo
+Abre un PDF desde Mail, Archivos, iCloud Drive o cualquier aplicación que comparta uno (MegaPDF está entre las aplicaciones que ofrecen para abrirlo) y devuélvelo con Compartir. Los documentos que completas y firmas aquí son PDF estándar: se abren perfectamente en cualquier otra aplicación de PDF.
+
+MegaPDF es deliberadamente simple: no te entierra en barras de herramientas. Abre, corrige, guarda. Listo.
+```
+
+**Keywords** [100] (93)
+```
+rellenar,completar,formulario,casilla,editor,buscar,documento,anotar,lector,censurar,contrato
+```
+
+**What's new** [4000] (120) — 2.3, from `docs/release-notes/2.3/app-store.md`
+```
+PENDING: the Español (España) release notes are written with docs/release-notes/2.3/app-store.md at release time (#724).
+```
+
+**Screenshot captions** (optional overlay text) — iPhone 6.9", 9 files, in this order
+```
+reading: El modo de lectura deja solo la página, esa que marcaste y firmaste
+text-edit: Corrige un error en el propio documento
+sign: Tus firmas, guardadas en tu dispositivo
+draw: Dibújala una vez, úsala en todas partes
+pages: Gira, reordena, elimina: un solo Deshacer lo revierte todo
+text: Escribe en la línea en blanco, con tu tamaño y tu fuente
+search: Encuentra cualquier palabra, en todas las páginas
+redact: Censurar quita el contenido. No solo lo tapa.
+home: Sin cuenta. Sin nube. Sin rastreo.
+```
+
+**Screenshot captions** (optional overlay text) — iPad 13", 9 files, in this order
+```
+pages: Tu propia barra de herramientas y las páginas en una barra lateral: hecho para la pantalla grande
+reading: Y luego desaparece: el modo de lectura deja solo la página
+text-edit: Corrige un error en el propio documento
+sign: Tus firmas, guardadas en tu dispositivo
+draw: Dibújala una vez, úsala en todas partes
+text: Escribe en la línea en blanco, con tu tamaño y tu fuente
+search: Encuentra cualquier palabra, en todas las páginas
+redact: Censurar quita el contenido. No solo lo tapa.
+home: Sin cuenta. Sin nube. Sin rastreo.
+```
+
 ### Mac App Store — English (Canada) — `mac-en-CA`
 
 *The Mac version's description and promotional text. Name, subtitle and keywords are the shared ones above.*
@@ -478,6 +670,108 @@ Chaque commande est dans la barre des menus avec le raccourci attendu, les docum
 MegaPDF est volontairement simple : il ne vous noie pas sous les barres d'outils. Il ouvre, il corrige, il enregistre. Terminé.
 ```
 
+### Mac App Store — Español (México) — `mac-es-MX`
+
+*The Mac version's description and promotional text. Name, subtitle and keywords are the shared ones above.*
+
+**Promotional text** [170] (148)
+```
+¿Te enviaron un PDF para firmar? Ábrelo, haz clic en las casillas, coloca tu firma y guarda. Listo en menos de un minuto, sin cuenta ni suscripción.
+```
+
+**Description** [4000] (3856)
+```
+Abrir. Corregir. Guardar. Listo.
+
+MegaPDF hace el trabajo que la mayoría de la gente realmente tiene con un PDF: alguien te envió un formulario y necesitas devolverlo llenado, marcado y firmado, en tu propio Mac.
+
+Marca cualquier casilla
+Haz clic en una casilla y queda marcada, tanto en campos de formulario reales como en simples cuadros impresos. MegaPDF reconoce las casillas dibujadas que otras aplicaciones tratan como simple decoración.
+
+Escribe en cualquier línea
+Haz clic donde va la respuesta y escríbela, con el tamaño y el tipo de fuente (sans, serif o monoespaciada) que combinan con el formulario. Arrástralo a su lugar, o haz doble clic en él para corregir un error. Todo lo que agregas es texto real en el que se puede buscar, no un adhesivo pegado sobre la página.
+
+Corrige el texto del propio documento
+¿Fecha equivocada? ¿Nombre mal escrito? Haz clic en la línea y vuelve a escribirla. MegaPDF conserva la fuente del propio documento siempre que puede y lo dice cuando tuvo que usar una parecida. Si un cambio alterara la página, te lo dice en lugar de mover cosas en silencio, y Deshacer devuelve el original exactamente como estaba.
+
+Censura, y de verdad desaparece
+Selecciona lo que tiene que desaparecer (un nombre, una dirección, una imagen) y MegaPDF lo quita del archivo en lugar de taparlo. Lo que había debajo desaparece: ninguna otra aplicación puede copiarlo ni buscarlo. También está Cubrir, que dice claramente que solo cubre.
+
+Firma con convicción
+Dibuja tu firma con el trackpad o el mouse, escríbela, o fotografía la que tienes en papel; el fondo blanco desaparece automáticamente. Tus firmas se quedan en una biblioteca privada en tu Mac; coloca una en un documento y muévela y cámbiale el tamaño hasta que quede justo sobre la línea.
+
+Guarda sin miedo
+Guardar escribe sobre el archivo que abriste, de forma segura. MegaPDF verifica primero cada documento, así que un guardado fallido nunca puede corromper el archivo que alguien te envió. O guarda una copia, o un archivo Markdown con el texto del documento, y el PDF queda como estaba. Al cerrar o salir con cambios sin guardar, siempre te pregunta primero.
+
+Encuentra cualquier palabra
+Busca en todo el documento mientras escribes: cada coincidencia se ilumina y el contador dice cuántas hay, así que la única cláusula que necesitas en un contrato de arrendamiento de cuarenta páginas está a una pulsación de distancia.
+
+Lee el documento, no la aplicación
+El modo de lectura (⇧⌘R) quita la barra de herramientas y la barra lateral y deja solo la página; Esc devuelve la ventana. Los colores de página están junto a él en Opciones: Sepia para una lectura larga, Noche para una habitación a oscuras; y Noche invierte también las imágenes, deliberadamente.
+
+Pon las páginas en orden
+La barra lateral Miniaturas ahora es un lugar para trabajar: gira una página que llegó de lado, elimina una, arrastra las páginas al orden correcto, inserta una página en blanco, inserta las páginas de otro PDF o guarda una selección como su propio archivo. Cada acción es un solo paso, y un solo Deshacer la revierte.
+
+Privado por diseño
+MegaPDF no realiza ninguna conexión de red (su sandbox ni siquiera las permite) y solo abre los archivos que tú eliges. Tus documentos y tu firma nunca salen de tu Mac. La aplicación es de código abierto, así que cualquiera puede verificarlo.
+
+Hecho para el Mac
+Cada comando está en la barra de menús con el atajo que esperas, los documentos se abren como pestañas en una sola ventana, y un PDF abierto desde el Finder se une al que ya tienes. VoiceOver lee la barra de herramientas y la página, la aplicación sigue tu apariencia clara u oscura, y lo que firmas aquí es un PDF estándar que se abre en Vista Previa y en cualquier otro lugar.
+
+MegaPDF es deliberadamente simple: no te entierra en barras de herramientas. Abre, corrige, guarda. Listo.
+```
+
+### Mac App Store — Español (España) — `mac-es-ES`
+
+*The Mac version's description and promotional text. Name, subtitle and keywords are the shared ones above.*
+
+**Promotional text** [170] (148)
+```
+¿Te enviaron un PDF para firmar? Ábrelo, haz clic en las casillas, coloca tu firma y guarda. Listo en menos de un minuto, sin cuenta ni suscripción.
+```
+
+**Description** [4000] (3852)
+```
+Abrir. Corregir. Guardar. Listo.
+
+MegaPDF hace el trabajo que la mayoría de la gente realmente tiene con un PDF: alguien te envió un formulario y necesitas devolverlo rellenado, marcado y firmado, en tu propio Mac.
+
+Marca cualquier casilla
+Haz clic en una casilla y queda marcada, tanto en campos de formulario reales como en simples cuadros impresos. MegaPDF reconoce las casillas dibujadas que otras aplicaciones tratan como simple decoración.
+
+Escribe en cualquier línea
+Haz clic donde va la respuesta y escríbela, con el tamaño y el tipo de fuente (sans, serif o monoespaciada) que combinan con el formulario. Arrástralo a su lugar, o haz doble clic en él para corregir un error. Todo lo que añades es texto real en el que se puede buscar, no un adhesivo pegado sobre la página.
+
+Corrige el texto del propio documento
+¿Fecha equivocada? ¿Nombre mal escrito? Haz clic en la línea y vuelve a escribirla. MegaPDF conserva la fuente del propio documento siempre que puede y lo dice cuando tuvo que usar una parecida. Si un cambio alterara la página, te lo dice en lugar de mover cosas en silencio, y Deshacer devuelve el original exactamente como estaba.
+
+Censura, y de verdad desaparece
+Selecciona lo que tiene que desaparecer (un nombre, una dirección, una imagen) y MegaPDF lo quita del archivo en lugar de taparlo. Lo que había debajo desaparece: ninguna otra aplicación puede copiarlo ni buscarlo. También está Cubrir, que dice claramente que solo cubre.
+
+Firma con convicción
+Dibuja tu firma con el trackpad o el ratón, escríbela, o fotografía la que tienes en papel; el fondo blanco desaparece automáticamente. Tus firmas se quedan en una biblioteca privada en tu Mac; coloca una en un documento y muévela y cámbiale el tamaño hasta que quede justo sobre la línea.
+
+Guarda sin miedo
+Guardar escribe sobre el archivo que abriste, de forma segura. MegaPDF verifica primero cada documento, así que un guardado fallido nunca puede corromper el archivo que alguien te envió. O guarda una copia, o un archivo Markdown con el texto del documento, y el PDF queda como estaba. Al cerrar o salir con cambios sin guardar, siempre te pregunta primero.
+
+Encuentra cualquier palabra
+Busca en todo el documento mientras escribes: cada coincidencia se ilumina y el contador dice cuántas hay, así que la única cláusula que necesitas en un contrato de alquiler de cuarenta páginas está a una pulsación de distancia.
+
+Lee el documento, no la aplicación
+El modo de lectura (⇧⌘R) quita la barra de herramientas y la barra lateral y deja solo la página; Esc devuelve la ventana. Los colores de página están junto a él en Opciones: Sepia para una lectura larga, Noche para una habitación a oscuras; y Noche invierte también las imágenes, deliberadamente.
+
+Pon las páginas en orden
+La barra lateral Miniaturas ahora es un lugar para trabajar: gira una página que llegó de lado, elimina una, arrastra las páginas al orden correcto, inserta una página en blanco, inserta las páginas de otro PDF o guarda una selección como su propio archivo. Cada acción es un solo paso, y un solo Deshacer la revierte.
+
+Privado por diseño
+MegaPDF no realiza ninguna conexión de red (su sandbox ni siquiera las permite) y solo abre los archivos que tú eliges. Tus documentos y tu firma nunca salen de tu Mac. La aplicación es de código abierto, así que cualquiera puede verificarlo.
+
+Hecho para el Mac
+Cada comando está en la barra de menús con el atajo que esperas, los documentos se abren como pestañas en una sola ventana, y un PDF abierto desde el Finder se une al que ya tienes. VoiceOver lee la barra de herramientas y la página, la aplicación sigue tu apariencia clara u oscura, y lo que firmas aquí es un PDF estándar que se abre en Vista Previa y en cualquier otro lugar.
+
+MegaPDF es deliberadamente simple: no te entierra en barras de herramientas. Abre, corrige, guarda. Listo.
+```
+
 <!-- /copy-by-language -->
 
 ## App Privacy (Data Collection)
@@ -552,13 +846,13 @@ changes from "the one you checked and signed" (closing a thought `reading`
 opened) to the contrast argument instead ("then it's gone": the same
 workspace `pages` just showed, taken away). The other seven slots keep the
 iPhone's words exactly; nothing about *them* is an iPad story.
-`tools/capture-gate/stores.py`'s `"ios"` profile's `"order"` is a
-`{"iphone-6_9": [...], "ipad-13": [...]}` dict now rather than one shared
-list, and `tools/gen_listing_copy.py`'s `AS_EN`/`AS_FR_CA` dicts carry
-`captions_iphone` and `captions_ipad` instead of one `captions` — in both
-places, two sequences side by side rather than one list with an iPad
-exception folded in, so the difference is something the next reader sees
-rather than has to reconstruct.
+The iOS orders live in `tools/store_slots.py` (#656) as a
+`{"iphone-6_9": [...], "ipad-13": [...]}` dict rather than one shared list;
+`tools/capture-gate/stores.py`'s `"ios"` profile's `"order"` reads it, and
+`tools/gen_listing_copy.py`'s `AS_EN`/`AS_FR_CA` dicts carry `captions_iphone`
+and `captions_ipad` (keyed by pose) instead of one `captions`. Two sequences
+side by side rather than one list with an iPad exception folded in, so the
+difference is something the next reader sees rather than has to reconstruct.
 
 Reading mode (#506) and Pages (#174, #613) both open the bundled six-page
 agreement (`demo-pages.pdf` / `demo-fr-pages.pdf` / `demo-fr-FR-pages.pdf`,

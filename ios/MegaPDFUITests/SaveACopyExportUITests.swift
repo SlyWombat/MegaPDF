@@ -26,6 +26,11 @@ final class SaveACopyExportUITests: XCTestCase {
         app = XCUIApplication()
         // English labels regardless of the simulator's language.
         app.launchArguments += ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        // So `DocumentOpening.wait` waits for the open to finish, not just for the page (#706).
+        app.launchArguments += [PageInput.launchArgument]
+        // "Saved" and "Exported" are the self-clearing banner now (#631); pinned, it outlives the
+        // wait. A later wait cannot be satisfied by an earlier one: the labels differ.
+        app.launchArguments += ["-uiTestPinNotices"]
     }
 
     /// One page, one line of real text. Written out here rather than shared with
@@ -65,72 +70,50 @@ final class SaveACopyExportUITests: XCTestCase {
         XCTAssertTrue(DocumentOpening.wait(for: page, in: app), dump(DocumentOpening.why(app, "the document did not open")))
     }
 
-    /// Waits for a control to stop being disabled. Everything that writes is disabled while a
-    /// save or the page check after an edit is still running (#145), and XCUITest taps a
-    /// disabled control without complaining — `FilesEndToEndUITests` learned that the hard
-    /// way, as "the export sheet did not appear" when the tap had simply been swallowed.
-    private func waitEnabled(_ element: XCUIElement, _ what: String, timeout: TimeInterval = 60) {
-        let deadline = Date().addingTimeInterval(timeout)
-        while !element.isEnabled && Date() < deadline {
-            RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.5))
-        }
-        XCTAssertTrue(element.isEnabled, dump("\(what) stayed disabled"))
-    }
-
-    /// Picks a row out of the viewer's More menu, by identifier, waiting for it to be enabled.
+    /// Picks a row out of the viewer's More menu, by identifier, waiting for it to be enabled:
+    /// everything that writes is disabled while a save or the page check after an edit is still
+    /// running (#145), and XCUITest taps a disabled control without complaining —
+    /// `FilesEndToEndUITests` learned that the hard way, as "the export sheet did not appear"
+    /// when the tap had simply been swallowed. The identifier is the contract; a lost one fails
+    /// as "the row is missing" rather than as the absent sheet this test is about.
     private func tapInMoreMenu(identifier: String, label: String) {
-        let more = app.buttons["viewerMore"].firstMatch
-        XCTAssertTrue(more.waitForExistence(timeout: 15), dump("no More menu"))
-        more.tap()
-        var row = app.buttons[identifier].firstMatch
-        if !row.waitForExistence(timeout: 5) {
-            // The identifier is the contract; the label is what the e2e suite has always used,
-            // kept as a fallback so a lost identifier fails as "the row is missing" rather than
-            // as the absent sheet this test is about.
-            row = app.buttons[label].firstMatch
-            XCTAssertTrue(row.waitForExistence(timeout: 5), dump("no \(label) in More"))
+        let row = app.buttons[identifier].firstMatch
+        if let failure = PageInput.openMoreMenu(in: app, for: row) {
+            XCTFail(dump("\(failure) (\(label))"))
+            return
         }
-        waitEnabled(row, "the \(label) row")
+        XCTAssertTrue(PageInput.waitEnabled(row), dump("the \(label) row stayed disabled"))
         row.tap()
     }
 
     /// The system export sheet, and its Save. **This is the #589 assertion**: with two
-    /// exporters on one view, the sheet for whichever lost simply never came up, and the wait
-    /// below is what notices. iOS 26's sheet has no name field, so a clash is answered Keep
-    /// Both and the name is the OS's business.
+    /// exporters on one view, the sheet for whichever lost simply never came up, and
+    /// `ExportSheet.save` is what notices. iOS 26's sheet has no name field, so a clash is
+    /// answered Keep Both and the name is the OS's business.
     private func saveOnTheExportSheet(_ what: String) {
-        let bar = app.navigationBars["FullDocumentManagerViewControllerNavigationBar"]
-        XCTAssertTrue(bar.waitForExistence(timeout: 30),
-                      dump("the \(what) export sheet did not appear"))
-        let save = bar.buttons["Save"]
-        XCTAssertTrue(save.waitForExistence(timeout: 15), dump("no Save on the \(what) export sheet"))
-        save.tap()
-        let keepBoth = app.buttons["Keep Both"].firstMatch
-        if keepBoth.waitForExistence(timeout: 3) { keepBoth.tap() }
+        if let failure = ExportSheet.save(in: app) {
+            XCTFail(dump("\(failure) (\(what))"))
+        }
     }
 
-    /// Waits for the app's own completion alert and returns its title, then dismisses it.
+    /// Waits for the app's own completion notice (#631), which says what finished.
     /// Which word it is matters as much as that it appeared: "Saved" is a copy of the
     /// document, "Exported" is the one-way Markdown export (#386), and with one exporter
     /// serving both kinds, a result delivered to the wrong completion would say the wrong one.
-    @discardableResult
-    private func acknowledgeCompletion(expected: String) -> String {
-        let alert = app.alerts.firstMatch
-        XCTAssertTrue(alert.waitForExistence(timeout: 30), dump("no completion alert"))
-        let title = alert.staticTexts.firstMatch.label
-        XCTAssertTrue(alert.staticTexts[expected].waitForExistence(timeout: 5),
-                      dump("the completion alert said \"\(title)\", not \"\(expected)\""))
-        alert.buttons.firstMatch.tap()
-        return title
+    /// An alert in its place fails at once: that is a "Save failed ...", not a confirmation.
+    private func expectCompletionNotice(_ expected: String) {
+        if let failure = ExportSheet.completionNotice(in: app, expected: expected) {
+            XCTFail(dump(failure))
+        }
     }
 
     /// Save a copy, end to end through the real sheet: the sheet appears, Save writes a file,
-    /// and the app says "Saved".
+    /// and the app says "Saved" with a notice.
     func testSaveACopyPresentsTheExportSheet() {
         launchWithADocument("MegaPDF Save A Copy Test")
         tapInMoreMenu(identifier: "viewerSaveCopy", label: "Save a copy")
         saveOnTheExportSheet("Save a copy")
-        acknowledgeCompletion(expected: "Saved")
+        expectCompletionNotice("Saved")
     }
 
     /// Both exports in one session, which is the shape #589 actually was: each worked alone
@@ -142,10 +125,10 @@ final class SaveACopyExportUITests: XCTestCase {
 
         tapInMoreMenu(identifier: "viewerExportMarkdown", label: "Export as Markdown")
         saveOnTheExportSheet("Markdown")
-        acknowledgeCompletion(expected: "Exported")
+        expectCompletionNotice("Exported")
 
         tapInMoreMenu(identifier: "viewerSaveCopy", label: "Save a copy")
         saveOnTheExportSheet("Save a copy")
-        acknowledgeCompletion(expected: "Saved")
+        expectCompletionNotice("Saved")
     }
 }

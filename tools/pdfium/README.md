@@ -110,8 +110,9 @@ either would only admit changes the patches now fix.
 
 `build-pdfium.sh` drives [bblanchon/pdfium-binaries](https://github.com/bblanchon/pdfium-binaries)
 at the tag matching the pinned Chromium branch, adds this series after its own patches,
-and stamps `staging/VERSION` with `MEGAPDF_PATCHES` (the count) and `MEGAPDF_SERIES`
-(a hash of the patch files).
+and stamps `staging/VERSION` with `MEGAPDF_PATCHES` (the fix level: the highest patch number,
+which is also the number of patches while none has landed upstream; see Upstream below) and
+`MEGAPDF_SERIES` (a hash of the patch and `.upstreamed` files).
 
 ```bash
 tools/pdfium/build-pdfium.sh ~/pdfium-build linux x64            # full build, ~15 min on 16 cores
@@ -145,7 +146,229 @@ The **PDFium (patched) build** workflow builds every target the apps ship. With
    and headers and checks every archive carries the same `VERSION`. macOS, Linux and iOS
    fetch from `libs/pdfium/RELEASE` at build time, and the iOS cache key follows its hash.
 
-## Upstream
+## Upstream (#129)
 
-Each fix is offered to PDFium (#129). A patch is dropped at the first pinned Chromium
-branch that contains it.
+Every fix is offered to PDFium, one Gerrit change per behaviour, with a PDFium-native test;
+the procedure is below. A patch whose fix has reached the pinned branch becomes an
+`.upstreamed` marker (same number) and is no longer applied; `MEGAPDF_PATCHES` is the
+highest number in the series, so nothing that checks `>= N` notices. **Nobody ever
+`git rm`s a patch**: that is how the level would drop (it used to be the file count).
+
+Agents prepare a change (steps a-g below); **Dave uploads it, answers every reviewer and
+attests to it himself** (step h, under the Electric RV corporate CLA; #129, decision of
+2026-10-21 09:51). Chromium's AI policy puts the human account owner on the hook, so nothing
+is uploaded, and no bug is filed, by an agent.
+
+| Patch | Class | Bug | CL | Status | Upstream commit | First branch | Marker since pin |
+|---|---|---|---|---|---|---|---|
+| 0001 | A | | | not sent | | | |
+| 0002 | A | | | not sent | | | |
+| 0003 | A | | | not sent | | | |
+| 0004 | A | | | not sent | | | |
+| 0005 | A | | | not sent | | | |
+| 0006 | A | | | not sent | | | |
+| 0007 | A | | | not sent | | | |
+| 0008 | A | | | not sent | | | |
+| 0009 | D | | | ours | | | |
+| 0010 | C | | | not sent | | | |
+| 0011 | C | | | not sent | | | |
+| 0012 | A | | | not sent | | | |
+| 0013 | A | | | not sent | | | |
+| 0014 | A | | | not sent | | | |
+| 0015 | A | | | not sent | | | |
+| 0016 | A | | | not sent | | | |
+| 0017 | A | | | not sent | | | |
+| 0018 | A | | | not sent | | | |
+| 0019 | A | | | not sent | | | |
+| 0020 | B | | | not sent | | | |
+| 0021 | B | | | not sent | | | |
+| 0022 | B | | | not sent | | | |
+| 0023 | C | | | not sent | | | |
+| 0024 | B | | | not sent | | | |
+| 0025 | B | | | not sent | | | |
+| 0026 | C | | | not sent | | | |
+| 0027 | C | | | not sent | | | |
+| 0028 | C | | | not sent | | | |
+| 0029 | A-other | | | not sent | | | |
+| 0030 | C | | | not sent | | | |
+| 0031 | A-other | | | not sent | | | |
+| 0032 | A-other | | | not sent | | | |
+| 0033 | A-other | | | not sent | | | |
+
+**Class** says how a patch is offered:
+
+- **A** is a content-writer fix (2.4 scope): a bug in existing behaviour, with a unit test in
+  `cpdf_pagecontentgenerator_unittest.cpp`. Sent in this order, smallest and least contentious
+  first: 0001, 0003, 0005, 0007, 0008, 0016, 0019, 0015, 0004, 0014, 0006, 0017, 0012, 0002,
+  0018, 0013. Several split into more than one change (see "Offering a patch", c).
+- **A-other** is a clear bug outside the writer (save, parse, page organizer), sent after the
+  A series. 0033's change description must carry the stale-`/Parent` note from #129: a widget
+  written *directly* in `/Annots` is copied with a stale `/Parent`, which is upstream's
+  behaviour for non-indirect annotations (`UpdateReference` skips the `Parent` key), not a
+  regression of ours.
+- **B** changes pixels or object lifetimes (a trade-off): mailing-list discussion first
+  (`CONTRIBUTING.md` step 1). Not before 2.5.
+- **C** is new public API: `// Experimental API.`, a bug and mailing-list feedback first. These
+  stay in our series whatever upstream says, because the core calls them (the `>= N` gates).
+  0030 fixes 0010's own path.
+- **D** is ours by design. 0009 supersedes 0007 in our build with a different approach (each
+  stream starts and ends at the page CTM); upstream gets 0007, the standalone fix.
+
+**Status** is one of `not sent`, `discussing` (mailing list or bug only), `in review`, `merged`,
+`merged (partial)`, `abandoned` (the reason goes in the issue the Bug cell names) or `ours`
+(class D, and any class C that upstream declines).
+
+### Markers
+
+A patch whose fix is in the pinned Chromium branch is replaced by a marker with the same
+number and the extension `.upstreamed`, for example
+`patches/0001-content-generator-write-char-and-word-spacing.upstreamed`: four lines, nothing
+else.
+
+```
+Upstream: https://pdfium-review.googlesource.com/c/pdfium/+/<CL number>
+Commit: <full pdfium commit sha>
+First-branch: chromium/<NNNN>
+Issue: #121
+```
+
+`build-pdfium.sh` then:
+
+- applies only the `.patch` files, so a marker never reaches `03-patch.sh`;
+- stamps `MEGAPDF_PATCHES` as the highest number among the `.patch` and `.upstreamed` files, so
+  turning a patch into a marker changes neither the level nor what any consumer believes
+  is present;
+- refuses a series in which a number is missing (a dropped patch must leave a marker) or appears
+  twice;
+- refuses a marker whose `First-branch` is newer than `PDFIUM_BRANCH`: a build at an older pin
+  would silently lose a fix that is no longer in the series;
+- hashes the markers into `MEGAPDF_SERIES`, so the change is traceable.
+
+If upstream took only part of a fix (a reviewer narrowed it), the number stays a `.patch` holding
+only the remainder and its row says `merged (partial)`. A number is never both a patch and a
+marker. The series check is written for bash 3.2, because the macOS and iOS targets run the
+script on the hosted macOS runners (no `declare -A`; `${arr[@]+...}` where an array can be
+empty under `set -u`).
+
+### Offering a patch
+
+Agents do a-g; h is Dave's. Every command here was run for 0001.
+
+a. **A PDFium checkout at upstream `main`, on kdocker3**, in a throwaway Ubuntu 24.04
+   container. `/home/claude/pdfium-upstream` is the bind mount and the long-lived upstream tree
+   for #129: **do not clear it as scratch**. It is separate from `~/pdfium-build`, our pinned
+   build tree. Remove the container, not the folder, when you finish.
+
+   ```bash
+   docker run -d --name megapdf-129-pdfium -v /home/claude/pdfium-upstream:/work ubuntu:24.04 sleep infinity
+   docker exec -u root megapdf-129-pdfium bash -c 'apt-get update && apt-get install -y git curl python3 \
+       ca-certificates xz-utils file lsb-release sudo build-essential pkg-config'
+   ```
+
+   Then as uid 1000 (`ubuntu` in the container, which is `claude` on the host) with
+   `HOME=/work/home` and `/work/depot_tools` on `PATH`:
+
+   ```bash
+   git clone --depth 1 https://chromium.googlesource.com/chromium/tools/depot_tools.git /work/depot_tools
+   git config --global --add safe.directory '*'
+   mkdir -p /work/gclient && cd /work/gclient
+   gclient config --unmanaged https://pdfium.googlesource.com/pdfium.git --name pdfium
+   gclient sync --no-history -j8                      # about 12 GB with its toolchain
+   ```
+
+   Then, as root in the container only: `cd /work/gclient/pdfium && build/install-build-deps.sh
+   --no-prompt --no-chromeos-fonts --no-arm --no-syms --no-nacl`. If you set
+   `DEPOT_TOOLS_UPDATE=0` (to stop depot_tools updating itself mid-task), run
+   `/work/depot_tools/ensure_bootstrap` once first: without it depot_tools' `gn` wrapper stops
+   with "python3_bin_reldir.txt not found". Its closing `luci-auth` traceback is harmless.
+   Generate and build:
+
+   ```bash
+   cd /work/gclient/pdfium
+   gn gen out/Debug --args='is_debug=true is_component_build=false pdf_is_standalone=true pdf_enable_v8=false pdf_enable_xfa=false use_remoteexec=false pdf_use_skia=false'
+   autoninja -C out/Debug pdfium_unittests pdfium_embeddertests
+   ```
+
+   (1,552 steps, 1 min 42 s on kdocker3's 16 cores for `pdfium_unittests` the first time.)
+
+b. **One branch per change:** `git checkout -b megapdf-<NNNN>[-<part>]` from `origin/main`, then
+   `patch -p1 < <MegaPDF>/tools/pdfium/patches/<NNNN>-....patch`. The patches carry `a/`/`b/`
+   labels, so it is `-p1`. If it does not apply, rebase the change by hand: upstream `main` has
+   moved since `chromium/7934`. `patch` leaves `*.orig` files; delete them before committing.
+
+c. **Split to Gerrit size.** One behaviour per change, under about 200 changed lines including
+   the test. Split along the behaviours the patch's row in the first table lists. 0002 splits
+   into CMYK/ICC, then Cal*/Lab, then Separation/DeviceN/Indexed, then coloured patterns. 0013
+   splits into the ExtGState after `cm`, then the matrix fold, then ExtGState reuse, then the
+   retire-and-restore, then the one-name-per-object fix. A refactor found on the way is its own
+   change (`CONTRIBUTING.md`). 0001 needs no split: 13 added lines in one function, and one test.
+
+d. **The test, PDFium's way.**
+   - A writer fix gets a `TEST_F(CPDFPageContentGeneratorTest, <Name>)` in
+     `core/fpdfapi/edit/cpdf_pagecontentgenerator_unittest.cpp`. Copy the setup of
+     `ProcessStandardText`: `CPDF_TestDocument`, `CreateNewPage(0)`, a
+     `CPDF_PageContentGenerator`, the object, then `TestProcessText`/`TestProcessPath` into an
+     `fxcrt::ostringstream`. Assert the exact bytes.
+   - Name tests after the behaviour in PDFium's CamelCase (`ProcessTextWithCharAndWordSpacing`),
+     not after our issue numbers.
+   - A fix that needs a parsed page (state that straddles streams: 0005, 0007, 0009) gets an
+     embedder test in `fpdfsdk/fpdf_edit_embeddertest.cpp` over a `testing/resources/<name>.in`
+     file, which `testing/tools/fixup_pdf_template.py` turns into the PDF.
+   - Our `core_tests.cpp` `test_rewrite_fidelity` case for the patch tells you what to assert.
+     Do not port it wholesale: PDFium wants the smallest input that shows the bug. Upstream's
+     generator skips objects that are not dirty (`ProcessPageObjects`), so an end-to-end repro
+     must dirty the object the fix is about (`FPDFPageObj_Transform`); adding another object
+     does not regenerate it.
+   - Compare from a `Find()` anchor, not `Last(n)`: `ByteString::Last(n)` is empty when the
+     string is shorter than `n`, which hides what was generated when the test fails.
+
+e. **Prove the test.** Build and run `out/Debug/pdfium_unittests
+   --gtest_filter='CPDFPageContentGeneratorTest.*'`: it must pass. Then
+   `git stash push -- <the non-test source files>`, **rebuild**, run again: the new test must
+   fail, and the failure must show the missing bytes. `git stash pop`, rebuild again, and run the
+   whole `pdfium_unittests` and `pdfium_embeddertests` once. Name every target you run in the
+   rebuild: ninja relinks only what you ask for, and a stale test binary passes or fails for
+   the wrong reason.
+
+f. **Format and commit.** `buildtools/linux64-format/clang-format --style=file -i <files>`
+   (`git cl format` printed nothing on this checkout, so it was not relied on); confirm with
+   `git show --check`. The commit message is a subject under about 60 characters in PDFium's
+   imperative style, a blank line, a body wrapped at 72 columns that says what was lost, when,
+   and why the fix is right, then a `Bug: <number>` footer, for a bug filed at
+   issues.chromium.org under the PDFium component with a minimal PDF attached. No MegaPDF issue
+   links in the message; they belong on our side. The first change also adds the organisation
+   line to `AUTHORS` (organisations section, sorted). Commit with a placeholder identity
+   (`GIT_AUTHOR_NAME` / `GIT_AUTHOR_EMAIL`); Dave runs `git commit --amend --reset-author` with
+   the address the corporate CLA covers before uploading.
+
+g. **Hand over.** `git format-patch -1 --stdout > /home/claude/pdfium-upstream/out-cls/<NNNN>.patch`
+   (the folder is never committed). Post a comment on #129 with: the patch number, the branch
+   name and commit, the test name, the fail-without proof (the gtest failure), a bug-report draft
+   with its minimal PDF (kept beside the patch in `out-cls/`), and a "questions a reviewer will
+   ask" paragraph. Fill in the row's `Bug` cell once Dave has filed it.
+
+h. **Dave uploads and answers.** `git cl upload -b <bug>`, pick reviewers with Gerrit's "Suggest
+   Owners", then "Send and Start Review". Every reply on the change is his.
+
+i. **On merge**, an agent fills in the row: `Status: merged`, the upstream commit and the first
+   branch. The first branch is the lowest `chromium/NNNN` branch that contains the commit: in
+   the checkout, `git fetch origin '+refs/branch-heads/*:refs/remotes/branch-heads/*'`, then
+   `git branch -r --contains <sha> | sort -V | head -1`. Branches are cut about every four
+   weeks, so expect a few weeks between merge and branch.
+
+### When the pin moves
+
+When `PDFIUM_BRANCH` moves to `chromium/MMMM` (its own task and issue, using the matching
+`bblanchon/pdfium-binaries` tag in `BINARIES_COMMIT`):
+
+1. Each patch whose row says `merged` with `First branch` at or below MMMM: `git mv NNNN-x.patch
+   NNNN-x.upstreamed` and replace the content with the four-line marker. The row's last column
+   becomes `chromium/MMMM`.
+2. Apply the remaining `.patch` files in order on the new branch. Regenerate each one that does
+   not apply cleanly, using "Writing a patch" steps 1-3.
+3. Run the core tests against the new build ("Writing a patch", step 4). The `fixed_by` cases
+   still gate on the same numbers, and now test upstream's version of each landed fix. A case
+   that fails means upstream took less than we had: turn that number back into a remainder
+   `.patch`, as in the partial rule above.
+4. Run the corpus diagnosis probe; no regressions allowed ("Writing a patch", step 5).
+5. Ship it as any PDFium release ("Shipping a release").

@@ -9,7 +9,7 @@ import XCTest
 /// demo agreement *unfilled* with the "Mega W." signature already in the
 /// library, so the video fills in the same document the store screenshots show. `DEMO_LANG`
 /// (passed by xcodebuild as `TEST_RUNNER_DEMO_LANG`) selects the catalogue the
-/// same way ios-screenshots.yml does: `fr-CA` or `fr`, anything else is English.
+/// same way ios-screenshots.yml does: `fr-CA`, `fr`, `es-419` or `es`, anything else is English.
 ///
 /// Every page coordinate is a fraction of the page, derived from the demo
 /// agreement's layout in `tools/gen_test_fixtures.py` (612x792 points), so the
@@ -25,6 +25,8 @@ final class DemoFlowUITests: XCTestCase {
         switch ProcessInfo.processInfo.environment["DEMO_LANG"] {
         case "fr-CA": app.launchArguments += ["-AppleLanguages", "(fr-CA)", "-AppleLocale", "fr_CA"]
         case "fr":    app.launchArguments += ["-AppleLanguages", "(fr)", "-AppleLocale", "fr_FR"]
+        case "es-419": app.launchArguments += ["-AppleLanguages", "(es-419)", "-AppleLocale", "es_MX"]
+        case "es":    app.launchArguments += ["-AppleLanguages", "(es)", "-AppleLocale", "es_ES"]
         default: break
         }
     }
@@ -50,11 +52,23 @@ final class DemoFlowUITests: XCTestCase {
                        done: "Terminé", textField: "Texte", add: "Ajouter", save: "Enregistrer",
                        searchTerm: "location", printedName: printedName)
             }
+            // Spanish (#724): the UI words are the same in both listings, as in French;
+            // only the demo person and the search word differ (arrendamiento / alquiler).
+            func spanish(printedName: String, searchTerm: String) -> Labels {
+                Labels(sign: "Firmar", addText: "Agregar texto", find: "Buscar en el documento",
+                       findField: "Buscar en el documento", nextMatch: "Siguiente coincidencia",
+                       done: "Listo", textField: "Texto", add: "Agregar", save: "Guardar",
+                       searchTerm: searchTerm, printedName: printedName)
+            }
             switch lang {
             case "fr-CA":
                 return french(printedName: "Hélène Bélanger")
             case "fr":
                 return french(printedName: "Céline Lefèvre")
+            case "es-419":
+                return spanish(printedName: "Sofía Ramírez", searchTerm: "arrendamiento")
+            case "es":
+                return spanish(printedName: "Lucía Fernández", searchTerm: "alquiler")
             default:
                 return Labels(sign: "Sign", addText: "Add text", find: "Find in document",
                               findField: "Find in document", nextMatch: "Next match",
@@ -206,10 +220,10 @@ final class DemoFlowUITests: XCTestCase {
         app.buttons["Draw"].firstMatch.tap(); pause(1.5)
         drawSignature(app); pause(1.0)
         lastButton(app, "Save").tap(); pause(1.0)
-        // Saving closes the library and confirms with a "Signature added" alert;
-        // read it, dismiss it, then open the library again to pick the entry.
-        let added = app.alerts.firstMatch
-        if added.waitForExistence(timeout: 3) { pause(1.2); added.buttons.firstMatch.tap() }
+        // Saving closes the library and confirms with a "Signature added" notice (#631), which
+        // clears itself; give the recording the moment it used to spend on the alert, then open
+        // the library again to pick the entry.
+        pause(1.2)
         pause(0.8)
         app.buttons["Sign"].firstMatch.tap(); pause(1.5)
         let drawn = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Signature'")).firstMatch

@@ -139,8 +139,8 @@ public static partial class Strings
     /// <summary>Smaller copy saved</summary>
     public static string SmallerCopySavedTitle => Get("SmallerCopySavedTitle");
 
-    /// <summary>Was {0:F1} MB, now {1:F1} MB.  Saved as {2} — ready to email.</summary>
-    public static string SmallerCopySavedBody(object? arg0, object? arg1, object? arg2) => string.Format(CultureInfo.CurrentCulture, Get("SmallerCopySavedBody"), arg0, arg1, arg2);
+    /// <summary>Was {0:F1} MB, now {1:F1} MB. Saved as {2}, ready to email.</summary>
+    public static string SmallerCopySavedNotice(object? arg0, object? arg1, object? arg2) => string.Format(CultureInfo.CurrentCulture, Get("SmallerCopySavedNotice"), arg0, arg1, arg2);
 
     /// <summary>Password</summary>
     public static string PasswordPlaceholder => Get("PasswordPlaceholder");
@@ -945,4 +945,19 @@ public static partial class Strings
 
     /// <summary>The author of this document asked that nothing be copied out of it.</summary>
     public static string CopyWithheld => Get("CopyWithheld");
+
+    /// <summary>Selected: {0}</summary>
+    public static string TextSelectionAnnounced(object? arg0) => string.Format(CultureInfo.CurrentCulture, Get("TextSelectionAnnounced"), arg0);
+
+    /// <summary>Copied</summary>
+    public static string TextCopiedAnnounced => Get("TextCopiedAnnounced");
+
+    /// <summary>Your changes can't be undone after this</summary>
+    public static string UndoLossTitle => Get("UndoLossTitle");
+
+    /// <summary>“Make marks &amp; signatures permanent when saving” is on, so this save makes your changes part of the page. MegaPDF won't ask again while this document is open.</summary>
+    public static string UndoLossFlattenBody => Get("UndoLossFlattenBody");
+
+    /// <summary>Setting, changing or removing a password saves the document and opens it again. After that, what you've done so far can't be undone.</summary>
+    public static string UndoLossPasswordBody => Get("UndoLossPasswordBody");
 }

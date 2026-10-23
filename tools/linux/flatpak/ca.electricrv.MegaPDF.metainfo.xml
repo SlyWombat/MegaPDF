@@ -20,9 +20,14 @@
   <name>MegaPDF</name>
   <name xml:lang="fr">MegaPDF</name>
   <name xml:lang="fr-CA">MegaPDF</name>
+  <name xml:lang="es">MegaPDF</name>
+  <name xml:lang="es-ES">MegaPDF</name>
   <summary>Fill in, sign and redact PDF forms</summary>
   <summary xml:lang="fr">Remplir, signer et caviarder des formulaires PDF</summary>
   <summary xml:lang="fr-CA">Remplir, signer et caviarder des formulaires PDF</summary>
+  <!-- ES-REVIEW #724: the Spanish name, summary and captions are not yet read by the reviewer. -->
+  <summary xml:lang="es">Llena, firma y censura formularios PDF</summary>
+  <summary xml:lang="es-ES">Rellena, firma y censura formularios PDF</summary>
 
   <developer id="ca.electricrv">
     <name>Electric RV</name>
@@ -88,13 +93,13 @@
   </description>
 
   <url type="homepage">https://electricrv.ca/megapdf/</url>
-  <url type="bugtracker">https://github.com/SlyWombat/MegaPDF/issues</url>
+  <url type="help">https://electricrv.ca/megapdf/support/</url>
+  <url type="bugtracker">https://electricrv.ca/megapdf/support/</url>
   <url type="vcs-browser">https://github.com/SlyWombat/MegaPDF</url>
   <url type="contribute">https://github.com/SlyWombat/MegaPDF</url>
-  <!-- The privacy policy, which is the same page both Apple's and Google's listings
-       point at. AppStream 1.0 has no `privacy` url type, so it goes under `contact` —
-       the type whose description is the page a user reaches the publisher through. -->
-  <url type="contact">https://electricrv.ca/megapdf/privacy/</url>
+  <!-- help, bugtracker and contact are the support page (#662); a software centre shows them
+       to the person who needs help. The source stays on GitHub. -->
+  <url type="contact">https://electricrv.ca/megapdf/support/</url>
 
   <!-- The colours a software centre paints behind the name. Both are already in the
        app's own palette (src/MegaPDF.Avalonia/Brand.axaml): the light one is
@@ -148,57 +153,85 @@
       <image type="source" width="1280" height="800">https://electricrv.ca/megapdf/screenshots/linux/en/01-reading.png</image>
       <image type="source" width="1280" height="800" xml:lang="fr-CA">https://electricrv.ca/megapdf/screenshots/linux/fr-CA/01-reading.png</image>
       <image type="source" width="1280" height="800" xml:lang="fr">https://electricrv.ca/megapdf/screenshots/linux/fr-FR/01-reading.png</image>
+      <image type="source" width="1280" height="800" xml:lang="es">https://electricrv.ca/megapdf/screenshots/linux/es-419/01-reading.png</image>
+      <image type="source" width="1280" height="800" xml:lang="es-ES">https://electricrv.ca/megapdf/screenshots/linux/es-ES/01-reading.png</image>
       <caption>Reading mode puts the tools away and leaves the page — this one filled in and signed</caption>
       <caption xml:lang="fr-CA">Le mode lecture range les outils et laisse la page — celle-ci remplie et signée</caption>
       <caption xml:lang="fr">Le mode lecture range les outils et laisse la page — celle-ci remplie et signée</caption>
+      <caption xml:lang="es">El modo de lectura oculta las herramientas y deja solo la página: esta ya está llena y firmada</caption>
+      <caption xml:lang="es-ES">El modo de lectura oculta las herramientas y deja solo la página: esta ya está rellena y firmada</caption>
     </screenshot>
     <screenshot>
       <image type="source" width="1280" height="800">https://electricrv.ca/megapdf/screenshots/linux/en/02-text.png</image>
       <image type="source" width="1280" height="800" xml:lang="fr-CA">https://electricrv.ca/megapdf/screenshots/linux/fr-CA/02-text.png</image>
       <image type="source" width="1280" height="800" xml:lang="fr">https://electricrv.ca/megapdf/screenshots/linux/fr-FR/02-text.png</image>
+      <image type="source" width="1280" height="800" xml:lang="es">https://electricrv.ca/megapdf/screenshots/linux/es-419/02-text.png</image>
+      <image type="source" width="1280" height="800" xml:lang="es-ES">https://electricrv.ca/megapdf/screenshots/linux/es-ES/02-text.png</image>
       <caption>Typing a name on the line: real, searchable text, not a sticker on the page</caption>
       <caption xml:lang="fr-CA">Taper un nom sur la ligne : du vrai texte, dans lequel on peut chercher, et non une vignette posée sur la page</caption>
       <caption xml:lang="fr">Taper un nom sur la ligne : du vrai texte, dans lequel on peut chercher, et non une vignette posée sur la page</caption>
+      <caption xml:lang="es">Escribir un nombre sobre la línea: texto real, en el que se puede buscar, no una calcomanía sobre la página</caption>
+      <caption xml:lang="es-ES">Escribir un nombre sobre la línea: texto real, en el que se puede buscar, no una pegatina sobre la página</caption>
     </screenshot>
     <screenshot>
       <image type="source" width="1280" height="800">https://electricrv.ca/megapdf/screenshots/linux/en/03-sign.png</image>
       <image type="source" width="1280" height="800" xml:lang="fr-CA">https://electricrv.ca/megapdf/screenshots/linux/fr-CA/03-sign.png</image>
       <image type="source" width="1280" height="800" xml:lang="fr">https://electricrv.ca/megapdf/screenshots/linux/fr-FR/03-sign.png</image>
+      <image type="source" width="1280" height="800" xml:lang="es">https://electricrv.ca/megapdf/screenshots/linux/es-419/03-sign.png</image>
+      <image type="source" width="1280" height="800" xml:lang="es-ES">https://electricrv.ca/megapdf/screenshots/linux/es-ES/03-sign.png</image>
       <caption>The signature library, kept on this computer and nowhere else</caption>
       <caption xml:lang="fr-CA">La bibliothèque de signatures, conservée sur cet ordinateur et nulle part ailleurs</caption>
       <caption xml:lang="fr">La bibliothèque de signatures, conservée sur cet ordinateur et nulle part ailleurs</caption>
+      <caption xml:lang="es">La biblioteca de firmas, guardada en este equipo y en ningún otro lugar</caption>
+      <caption xml:lang="es-ES">La biblioteca de firmas, guardada en este equipo y en ningún otro lugar</caption>
     </screenshot>
     <screenshot>
       <image type="source" width="1280" height="800">https://electricrv.ca/megapdf/screenshots/linux/en/04-pages.png</image>
       <image type="source" width="1280" height="800" xml:lang="fr-CA">https://electricrv.ca/megapdf/screenshots/linux/fr-CA/04-pages.png</image>
       <image type="source" width="1280" height="800" xml:lang="fr">https://electricrv.ca/megapdf/screenshots/linux/fr-FR/04-pages.png</image>
+      <image type="source" width="1280" height="800" xml:lang="es">https://electricrv.ca/megapdf/screenshots/linux/es-419/04-pages.png</image>
+      <image type="source" width="1280" height="800" xml:lang="es-ES">https://electricrv.ca/megapdf/screenshots/linux/es-ES/04-pages.png</image>
       <caption>Rotate, reorder, delete or save pages out — and one undo puts the document back</caption>
       <caption xml:lang="fr-CA">Faire pivoter, réordonner, supprimer ou extraire des pages — et une annulation remet le document en place</caption>
       <caption xml:lang="fr">Faire pivoter, réordonner, supprimer ou extraire des pages — et une annulation remet le document en place</caption>
+      <caption xml:lang="es">Gira, reordena, elimina o extrae páginas, y un solo deshacer deja el documento como estaba</caption>
+      <caption xml:lang="es-ES">Gira, reordena, elimina o extrae páginas, y un solo deshacer deja el documento como estaba</caption>
     </screenshot>
     <screenshot>
       <image type="source" width="1280" height="800">https://electricrv.ca/megapdf/screenshots/linux/en/05-search.png</image>
       <image type="source" width="1280" height="800" xml:lang="fr-CA">https://electricrv.ca/megapdf/screenshots/linux/fr-CA/05-search.png</image>
       <image type="source" width="1280" height="800" xml:lang="fr">https://electricrv.ca/megapdf/screenshots/linux/fr-FR/05-search.png</image>
+      <image type="source" width="1280" height="800" xml:lang="es">https://electricrv.ca/megapdf/screenshots/linux/es-419/05-search.png</image>
+      <image type="source" width="1280" height="800" xml:lang="es-ES">https://electricrv.ca/megapdf/screenshots/linux/es-ES/05-search.png</image>
       <caption>Searching the whole document as you type, with every match counted</caption>
       <caption xml:lang="fr-CA">Rechercher dans tout le document à mesure que vous tapez, chaque occurrence comptée</caption>
       <caption xml:lang="fr">Rechercher dans tout le document à mesure que vous tapez, chaque occurrence comptée</caption>
+      <caption xml:lang="es">Buscar en todo el documento mientras escribes, con cada coincidencia contada</caption>
+      <caption xml:lang="es-ES">Buscar en todo el documento mientras escribes, con cada coincidencia contada</caption>
     </screenshot>
     <screenshot>
       <image type="source" width="1280" height="800">https://electricrv.ca/megapdf/screenshots/linux/en/06-redact.png</image>
       <image type="source" width="1280" height="800" xml:lang="fr-CA">https://electricrv.ca/megapdf/screenshots/linux/fr-CA/06-redact.png</image>
       <image type="source" width="1280" height="800" xml:lang="fr">https://electricrv.ca/megapdf/screenshots/linux/fr-FR/06-redact.png</image>
+      <image type="source" width="1280" height="800" xml:lang="es">https://electricrv.ca/megapdf/screenshots/linux/es-419/06-redact.png</image>
+      <image type="source" width="1280" height="800" xml:lang="es-ES">https://electricrv.ca/megapdf/screenshots/linux/es-ES/06-redact.png</image>
       <caption>Then marking a line to be redacted — the words are removed, not covered over</caption>
       <caption xml:lang="fr-CA">Puis marquer une ligne à caviarder — les mots sont supprimés, et non recouverts</caption>
       <caption xml:lang="fr">Puis marquer une ligne à caviarder — les mots sont supprimés, et non recouverts</caption>
+      <caption xml:lang="es">Luego, marcar una línea para censurarla: las palabras se eliminan, no solo se tapan</caption>
+      <caption xml:lang="es-ES">Luego, marcar una línea para censurarla: las palabras se eliminan, no solo se tapan</caption>
     </screenshot>
     <screenshot>
       <image type="source" width="1280" height="800">https://electricrv.ca/megapdf/screenshots/linux/en/07-home.png</image>
       <image type="source" width="1280" height="800" xml:lang="fr-CA">https://electricrv.ca/megapdf/screenshots/linux/fr-CA/07-home.png</image>
       <image type="source" width="1280" height="800" xml:lang="fr">https://electricrv.ca/megapdf/screenshots/linux/fr-FR/07-home.png</image>
+      <image type="source" width="1280" height="800" xml:lang="es">https://electricrv.ca/megapdf/screenshots/linux/es-419/07-home.png</image>
+      <image type="source" width="1280" height="800" xml:lang="es-ES">https://electricrv.ca/megapdf/screenshots/linux/es-ES/07-home.png</image>
       <caption>The empty window, with the documents you opened last</caption>
       <caption xml:lang="fr-CA">La fenêtre vide, avec les documents ouverts en dernier</caption>
       <caption xml:lang="fr">La fenêtre vide, avec les documents ouverts en dernier</caption>
+      <caption xml:lang="es">La ventana vacía, con los documentos que abriste por última vez</caption>
+      <caption xml:lang="es-ES">La ventana vacía, con los documentos que abriste por última vez</caption>
     </screenshot>
   </screenshots>
 

@@ -1,6 +1,6 @@
 # The in-house Mac — build, test and capture runbook
 
-A Mac mini (M4, macOS 26) on the house network is the build and capture box
+A Mac mini (M4, macOS 26.7.1, Xcode 26.6) on the house network is the build and capture box
 for the iOS and macOS apps. It replaces GitHub's macOS runners for anything
 that wants a real screen: App Store preview videos, listing screenshots, and
 driving the real apps. CI still proves the builds; this machine is for the
@@ -28,8 +28,9 @@ things a runner cannot see.
 ## CI on this machine: turning it on and off (#614)
 
 `ios-ci.yml`'s `build` job runs here instead of on GitHub's macOS runners when,
-and only when, **both** of these are true. It is 36-55 minutes there and it
-queues behind every other job in the account; here it is ours and idle.
+and only when, **both** of these are true: the switch below is on, and the job
+is not a fork's. It is 36-55 minutes there and it queues behind every other job
+in the account; here it starts in seconds.
 
 **The two commands.** Run them from anywhere — they need no access to the Mac:
 
@@ -41,89 +42,136 @@ gh variable list                              # which is it right now
 
 That is the whole switch. The variable is read in `runs-on`, so it takes effect
 on the next job to start; jobs already running are unaffected. **Set it to `off`
-whenever the Mac is going to be unavailable** — shut down, rebooting, on a
+whenever the Mac is going to be unavailable** — shut down, being upgraded, on a
 different network, or being used for a capture session you do not want a CI job
 walking into. A job that asks for a runner which never appears does not fail
-fast: it sits in the queue for 24 hours and *then* fails. One `off` sends those
-jobs straight back to GitHub.
+fast: it sits in the queue for 24 hours and *then* fails.
 
-**The second condition is the fork guard, and it is not a switch.** This
-repository is public. A self-hosted runner executes whatever a workflow file
-tells it to, on this machine, as the account it runs under — so a pull request
-opened from a **fork** never comes here, no matter what the variable says. It
-goes to GitHub's disposable macOS runner, which is what that is for. The guard
-is the `runs-on` expression in `ios-ci.yml`; it was proved by
-`.github/workflows/runner-selection-probe.yml`, not assumed, and the result is
-recorded on #614. There are no forks today, and the setting GitHub offers for
-this ("Require approval for fork pull request workflows") is only on
-*first-time* contributors here, so the guard has to be in the workflow.
+**A job already queued for the Mac keeps its labels after the variable goes
+`off`**, and goes on waiting for the Mac. The flip only steers jobs that start
+after it. Cancel such jobs with `gh run cancel <id>` (and re-run them, which now
+lands on GitHub), or bring the Mac back. The order is always: variable `off`
+first, then stop the service, so nothing new queues for a machine that is going
+away.
 
-**Starting and stopping the runner on the machine itself** is separate from the
-variable, and needed after a reboot, after every job (see "ephemeral" below), or
-if it has been stopped:
+**The fork guard has two layers, and the one that matters is on the machine.**
+This repository is public, and a self-hosted runner executes whatever a workflow
+file tells it to, on this machine, as `claude`.
+
+1. **The `runs-on` expression in `ios-ci.yml`** sends a pull request from a fork
+   to GitHub's disposable runner whatever the variable says. It was proved by a
+   probe workflow (run 36888016328, recorded on #614), including the deleted-fork
+   case where `head.repo` is null and a `fork == false` test alone fails open.
+   But for a `pull_request` event GitHub runs **the pull request's own copy** of
+   the workflow files, so a fork's pull request can delete that expression, or add
+   a new workflow asking for `[self-hosted, megapdf-ios]`. This layer keeps
+   *honest* fork PRs on GitHub, where they pass instead of being refused. It is
+   not what keeps strangers off the machine.
+2. **The runner's job-started hook**, `tools/mac-runner/job-started.sh`, installed
+   as a copy in `~/actions-runner/megapdf/` and named by
+   `ACTIONS_RUNNER_HOOK_JOB_STARTED` in the LaunchAgent. It runs before the first
+   step of **every** job this runner takes, and no pull request can edit it. It
+   fails the job unless the repository is this one, the workflow is `ios-ci.yml`,
+   and the event is a `push`, a `workflow_dispatch`, or a `pull_request` whose head
+   repository is this repository and not a fork. It fails closed on anything
+   missing, including a null `head.repo`. `tools/mac-runner/test-job-started.sh`
+   tests it, in CI (`mac-runner-guard.yml`) and by hand against the installed copy.
+   Each job it saw is a line in `~/Library/Logs/megapdf-runner/job-started.log`:
+   `allowed` or `REFUSED(<reason>)`, with the run id, event and workflow.
+
+On top of both, the repository's fork-approval setting is "require approval for
+all external contributors" (Dave, 2026-10-21): no fork's workflow runs anywhere
+until it is approved. That is a third layer; neither of the first two depends on
+it.
+
+**The service on the machine** is separate from the variable. It is a
+LaunchAgent, so it starts itself:
 
 ```
 # is it registered and waiting?
 gh api repos/SlyWombat/MegaPDF/actions/runners --jq '.runners[] | {name,status,busy}'
 
-# start it (it takes one job, then exits)
-ssh mac-mini 'cd /Users/claude/actions-runner && nohup ./run.sh >> ~/mp-614/runner.log 2>&1 &'
-
-# stop it
-ssh mac-mini 'pkill -f Runner.Listener'
+# on the machine
+ssh mac-mini 'bash ~/Projects/MegaPDF/tools/mac-runner/service.sh status'     # launchd state + log tails
+ssh mac-mini 'bash ~/Projects/MegaPDF/tools/mac-runner/service.sh restart'    # kickstart -k
+ssh mac-mini 'bash ~/Projects/MegaPDF/tools/mac-runner/service.sh install'    # (re)write plists, copy the hook, bootstrap
+ssh mac-mini 'bash ~/Projects/MegaPDF/tools/mac-runner/service.sh uninstall'  # bootout, delete plists and hook copies
 ```
+
+`install` is also how a changed hook reaches the machine: the installed copy does
+not follow `git pull`, on purpose. Logs are in `~/Library/Logs/megapdf-runner/`
+(`runner.log`, `job-started.log`, `prune.log`); a weekly agent
+(`ca.electricrv.megapdf.actions-runner-logs`, Sundays 04:30) prunes the runner's
+`_diag` and rotates `runner.log` past 10 MB, because launchd rotates nothing.
 
 Notes on how it is set up, and why each part is the way it is:
 
 - **It runs as `claude`** (Dave's decision, 2026-10-01), which is also the
   account that holds the read-write deploy key for this repository, the six
   working clones — two with unpushed commits — and the PDF corpus. **A job that
-  reaches this runner can read all of it.** That is the whole reason the fork
-  guard above lives in the workflow file rather than in a repository setting: the
-  guard is the only thing between a stranger's pull request and that material, so
-  it must not be one click from being loosened. The runner's own files and work
-  directory sit under `/Users/claude/actions-runner`, nowhere near the clones,
-  but that is tidiness and not isolation — same account, same reach. Do not add
-  further credentials to this account while the runner is registered.
-- **Registered `--ephemeral`**, so the runner takes exactly one job and then
-  removes its own registration and exits. A job that compromised the runner
-  cannot persist into the next one. The cost is real: **a fresh registration is
-  needed before every job.** That needs a registration credential, which needs
-  `gh`, and there is deliberately no `gh` and no GitHub credential on the Mac —
-  so it is done from a machine that has one, with `tools/mac-runner-configure.sh`,
-  which takes the credential on **stdin** and never puts it in a command-line
-  argument (argv is visible in the process table to anything that runs later on
-  this shared machine, which is how a Home Assistant token leaked on 2026-09-08).
-  That script's own header carries the one-line invocation, and it verifies the
-  runner tarball's checksum before unpacking it — the thing it unpacks becomes a
-  process with full access to this account.
-
-  If that per-job step proves too much friction, the alternative is to drop
-  `--ephemeral` and let one registration serve many jobs. That is defensible
-  here: what actually stops state carrying between runs is the per-job cleanup in
-  the workflow, not the registration, and ephemerality buys little when every job
-  shares the `claude` account anyway. A deliberate decision, not one to drift
-  into.
+  reaches this runner can read all of it.** That is why the guard lives on the
+  machine and not in a workflow file or a repository setting. The runner's own
+  files and work directory sit under `/Users/claude/actions-runner`, nowhere near
+  the clones, but that is tidiness and not isolation — same account, same reach.
+  Do not add further secrets to this account while the runner is registered.
+  A second account is not an option: simulators need a GUI session, and the
+  auto-login is `claude`.
+- **Registered once, standing** (Dave, 2026-10-21: "we have a standing order to
+  use local resources"). The registration persists in the runner directory, so
+  the runner takes job after job. Registering again is needed only after
+  `config.sh remove`; it is done from a machine that has `gh` (there is
+  deliberately no `gh` and no GitHub token on the Mac) with
+  `tools/mac-runner-configure.sh`, which takes the registration token on
+  **stdin** and never puts it in a command-line argument (argv is visible to
+  anything that runs later on this shared machine, which is how a Home Assistant
+  token leaked on 2026-09-08). That script's header carries the one-line
+  invocation, and it verifies the runner tarball's checksum before unpacking it.
+  **The runner updates itself** after registration, and that stays on: GitHub
+  stops sending jobs to a runner that is too old, which would be the 24-hour
+  silent queue again. What stops state carrying between runs is the per-job
+  cleanup in the workflow (below), not the registration: a job that wanted to
+  leave something behind could do it with push access anyway. The runner
+  directory holds the registration and its keys; never print anything in it,
+  check files with `test -f`.
+- **One runner slot; jobs queue.** The Mac is shared with agents' builds, and a
+  CI job boots two simulators. A queue here is minutes; the hosted queue measured
+  26. `ios-ci.yml`'s `concurrency` group cancels a pull request's older run when
+  it gets a new push, so the queue never works through stale commits, and
+  `timeout-minutes: 90` stops one hung job blocking everyone behind it.
 - **Label `megapdf-ios`.** The job asks for `[self-hosted, macOS, ARM64,
   megapdf-ios]`, so nothing else in the repository can drift onto this machine
-  by accident.
+  by accident (and the hook refuses any other workflow that tries).
 - **Every job starts from nothing**: the workspace is emptied before checkout,
   derived data goes under the runner's own temp directory rather than the shared
   `~/Library/Developer/Xcode/DerivedData`, and the two simulators are created
-  for the job and deleted by UDID when it ends. That last one is deliberate and
-  not optional — #569 was a flake caused entirely by state surviving between
-  runs. It also means a CI job will never shut down or erase a simulator you
-  booted yourself: it only ever touches devices named `megapdf-ci-*`.
-- **Not installed as a launchd service.** On macOS the runner's own `svc.sh`
-  installs a per-user LaunchAgent, and CoreSimulator wants a real user session, so
-  a headless daemon may not be able to boot a simulator at all. The manual start
-  above is proven; a service is a deliberate follow-up, not a guess. After a
-  reboot, either start it again or set `MAC_SELF_HOSTED` to `off`.
+  for the job and deleted by UDID when it ends, cancelled or not. That last one is
+  deliberate and not optional — #569 was a flake caused entirely by state
+  surviving between runs.
+- **A LaunchAgent, `ca.electricrv.megapdf.actions-runner`, in `gui/502`.**
+  `LimitLoadToSessionType Aqua`, so it runs only in the GUI login session, where
+  CoreSimulator works; a LaunchDaemon has no such session. It runs the runner's
+  own service host, `runsvc.sh`, with `KeepAlive` on an unsuccessful exit and a
+  30-second throttle, so it comes back after a crash and after a self-update.
+  **It deliberately does not set `SessionCreate`**, which the runner's own
+  template (`bin/actions.runner.plist.template`) does: that starts the job in a
+  new security session, outside the login session that the simulators and the
+  login keychain belong to. So never use the runner's `svc.sh install`; it
+  brings `SessionCreate` back and loads with `launchctl load`, which from SSH
+  lands in the SSH session's domain. `service.sh` uses `launchctl bootstrap
+  gui/502` only. After a reboot the agent starts at the `claude` auto-login
+  with nobody involved. The house restart window waits for `xcodebuild` and
+  `xctest` to finish before it restarts (house-network-ops#426).
 - **This machine is shared, and that is the main running cost.** The 2026-10-01
   measurement ran while another agent was building on the Mac, at load average
-  11. A CI job here competes with whoever is using the Mac, in both directions:
-  the job is slower and so is their work. On GitHub's runners nobody is in
-  anybody's way. Decide which matters more on the day, and use the variable.
+  11. A CI job here competes with whoever is using the Mac, in both directions.
+  Agents are not paused for CI and CI is not paused for agents; contention costs
+  speed, not correctness. An agent quoting a timing from the Mac says whether
+  `pgrep -x Runner.Worker` found a CI job running.
+- **Simulator names: `megapdf-agent-<n>`, never `megapdf-ci-<n>`.** A CI job
+  deletes **every** `megapdf-ci-*` simulator when it starts, as leftovers of a
+  cancelled job of its own. With an ephemeral runner a CI job rarely overlapped
+  an agent's run; with a standing one it will, and an agent's `megapdf-ci-*`
+  device would vanish mid-run. Name yours `megapdf-agent-<issue>`.
 - **What is still hosted, on purpose.** `ios-ci.yml`'s `pdfkit-spike` job, and
   every `macos-latest` job in `macos-app.yml`, `macos-appstore.yml`,
   `macos-tester-build.yml`, `macos-screenshots.yml`, `core-tests.yml` and the
@@ -159,6 +207,46 @@ recorded on a hosted runner. That duration is the tests' own cost, not runner
 load, so dedicated hardware does not restore their margin and does not close
 #599.
 
+**The standing runner against hosted, measured 2026-10-22 (#614 proof step 16).** Three
+dispatched hosted runs of the same workflow (`gh workflow run ios-ci.yml -f runner=hosted
+--ref main`), spread over one day because hosted timing moves hour to hour, beside every
+`build` job the mini ran in the last forty runs. Not same-SHA pairs: a merged head cannot be
+re-run on the mini after the fact, so the comparison is of the workflow, not of one commit.
+
+| runner | run | dispatched (EDT) | SHA | wait | job | Build and test | iPhone UI lane | iPad UI lane |
+|---|---|---|---|---|---|---|---|---|
+| hosted | [39818409951](https://github.com/SlyWombat/MegaPDF/actions/runs/39818409951) | 12:57 | a3111b4 | 3 s | 55 min 51 s | 364 s | 1090 s | 1000 s |
+| hosted | [39845022875](https://github.com/SlyWombat/MegaPDF/actions/runs/39845022875) | 16:00 | e709ac7 | 3 s | 53 min 33 s, **red** | 423 s | 961 s | 982 s, red |
+| hosted | [39868868578](https://github.com/SlyWombat/MegaPDF/actions/runs/39868868578) | 19:00 | e99d317 | 2 s | 47 min 59 s | 367 s | 925 s | 924 s |
+| mini, median of 29 | since 2026-10-21 15:50 UTC | | | **15 min** (1 s to 76 min) | **15 min 46 s** | 68 s | 421 s | 308 s |
+
+- **The compute is about 3.4 times faster on the mini** (job median 946 s against 3,213 s for
+  the three hosted runs), and the whole job is shorter than the hosted iPhone UI lane alone.
+- **The queue moved rather than vanished.** A dispatched hosted run starts at once; a hosted
+  run for a pull request waited 11 to 18 minutes on 2026-10-21 (two runs). The mini has one
+  slot, so its median wait is 15 minutes. Typical pull request: about 31 minutes on the mini
+  (15 queued, 16 running) against about 60 to 75 hosted.
+- **Hosted was red once in three.** Run 39845022875 failed
+  `ReadingModeUITests.testTheEdgeSwipeClosesTheFindBarFirstAndThenLeavesReadingMode` on the
+  iPad lane ("Find is unreachable from inside reading mode (#506)"); the same tests passed on
+  the mini for the same code. One occurrence, not diagnosed; the mini was green on 28 of its
+  29 jobs.
+- **Not recorded:** the mini's load average at the start of each job (the design asked for
+  it). The mini runs the agents' own builds too, so its numbers include that contention.
+
+**When macOS or Xcode moves (27).** The Mac is held on macOS 26.7.1 and Xcode
+26.6 until 27.2 at the earliest (house-network-ops#426, not before December).
+When that upgrade is scheduled:
+
+1. `gh variable set MAC_SELF_HOSTED --body off` before the upgrade.
+2. After it, `service.sh status`. The agent survives an OS upgrade, because it
+   lives in `~/Library/LaunchAgents`.
+3. Run the § Recipes build-and-test recipe by hand.
+4. `gh workflow run ios-ci.yml -f runner=self-hosted --ref main`, and compare it
+   with a hosted run of the same commit. The hosted image may still be on Xcode
+   26 while the Mac is on 27: that is a divergence to record, not to hide.
+5. Turn the variable back `on`.
+
 ## What is installed (2026-09-11)
 
 | Piece | Where | Note |
@@ -171,7 +259,7 @@ load, so dedicated hardware does not restore their margin and does not close
 | Simulator build | `~/dd-ios` | derived data shared by the capture scripts |
 | Mac app | `~/app-macos/MegaPDF.app` | `tools/build-macos-app.sh osx-arm64 ~/app-macos` |
 | Captures | `~/captures/` | never committed; copy what is wanted into `artifacts/` locally |
-| GitHub Actions runner | `/Users/claude/actions-runner` | 2026-10-01, #614. Runs as `claude`, so a job that reaches it can read the deploy key and the clones — the fork guard in `ios-ci.yml` is what keeps strangers off it. Ephemeral, label `megapdf-ios`. See "CI on this machine" above. |
+| GitHub Actions runner | `/Users/claude/actions-runner` | 2026-10-01, #614; standing (non-ephemeral) since 2026-10-21, LaunchAgent `ca.electricrv.megapdf.actions-runner`, logs in `~/Library/Logs/megapdf-runner/`, job-started hook in `~/actions-runner/megapdf/`. Runs as `claude`, so a job that reaches it can read the deploy key and the clones; the hook is what keeps strangers off it. Label `megapdf-ios`. See "CI on this machine" above. |
 
 ## Recipes
 

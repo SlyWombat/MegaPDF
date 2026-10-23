@@ -192,6 +192,39 @@ public class ScanSearchTests
     }
 
     [Fact]
+    public void PageReadsOnceAndThenComesFromTheCache()
+    {
+        // #683: the Markdown export asks for a page the way Find does, and they share one cache.
+        var reads = 0;
+        var searcher = new ScanSearcher(_ => false, _ =>
+        {
+            reads++;
+            return Invoice;
+        });
+        Assert.Same(Invoice, searcher.Page(0));
+        Assert.Same(Invoice, searcher.Page(0));
+        Assert.Equal(1, reads);
+        // ...and a Find after the export (or before it) does not read again.
+        Assert.Single(searcher.Hits(0, "due", []));
+        Assert.Equal(1, reads);
+    }
+
+    [Fact]
+    public void PageIsNullForAPageWithItsOwnText()
+    {
+        var reads = 0;
+        var searcher = new ScanSearcher(_ => true, _ =>
+        {
+            reads++;
+            return Invoice;
+        });
+        Assert.Null(searcher.Page(0));
+        Assert.Null(searcher.Page(0));
+        Assert.Equal(0, reads);
+        Assert.Empty(searcher.Hits(0, "due", []));
+    }
+
+    [Fact]
     public void AReadHitOverAnOwnHitIsDroppedSoTheBoxIsNotShownTwice()
     {
         var searcher = Searcher(new Script());

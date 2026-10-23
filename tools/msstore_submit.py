@@ -53,6 +53,10 @@ LANGS = {
     "en-ca": {"shots": "en", "doc": "en-CA"},
     "fr-ca": {"shots": "fr-CA", "doc": "fr-CA"},
     "fr-fr": {"shots": "fr-FR", "doc": "fr-FR"},
+    # Spanish (#724): Partner Center lists Latin America as es-mx, the capture folder
+    # stays es-419; Spain is es-es with the es-ES folder.
+    "es-mx": {"shots": "es-419", "doc": "es-MX"},
+    "es-es": {"shots": "es-ES", "doc": "es-ES"},
 }
 LIMITS = {"description": 10000, "shortDescription": 1000, "releaseNotes": 1500,
           "feature": 200, "features": 20, "keyword": 30, "keywords": 7,
@@ -406,6 +410,7 @@ def describe_submission(sub, label):
         print(f"  {lang}: title '{b.get('title')}', description {len(b.get('description') or '')}, "
               f"what's new {len(b.get('releaseNotes') or '')}, {len(b.get('features') or [])} features, "
               f"{len(b.get('keywords') or [])} search terms; images: {types}")
+        print(f"      website {b.get('websiteUrl')}  support {b.get('supportContact')}  privacy {b.get('privacyPolicy')}")
     pr = sub.get("pricing", {})
     print(f"  pricing {pr.get('priceId')}  visibility {sub.get('visibility')}")
 

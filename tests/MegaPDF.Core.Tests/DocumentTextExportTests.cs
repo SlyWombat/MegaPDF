@@ -1,5 +1,6 @@
 using MegaPDF.Core.Engine;
 using MegaPDF.Core.Engine.Pdfium;
+using MegaPDF.Core.Viewing;
 using Xunit;
 
 namespace MegaPDF.Core.Tests;
@@ -51,6 +52,82 @@ public class DocumentTextExportTests : IDisposable
         Path.Combine(RepoRoot(), "core", "tests", "expected", "structure", name + "." + extension);
 
     public static IEnumerable<object[]> Cases() => GoldenCases.Select(c => new object[] { c });
+
+    // --- #683: scanned pages read by a recogniser ---
+
+    /// <summary>A recognised word on a 612 x 792 pt page: top-left origin, as the desktop recognisers report it.</summary>
+    private static OcrLine Line(string text, double topLeftY) =>
+        new(text, [new OcrWord(0, text.Length, new PdfRect(72, topLeftY, 400, 12))]);
+
+    [Theory]
+    [MemberData(nameof(Cases))]
+    public void WriteMarkdownWithScans_NothingRecognised_IsWriteMarkdownByteForByte(string name)
+    {
+        using var doc = new PdfiumEngine().Open(FixturePath(name));
+        using var plain = new MemoryStream();
+        doc.WriteMarkdown(plain, options: NativeDefaultOptions);
+
+        Assert.Equal(plain.ToArray(), doc.WriteMarkdownWithScans(null, NativeDefaultOptions).Markdown);
+        Assert.Equal(plain.ToArray(), doc.WriteMarkdownWithScans(new Dictionary<int, OcrPage>(), NativeDefaultOptions).Markdown);
+        Assert.Equal(File.ReadAllBytes(GoldenPath(name, "md")), doc.WriteMarkdownWithScans(null, NativeDefaultOptions).Markdown);
+    }
+
+    [Theory]
+    [InlineData("scan", new[] { 0 })]
+    [InlineData("mixed", new[] { 1 })]
+    [InlineData("headings", new int[0])]
+    [InlineData("empty-page", new int[0])]
+    [InlineData("tiny-font-size", new int[0])]
+    public void WriteMarkdownWithScans_ReportsTheScannedPage(string name, int[] expected)
+    {
+        using var doc = new PdfiumEngine().Open(FixturePath(name));
+        Assert.Equal(expected, doc.WriteMarkdownWithScans(null).UnreadScannedPages);
+    }
+
+    [Fact]
+    public void WriteMarkdownWithScans_QuotesWhatWasRead()
+    {
+        using var doc = new PdfiumEngine().Open(FixturePath("scan"));
+        // Two lines close together, then one far below: two paragraphs -- but only if the top-left
+        // rectangles are flipped to the core's bottom-left convention. Unflipped, the third line
+        // sits "above" the second, and every line becomes its own paragraph.
+        var read = new Dictionary<int, OcrPage>
+        {
+            [0] = new OcrPage([Line("First line", 80), Line("second line", 94), Line("Third line", 180)]),
+        };
+
+        var result = doc.WriteMarkdownWithScans(read, NativeDefaultOptions);
+
+        Assert.Equal(File.ReadAllBytes(GoldenPath("scan-recognised", "md")), result.Markdown);
+        Assert.Empty(result.UnreadScannedPages);
+    }
+
+    [Fact]
+    public void WriteMarkdownWithScans_AReadPageLeavesTheTextPagesAlone()
+    {
+        using var doc = new PdfiumEngine().Open(FixturePath("mixed"));
+        var read = new Dictionary<int, OcrPage> { [1] = new OcrPage([Line("Read me", 80)]) };
+
+        var text = System.Text.Encoding.UTF8.GetString(doc.WriteMarkdownWithScans(read, NativeDefaultOptions).Markdown);
+
+        Assert.Equal(
+            "First page has text.\n\n*[Page 2 is a scanned image, read by text recognition: the text may contain mistakes]*\n\n> Read me\n\nThird page has text too.\n",
+            text);
+    }
+
+    [Fact]
+    public void WriteMarkdownWithScans_LinesForAPageWithItsOwnTextAreIgnored()
+    {
+        using var doc = new PdfiumEngine().Open(FixturePath("mixed"));
+        var read = new Dictionary<int, OcrPage> { [0] = new OcrPage([Line("never shown", 80)]) };
+
+        var result = doc.WriteMarkdownWithScans(read, NativeDefaultOptions);
+
+        using var plain = new MemoryStream();
+        doc.WriteMarkdown(plain, options: NativeDefaultOptions);
+        Assert.Equal(plain.ToArray(), result.Markdown);
+        Assert.Equal([1], result.UnreadScannedPages);
+    }
 
     [Theory]
     [MemberData(nameof(Cases))]

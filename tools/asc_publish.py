@@ -32,54 +32,41 @@ import time
 import urllib.error
 import urllib.request
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import store_slots  # noqa: E402
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 API = "https://api.appstoreconnect.apple.com"
 APP_ID = os.environ.get("ASC_APP_ID", "6799522972")          # MegaPDF (iOS)
 PLATFORM = os.environ.get("ASC_PLATFORM", "IOS")
 # App Store Connect locale codes; the repo (docs, capture folders) calls France
-# French plain "fr", App Store Connect calls it "fr-FR".
-LOCALES = ["en-CA", "fr-CA", "fr-FR"]
-REPO_LOCALE = {"en-CA": "en", "fr-FR": "fr"}
+# French plain "fr", App Store Connect calls it "fr-FR". Spanish (#724): App Store
+# Connect has no es-419, so Latin American Spanish is listed as "es-MX" while the
+# capture folder stays "es-419"; Spain is "es-ES" and, like France, the plain "es"
+# folder. Do not rename the folder to match the store.
+LOCALES = ["en-CA", "fr-CA", "fr-FR", "es-MX", "es-ES"]
+REPO_LOCALE = {"en-CA": "en", "fr-FR": "fr", "es-MX": "es-419", "es-ES": "es"}
 
-# Listing slots, per label, in order (docs/app-store-listing.md § Screenshots).
+# Store URLs (#662). The support page asks the four questions a useful report needs and
+# answers the common ones first; GitHub is the source, not the help desk.
+SUPPORT_URL = "https://electricrv.ca/megapdf/support/"
+MARKETING_URL = "https://electricrv.ca/megapdf/"
+PRIVACY_URL = "https://electricrv.ca/megapdf/privacy/"
+
+# Slot order and file names: tools/store_slots.py (#656).
 # The Mac is a platform of the same record: ASC_PLATFORM=MAC_OS switches the
 # version, the slot types, and where the captures come from (tools/mac-mini.md).
-#
-# SHOT_ORDER is a {label: [states]} map, one order per SHOT_SETS label, rather
-# than one shared list with an exception threaded through it: since #613 (PR
-# #651) the iPad's sequence genuinely differs from the iPhone's (Dave's call —
-# the iPad leads on the sidebar and its own 2.2 toolbar instead of repeating
-# the phone's case), so the divergence needs to be visible, the same shape #651
-# itself used in tools/capture-gate/stores.py and tools/gen_listing_copy.py.
-#
-# Both orders below are taken verbatim from those two files, not reinvented
-# here:
-#   - tools/capture-gate/stores.py, profile "ios", order["iphone-6_9"] /
-#     order["ipad-13"] (the merged source of truth for the capture rig itself).
-#   - cross-checked against tools/gen_listing_copy.py's captions_iphone /
-#     captions_ipad, which name the same states in the same order.
-# Neither file's state names carry the numeric prefixes the Mac's capture
-# filenames do (light-01-reading.png, …) — tools/capture-gate/stores.py's own
-# "mac" profile `parse` strips them with `(?:\d+[-_])?`. The Mac order here
-# spells them out because this file matches literal filenames, not poses.
-if PLATFORM == "MAC_OS":
-    # tools/macos-store-captures.sh's seven listing slots (#613 cut Viewer from
-    # the front in favour of Reading, and added Pages).
-    SHOT_SETS = {"light": "APP_DESKTOP"}
-    SHOT_ORDER = {"light": ["01-reading", "02-text", "03-sign", "04-pages",
-                            "05-search", "06-redact", "07-home"]}
-    # One clip per listing language: macos-<lang>-light-recorded-preview.mp4.
-    PREVIEW_SETS = {"macos-{lang}-light-recorded": "DESKTOP"}
-else:
-    # Nine slots since #613 (PR #651): two sequences, not one.
-    SHOT_SETS = {"iphone-6_9": "APP_IPHONE_67", "ipad-13": "APP_IPAD_PRO_3GEN_129"}
-    SHOT_ORDER = {
-        "iphone-6_9": ["reading", "text-edit", "sign", "draw", "pages", "text",
-                       "search", "redact", "home"],
-        "ipad-13": ["pages", "reading", "text-edit", "sign", "draw", "text",
-                    "search", "redact", "home"],
-    }
-    PREVIEW_SETS = {"iphone-6_9": "IPHONE_67", "ipad-13": "IPAD_PRO_3GEN_129"}
+STORE = "mac" if PLATFORM == "MAC_OS" else "ios"
+# Display type per store_slots device. Keys must equal store_slots.devices(STORE)
+# (tools/test_store_slots.py checks it).
+SHOT_SETS_BY_STORE = {
+    "mac": {"desktop": "APP_DESKTOP"},
+    "ios": {"iphone-6_9": "APP_IPHONE_67", "ipad-13": "APP_IPAD_PRO_3GEN_129"},
+}
+SHOT_SETS = SHOT_SETS_BY_STORE[STORE]
+# Mac: one clip per listing language, macos-<lang>-light-recorded-preview.mp4.
+PREVIEW_SETS = ({"macos-{lang}-light-recorded": "DESKTOP"} if STORE == "mac"
+                else {"iphone-6_9": "IPHONE_67", "ipad-13": "IPAD_PRO_3GEN_129"})
 
 
 # --- client -----------------------------------------------------------------
@@ -300,8 +287,8 @@ def cmd_copy():
             continue
         attrs = {"description": fields["Description"], "keywords": fields["Keywords"],
                  "promotionalText": fields.get("Promotional text", ""),
-                 "supportUrl": "https://github.com/SlyWombat/MegaPDF",
-                 "marketingUrl": "https://electricrv.ca/megapdf/"}
+                 "supportUrl": SUPPORT_URL,
+                 "marketingUrl": MARKETING_URL}
         wn = notes.get(locale) or notes.get(REPO_LOCALE.get(locale, locale))
         if wn:
             if len(wn) > 4000:
@@ -328,7 +315,7 @@ def cmd_copy():
         if not fields:
             continue
         attrs = {"name": fields["Name"], "subtitle": fields["Subtitle"],
-                 "privacyPolicyUrl": "https://electricrv.ca/megapdf/privacy/"}
+                 "privacyPolicyUrl": PRIVACY_URL}
         if locale in ilocs:
             api("PATCH", f"/v1/appInfoLocalizations/{ilocs[locale]['id']}", {"data": {
                 "type": "appInfoLocalizations", "id": ilocs[locale]["id"], "attributes": attrs}})
@@ -368,7 +355,7 @@ def cmd_screenshots(captures):
         sets = {s["attributes"]["screenshotDisplayType"]: s for s in
                 paged(f"/v1/appStoreVersionLocalizations/{lid}/appScreenshotSets?limit=50")}
         for label, display in SHOT_SETS.items():
-            order = SHOT_ORDER[label]
+            names = store_slots.listing_files(STORE, label)
             if display in sets:
                 sid = sets[display]["id"]
                 try:
@@ -391,8 +378,8 @@ def cmd_screenshots(captures):
                         "type": "appStoreVersionLocalizations", "id": lid}}}}})["data"]["id"]
             n = 0
             missing = []
-            for state in order:
-                path = os.path.join(folder, f"{label}-{state}.png")
+            for name in names:
+                path = os.path.join(folder, name)
                 if os.path.exists(path):
                     upload_asset("/v1/appScreenshots", "appScreenshotSet", sid, path)
                     n += 1
@@ -400,8 +387,8 @@ def cmd_screenshots(captures):
                     missing.append(os.path.basename(path))
             status = f"  {locale} {display}: {n} screenshots"
             if missing:
-                status += f"  -- MISSING {len(missing)}/{len(order)}: {', '.join(missing)}"
-                problems.append(f"{locale} {display}: found {n}/{len(order)} in {folder}, "
+                status += f"  -- MISSING {len(missing)}/{len(names)}: {', '.join(missing)}"
+                problems.append(f"{locale} {display}: found {n}/{len(names)} in {folder}, "
                                 f"missing {', '.join(missing)}")
             print(status)
     if problems:

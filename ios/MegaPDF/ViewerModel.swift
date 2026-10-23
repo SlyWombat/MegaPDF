@@ -823,6 +823,22 @@ final class ViewerModel: ObservableObject {
     /// a save) belongs to whoever started it.
     let busy = BusyState()
 
+    // MARK: - the input probe the UI tests read (#681, #706)
+
+    /// What became of the page's taps and long presses, counted only under
+    /// `-uiTestInputProbe` (see `UITestInputProbe`) and published nowhere else: an ordinary
+    /// launch never changes these, so they never cost a render.
+    @Published private(set) var probeTaps = 0
+    @Published private(set) var probeDispatched = 0
+    @Published private(set) var probeIgnoredBusy = 0
+    @Published private(set) var probePresses = 0
+
+    /// The page's single-tap gesture ended: the touch arrived as a tap.
+    func probeNoteTap() { if UITestInputProbe.requested { probeTaps += 1 } }
+
+    /// The page's long-press recogniser began: the touch arrived as a press.
+    func probeNotePress() { if UITestInputProbe.requested { probePresses += 1 } }
+
     /// The #139 page check, one shared check per page of the open document, started early (#145).
     /// Settled pages need no warning before a text-box change: they keep their look, the person
     /// already chose Continue, or a change went on without one.
@@ -1520,7 +1536,11 @@ final class ViewerModel: ObservableObject {
         // about the mode rather than about what the app happens to be doing.
         guard !readingMode else { return }
         // Taps are ignored while other work runs (#145): never two changes or two questions at once.
-        guard !busy.isBlocked else { return }
+        guard !busy.isBlocked else {
+            if UITestInputProbe.requested { probeIgnoredBusy += 1 }
+            return
+        }
+        if UITestInputProbe.requested { probeDispatched += 1 }
         let size = pageSizes[index]
         let x = xFraction * size.width
         let y = (1 - yFraction) * size.height  // view top-left → PDF bottom-left
@@ -1863,6 +1883,20 @@ final class ViewerModel: ObservableObject {
         setTextSelection(selection, snapshot: snapshot)
     }
 
+    /// Moves a handle one word on or back, for VoiceOver's adjust gesture (#710): a user who
+    /// cannot drag can still extend or shrink the selection. Word boundaries are the ones a long
+    /// press uses. Does nothing at the page's first or last word, or where the step would empty
+    /// the selection. Synchronous, like a drag: the snapshot is already loaded.
+    func moveSelectionHandleByWord(_ handle: PageTextSelection.Handle, forward: Bool) {
+        guard var selection = textSelection, let snapshot = selectables[selection.pageIndex] else { return }
+        let from = handle == .start ? selection.start : selection.end
+        guard let caret = snapshot.caret(byWordFrom: from, forward: forward),
+              selection.step(handle, to: caret, length: snapshot.length) else { return }
+        setTextSelection(selection, snapshot: snapshot)
+        // Show the menu again, as after a drag: Copy is how the user finishes.
+        selectionMenuRequest += 1
+    }
+
     /// The handle was let go: show the menu again.
     func endSelectionHandleDrag() {
         if textSelection != nil { selectionMenuRequest += 1 }
@@ -1946,10 +1980,34 @@ final class ViewerModel: ObservableObject {
         bodyDraft = ""
     }
 
+    /// How a notice is spoken (#631). Queued rather than interrupting: "Saved" usually lands as the
+    /// export sheet goes away, and an announcement posted during that screen change is otherwise
+    /// cut off by it. A seam so the tests can see what VoiceOver would be told.
+    var speakNotice: @MainActor (String) -> Void = { text in
+        UIAccessibility.post(
+            notification: .announcement,
+            argument: NSAttributedString(
+                string: text,
+                attributes: [.accessibilitySpeechQueueAnnouncement: true]))
+    }
+
+    /// A finished file command (#631): a self-clearing notice when it is only a confirmation, and
+    /// the alert when a redaction summary rides along. What a redaction permanently removed is
+    /// acknowledged once, with an OK (#276, #279). A four-second capsule is the wrong place for it.
+    private func confirmFinished(_ title: String, detail: String?) {
+        if let detail {
+            statusMessage = title
+            statusDetail = detail
+        } else {
+            showNotice(title)
+        }
+    }
+
     /// Shows a notice over the page for a few seconds (`NoticeLifetime`).
     func showNotice(_ text: String) {
         noticeTask?.cancel()
         notice = text
+        speakNotice(text)
         guard NoticeLifetime.clearsItself() else { return }
         noticeTask = Task {
             try? await Task.sleep(nanoseconds: NoticeLifetime.visibleNanoseconds)
@@ -2400,6 +2458,7 @@ final class ViewerModel: ObservableObject {
                     doc, index: index, pixelWidth: width, pixelHeight: height, tint: .normal) {
                     guard !Task.isCancelled, document === doc else { return }
                     pageThumbnails[index] = image
+                    PagesGridTrace.note("thumb \(index)")
                 }
             }
         }
@@ -3171,7 +3230,7 @@ final class ViewerModel: ObservableObject {
             return
         }
         signatures.append(entry)
-        statusMessage = String(localized: "Signature added")
+        showNotice(String(localized: "Signature added"))
     }
 
     private func downscaled(_ image: CGImage, maxDim: Int = 1500) -> CGImage {
@@ -3251,8 +3310,7 @@ final class ViewerModel: ObservableObject {
                     isSaving = false
                     openPicked(url: newURL)
                 default:
-                    statusMessage = String(localized: "Saved")
-                    statusDetail = summaryForSave
+                    confirmFinished(String(localized: "Saved"), detail: summaryForSave)
                 }
                 summaryForSave = nil
             } catch {
@@ -3417,8 +3475,7 @@ final class ViewerModel: ObservableObject {
         adopt(exportedCopy: destination)
         if exportEditCount == editCount { isDirty = false }
         exportEditCount = nil
-        statusMessage = String(localized: "Saved")
-        statusDetail = summary
+        confirmFinished(String(localized: "Saved"), detail: summary)
     }
 
     /// Points the open document at the copy Save a copy just wrote (#572): everything an open
@@ -3488,8 +3545,15 @@ final class ViewerModel: ObservableObject {
     /// quiet about a PDF that was never actually saved.
     func finishMarkdownExport(saved: Bool) {
         discardExportFile()
-        guard saved else { return }
-        statusMessage = String(localized: "Exported")
+        let summary = summaryForSave
+        summaryForSave = nil
+        guard saved else {
+            // Cancelled: nothing was written, but the redaction was applied to the open document,
+            // so what it removed is still said, as finishExport does (#631).
+            if let summary { redactionSummary = summary }
+            return
+        }
+        confirmFinished(String(localized: "Exported"), detail: summary)
     }
 
     private func discardExportFile() {
@@ -3853,6 +3917,27 @@ final class ViewerModel: ObservableObject {
 /// that appeared and cleared itself before the assertion looked used to be indistinguishable
 /// from a notice that was never shown, and those two tests exist precisely to tell the
 /// difference.
+/// `-uiTestInputProbe`: the page says what became of each touch a UI test sends it (#681).
+///
+/// **Why the app has to say it.** On GitHub's hosted macOS runners a synthesised tap has been
+/// measured taking 25 seconds to deliver (run 39376112304, `BodyTextEditUITests`), against a
+/// fraction of a second on the Mac mini, and the tests that tap the page then failed with
+/// "tapping the line did not open the text editor" and nothing else to go on. Three different
+/// things look exactly like that from outside: the touch never arrived; it arrived while an
+/// open was still finishing, and #145 ignores page taps while work runs, by design; or it
+/// arrived held long enough to be a long press (#710's selection starts at 0.45 s), which a
+/// starved simulator can make of any tap. And one more that is a real defect: it arrived as a
+/// tap, was dispatched, and the app did nothing. A screen recording cannot tell those apart.
+/// These counts can, so a test re-sends a touch only when the app itself says the last one was
+/// not dispatched, and fails at once when it was dispatched and nothing followed.
+///
+/// The same kind of lever as `-uiTestZoomProbes` (#531) and `-uiTestPinNotices` (#487): it
+/// changes nothing the app does, adds one undrawn element to the accessibility tree, and
+/// nothing but a UI test passes it.
+enum UITestInputProbe {
+    static let requested = ProcessInfo.processInfo.arguments.contains("-uiTestInputProbe")
+}
+
 enum NoticeLifetime {
     /// What a person sees.
     static let visible: TimeInterval = 4

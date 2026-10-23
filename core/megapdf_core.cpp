@@ -95,6 +95,10 @@ struct FileSource {
 #endif
     unsigned long long length = 0;
     bool open = false;
+    // Bytes PDFium has read through FileSourceGetBlock (megapdf_testing_bytes_read, #698).
+    // Plain, not atomic: every PDFium call, and so every read, holds the core lock, and the
+    // struct is copied by value in megapdf_read_from_copy().
+    unsigned long long bytes_read = 0;
 };
 
 // A redaction mark (#173, contract 8). The core's own: never a page object, so a document
@@ -502,7 +506,9 @@ bool FileSourceRead(FileSource* s, unsigned long long pos, unsigned char* buf, s
 int FileSourceGetBlock(void* param, unsigned long position, unsigned char* buf, unsigned long size) {
     auto* s = static_cast<FileSource*>(param);
     if (s == nullptr || !s->open || buf == nullptr || size == 0) return 0;
-    return FileSourceRead(s, position, buf, static_cast<size_t>(size)) ? 1 : 0;
+    if (!FileSourceRead(s, position, buf, static_cast<size_t>(size))) return 0;
+    s->bytes_read += size;
+    return 1;
 }
 
 // Fills in the length and wires up the callback once the handle is open. False, with
@@ -3237,6 +3243,11 @@ MEGAPDF_API void megapdf_testing_set_max_file_bytes(unsigned long long bytes) {
     g_testing_max_file_bytes.store(bytes);
 }
 
+MEGAPDF_API unsigned long long megapdf_testing_bytes_read(const megapdf_document* doc) {
+    Guard guard(CoreLock());
+    return doc != nullptr ? doc->source.bytes_read : 0;
+}
+
 MEGAPDF_API megapdf_cancel* megapdf_cancel_new(void) {
     return new (std::nothrow) megapdf_cancel();
 }
@@ -4026,40 +4037,112 @@ MEGAPDF_API int megapdf_replace_image_jpeg(const megapdf_document* d, int page_i
 
 MEGAPDF_API int megapdf_shrink_images(const megapdf_document* d, megapdf_jpeg_encode_fn encode, megapdf_jpeg_release_fn release,
                                       void* context, int* out_replaced) {
+    int counts[MEGAPDF_SHRINK_COUNTS] = {};
+    const int status = megapdf_shrink_images_cancellable(d, encode, release, nullptr, context, nullptr, counts, MEGAPDF_SHRINK_COUNTS);
+    if (out_replaced != nullptr && status != MEGAPDF_ERR_ARGUMENT) *out_replaced = counts[MEGAPDF_SHRINK_REPLACED];
+    return status;
+}
+
+MEGAPDF_API int megapdf_shrink_images_cancellable(const megapdf_document* d, megapdf_jpeg_encode_fn encode,
+                                                  megapdf_jpeg_release_fn release, megapdf_progress_fn progress,
+                                                  void* context, const megapdf_cancel* cancel,
+                                                  int* out_counts, size_t count_slots) {
+    const size_t slots = count_slots < static_cast<size_t>(MEGAPDF_SHRINK_COUNTS) ? count_slots : static_cast<size_t>(MEGAPDF_SHRINK_COUNTS);
+    if (out_counts != nullptr) for (size_t i = 0; i < slots; i++) out_counts[i] = 0;
     if (d == nullptr || encode == nullptr) return MEGAPDF_ERR_ARGUMENT;
-    Guard guard(CoreLock());
-    if (out_replaced != nullptr) *out_replaced = 0;
+    std::unique_lock<std::recursive_mutex> lock(CoreLock());
+    // The page check's pattern (#145): from here on only the document, which megapdf_close()
+    // keeps alive while active_checks is non-zero, and the image list taken up front are used.
+    auto* doc = const_cast<megapdf_document*>(d);
+    if (doc->closing) return MEGAPDF_ERR_CANCELLED;
     megapdf_images* list = megapdf_images_load(d);
     if (list == nullptr) return MEGAPDF_ERR_MEMORY;
+    // The list names images by (page, object index). An edit that regenerates a page while the
+    // lock is let go may move those indices, so each page's change count is kept as the list saw it.
+    std::map<int, unsigned long long> seen = doc->page_changes;
+    doc->active_checks++;
+    int considered = 0;
     int replaced = 0;
     int status = MEGAPDF_OK;
+    // Every exit from here runs this, with the lock held: megapdf_close() waits for
+    // active_checks to reach zero, so a missed decrement hangs every later close.
+    struct Finish {
+        megapdf_document* doc;
+        megapdf_images* list;
+        ~Finish() {
+            doc->active_checks--;
+            ChecksDone().notify_all();
+            megapdf_images_free(list);
+        }
+    } finish{doc, list};
+    const int total = static_cast<int>(list->images.size());
+    auto stopped = [&] { return megapdf_internal::IsCancelled(cancel) || doc->closing; };
+    auto unchanged = [&](int page) { return doc->page_changes[page] == seen[page]; };
+
+    if (progress != nullptr) {
+        lock.unlock();
+        progress(context, 0, total);
+        lock.lock();
+    }
     for (const megapdf_image_info& image : list->images) {
+        if (stopped()) { status = MEGAPDF_ERR_CANCELLED; break; }
+        considered++;
+        unsigned char* jpeg = nullptr;
         // The desktop rules (ImageShrinker), rounding half to even as .NET does.
         int target_w = static_cast<int>(std::nearbyint(image.display_width / 72.0 * 150.0));
         int target_h = static_cast<int>(std::nearbyint(image.display_height / 72.0 * 150.0));
         const bool oversized = image.pixel_width > target_w * 1.2;
-        if ((!oversized && image.stored_bytes < 100000) || image.stored_bytes < 8000) continue;
-        if (image.pixel_width < 8 || image.pixel_height < 8) continue;
-        target_w = target_w < 8 ? 8 : (target_w > image.pixel_width ? image.pixel_width : target_w);
-        target_h = target_h < 8 ? 8 : (target_h > image.pixel_height ? image.pixel_height : target_h);
-
-        megapdf_image* pixels = megapdf_render_image(d, image.page_index, image.object_index, target_w, target_h);
-        if (pixels == nullptr) continue;
-        unsigned char* jpeg = nullptr;
-        size_t length = 0;
-        const int encoded = encode(context, pixels->bgra.data(), pixels->width, pixels->height, 0.75, &jpeg, &length);
-        megapdf_image_free(pixels);
-        if (!encoded || jpeg == nullptr) continue;
-        // A re-encode that saves less than 10% is not worth the quality loss.
-        if (static_cast<double>(length) < image.stored_bytes * 0.9) {
-            ScopedPage sp(d, image.page_index);
-            const int one = sp.page ? ReplaceImageJpegUnlocked(sp.page, image.object_index, jpeg, length) : MEGAPDF_ERR_ARGUMENT;
-            if (one == MEGAPDF_OK) replaced++; else status = one;
+        const bool worth_it = !((!oversized && image.stored_bytes < 100000) || image.stored_bytes < 8000) &&
+                              image.pixel_width >= 8 && image.pixel_height >= 8;
+        // An image on a page that changed since the list was taken may no longer be at its index.
+        if (worth_it && unchanged(image.page_index)) {
+            target_w = target_w < 8 ? 8 : (target_w > image.pixel_width ? image.pixel_width : target_w);
+            target_h = target_h < 8 ? 8 : (target_h > image.pixel_height ? image.pixel_height : target_h);
+            megapdf_image* pixels = megapdf_render_image(d, image.page_index, image.object_index, target_w, target_h);
+            if (pixels != nullptr) {
+                size_t length = 0;
+                // The encode is the platform's slow part: it runs without the lock, so renders,
+                // edits and saves of any document go on meanwhile.
+                lock.unlock();
+                const int encoded = encode(context, pixels->bgra.data(), pixels->width, pixels->height, 0.75, &jpeg, &length);
+                megapdf_image_free(pixels);
+                if (!encoded) jpeg = nullptr;   // as before: a failed encode hands nothing back to release
+                lock.lock();
+                if (stopped()) {
+                    if (release != nullptr && jpeg != nullptr) {
+                        lock.unlock();
+                        release(context, jpeg);
+                        lock.lock();
+                    }
+                    status = MEGAPDF_ERR_CANCELLED;
+                    break;
+                }
+                // A re-encode that saves less than 10% is not worth the quality loss; and the page
+                // is checked again, because the lock was let go during the encode.
+                if (jpeg != nullptr && static_cast<double>(length) < image.stored_bytes * 0.9 &&
+                    unchanged(image.page_index)) {
+                    ScopedPage sp(d, image.page_index);
+                    const int one = sp.page ? ReplaceImageJpegUnlocked(sp.page, image.object_index, jpeg, length) : MEGAPDF_ERR_ARGUMENT;
+                    if (one == MEGAPDF_OK) {
+                        replaced++;
+                        // Our own replacement regenerated the page; without this the page's next
+                        // image would be skipped as changed by someone else.
+                        seen[image.page_index] = doc->page_changes[image.page_index];
+                    } else {
+                        status = one;
+                    }
+                }
+            }
         }
-        if (release != nullptr) release(context, jpeg);
+        lock.unlock();
+        if (release != nullptr && jpeg != nullptr) release(context, jpeg);
+        if (progress != nullptr) progress(context, considered, total);
+        lock.lock();
     }
-    megapdf_images_free(list);
-    if (out_replaced != nullptr) *out_replaced = replaced;
+    if (out_counts != nullptr) {
+        if (slots > MEGAPDF_SHRINK_CONSIDERED) out_counts[MEGAPDF_SHRINK_CONSIDERED] = considered;
+        if (slots > MEGAPDF_SHRINK_REPLACED) out_counts[MEGAPDF_SHRINK_REPLACED] = replaced;
+    }
     return status;
 }
 

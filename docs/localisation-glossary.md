@@ -4,6 +4,9 @@ The one vocabulary every platform's catalogue follows. Same English concept,
 same French word on Windows, macOS, Android and iOS. Add a row before you coin a
 new term; a term that exists here is not re-translated per platform.
 
+The Spanish sibling of this file is [localisation-glossary-es.md](localisation-glossary-es.md)
+(#724); its main table covers every English term below, and a test keeps the two in step.
+
 The exception is a platform's own idiom for its own system screen — Settings is
 the one case of this so far (Dave, 2026-10-01): it is *Paramètres* on Windows
 and Android, *Réglages* on iOS and macOS, each row below says so, and neither
@@ -75,6 +78,11 @@ established French for the cryptographic sense.
 | Save As | Enregistrer sous | |
 | Save a copy | Enregistrer une copie | |
 | Save a smaller copy for email | Enregistrer une copie réduite pour courriel | |
+| Your changes can't be undone after this | Vos modifications ne pourront plus être annulées ensuite | #633, desktops (Windows and macOS/Linux): the title of the question put before a save or a password change takes away what Undo could reach back to. Shared by both reasons, which differ only in the body |
+| "Make marks & signatures permanent when saving" is on, so this save makes your changes part of the page. MegaPDF won't ask again while this document is open. | L'option «&nbsp;Rendre les marques et signatures permanentes à l'enregistrement&nbsp;» est activée&nbsp;: cet enregistrement intègre donc vos modifications à la page. MegaPDF ne vous le redemandera pas tant que ce document est ouvert. | #633, **Windows** body for a save with that setting on. Quotes the setting's own label (`FlattenToggle.Header`, above in the Settings rows) exactly; the last sentence is #558's once-per-open-document rule |
+| "Flatten when saving" is on, so this save bakes your changes into the page. MegaPDF won't ask again while this document is open. | L'option «&nbsp;Aplatir à l'enregistrement&nbsp;» est activée&nbsp;: cet enregistrement intègre donc vos modifications à la page. MegaPDF ne vous le redemandera pas tant que ce document est ouvert. | #633, **macOS/Linux** body for a save with that setting on. Quotes `FlattenWhenSaving` exactly; the French is the Windows sentence with the Mac/Linux label, so the two read alike |
+| Setting, changing or removing a password saves the document and opens it again. After that, what you've done so far can't be undone. | Définir, changer ou retirer un mot de passe enregistre le document et le rouvre. Ensuite, vous ne pourrez plus annuler ce que vous avez fait jusqu'ici. | #633, both desktops: the body for the Password command, asked every time (the reopen it describes resets the once-per-document flag anyway). Says *password*, never *encrypted* or *protected* |
+| can't be undone (after a step that clears the undo history) | ne pourront plus être annulées / vous ne pourrez plus annuler | #633: the verb, never the bare noun « Annuler », which is also Cancel — and Cancel is a button in this very dialog (see the Undo and Cancel rows) |
 | Shrink | Réduire | toolbar label |
 | Shrink for email | Réduire pour courriel | UIA name |
 | Print | Imprimer | |
@@ -241,7 +249,8 @@ established French for the cryptographic sense.
 | Copy | Copier | #710, iOS: the system edit menu's item over a text selection; the system's own French |
 | This page has no text to select. | Cette page ne contient aucun texte à sélectionner. | #710, iOS: long press on a scan |
 | The owner of this document doesn't allow copying its text. | Le propriétaire de ce document n'autorise pas la copie de son texte. | #710, iOS: the copy permission is off; the text still selects. Not "chiffrement" or "protégé": it is a permission, not encryption |
-| Start of selection / End of selection | Début de la sélection / Fin de la sélection | #710, iOS: VoiceOver names of the two handles |
+| Start of selection / End of selection | Début de la sélection / Fin de la sélection | #710, iOS: VoiceOver names of the two handles; Android: the same words, TalkBack's names for them |
+| Next word / Previous word | Mot suivant / Mot précédent | #710, Android: the two TalkBack custom actions on each selection handle, moving that end one word later or earlier |
 | This field is read-only. | Ce champ est en lecture seule. | #712, iOS: a form field marked read-only by its author |
 | Save as a copy, keeping the invalid signature | Enregistrer une copie en gardant la signature invalide | #576, iOS: the *redaction*-confirm sheet's twin of the row above, keyed "Save **as a** copy" rather than "Save a copy" because that is what its own plain row is already keyed — same French either way, since French does not need the English distinction |
 | Saved. The copy carries the document's digital signature, and it is no longer valid. | Enregistré. La copie porte la signature numérique du document, et celle-ci n'est plus valide. | #576, Android's own idiom: a snackbar message starting "Saved.", and naming the document rather than the original, since Android's string never otherwise mentions "the original" — the canonical row above is Windows/Avalonia's own phrasing |
@@ -261,6 +270,7 @@ established French for the cryptographic sense.
 | Save first | Enregistrez d'abord | |
 | Nothing to shrink | Rien à réduire | |
 | Smaller copy saved | Copie réduite enregistrée | |
+| Was {0} MB, now {1} MB. Saved as {2}, ready to email. | Avant : {0} Mo, après : {1} Mo. Enregistrée sous {2}, prête pour le courriel. | #632, the Windows shrink notice; Mac/Linux say this on the status line in their own words |
 | Saved | Enregistré | |
 | Saving… | Enregistrement… | |
 | Opening… | Ouverture… | busy strip (#145) |
@@ -298,6 +308,7 @@ established French for the cryptographic sense.
 | Redact | Caviarder | #173. The verb Termium and the Quebec public service use for removing content from a document; "expurger" is the alternative and is less specific. **For francophone review.** |
 | Redaction | Caviardage | #173 |
 | Marked for redaction | Marqué pour caviardage | #173 |
+| Selects this mark. | Sélectionne cette marque. | #644, iOS VoiceOver hint on a redaction mark; Apple's hint style says what happens, never the gesture |
 | Remove content from the file | Retirer du contenu du fichier | #173. "Retirer" (take out), not "supprimer" (delete), because the point is that it leaves the file |
 | Cover an area — this doesn't remove what's under it | Masquer une zone : ce qui est dessous n'est pas retiré | #173. The whiteout tooltip, reworded so the tool says what it does |
 | Whiteout covers — it doesn't remove | Le correcteur masque sans rien retirer | #173 first-use hint; no comma splice (#242) |
@@ -359,6 +370,8 @@ established French for the cryptographic sense.
 | Copy (selected text) | Copier | #710, the desktops' page context menu and the Mac's Edit menu. The verb, as every OS's own Copy says it; not *Copie*, which is the noun in *Enregistrer une copie* |
 | Select all / Select All | Tout sélectionner | #710, the desktops' page context menu and the Mac's Edit menu; the same words the phones' page tools already use (`pages_select_all`). Title case in the Mac's English only, its menu idiom |
 | The author of this document asked that nothing be copied out of it. (Copy unavailable) | L'auteur de ce document a demandé que rien n'en soit copié. | #710 reuses #558's extraction-class row word for word as the reason Copy is greyed on a document without the copy permission: selecting still works, only Copy is off. A request, never *interdit* |
+| Selected: {0} (announced) | Sélectionné : {0} | #710, the desktops: what Narrator or VoiceOver says when a text selection settles; {0} is the first 80 characters of the selection. Spoken only. The Canadian rule: U+00A0 before the colon; France derives its own |
+| Copied (announced) | Copié | #710, the desktops: spoken after a successful copy; the past participle, as the Android toast says it (*select_copied*) |
 
 ## Français (France)
 

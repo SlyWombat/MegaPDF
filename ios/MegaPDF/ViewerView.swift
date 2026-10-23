@@ -163,6 +163,9 @@ struct ViewerView: View {
                 // wrong room.
                 .background(Brand.Reading.gutter(model.pageTint))
                 .overlay(alignment: .topLeading) { zoomProbes(geo: geo) }
+                .overlay(alignment: .topLeading) {
+                    if UITestInputProbe.requested { InputProbe(model: model, busy: model.busy) }
+                }
                 // The pinch itself lives in the overlay inside the stack above, not
                 // here: `MagnificationGesture` reports a bare scale and no location at
                 // all, so nothing hung off it could know where to anchor (#530).
@@ -424,7 +427,7 @@ struct ViewerView: View {
     private func zoomProbes(geo: GeometryProxy) -> some View {
         if zoomProbesRequested {
             ZStack(alignment: .topLeading) {
-                Text("zoom \(String(format: "%.4f", zoom))")
+                Text(verbatim: "zoom \(String(format: "%.4f", zoom))")
                     .font(.system(size: 6))
                     .foregroundColor(.clear)
                     .accessibilityIdentifier("viewerZoomProbe")
@@ -434,7 +437,7 @@ struct ViewerView: View {
                 // together with `viewerZoomProbe`, this is what lets the UI tests assert
                 // that leaving reading mode came back to the *same place* rather than
                 // merely to a page.
-                Text("reading \(model.readingMode ? "on" : "off")"
+                Text(verbatim: "reading \(model.readingMode ? "on" : "off")"
                      + " bar \(readingBarVisible ? "on" : "off")"
                      + " page \(currentPageIndex)"
                      + " tint \(model.pageTint.rawValue.isEmpty ? "Normal" : model.pageTint.rawValue)")
@@ -446,7 +449,7 @@ struct ViewerView: View {
                 // are deliberately different sizes — and a rotation shows up in the same string
                 // as a swapped width and height, which is how "the rotate arrived and did
                 // something" is told from "the rotate arrived and did nothing".
-                Text("pages \(model.pagesOpen ? "on" : "off")"
+                Text(verbatim: "pages \(model.pagesOpen ? "on" : "off")"
                      + " selecting \(model.pagesSelecting ? "on" : "off")"
                      + " selected \(model.pageSelection.count)"
                      + " count \(pageSizes.count)"
@@ -460,7 +463,7 @@ struct ViewerView: View {
                     .contentShape(Rectangle())
                     .accessibilityElement()
                     .accessibilityIdentifier("viewerPinchProbe")
-                    .accessibilityLabel("Pinch probe")
+                    .accessibilityLabel(Text(verbatim: "Pinch probe"))
                     .padding(.leading, geo.size.width * 0.15)
                     .padding(.top, geo.size.height * 0.2)
             }
@@ -1529,7 +1532,7 @@ struct ViewerView: View {
                         .accessibilityElement()
                         .accessibilityLabel("Marked for redaction")
                         .accessibilityAddTraits(.isButton)
-                        .accessibilityHint("Double tap to select this mark")
+                        .accessibilityHint("Selects this mark.")
                         .accessibilityAction {
                             model.selectRedactionMark(pageIndex: index, markId: mark.markId)
                         }
@@ -1623,7 +1626,9 @@ struct ViewerView: View {
                         model.dragSelectionHandle(handle, xFraction: Double(point.x / width),
                                                   yFraction: Double(point.y / height))
                     },
-                    onEndDrag: model.endSelectionHandleDrag)
+                    onEndDrag: model.endSelectionHandleDrag,
+                    selectedText: model.selectedText,
+                    onAdjust: model.moveSelectionHandleByWord)
                 if let box = SelectionGeometry.bounds(of: model.selectionRects) {
                     let frame = space.rect(box)
                     SelectionMenuHost(request: model.selectionMenuRequest,
@@ -1654,6 +1659,7 @@ struct ViewerView: View {
         .overlay(
             PageLongPress(enabled: model.canSelectText,
                           onPress: { xFraction, yFraction in
+                              model.probeNotePress()
                               model.beginTextSelection(pageIndex: index, xFraction: xFraction, yFraction: yFraction)
                           },
                           onEnd: model.endTextSelectionPress)
@@ -1716,6 +1722,7 @@ struct ViewerView: View {
                 }
                 .exclusively(before: SpatialTapGesture()
                     .onEnded { value in
+                        model.probeNoteTap()
                         // A tap with a selection showing puts the selection away, as it does in
                         // every iOS text view, and does nothing else (#710): it is the
                         // dismissal, not an edit.
@@ -1854,6 +1861,29 @@ struct BusyStrip: View {
         .padding(.vertical, 6)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.bar)
+    }
+}
+
+/// What became of the page's touches, for the UI tests that send them (#681): built only under
+/// `-uiTestInputProbe` (see `UITestInputProbe`). Draws nothing and takes no touch.
+///
+/// `busy` is whether page taps are being ignored right now (#145) -- the condition a test has
+/// to wait out before a tap can do anything -- which is why it observes the busy state itself
+/// rather than taking the model's word at the last render. `selection` is whether a long press
+/// has left a text selection up (#710), which takes the next tap on the page to put away.
+struct InputProbe: View {
+    @ObservedObject var model: ViewerModel
+    @ObservedObject var busy: BusyState
+
+    var body: some View {
+        Text(verbatim: "taps \(model.probeTaps) dispatched \(model.probeDispatched)"
+             + " ignored \(model.probeIgnoredBusy) presses \(model.probePresses)"
+             + " busy \(busy.isBlocked || busy.blocksFileCommands ? "on" : "off")"
+             + " selection \(model.textSelection == nil ? "off" : "on")")
+            .font(.system(size: 6))
+            .foregroundColor(.clear)
+            .allowsHitTesting(false)
+            .accessibilityIdentifier("viewerInputProbe")
     }
 }
 

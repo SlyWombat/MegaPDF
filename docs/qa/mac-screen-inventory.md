@@ -64,6 +64,7 @@ so re-measure with `tools/macos-measure-page.py` after arming a mode).
 | 2.16 | Shrink picker — "Save a smaller copy", suggests "{name} - smaller.pdf" | — | More ▸ Shrink | real window |
 | 2.17 | Import signature picker — "Choose a photo of your signature" | — | Sign ▸ From photo | real window |
 | 2.18 | **macOS system print panel** | — | Cmd+P | real window |
+| 2.19 | **Your changes can't be undone after this** (#633) | Cancel / **Save** or **Continue** | a save with Flatten when saving on and an edit, or the Password command with an edit | `--screenshot-state undo-loss` → `<out>-dialog.png` |
 
 ## 3. Menus
 

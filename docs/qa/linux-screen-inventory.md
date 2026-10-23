@@ -72,6 +72,7 @@ the second desktop is for is everything around the window — see §10.
 | 2.13 | **Print** — which printer, how many copies | Cancel / **Print** | Print, with a CUPS queue present | real window | hands; the CUPS route is §8 |
 | 2.14 | **About MegaPDF** — icon, version, copyright, GitHub link, Third-party notices… | — | toolbar **More** ▸ About MegaPDF (#571; nothing reached it before) | `--screenshot-state about` | ✅ |
 | 2.15 | **Third-party notices** — the licence text | — | About ▸ Third-party notices… | `--screenshot-state notices` | ✅ |
+| 2.16 | **Your changes can't be undone after this** (#633) | Cancel / **Save** or **Continue** | a save with Flatten when saving on and an edit, or the Password command with an edit | `--screenshot-state undo-loss` → `<out>-dialog.png` | |
 
 ## 3. Menus
 

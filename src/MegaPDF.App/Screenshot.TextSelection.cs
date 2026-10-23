@@ -126,7 +126,14 @@ internal static partial class Screenshot
         Check("  no editor opened", !view.HasActiveEditorForTest);
         Check("  it is drawn: one highlight per line selected", view.SelectionRectsShownForTest(0) == 6);
         Check("  and the menu's Copy is on, with no reason shown", view.TextMenuStateForTest() == (true, false));
+        // Narrator is told what was selected, once the release has settled it (#710).
+        await view.TextAnnouncementForTest;
+        Check("the release announces the selection: \"Selected: \" and its first 80 characters",
+              view.LastAnnouncement == Strings.TextSelectionAnnounced(
+                  "Left two bravo and more Left three charlie Left four delta Left five echo Right\u2026"));
+        Console.Error.WriteLine($"  announced: {view.LastAnnouncement}");
         Check("Copy succeeds", await view.CopySelectedTextAsync());
+        Check("  and the copy announces \"Copied\"", view.LastAnnouncement == Strings.TextCopiedAnnounced);
         var copied = await ClipboardText();
         Console.Error.WriteLine($"  clipboard: {Shown(copied)}");
         Check("the clipboard runs down the left column and then the right, with CR LF line ends",
@@ -136,6 +143,11 @@ internal static partial class Screenshot
 
         // --- the keyboard: Shift+Right one character, Escape lets go ---
         Check("Shift+Right extends the selection by a character", view.StepTextSelectionForTest(+1));
+        Check("  and says nothing yet: the keys are debounced", view.LastAnnouncement == Strings.TextCopiedAnnounced);
+        Check("  then, 300 ms after the last key, it announces the selection",
+              await UntilAsync(() => view.LastAnnouncement != Strings.TextCopiedAnnounced, 3)
+              && view.LastAnnouncement == Strings.TextSelectionAnnounced(
+                  "Left two bravo and more Left three charlie Left four delta Left five echo Right\u2026"));
         await view.CopySelectedTextAsync();
         var stepped = await ClipboardText();
         Console.Error.WriteLine($"  clipboard: {Shown(stepped)}");
@@ -160,7 +172,15 @@ internal static partial class Screenshot
         var clickStarted = Environment.TickCount64;
         await view.ClickForTest(0, charlie);
         Console.Error.WriteLine($"  the first click's editor took {Environment.TickCount64 - clickStarted} ms to open (open: {view.HasActiveEditorForTest})");
-        Check("a double-click on a word selects it", view.DoubleClickForTest(0, charlie) && view.HasTextSelection);
+        // The second click lands on the editor the first one opened, where WinUI raises no DoubleTapped
+        // (#774, measured): the page reads it from the Tapped it still gets, and only when it is near the first.
+        Check("the first click's editor is open when the second click comes", view.HasActiveEditorForTest);
+        Check("a second click far from the first is not a double-click: nothing selected, the editor stays",
+              !view.SecondClickForTest(0, Mid(lines[8])) && view.HasActiveEditorForTest && !view.HasTextSelection);
+        Check("a double-click on a word selects it, through the second click the editor took",
+              view.SecondClickForTest(0, charlie) && view.HasTextSelection);
+        await view.TextAnnouncementForTest;
+        Check("  and announces the word", view.LastAnnouncement == Strings.TextSelectionAnnounced("charlie"));
         Check("  and the editor its first click opened is gone, with nothing changed", !view.HasActiveEditorForTest && !tab.HasUnsavedChanges);
         await view.CopySelectedTextAsync();
         Check("  the clipboard holds that word", (await ClipboardText()) == "charlie");
@@ -171,6 +191,38 @@ internal static partial class Screenshot
         await Task.Delay(300);
         Check("  and no editor opens behind it", !view.HasActiveEditorForTest && view.HasTextSelection);
         view.PressSelectionKeyForTest(Windows.System.VirtualKey.Escape);
+
+        // The same pair a second time, with the second click as a pair of Tapped events would make it: once the
+        // word is taken, a third click is a click again and opens the editor.
+        Check("a double-click is used up by the word it selected (a further second click does nothing)",
+              !view.SecondClickForTest(0, charlie));
+
+        // --- a double-click on an added text box edits it, selected or not (#775) ---
+        await tab.AddTextBoxAsync(0, new PdfPoint(200, 600), "box");
+        Check("a text box is added", await UntilAsync(() => tab.Pages[0].Regions.Any(r => r.Kind == PageHitKind.TextBox)));
+        await UntilAsync(() => !tab.Busy.IsBusy, 5); // a click while work runs is ignored (#145)
+        await Task.Delay(300);
+        var boxRegion = tab.Pages[0].Regions.FirstOrDefault(r => r.Kind == PageHitKind.TextBox);
+        var boxMid = boxRegion is null ? default : Mid(boxRegion.Bounds);
+        await view.ClickForTest(0, boxMid);
+        Check("a first click on the unselected box selects it (its chrome is up) and opens no editor",
+              view.HasSelectionChromeForTest && !view.HasActiveEditorForTest);
+        Check("  the second click lands on that chrome, and is a double-click: the box's editor opens",
+              view.SecondClickForTest(0, boxMid) && await UntilAsync(() => view.HasActiveEditorForTest));
+        Check("  with the box's own text in it", view.ActiveEditorTextForTest == "box");
+        Check("  and nothing selected: no text, no chrome", !view.HasTextSelection && !view.HasSelectionChromeForTest);
+        await view.PressEditorKeyForTest(Windows.System.VirtualKey.Escape);
+        Check("  Escape closes it, the box unchanged", await UntilAsync(() => !view.HasActiveEditorForTest)
+              && tab.Pages[0].Regions.Count(r => r.Kind == PageHitKind.TextBox) == 1);
+        // A word on the page is still the word's, and a box's chrome only takes a double-click that began on it.
+        await view.ClickForTest(0, charlie);
+        Check("  a double-click on body text still selects the word beside a text box",
+              view.SecondClickForTest(0, charlie) && view.HasTextSelection);
+        view.PressSelectionKeyForTest(Windows.System.VirtualKey.Escape);
+        if (tab.UndoCommand.CanExecute(null))
+            tab.UndoCommand.Execute(null);
+        await UntilAsync(() => !tab.Busy.IsBusy && tab.Pages[0].Regions.All(r => r.Kind != PageHitKind.TextBox), 5);
+        Check("  the box added for this is taken away again", tab.Pages[0].Regions.All(r => r.Kind != PageHitKind.TextBox));
 
         // --- across the page break, and the whole document ---
         var lastLeft = new PdfPoint(lines[10].X + 0.2, Mid(lines[10]).Y);    // the start of "Right five kilo"
@@ -187,12 +239,48 @@ internal static partial class Screenshot
         Check("  and both pages show their share of it", view.SelectionRectsShownForTest(0) == 1 && view.SelectionRectsShownForTest(1) >= 1);
 
         Check("Ctrl+A selects the whole document", view.SelectAllText() && view.HasTextSelection);
+        await view.TextAnnouncementForTest;
+        Check("  and announces its first 80 characters",
+              view.LastAnnouncement == Strings.TextSelectionAnnounced(
+                  "Selection Columns Left one alpha Left two bravo and more Left three charlie Left\u2026"));
         await view.CopySelectedTextAsync();
         var all = await ClipboardText() ?? "";
         Check("  and copies both pages, ligatures expanded and line-end hyphens kept",
               all.StartsWith("Selection Columns\r\nLeft one alpha\r\n", StringComparison.Ordinal)
               && all.Contains("Right five kilo\r\nThe final flow test\r\nWe test hyphen-\r\nation here.", StringComparison.Ordinal)
               && all.EndsWith("known word.", StringComparison.Ordinal));
+
+        // --- a drag held still past the bottom edge goes on scrolling and selecting (#710) ---
+        // The pointer sends nothing while it is still, so only a timer can do it. The moves that
+        // brought the pointer there scrolled once each; the baseline is taken after the last of
+        // them, and what happens over the next 500 ms with NO further sample is the timer's.
+        view.PressSelectionKeyForTest(Windows.System.VirtualKey.Escape);
+        view.ScrollPagesToTopForTest();
+        await Task.Delay(300);
+        Check($"the pages can scroll (room: {view.PagesScrollableHeightForTest:0} DIP)", view.PagesScrollableHeightForTest > 200);
+        Check("a drag taken 40 DIP below the pages is a selection",
+              await view.HoldDragPastBottomForTest(0, new PdfPoint(lines[2].X + 0.5, Mid(lines[2]).Y), belowViewportDip: 40));
+        await Task.Delay(100);
+        var heldBaseline = view.PagesScrollOffsetForTest;
+        await Task.Delay(500);
+        var heldAfter = view.PagesScrollOffsetForTest;
+        Console.Error.WriteLine($"  held still for 500 ms: offset {heldBaseline:0} -> {heldAfter:0} DIP; the selection ends on page {(view.TextSelectionFocusPageForTest ?? -1) + 1}");
+        Check("  held still for 500 ms, the pages kept scrolling", heldAfter > heldBaseline + 20);
+        // Page 2 is reached once the pages have scrolled past the foot of page 1, a distance that
+        // depends on the window; a timer starved by a busy UI thread gets there later, never not at
+        // all. So it is given up to 3 s more of the same stillness before the check calls it.
+        Check("  and the selection's end moved onto page 2",
+              await UntilAsync(() => view.TextSelectionFocusPageForTest == 1, 3));
+        Check("  the release lets go, and the timer with it", view.ReleaseHeldDragForTest() && !view.IsTextAutoScrollRunningForTest);
+        // The last tick's ChangeView may still be on its way to the scroller when the release lands:
+        // let that one settle, then nothing else may move the pages.
+        await Task.Delay(150);
+        var stopped = view.PagesScrollOffsetForTest;
+        await Task.Delay(250);
+        Check("  and the pages stay where they stopped", view.PagesScrollOffsetForTest == stopped);
+        view.PressSelectionKeyForTest(Windows.System.VirtualKey.Escape);
+        view.ScrollPagesToTopForTest();
+        await Task.Delay(300);
 
         // --- an armed tool keeps its drag ---
         tab.IsWhiteoutMode = true;

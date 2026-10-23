@@ -3,8 +3,12 @@
 Deployed to `/public_html/megapdf/` on electricrv.ca via cPanel UAPI
 (the login lives in the Lighting Arduino project's `.env` —
 CPANEL_HOST/PORT/USER/TOKEN; upload client pattern: that project's
-`server/deploy.py`). **It is on Dave's laptop and nowhere else**, so every other
-machine is limited to `deploy.py --dry-run`.
+`server/deploy.py`). **It is on Dave's laptop (GPD-DAVE) and nowhere else**, so every
+other machine is limited to `deploy.py --dry-run`. `deploy.py` finds it beside the
+**main** checkout, so it works from a worktree too (#668). Anywhere else, name the
+folder that holds it: `MEGAPDF_DEPLOY_ENV_DIR="/path/to/Lighting Arduino" python3
+website/deploy.py ...`. That is the folder, never the file's contents. The dry run's
+`Login file` line says whether it was found.
 
 - `megapdf/index.html` — landing page (linked from the main-page teaser)
 - `megapdf/privacy/index.html` — privacy policy, the URL both app-store

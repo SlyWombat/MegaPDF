@@ -446,6 +446,13 @@ internal static class Program
              "a codeset and a modifier are dropped, not translated"),
             (new(), null,
              "an empty environment leaves .NET's own default alone"),
+            // Spanish (#724).
+            (new() { ["LANG"] = "es_MX.UTF-8" }, "es-MX",
+             "a Mexican Spanish desktop, which falls back to the neutral es catalogue (Latin American)"),
+            (new() { ["LANG"] = "es_ES.UTF-8" }, "es-ES",
+             "Spain"),
+            (new() { ["LANG"] = "en_US.UTF-8", ["LANGUAGE"] = "es_MX:es" }, "es-MX",
+             "Spanish display language with English formats"),
         ];
 
         var failures = 0;
@@ -463,12 +470,39 @@ internal static class Program
 
         // And that every tag the table produces is a culture .NET actually has, so a
         // pass here cannot mean "resolved to a custom culture with no resources".
-        foreach (var tag in new[] { "fr-CA", "fr", "fr-FR", "en-CA" })
+        foreach (var tag in new[] { "fr-CA", "fr", "fr-FR", "en-CA", "es", "es-419", "es-MX", "es-ES" })
         {
             var culture = CultureInfo.GetCultureInfo(tag);
             var ok = !culture.Equals(CultureInfo.InvariantCulture);
             if (!ok) failures++;
             Console.WriteLine($"  [{(ok ? "PASS" : "FAIL")}] {tag} resolves to a real culture ({culture.EnglishName})");
+        }
+
+        // Spanish on the desktops (#724): every Latin American culture reaches the
+        // neutral "es" catalogue through its parent, and both Spanish satellite
+        // assemblies are really in the build. If either failed, a Mexican desktop
+        // would quietly read English.
+        foreach (var tag in new[] { "es-MX", "es-419" })
+        {
+            var parent = CultureInfo.GetCultureInfo(tag).Parent.Name;
+            var ok = parent == "es";
+            if (!ok) failures++;
+            Console.WriteLine($"  [{(ok ? "PASS" : "FAIL")}] {tag}'s parent culture is es (got \"{parent}\")");
+        }
+        foreach (var tag in new[] { "es", "es-ES" })
+        {
+            bool ok;
+            try
+            {
+                typeof(Strings).Assembly.GetSatelliteAssembly(CultureInfo.GetCultureInfo(tag));
+                ok = true;
+            }
+            catch (Exception)
+            {
+                ok = false;
+            }
+            if (!ok) failures++;
+            Console.WriteLine($"  [{(ok ? "PASS" : "FAIL")}] the {tag} satellite assembly is in the build");
         }
 
         Console.WriteLine($"language-check: {(failures == 0 ? "PASS" : $"FAIL — {failures} check(s)")}");
@@ -2489,6 +2523,17 @@ internal static class Program
             failures++;
         }
 
+        Console.WriteLine("the undo-history question, in a real window (#633):");
+        try
+        {
+            CheckUndoLossQuestion(dir, state, Check);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"::error::undo-history question: {ex.GetType().Name}: {ex.Message}");
+            failures++;
+        }
+
         Console.WriteLine(failures == 0 ? "self-test: PASS" : $"::error::self-test: {failures} check(s) failed");
         return failures == 0 ? 0 : 1;
     }
@@ -4383,6 +4428,180 @@ internal static class Program
         }
     }
 
+    /// <summary>
+    /// #633, the question before a save or a password change takes away the undo history,
+    /// in a real window on the headless platform. A password change clears the history
+    /// whether or not Flatten when saving is on, because it writes the file and reopens it;
+    /// a save clears it only with that setting on, and asks once per open document so Ctrl+S
+    /// is not a dialog every time. Cancel leaves everything as it was.
+    ///
+    /// A headless window has no <c>IStorageFile</c>, so a Save stops at <c>NowhereToSave</c>
+    /// and the Password command at its <c>OpenedFile</c> check. Both questions are put before
+    /// those checks, which is what makes them testable here; that the flatten clears the
+    /// history is proved elsewhere in this file (the "Flatten on save bakes it in" check).
+    /// </summary>
+    private static void CheckUndoLossQuestion(string dir, string state, Action<string, bool> check)
+    {
+        EnsureHeadlessPlatform();
+
+        // A copy, so nothing in dir is touched whatever a check does to it.
+        var copy = Path.Combine(Path.GetTempPath(), $"megapdf-selftest-undoloss-{Guid.NewGuid():N}.pdf");
+        File.Copy(Path.Combine(dir, "fixture.pdf"), copy, overwrite: true);
+        // The drawn checkbox the other checks in this file click: one click, one undoable edit.
+        var tick = new PdfPoint(78, 186);
+
+        (ShellViewModel Shell, DocumentViewModel Vm, Views.MainWindow Window) Open(string path)
+        {
+            var shell = new ShellViewModel(state);
+            var vm = shell.CreateDocument();
+            vm.Open(path);
+            shell.AddTab(vm);
+            var window = new Views.MainWindow { DataContext = shell, Width = 1280, Height = 800 };
+            window.SkipRecoveryOffer = true;
+            window.Show();
+            MenuProbe.Pump();
+            return (shell, vm, window);
+        }
+
+        void Edit(DocumentViewModel vm)
+        {
+            vm.HandlePageClick(0, tick);
+            PumpUntil(() => vm.IsDirty && !vm.Busy.IsBusy, TimeSpan.FromSeconds(5));
+        }
+
+        void Done(ShellViewModel shell, Views.MainWindow window)
+        {
+            window.SkipCloseConfirmation();
+            window.Close();
+            MenuProbe.Pump();
+            shell.Dispose();
+        }
+
+        try
+        {
+            // 1. An edit, with Flatten when saving on: there is history to lose.
+            {
+                var (shell, vm, window) = Open(copy);
+                var flattenAtStart = vm.FlattenOnSave;
+                try
+                {
+                    vm.FlattenOnSave = true;
+                    Edit(vm);
+                    check("there is something to undo, and the document is changed", vm.CanUndo && vm.IsDirty);
+
+                    // 2. Save puts the question, and Cancel stops there.
+                    UndoLossReason? asked = null;
+                    window.AnswerUndoLossForTest = r => { asked = r; return false; };
+                    vm.SaveCommand.Execute(null);
+                    PumpUntil(() => window.UndoLossAsked > 0, TimeSpan.FromSeconds(5));
+                    MenuProbe.Pump();
+                    check($"Save with flatten on and an edit puts the question ({window.UndoLossAsked} time(s))",
+                          window.UndoLossAsked == 1);
+                    check("  for the flatten reason", asked == UndoLossReason.Flatten);
+                    check("  Cancel keeps the undo history and the unsaved change", vm.CanUndo && vm.IsDirty);
+                    check("  and stops at the question, not after it", vm.Status != Strings.NowhereToSave);
+
+                    // 3. The real window's words, and its buttons.
+                    var flatten = new Views.ConfirmUndoLossWindow();
+                    flatten.SetReason(UndoLossReason.Flatten);
+                    check("the window's title is the undo-history title",
+                          flatten.PromptText.Text == Strings.UndoLossTitle && flatten.Title == Strings.UndoLossTitle);
+                    check("  its body, for a save, is the flatten wording", flatten.BodyText.Text == Strings.UndoLossFlattenBody);
+                    check("  its action reads Save", Equals(flatten.ContinueButton.Content, Strings.Save));
+                    check("  the action is the default button, not Cancel", flatten.ContinueButton.IsDefault && !flatten.CancelButton.IsDefault);
+                    check("  Cancel is the Escape button", flatten.CancelButton.IsCancel);
+                    check("  Save comes with Cancel only: there is no Don't-ask-again tick",
+                          !global::Avalonia.LogicalTree.LogicalExtensions.GetLogicalDescendants(flatten).OfType<global::Avalonia.Controls.CheckBox>().Any());
+                    var password = new Views.ConfirmUndoLossWindow();
+                    password.SetReason(UndoLossReason.PasswordChange);
+                    check("  its body, for a password, is the password wording", password.BodyText.Text == Strings.UndoLossPasswordBody);
+                    check("  its action reads Continue", Equals(password.ContinueButton.Content, Strings.Continue));
+                    // #602: nothing here may read as the document being encrypted, or as a
+                    // signature (the word the app also uses for the picture someone places).
+                    var everything = $"{Strings.UndoLossTitle} {Strings.UndoLossFlattenBody} {Strings.UndoLossPasswordBody} {Strings.Save} {Strings.Continue}";
+                    var forbidden = new[] { "encrypt", "signed", "digital" };
+                    var found = forbidden.Where(w => everything.Contains(w, StringComparison.OrdinalIgnoreCase)).ToList();
+                    check($"  and nothing in it can be read as encryption or a digital signature ({(found.Count == 0 ? "no such word" : string.Join(", ", found))})",
+                          found.Count == 0);
+
+                    // 4. Save, answered Save: asked, remembered for this document.
+                    window.AnswerUndoLossForTest = _ => true;
+                    vm.SaveCommand.Execute(null);
+                    PumpUntil(() => window.UndoLossAsked > 1, TimeSpan.FromSeconds(5));
+                    MenuProbe.Pump();
+                    check($"answering Save: the question was put again ({window.UndoLossAsked} in all)", window.UndoLossAsked == 2);
+                    check("  and is remembered for this document", vm.UndoLossAcknowledged);
+
+                    // 5. Once per open document.
+                    Edit(vm);
+                    vm.SaveCommand.Execute(null);
+                    MenuProbe.Pump();
+                    PumpFor(TimeSpan.FromMilliseconds(300));
+                    check($"the next Save, after a fresh edit, does not ask ({window.UndoLossAsked} in all)", window.UndoLossAsked == 2);
+
+                    // 6. Flatten off never asks.
+                    vm.FlattenOnSave = false;
+                    Edit(vm);
+                    vm.SaveCommand.Execute(null);
+                    MenuProbe.Pump();
+                    PumpFor(TimeSpan.FromMilliseconds(300));
+                    check($"with flatten off, Save does not ask ({window.UndoLossAsked} in all)", window.UndoLossAsked == 2);
+
+                    // 7. The Password command asks flatten or no flatten, and Cancel opens no dialog.
+                    Edit(vm);
+                    asked = null;
+                    window.AnswerUndoLossForTest = r => { asked = r; return false; };
+                    var changing = window.ChangeSecurityAsync();
+                    PumpUntil(() => changing.IsCompleted, TimeSpan.FromSeconds(5));
+                    MenuProbe.Pump();
+                    check($"the Password command asks, with flatten off ({window.UndoLossAsked} in all)", window.UndoLossAsked == 3);
+                    check("  for the password reason", asked == UndoLossReason.PasswordChange);
+                    check("  Cancel opens no password window", window.OwnedWindows.Count == 0);
+                    check("  and keeps the undo history", vm.CanUndo);
+
+                    // 8. A reopen resets the once-per-document rule.
+                    vm.Open(copy);
+                    check("a reopened document has not been asked about", !vm.UndoLossAcknowledged);
+                }
+                finally
+                {
+                    vm.FlattenOnSave = flattenAtStart;
+                    Done(shell, window);
+                }
+            }
+
+            // 9. Closing does not ask a second question: the history goes with the document.
+            {
+                var (shell, vm, window) = Open(copy);
+                var flattenAtStart = vm.FlattenOnSave;
+                try
+                {
+                    vm.FlattenOnSave = true;
+                    Edit(vm);
+                    window.AnswerUndoLossForTest = _ => true;
+                    window.AnswerUnsavedChangesForTest = () => Views.UnsavedChangesWindow.Decision.Save;
+                    // The route window close, Ctrl+W/Cmd+W and Quit all share, so this holds on
+                    // both desktops without a keyboard shortcut that differs between them. A
+                    // headless Save then stops at NowhereToSave, so closing is refused: false.
+                    var closing = window.ConfirmCloseForQuitAsync();
+                    PumpUntil(() => closing.IsCompleted, TimeSpan.FromSeconds(5));
+                    MenuProbe.Pump();
+                    check($"closing a changed document asks Save changes ({window.UnsavedChangesAsked} time(s))", window.UnsavedChangesAsked == 1);
+                    check($"  and answering Save does not put the undo question as well ({window.UndoLossAsked} asked)", window.UndoLossAsked == 0);
+                }
+                finally
+                {
+                    vm.FlattenOnSave = flattenAtStart;
+                    Done(shell, window);
+                }
+            }
+        }
+        finally
+        {
+            try { File.Delete(copy); } catch { /* best-effort scratch cleanup */ }
+        }
+    }
+
     private static void EnsureHeadlessPlatform()
     {
         if (_headlessStarted)
@@ -4416,7 +4635,7 @@ internal static class Program
         // old one.
         try
         {
-            foreach (var tag in new[] { "en", "fr-CA", "fr-FR" })
+            foreach (var tag in new[] { "en", "fr-CA", "fr-FR", "es-MX", "es-ES" })
             {
                 var culture = CultureInfo.GetCultureInfo(tag);
                 CultureInfo.DefaultThreadCurrentUICulture = culture;
@@ -4471,7 +4690,7 @@ internal static class Program
                 // The demo agreement in the running language, so the counter reads a
                 // count rather than "Not found" — the two are different widths and the
                 // row has to hold either.
-                var demo = new[] { tag == "fr-FR" ? "demo-fr-FR.pdf" : tag == "fr-CA" ? "demo-fr.pdf" : "demo.pdf", "fixture.pdf" }
+                var demo = new[] { tag == "fr-FR" ? "demo-fr-FR.pdf" : tag == "fr-CA" ? "demo-fr.pdf" : tag == "es-ES" ? "demo-es-ES.pdf" : tag == "es-MX" ? "demo-es.pdf" : "demo.pdf", "fixture.pdf" }
                     .Select(name => Path.Combine(dir, name)).First(File.Exists);
                 vm.Open(demo);
                 shell.AddTab(vm);
@@ -5165,6 +5384,8 @@ internal static class Program
                       && window.PageStripHost.IsVisible
                       && !window.IsReadingMode);
 
+                var readingPosted = new List<string>();
+                window.NativeAnnouncer = text => readingPosted.Add(text);
                 window.ToggleReadingMode();
                 Pump();
 
@@ -5182,6 +5403,8 @@ internal static class Program
                 check("  the floating pill is up", window.ReadingPill.IsVisible);
                 check($"  and the change is announced (\"{window.ReadingAnnouncementText}\")",
                       window.ReadingAnnouncementText == Strings.ReadingModeOn);
+                check("  and the platform's own announcement path is handed it too (VoiceOver, #778)",
+                      readingPosted.Count == 1 && readingPosted[0] == Strings.ReadingModeOn);
 
                 // The invariant from the plan's §1: same page, same zoom, same offset.
                 check($"  same zoom ({vm.Zoom:0.##}), same page ({vm.CurrentPage}), same scroll offset",
@@ -5197,6 +5420,8 @@ internal static class Program
                 check("  the pill is gone with it", !window.ReadingPill.IsVisible);
                 check($"  and that is announced too (\"{window.ReadingAnnouncementText}\")",
                       window.ReadingAnnouncementText == Strings.ReadingModeOff);
+                check("  and so is that",
+                      readingPosted.Count == 2 && readingPosted[1] == Strings.ReadingModeOff);
                 check("  still the same zoom, page and offset",
                       Math.Abs(vm.Zoom - zoom) < 0.001 && vm.CurrentPage == page
                       && window.PageScroller.Offset == offset);
@@ -6254,10 +6479,9 @@ internal static class Program
     /// drag; an edit to the page drops the selection on it; reading mode selects too; and a
     /// document that asked not to be copied from selects, but greys Copy and says why.
     ///
-    /// The double-click's second press is the one thing not sent as real input: the headless
-    /// platform does not raise a click count of two reliably (the same limit
-    /// BeginEditingSelectedTextBoxForTest documents), so it goes through the decision the real
-    /// one takes, DoubleClickWordForTest, straight after a real first click.
+    /// The double-click is real input too: headless MouseDown raises a click count of two for a second
+    /// press soon after the first (measured, #774/#775), so the pair goes through the tunnelling handler a
+    /// person's does, on a word and on an added text box.
     /// </summary>
     private static void CheckTextSelection(string dir, string state, Action<string, bool> check)
     {
@@ -6357,6 +6581,47 @@ internal static class Program
                 return window.Clipboard is { } clipboard ? Wait(clipboard.GetTextAsync()) : null;
             }
             static string Shown(string? s) => s is null ? "(none)" : s.Replace("\r", "\\r").Replace("\n", "\\n");
+            // A DispatcherTimer fires only inside the dispatcher's main loop, which the headless
+            // pump (RunJobs) never enters: run the loop itself for the time given, the way the
+            // app's own run does, so the 30 ms and 300 ms timers of #710 get their ticks.
+            void RunLoopFor(TimeSpan span)
+            {
+                using var stop = new CancellationTokenSource(span);
+                global::Avalonia.Threading.Dispatcher.UIThread.MainLoop(stop.Token);
+                Pump();
+            }
+            // What a screen reader was told when the selection settled (#710): read off the UI
+            // thread, so the live region is looked at once the read has finished.
+            string Announced()
+            {
+                PumpUntilRendered(() => window.TextAnnouncementForTest.IsCompleted, TimeSpan.FromSeconds(10));
+                Pump();
+                return window.AnnouncementForTest;
+            }
+
+            // What Announce hands the platform's own announcement path (#778). On the Mac that path is
+            // AppKit's announcement request, the only thing VoiceOver speaks; here it is recorded
+            // instead of posted, so this headless check sees the words that would be spoken. Real
+            // speech is proved separately, with VoiceOver's caption panel.
+            var posted = new List<string>();
+            window.NativeAnnouncer = text => posted.Add(text);
+
+            // --- the Mac's own selected-text colour is the fill (#710) ---
+            var fill = window.TextSelectionFillForTest;
+            Console.WriteLine($"  the selection fill: {fill?.ToString() ?? "(none)"} (alpha {fill?.A})");
+            check("the selection has a fill, translucent", fill is { A: > 80 and < 120 });
+            if (OperatingSystem.IsMacOS())
+            {
+                var system = Platform.MacApplication.SelectedTextBackgroundColor();
+                Console.WriteLine($"  NSColor.selectedTextBackgroundColor in sRGB: {system?.ToString() ?? "(none)"}");
+                check("on the Mac, AppKit gave the selected-text colour", system is not null);
+                check("  and it is the fill, at the usual alpha",
+                      system is { } sys && fill is { } f && f.R == sys.R && f.G == sys.G && f.B == sys.B);
+                // The one thing the recorder above cannot see: that AppKit's three constants resolve by
+                // name and the post goes through (#778). Whether VoiceOver then says it is the caption run's.
+                check("on the Mac, AppKit accepts an announcement request, and an empty one is declined",
+                      Platform.MacApplication.PostAnnouncement("MegaPDF self-test") && !Platform.MacApplication.PostAnnouncement(""));
+            }
 
             // --- a drag across the two columns ---
             var from = new PdfPoint(lines[2].X + 0.5, Mid(lines[2]).Y);   // the start of "Left two bravo and more"
@@ -6367,13 +6632,26 @@ internal static class Program
             check("  it is drawn: one highlight per line selected", vm.Pages[0].TextSelectionRects.Count == 6);
             check("  the Edit menu's Copy is on", vm.CanCopySelection);
             check("  and so is the context menu's, with no reason shown", window.TextMenuStateForTest() == (true, false));
+            const string FirstEighty = "Left two bravo and more Left three charlie Left four delta Left five echo Right\u2026";
+            check("the release announces the selection: \"Selected: \" and its first 80 characters",
+                  Announced() == Strings.TextSelectionAnnounced(FirstEighty));
+            Console.WriteLine($"  announced: {window.AnnouncementForTest}");
+            check("  and the platform's own announcement path is handed the same words (VoiceOver, #778)",
+                  posted.Count == 1 && posted[0] == Strings.TextSelectionAnnounced(FirstEighty));
             var copied = Copied();
+            check("  and the copy announces \"Copied\"", window.AnnouncementForTest == Strings.TextCopiedAnnounced);
+            check("  to the platform's own path too, after the selection and nothing else",
+                  posted.Count == 2 && posted[1] == Strings.TextCopiedAnnounced);
             Console.WriteLine($"  clipboard: {Shown(copied)}");
             check("the clipboard runs down the left column and then the right, with LF line ends",
                   copied == "Left two bravo and more\nLeft three charlie\nLeft four delta\nLeft five echo\nRight one golf\nRight two hotel");
 
             // --- keys ---
             Press(Key.Right, PhysicalKey.ArrowRight, RawInputModifiers.Shift);
+            check("Shift+Right says nothing yet: the keys are debounced", window.AnnouncementForTest == Strings.TextCopiedAnnounced);
+            RunLoopFor(TimeSpan.FromMilliseconds(600));
+            check("  then, 300 ms after the last key, it announces the selection",
+                  Announced() == Strings.TextSelectionAnnounced(FirstEighty));
             var stepped = Copied();
             check("Shift+Right takes the next character, over the line end",
                   stepped == "Left two bravo and more\nLeft three charlie\nLeft four delta\nLeft five echo\nRight one golf\nRight two hotel\nR");
@@ -6390,13 +6668,83 @@ internal static class Program
             check("  Escape closes it, nothing changed", !window.HasOpenInlineEditor && !vm.IsDirty);
 
             // --- a double-click selects a word and takes back its first click's editor ---
+            // Real input: headless MouseDown raises a click count of two for a second press that follows the
+            // first soon enough, so the pair goes through the tunnelling handler a person's does.
+            void SecondPress(int pageIndex, PdfPoint p)
+            {
+                var a = At(pageIndex, p);
+                HeadlessWindowExtensions.MouseDown(window, a, MouseButton.Left);
+                HeadlessWindowExtensions.MouseUp(window, a, MouseButton.Left);
+                Pump();
+            }
             var charlie = new PdfPoint(lines[3].Right - 2, Mid(lines[3]).Y);
-            Click(0, charlie);
-            PumpUntilRendered(() => window.HasOpenInlineEditor, TimeSpan.FromSeconds(3));
-            check("a double-click on a word selects it", window.DoubleClickWordForTest(0, charlie) && vm.HasTextSelection);
+            // The second press is a double-click only within the platform's double-click time of the first, so a
+            // first click whose editor took longer than that to open on a loaded machine is tried again.
+            var opened = false;
+            for (var attempt = 1; attempt <= 3 && !opened; attempt++)
+            {
+                var firstClickAt = Environment.TickCount64;
+                Click(0, charlie);
+                PumpUntilRendered(() => window.HasOpenInlineEditor, TimeSpan.FromSeconds(3));
+                var took = Environment.TickCount64 - firstClickAt;
+                Console.WriteLine($"  the first click's editor opened in {took} ms (attempt {attempt}, double-click time 500 ms)");
+                opened = window.HasOpenInlineEditor && took < 350;
+                if (!opened && window.HasOpenInlineEditor)
+                {
+                    Press(Key.Escape, PhysicalKey.Escape);
+                    PumpUntilRendered(() => !window.HasOpenInlineEditor, TimeSpan.FromSeconds(3));
+                }
+            }
+            check("the first click of a pair opens the line editor", window.HasOpenInlineEditor);
+            SecondPress(0, charlie);
+            check("a double-click on a word selects it", vm.HasTextSelection);
+            check("  and announces the word", Announced() == Strings.TextSelectionAnnounced("charlie"));
+            check("  to the platform's own path too", posted.LastOrDefault() == Strings.TextSelectionAnnounced("charlie"));
             check("  and the editor its first click opened is gone, nothing changed", !window.HasOpenInlineEditor && !vm.IsDirty);
             check("  the clipboard gets the word", Copied() == "charlie");
             Press(Key.Escape, PhysicalKey.Escape);
+            // The pair arriving before the first click's check has opened its editor: the open is called off.
+            {
+                var at = At(0, charlie);
+                HeadlessWindowExtensions.MouseDown(window, at, MouseButton.Left);
+                HeadlessWindowExtensions.MouseUp(window, at, MouseButton.Left);
+                HeadlessWindowExtensions.MouseDown(window, at, MouseButton.Left);
+                HeadlessWindowExtensions.MouseUp(window, at, MouseButton.Left);
+                Pump();
+                PumpFor(TimeSpan.FromMilliseconds(300));
+                check("a double-click quicker than the first click's editor also selects the word, and none opens behind it",
+                      vm.HasTextSelection && !window.HasOpenInlineEditor && Copied() == "charlie");
+            }
+            Press(Key.Escape, PhysicalKey.Escape);
+
+            // --- a double-click on an added text box edits it, selected or not (#775) ---
+            // The first click selects the box, which puts chrome over it: the pair's two taps have different
+            // targets, and Avalonia raises no DoubleTapped for it.
+            vm.AddTextBox(0, new PdfPoint(200, 600), "box");
+            PumpUntil(() => vm.IsIdle, TimeSpan.FromSeconds(5));
+            PumpUntilRendered(() => vm.Pages[0].Regions.Any(r => r.Kind == PageHitKind.TextBox), TimeSpan.FromSeconds(5));
+            var boxBounds = vm.Pages[0].Regions.FirstOrDefault(r => r.Kind == PageHitKind.TextBox).Bounds;
+            check("a text box is added", boxBounds.Width > 0);
+            var boxMid = Mid(boxBounds);
+            vm.ClearSelection();
+            Pump();
+            Click(0, boxMid);
+            check("a first click on the unselected box selects it, and opens no editor",
+                  vm.Selection is { Kind: DocumentViewModel.SelectionKind.TextBox } && !window.HasOpenInlineEditor);
+            SecondPress(0, boxMid);
+            PumpUntilRendered(() => window.HasOpenInlineEditor, TimeSpan.FromSeconds(3));
+            check("  the second click of the pair opens the box's editor", window.HasOpenInlineEditor);
+            check("  with the box's own text in it", window.InlineEditorTextForTest == "box");
+            check("  and no text selected on the page", !vm.HasTextSelection);
+            Press(Key.Escape, PhysicalKey.Escape);
+            PumpUntilRendered(() => !window.HasOpenInlineEditor, TimeSpan.FromSeconds(3));
+            check("  Escape closes it, the box unchanged", !window.HasOpenInlineEditor && vm.Pages[0].Regions.Count(r => r.Kind == PageHitKind.TextBox) == 1);
+            vm.ClearSelection();
+            while (vm.CanUndo)
+                vm.UndoCommand.Execute(null);
+            PumpUntil(() => vm.IsIdle, TimeSpan.FromSeconds(5));
+            PumpUntilRendered(() => vm.Pages[0].Regions.All(r => r.Kind != PageHitKind.TextBox), TimeSpan.FromSeconds(5));
+            check("  the box added for this is taken away again", vm.Pages[0].Regions.All(r => r.Kind != PageHitKind.TextBox));
 
             // --- across the page break, and the whole document ---
             PumpUntilRendered(() => window.WindowPointForTest(1, new PdfPoint(72, 72)) is not null && cache.Peek(1) is not null, TimeSpan.FromSeconds(5));
@@ -6410,11 +6758,52 @@ internal static class Program
             check("  and both pages show their share", vm.Pages[0].TextSelectionRects.Count == 1 && vm.Pages[1].TextSelectionRects.Count >= 1);
 
             window.SelectAllCommand();
+            check("Select All announces the first 80 characters of the document",
+                  Announced() == Strings.TextSelectionAnnounced(
+                      "Selection Columns Left one alpha Left two bravo and more Left three charlie Left\u2026"));
+            check("  to the platform's own path too",
+                  posted.LastOrDefault() == Strings.TextSelectionAnnounced(
+                      "Selection Columns Left one alpha Left two bravo and more Left three charlie Left\u2026"));
             var all = Copied() ?? "";
             check("Select All copies the whole document, ligatures expanded and line-end hyphens kept",
                   all.StartsWith("Selection Columns\nLeft one alpha\n", StringComparison.Ordinal)
                   && all.Contains("Right five kilo\nThe final flow test\nWe test hyphen-\nation here.", StringComparison.Ordinal)
                   && all.EndsWith("known word.", StringComparison.Ordinal));
+
+            // --- a drag held still past the bottom edge goes on scrolling and selecting (#710) ---
+            // The pointer sends nothing while it is still, so only a timer can do it. The moves that
+            // brought it there scrolled once each; the baseline is taken after the last of them, and
+            // what the pages do over the next 500 ms with NO further input is the timer's.
+            Press(Key.Escape, PhysicalKey.Escape);
+            window.ScrollPagesToTopForTest();
+            Pump();
+            check($"the pages can scroll (room: {window.PagesScrollRoomForTest:0} DIP)", window.PagesScrollRoomForTest > 100);
+            var holdFrom = At(0, from);
+            var holdTo = new Point(holdFrom.X, window.PagesViewportBottomForTest + 40);
+            HeadlessWindowExtensions.MouseDown(window, holdFrom, MouseButton.Left);
+            Pump();
+            for (var i = 1; i <= 10; i++)
+            {
+                HeadlessWindowExtensions.MouseMove(window, new Point(holdFrom.X, holdFrom.Y + (holdTo.Y - holdFrom.Y) * i / 10));
+                Pump();
+            }
+            check("a drag taken 40 DIP below the pages is a selection", vm.HasTextSelection);
+            Pump();
+            var heldBaseline = window.PagesScrollOffsetForTest;
+            RunLoopFor(TimeSpan.FromMilliseconds(500));
+            var heldAfter = window.PagesScrollOffsetForTest;
+            Console.WriteLine($"  held still for 500 ms: offset {heldBaseline:0} -> {heldAfter:0} of {window.PagesScrollRoomForTest:0} DIP; the selection ends on page {(vm.TextSelection.Focus?.PageIndex ?? -1) + 1}");
+            check("  held still for 500 ms, the pages kept scrolling", heldAfter > heldBaseline + 20);
+            check("  and the selection's end moved onto page 2", vm.TextSelection.Focus?.PageIndex == 1);
+            HeadlessWindowExtensions.MouseUp(window, holdTo, MouseButton.Left);
+            Pump();
+            check("  the release lets go, and the timer with it", !window.HasTextPressForTest && !window.IsTextAutoScrollRunningForTest);
+            var stoppedAt = window.PagesScrollOffsetForTest;
+            PumpFor(TimeSpan.FromMilliseconds(200));
+            check("  and the pages stay where they stopped, the selection kept", window.PagesScrollOffsetForTest == stoppedAt && vm.HasTextSelection);
+            Press(Key.Escape, PhysicalKey.Escape);
+            window.ScrollPagesToTopForTest();
+            Pump();
 
             // --- an armed tool keeps its drag, and the edit it makes drops the selection on its page ---
             vm.ToggleWhiteoutCommand.Execute(null);

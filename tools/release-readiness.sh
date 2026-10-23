@@ -266,6 +266,39 @@ for pair in "README.md 'Store status as of':$README_V" "website support page 'Th
   else attn "$label says ${val}, shipped version is $VERSION"; fi
 done
 
+# ---------------------------------------------------------------- 7b. support links
+head_ "7b. store support links (#662)"
+emit < <(python3 -I - "$ROOT" <<'PY'
+import re, sys
+root = sys.argv[1]
+S = "https://electricrv.ca/megapdf/support/"
+def text(p):
+    try:
+        return open(f"{root}/{p}", encoding="utf-8").read()
+    except OSError:
+        return None
+def check(label, path, ok_when):
+    t = text(path)
+    if t is None:
+        print(f"ATTENTION\t{path}: file missing"); return
+    good = ok_when(t)
+    print(("OK" if good else "ATTENTION") + f"\t{label}: {path}" + ("" if good else " does not carry the support page URL"))
+check("Apple supportUrl", "tools/asc_publish.py",
+      lambda t: f'SUPPORT_URL = "{S}"' in t and '"supportUrl": SUPPORT_URL' in t)
+check("Play contactWebsite", "tools/play_listing.py", lambda t: f'CONTACT_WEBSITE = "{S}"' in t)
+def ms(t):
+    sec = t.split("## Other fields", 1)
+    if len(sec) < 2: return False
+    blocks = re.findall(r"```[^\n]*\n(.*?)```", sec[1].split("\n## ", 1)[0], re.S)
+    return len(blocks) >= 3 and blocks[2].strip() == S
+check("Microsoft supportContact (third Other-fields block)", "docs/microsoft-store-listing.md", ms)
+check("Snap contact and issues", "tools/linux/snap/snapcraft.yaml.in",
+      lambda t: f"\ncontact: {S}\n" in t and f"\nissues: {S}\n" in t)
+check("metainfo help and contact", "tools/linux/flatpak/ca.electricrv.MegaPDF.metainfo.xml",
+      lambda t: f'<url type="help">{S}</url>' in t and f'<url type="contact">{S}</url>' in t)
+PY
+)
+
 # ---------------------------------------------------------------- 8. milestone
 head_ "8. milestone for ${VERSION:-?} (informational; milestones are Dave's)"
 MS=$(gh api "repos/$REPO/milestones?state=open&per_page=100" 2>/dev/null | python3 -I -c '
@@ -287,6 +320,49 @@ head_ "9. coverage map"
 if out=$(python3 tools/qa/check-matrix.py --check 2>&1); then ok "check-matrix.py --check: $(printf '%s' "$out" | tail -1)"
 else attn "check-matrix.py --check failed: $(printf '%s' "$out" | tail -3 | tr '\n' ' ')"; fi
 
+# ---------------------------------------------------------------- 9b. Mac mini CI runner
+head_ "9b. Mac mini CI runner (#614, tools/mac-mini.md)"
+SW=${MAC_SELF_HOSTED-}
+[ -n "$SW" ] || SW=$(gh variable get MAC_SELF_HOSTED 2>/dev/null)
+if [ "$SW" = on ]; then ok "MAC_SELF_HOSTED=on: iOS CI's build job runs on the Mac mini"
+else attn "MAC_SELF_HOSTED='${SW:-unset}': every iOS PR waits on GitHub's macOS queue; the standing order is on (tools/mac-mini.md)"; fi
+if rn=$(gh api "repos/$REPO/actions/runners" --jq '.runners[]|select(.name=="mac-mini-megapdf")|"\(.status) busy=\(.busy)"' 2>/dev/null); then
+  case "$rn" in online*) ok "runner mac-mini-megapdf: $rn" ;; "") attn "runner mac-mini-megapdf: not registered" ;; *) attn "runner mac-mini-megapdf: $rn" ;; esac
+else
+  printf '           %s\n' "runner list not readable with this token (the weekly GITHUB_TOKEN cannot list runners); judged by the jobs below"
+fi
+emit < <(for id in $(gh run list --workflow ios-ci.yml --limit 15 --json databaseId -q '.[].databaseId' 2>/dev/null); do
+  gh api "repos/$REPO/actions/runs/$id/jobs" --jq '.jobs[]|select(.name=="build")|[.status,(.labels|join(",")),(.runner_name//""),.created_at,(.started_at//"")]|@tsv' 2>/dev/null
+done | python3 -I -c '
+import sys, statistics
+from datetime import datetime, timezone, timedelta
+sw = sys.argv[1]
+now = datetime.now(timezone.utc)
+ts = lambda s: datetime.fromisoformat(s.replace("Z", "+00:00")) if s else None
+jobs = []
+for line in sys.stdin:
+    f = line.rstrip("\n").split("\t")
+    if len(f) == 5: jobs.append(f)
+if not jobs:
+    print("ATTENTION\tno ios-ci.yml build jobs found"); sys.exit()
+mini, hosted = [], []
+recent = False
+for status, labels, runner, created, started in jobs:
+    c, s = ts(created), ts(started)
+    if status == "queued" and "megapdf-ios" in labels.split(",") and c and now - c > timedelta(minutes=30):
+        m = int((now - c).total_seconds() // 60)
+        print(f"ATTENTION\ta job has waited {m} min for the mini: is the runner down? Jobs wait 24 h before failing")
+    if not runner or not c or not s:
+        continue
+    if now - s < timedelta(days=7): recent = True
+    wait = max(0, int((s - c).total_seconds()))
+    (mini if runner == "mac-mini-megapdf" else hosted).append(wait)
+if sw == "on" and not mini and recent:
+    print("ATTENTION\tMAC_SELF_HOSTED is on but none of the last %d build jobs ran on mac-mini-megapdf" % len(jobs))
+med = lambda w: f"{int(statistics.median(w))}s" if w else "n/a"
+print(f"OK\tlast {len(jobs)} build jobs: {len(mini)} on the mini (median wait {med(mini)}), {len(hosted)} hosted (median wait {med(hosted)})")
+' "$SW")
+
 # ---------------------------------------------------------------- 10. machines
 if [ $MACHINES = 1 ]; then
   head_ "10. machines (leftovers)"
@@ -297,7 +373,10 @@ if [ $MACHINES = 1 ]; then
     if [ -n "$out" ]; then attn "$1 $2: $(printf '%s' "$out" | tr '\n' ' ')"; else ok "$1 $2: nothing"; fi
   }
   remote mac-mini "~/megapdf-* ~/mp-*" 'for f in "$HOME"/megapdf-* "$HOME"/mp-*; do [ -e "$f" ] && echo "$f"; done; true'
-  remote mac-mini "simulators" 'xcrun simctl list devices 2>/dev/null | grep -E "Booted|megapdf-|MegaPDF" ; true'
+  # megapdf-ci-* belong to a CI job in flight; its own always() step and the next job's
+  # start step remove them (#614).
+  remote mac-mini "simulators" 'xcrun simctl list devices 2>/dev/null | grep -E "Booted|megapdf-|MegaPDF" | grep -v "megapdf-ci-" ; true'
+  remote mac-mini "runner service" 'o=$(launchctl print gui/$(id -u)/ca.electricrv.megapdf.actions-runner 2>&1) || { echo "LaunchAgent not loaded"; exit 0; }; printf "%s\n" "$o" | grep -E "^[[:space:]]state = " | grep -v "state = running"; true'
   remote kdocker2 "~/megapdf-* ~/mp-* /data/megapdf-work/*" 'for f in "$HOME"/megapdf-* "$HOME"/mp-* /data/megapdf-work/*; do [ -e "$f" ] && echo "$f"; done; true'
   remote kdocker3 "~/megapdf-* ~/mp-*" 'for f in "$HOME"/megapdf-* "$HOME"/mp-*; do [ -e "$f" ] && echo "$f"; done; true'
   if command -v powershell.exe >/dev/null; then
@@ -329,9 +408,13 @@ if [ $STORES = 1 ]; then
   else attn "Google Play listing: HTTP $code (404 until public; tools/play.sh listing status for the track)"; fi
   l=$(curl -s -m 20 https://electricrv.ca/megapdf/apt/dists/stable/main/binary-amd64/Packages | awk '/^Version:/{print $2}' | sort -V | tail -1)   # the pool keeps the newest three; the newest must be the shipped one
   cmp_ver "APT repository (Linux)" "${l%-*}"
-  s=$(curl -s -m 20 -H 'Snap-Device-Series: 16' 'https://api.snapcraft.io/v2/snaps/info/megapdf?fields=version,revision' | python3 -I -c 'import json,sys; c=json.load(sys.stdin)["channel-map"]; print(" ".join(sorted({x["channel"]["name"]+"="+x["version"] for x in c})))' 2>/dev/null)
+  snapinfo=$(curl -s -m 20 -H 'Snap-Device-Series: 16' 'https://api.snapcraft.io/v2/snaps/info/megapdf?fields=version,revision,links')
+  s=$(printf '%s' "$snapinfo" | python3 -I -c 'import json,sys; c=json.load(sys.stdin)["channel-map"]; print(" ".join(sorted({x["channel"]["name"]+"="+x["version"] for x in c})))' 2>/dev/null)
   if [ -n "$s" ]; then
     case " $s " in *"=$VERSION "*) ok "Snap Store: $s" ;; *) attn "Snap Store: $s, repo $VERSION" ;; esac
+    sc=$(printf '%s' "$snapinfo" | python3 -I -c 'import json,sys; print((json.load(sys.stdin)["snap"].get("links",{}).get("contact") or [""])[0])' 2>/dev/null)
+    if [ "$sc" = "https://electricrv.ca/megapdf/support/" ]; then ok "Snap Store contact link: the support page (#662)"
+    else attn "Snap Store contact link is '${sc:-unreadable}', not the support page (#662; the next snap upload carries it)"; fi
   else attn "Snap Store: could not read"; fi
   rel=$(gh release list --limit 40 --json tagName,isDraft -q '.[]|select(.tagName|test("'"$VERSION"'"))|.tagName+(if .isDraft then " (DRAFT)" else "" end)' 2>/dev/null | tr '\n' ' ')
   case "$rel" in *DRAFT*) attn "GitHub releases for $VERSION: $rel" ;; "") attn "GitHub releases for $VERSION: none" ;; *) ok "GitHub releases for $VERSION: $rel" ;; esac

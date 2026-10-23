@@ -13,6 +13,10 @@ final class MarkdownExportUITests: XCTestCase {
         app = XCUIApplication()
         // English labels regardless of the simulator's language.
         app.launchArguments += ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        // So `DocumentOpening.wait` waits for the open to finish, not just for the page (#706).
+        app.launchArguments += [PageInput.launchArgument]
+        // The "Exported" confirmation is a self-clearing banner (#631); pinned, it outlives the wait.
+        app.launchArguments += ["-uiTestPinNotices"]
     }
 
     /// One page, one line of real text -- enough for the Markdown writer to have something to
@@ -44,23 +48,24 @@ final class MarkdownExportUITests: XCTestCase {
         return message
     }
 
-    /// Picks Export as Markdown from the More menu, then the system export sheet's own Save --
-    /// the same iOS-26-has-no-name-field dance `FilesEndToEndUITests.export()` uses.
+    /// Picks Export as Markdown from the More menu, then the system export sheet's own Save.
+    ///
+    /// #706: on hosted runners this failed seven times as "no Save on the export sheet" with
+    /// the sheet still on its Browse root, and twice as "the export sheet did not appear" with
+    /// the row tapped and nothing following. `ExportSheet.save` is the first; the second is a
+    /// row tapped while still disabled by the open (#145), which the enabled wait below and the
+    /// open's own end (`DocumentOpening.wait`) both answer.
     private func exportMarkdown() {
-        let more = app.buttons["viewerMore"].firstMatch
-        XCTAssertTrue(more.waitForExistence(timeout: 10), dump("no More menu"))
-        more.tap()
         let button = app.buttons["viewerExportMarkdown"].firstMatch
-        XCTAssertTrue(button.waitForExistence(timeout: 5), dump("no Export as Markdown in More"))
+        if let failure = PageInput.openMoreMenu(in: app, for: button) {
+            XCTFail(dump(failure))
+            return
+        }
+        XCTAssertTrue(PageInput.waitEnabled(button), dump("Export as Markdown stayed disabled"))
         button.tap()
-
-        let bar = app.navigationBars["FullDocumentManagerViewControllerNavigationBar"]
-        XCTAssertTrue(bar.waitForExistence(timeout: 30), dump("the export sheet did not appear"))
-        let save = bar.buttons["Save"]
-        XCTAssertTrue(save.waitForExistence(timeout: 10), dump("no Save on the export sheet"))
-        save.tap()
-        let keepBoth = app.buttons["Keep Both"].firstMatch
-        if keepBoth.waitForExistence(timeout: 3) { keepBoth.tap() }
+        if let failure = ExportSheet.save(in: app) {
+            XCTFail(dump(failure))
+        }
     }
 
     /// #386's whole point, driven for real: the exported file is really produced, and the app
@@ -75,10 +80,8 @@ final class MarkdownExportUITests: XCTestCase {
 
         exportMarkdown()
 
-        let alert = app.alerts.firstMatch
-        XCTAssertTrue(alert.waitForExistence(timeout: 30), dump("no completion alert"))
-        XCTAssertTrue(alert.staticTexts["Exported"].waitForExistence(timeout: 5),
-                      dump("the completion alert did not say \"Exported\""))
-        alert.buttons.firstMatch.tap()
+        if let failure = ExportSheet.completionNotice(in: app, expected: "Exported") {
+            XCTFail(dump(failure))
+        }
     }
 }
