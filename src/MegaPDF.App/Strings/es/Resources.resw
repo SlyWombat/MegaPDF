@@ -448,6 +448,10 @@
     <value>Las imágenes de este documento ya son pequeñas.</value>
     <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
   </data>
+  <data name="ShrinkNotSmallerBody" xml:space="preserve">
+    <value>Reducir no haría este documento más pequeño.</value>
+    <comment>ES-REVIEW #6 — new, not yet read by the reviewer.</comment>
+  </data>
   <data name="SmallerCopySavedTitle" xml:space="preserve">
     <value>Copia reducida guardada</value>
     <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>

@@ -136,6 +136,9 @@ public static partial class Strings
     /// <summary>The pictures in this document are already small.</summary>
     public static string NothingToShrinkBody => Get("NothingToShrinkBody");
 
+    /// <summary>Shrinking wouldn't make this document any smaller.</summary>
+    public static string ShrinkNotSmallerBody => Get("ShrinkNotSmallerBody");
+
     /// <summary>Smaller copy saved</summary>
     public static string SmallerCopySavedTitle => Get("SmallerCopySavedTitle");
 

@@ -250,11 +250,11 @@ MegaPDF: llena y firma PDF
 Llena, marca y firma un PDF. Sin cuenta y sin nube.
 ```
 
-**Full description** [4000] (3830)
+**Full description** [4000] (3833)
 ```
 Abrir. Corregir. Guardar. Listo.
 
-MegaPDF hace el trabajo que la mayoría de la gente realmente tiene con un PDF: alguien te envió un formulario y necesitas devolverlo llenado, marcado y firmado. Sin cuenta. Sin suscripción. Sin nube. Todo sucede en tu dispositivo.
+MegaPDF hace el trabajo que la mayoría de la gente realmente tiene con un PDF: alguien te envió un formulario y necesitas devolverlo completado, marcado y firmado. Sin cuenta. Sin suscripción. Sin nube. Todo sucede en tu dispositivo.
 
 Marca cualquier casilla
 Toca una casilla y queda marcada, tanto en campos de formulario interactivos reales como en simples cuadros impresos. MegaPDF reconoce las casillas dibujadas que otras aplicaciones tratan como simple decoración.
@@ -309,11 +309,11 @@ MegaPDF: rellena y firma PDF
 Rellena, marca y firma un PDF. Sin cuenta y sin nube.
 ```
 
-**Full description** [4000] (3825)
+**Full description** [4000] (3826)
 ```
 Abrir. Corregir. Guardar. Listo.
 
-MegaPDF hace el trabajo que la mayoría de la gente realmente tiene con un PDF: alguien te envió un formulario y necesitas devolverlo rellenado, marcado y firmado. Sin cuenta. Sin suscripción. Sin nube. Todo sucede en tu dispositivo.
+MegaPDF hace el trabajo que la mayoría de la gente realmente tiene con un PDF: alguien te envió un formulario y necesitas devolverlo completado, marcado y firmado. Sin cuenta. Sin suscripción. Sin nube. Todo sucede en tu dispositivo.
 
 Marca cualquier casilla
 Toca una casilla y queda marcada, tanto en campos de formulario interactivos reales como en simples cuadros impresos. MegaPDF reconoce las casillas dibujadas que otras aplicaciones tratan como simple decoración.

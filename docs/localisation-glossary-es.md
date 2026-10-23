@@ -286,10 +286,10 @@ refers to the same row in the French file.
 | Couldn't update | No se pudo actualizar |  |
 | Save first | Guarda primero |  |
 | Nothing to shrink | Nada que reducir |  |
+| Shrinking wouldn't make this document any smaller. | Reducir no haría este documento más pequeño. | #6, ambos escritorios: el aviso cuando la copia reducida no sería más pequeña que el archivo en disco. *reducir* y *documento* como arriba También en los teléfonos (#593). |
 | Smaller copy saved | Copia reducida guardada |  |
 | Smaller copy ready | Copia reducida lista | #593, título de la hoja de resultado en los teléfonos |
 | The document you have open is unchanged. | El documento que tienes abierto queda sin cambios. | #593, bajo “Antes/ahora” en la hoja de resultado de los teléfonos |
-| Shrinking wouldn't make this document any smaller. | Reducir no haría este documento más pequeño. | #593, teléfonos; #6 lo reutiliza en los escritorios |
 | Was {0} MB, now {1} MB. Saved as {2}, ready to email. | Antes: {0} MB; ahora: {1} MB. Guardada como {2}, lista para enviar por correo electrónico. |  |
 | Saved | Guardado |  |
 | Saving… | Guardando… |  |

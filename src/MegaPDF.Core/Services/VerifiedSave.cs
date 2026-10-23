@@ -90,6 +90,19 @@ public static class VerifiedSave
                 destination.SetLength(destination.Position);
         }
 
+        /// <summary>
+        /// Puts the staged file at <paramref name="destinationPath"/> through
+        /// <see cref="AtomicFileWriter"/>'s swap, so a crash or full disk mid-write leaves the
+        /// destination as it was. The staged file was read back when it was made, so this does
+        /// not verify again. For hosts that have a path (Windows); a stream goes through
+        /// <see cref="WriteOver"/>.
+        /// </summary>
+        public void WriteToPath(string destinationPath)
+        {
+            ArgumentException.ThrowIfNullOrEmpty(destinationPath);
+            AtomicFileWriter.Write(destinationPath, CopyTo);
+        }
+
         public void Dispose()
         {
             try

@@ -379,6 +379,9 @@
   <data name="NothingToShrinkBody" xml:space="preserve">
     <value>The pictures in this document are already small.</value>
   </data>
+  <data name="ShrinkNotSmallerBody" xml:space="preserve">
+    <value>Shrinking wouldn't make this document any smaller.</value>
+  </data>
   <data name="SmallerCopySavedTitle" xml:space="preserve">
     <value>Smaller copy saved</value>
   </data>

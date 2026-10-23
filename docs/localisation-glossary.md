@@ -270,10 +270,10 @@ established French for the cryptographic sense.
 | Couldn't update | Impossible de mettre à jour | |
 | Save first | Enregistrez d'abord | |
 | Nothing to shrink | Rien à réduire | |
+| Shrinking wouldn't make this document any smaller. | La réduction ne rendrait pas ce document plus petit. | #6, both desktops: the notice when the smaller copy would not be smaller than the file on disk (Windows body under *Couldn't shrink*; Mac/Linux status line). *réduire*/*document* as above; says nothing failed Also the phones' copy that would not be smaller (#593). |
 | Smaller copy saved | Copie réduite enregistrée | |
 | Smaller copy ready | Copie réduite prête | #593, title of the phones' result sheet |
 | The document you have open is unchanged. | Le document ouvert n'est pas modifié. | #593, under Was/now on the phones' result sheet |
-| Shrinking wouldn't make this document any smaller. | La réduction ne rendrait pas ce document plus petit. | #593, phones; #6 reuses it on the desktops |
 | Was {0} MB, now {1} MB. Saved as {2}, ready to email. | Avant : {0} Mo, après : {1} Mo. Enregistrée sous {2}, prête pour le courriel. | #632, the Windows shrink notice; Mac/Linux say this on the status line in their own words |
 | Saved | Enregistré | |
 | Saving… | Enregistrement… | |

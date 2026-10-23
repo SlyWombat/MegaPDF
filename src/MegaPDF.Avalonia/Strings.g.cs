@@ -464,6 +464,9 @@ public static partial class Strings
     /// <summary>The pictures in this document are already small — nothing to shrink.</summary>
     public static string NothingToShrink => Get("NothingToShrink");
 
+    /// <summary>Shrinking wouldn't make this document any smaller.</summary>
+    public static string ShrinkNotSmaller => Get("ShrinkNotSmaller");
+
     /// <summary>Saved a smaller copy: {0} picture re-encoded.</summary>
     public static string SmallerCopySavedOne(object? arg0) => string.Format(CultureInfo.CurrentCulture, Get("SmallerCopySavedOne"), arg0);
 
