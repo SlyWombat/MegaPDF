@@ -1,0 +1,7 @@
+app:      /work/out/MegaPDF
+binary:   1d7e074a01b018453af5c9138984b0ea614638b2a30b15737802bebaf7450786
+language: en (en-CA)
+window:   1280x800
+display:  :99 (Xvfb started by this run)
+document: Rental Agreement.pdf (from demo.pdf)
+taken:    2026-10-23T23:17:49Z
