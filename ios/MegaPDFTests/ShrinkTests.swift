@@ -123,6 +123,33 @@ final class ShrinkTests: XCTestCase {
         XCTAssertNil(model.statusMessage)
     }
 
+    /// D7: a copy that is not strictly smaller than the on-screen document (serialised, since the
+    /// phones have no on-disk original once there are unsaved edits) is not offered. The sizes
+    /// come through the model's `shrinkSizeOf` seam: the core replaces a picture only when it is
+    /// at least 10% smaller and both files come from the same writer, so no fixture makes a real
+    /// copy come out no smaller. EQUAL is "not smaller" too, so the seam reports the same size.
+    func testACopyThatIsNotSmallerIsNotOffered() async throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("shrink-593-equal-\(UUID().uuidString).pdf")
+        let input = Self.largeImagePdf(pages: 1)
+        try input.write(to: url)
+        defer { try? FileManager.default.removeItem(at: url) }
+        let model = ViewerModel()
+        model.openPicked(url: url)
+        try await ModelOpening.waitForTheDocument(model)
+        let doc = try XCTUnwrap(model.document)
+        model.shrinkSizeOf = { _ in 1000 }
+
+        await model.shrinkForEmail(named: url.lastPathComponent)
+
+        XCTAssertNil(model.shrinkReady, "no result sheet for a copy that is not smaller")
+        XCTAssertNil(model.stagedShrunkCopy, "no copy is left staged for Share or Save to Files")
+        XCTAssertEqual(model.statusMessage, String(localized: "Shrinking wouldn't make this document any smaller."))
+        // And the open document is still the one that was opened.
+        XCTAssertTrue(model.document === doc)
+        XCTAssertFalse(model.isDirty)
+        XCTAssertEqual(try Data(contentsOf: url), input)
+    }
+
     /// `data` without its trailer's `/ID[…]`: every save writes a fresh one, so two saves of an
     /// unchanged document differ there and only there (62 bytes of 225,133, measured for #593).
     private static func withoutID(_ data: Data) -> Data {

@@ -163,6 +163,15 @@ final class ViewerModel: ObservableObject {
     @Published var shrinkReady: ShrinkReady?
     /// The shrunk copy's staged file, kept past the sheet for the Save to Files exporter (#593).
     private var shrunkStagedURL: URL?
+    /// The folder holding the shrunk copy while the result sheet is up; nil when no copy is staged.
+    var stagedShrunkCopy: URL? { shrunkStagedURL }
+    /// How big a file is, for the "is the copy smaller" check (D7). A seam for the test of the
+    /// "not smaller" refusal: the core only replaces a picture it can make at least 10% smaller
+    /// and both sizes come from the same writer, so a real document that comes out no smaller is
+    /// not one a fixture can be built for.
+    var shrinkSizeOf: (URL) -> Int64 = { url in
+        ((try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? NSNumber)?.int64Value ?? 0
+    }
     /// An action waiting on the "Unsaved changes" alert (#377, #378): nil the rest of the
     /// time. Set here rather than as view-local state because `openExternal` needs to raise
     /// the same alert and runs before any view has a gesture to hang state off.
@@ -3503,8 +3512,8 @@ final class ViewerModel: ObservableObject {
                 throw error
             }
             // "Was" is the size of the saved copy of what is on screen, so the two are like for like (D6).
-            let before = Self.fileSize(staged)
-            let after = Self.fileSize(smaller)
+            let before = shrinkSizeOf(staged)
+            let after = shrinkSizeOf(smaller)
             await closeShrinkCopy(copy, source: source)
             copy = nil
             source = nil
@@ -3530,10 +3539,6 @@ final class ViewerModel: ObservableObject {
     private func closeShrinkCopy(_ copy: PdfDocument?, source: URL?) async {
         if let copy { await PdfEngine.shared.close(copy) }
         if let source { try? FileManager.default.removeItem(at: source.deletingLastPathComponent()) }
-    }
-
-    private static func fileSize(_ url: URL) -> Int64 {
-        ((try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? NSNumber)?.int64Value ?? 0
     }
 
     /// The result sheet is done with the shrunk copy: Done, Share's sheet closed, or the Save to

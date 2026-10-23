@@ -1814,6 +1814,7 @@ tests = [
   "ios/MegaPDFTests/ShrinkTests.swift::testShrinkReplacesTheOversizedImage",
   "ios/MegaPDFTests/ShrinkTests.swift::testARaisedFlagStopsTheShrink",
   "ios/MegaPDFTests/ShrinkTests.swift::testTheModelOffersASmallerCopyAndTheDocumentIsUnchanged",
+  "ios/MegaPDFTests/ShrinkTests.swift::testACopyThatIsNotSmallerIsNotOffered",
   "ios/MegaPDFUITests/ShrinkForEmailUITests.swift::testShrinkForEmailOffersShareAndSave",
   "ios/MegaPDFUITests/ShrinkForEmailUITests.swift::testShrinkForEmailWithAMarkAsksTheRedactionQuestionAndCancelMakesNothing",
   "ios/ui-test-lanes.txt::iphone/ShrinkForEmailUITests",
@@ -1829,6 +1830,7 @@ tests = [
   "android/engine/src/androidTest/java/com/megapdf/engine/ShrinkEngineTest.kt::aRaisedFlagStopsTheShrink",
   "android/app/src/androidTest/java/com/megapdf/android/ShrinkForEmailTest.kt::shrinkForEmailOffersASmallerCopyAndLeavesTheDocumentAlone",
   "android/app/src/androidTest/java/com/megapdf/android/ShrinkForEmailTest.kt::shrinkForEmailWithAMarkAsksTheRedactionQuestionAndCancelMakesNothing",
+  "android/app/src/androidTest/java/com/megapdf/android/ShrinkForEmailTest.kt::aCopyThatIsNotSmallerIsNotOffered",
   "android/app/src/test/java/com/megapdf/android/DocumentCapabilitiesTest.kt::shrinkNeedsModify",
   "android/app/src/test/java/com/megapdf/android/ShareFileTest.kt::a shrunk copy is named",
 ]

@@ -939,6 +939,15 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         private set
 
     /**
+     * How big a file is, for the "is the copy smaller" check (D7). A seam for the test of the
+     * "not smaller" refusal: the core only replaces a picture it can make at least 10% smaller
+     * and both sizes here come from the same writer, so a real document that comes out no
+     * smaller is not one a fixture can be built for (measured: none found).
+     */
+    @androidx.annotation.VisibleForTesting
+    internal var shrinkSizeOf: (File) -> Long = { it.length() }
+
+    /**
      * Shrink for email (#593): a smaller copy of the document as it stands on screen, unsaved
      * edits included (Dave, 2026-10-21: no save-first refusal), with its pictures re-encoded at
      * email quality by the core's own rules. The open document is never touched: it is
@@ -990,8 +999,8 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                         }
                         // Verified by reopening, as a save is, before anything is offered.
                         engine.openFileLike(doc, target.path).close()
-                        val before = source.length()
-                        val after = target.length()
+                        val before = shrinkSizeOf(source)
+                        val after = shrinkSizeOf(target)
                         // Per-picture savings do not promise a smaller file: a full rewrite can
                         // lose the original's object streams (D7).
                         if (after >= before) {

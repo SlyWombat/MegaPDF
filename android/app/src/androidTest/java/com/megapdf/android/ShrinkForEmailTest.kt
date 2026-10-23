@@ -112,4 +112,30 @@ class ShrinkForEmailTest {
         assertFalse("no shrunk copy was made", copy.exists())
         assertArrayEquals(sourceBytes, source.readBytes())
     }
+
+    /**
+     * D7: a copy that is not strictly smaller than the on-screen document (serialised) is not
+     * offered: no result sheet, no file, and the message says so. The sizes come through the view
+     * model's `shrinkSizeOf` seam: the core only replaces a picture it can make at least 10%
+     * smaller and both files come from the same writer, so no fixture makes a real copy come out
+     * no smaller. Equal counts as not smaller, so the seam reports the same size for both.
+     */
+    @Test
+    fun aCopyThatIsNotSmallerIsNotOffered() {
+        val source = Fixtures.written("shrink-593-equal.pdf", LargeImagePdf.bytes(1))
+        val sourceBytes = source.readBytes()
+        rule.open(source)
+        rule.viewModel.shrinkSizeOf = { 1000L }
+
+        rule.menu(str(R.string.shrink_for_email))
+
+        rule.waitUntil(SETTLE_MS) { rule.viewModel.statusMessage == str(R.string.shrink_not_smaller) }
+        assertEquals(null, rule.viewModel.shrinkReady)
+        val copy = java.io.File(shareDirectory(Fixtures.appContext.cacheDir),
+            str(R.string.shrink_file_name, "shrink-593-equal") + ".pdf")
+        assertFalse("no copy is left to share or save", copy.exists())
+        assertFalse(rule.viewModel.busy.locksDocument)
+        assertEquals("shrink-593-equal.pdf", (rule.viewModel.uiState as ViewerUiState.Viewing).displayName)
+        assertArrayEquals(sourceBytes, source.readBytes())
+    }
 }
