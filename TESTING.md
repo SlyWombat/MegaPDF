@@ -2745,6 +2745,91 @@ The argument order matters: the check clicks body text at (78, 186) on its secon
 there, so `fixture.pdf forms.pdf demo.pdf` (the order #711's remaining-work list gives) fails two
 checks on its own; `demo.pdf fixture.pdf forms.pdf` is the order that passes on a clean build.
 
+## Wave 2: real-input, VoiceOver and hosted-CI runs (#710, #711, #614), 2026-10-22
+
+One day's verification of select-and-copy (#710), tab tear-out (#711) and the standing iOS runner
+(#614) on the real machines: GPD-DAVE, the Mac mini, WSLg, the kdocker2/3 builders and the
+hosted macOS runners. Each row is one run; the issues hold the per-step detail. What the day
+found and fixed: the Windows word double-click (#774) and text-box double-click (#775) never
+received a DoubleTapped (the two taps hit different elements), fixed in #777; VoiceOver never
+spoke the app's live-region announcements on the Mac (#778), fixed in #779 by posting AppKit's
+own announcement request; `--window-tabs-check` could exit 0 after `[FAIL]` (#767). Still open
+and unmilestoned: #770, #771, #773, #776.
+
+### #710 desktop items 1 and 2: the real routes and the real double-click (before the fixes)
+
+| date | machine | build | what | result |
+|---|---|---|---|---|
+| 2026-10-22 | GPD-DAVE (2560x1600, 150 %), elevated launch, person's launch (`MEGAPDF_USER_DATA` scratch) | `a3111b4`, Release win-x64 unpackaged | #710 desktop item 1: real input (`mouse_event` with real move events + `SendKeys`) on `selection.pdf` and `owner-only.pdf`: drag + Ctrl+C, right-click then mouse-click Copy (`TextCopyItem` by UI Automation), Ctrl+A + Ctrl+C, no-copy document | all PASS: clipboard equals the expected text with `\r\n` (6-line drag; 16-line whole document); `owner-only.pdf`: clipboard unchanged, notice shown, Copy disabled with reason. Note: a drag whose moves are `SetCursorPos` warps (the shape of `Drag` in tools/windows-qa/common.ps1) starts no selection; use `MOUSEEVENTF_MOVE\|ABSOLUTE` |
+| 2026-10-22 | GPD-DAVE, same | `a3111b4` | #710 desktop item 2: real double-click on "charlie" and "bravo" (gaps 20-350 ms), single click on a body line, added text box double-click | **FAIL**: the word double-click opens the line editor and selects nothing at every gap (#774); single click opens the editor (PASS); first double-click on an unselected added text box only selects it, the second opens the editor (#775) |
+| 2026-10-22 | Mac mini (macOS 26, 2560x1440 @1x), person's launch (`MEGAPDF_USER_DATA` scratch), fresh clone `~/mp-710` | `a3111b4`, `tools/build-macos-app.sh osx-arm64` | #710 desktop item 1: `cliclick` drag, Cmd+C, Edit > Copy and Cmd+A, Cmd+C through System Events, right-click > Copy, no-copy document | all PASS: `pbpaste` equals the expected text with `\n` (104-byte drag, 257-byte whole document); `owner-only.pdf`: Edit > Copy disabled, sentinel unchanged by Cmd+C and the menu, popup shows Copy greyed + reason. Note: `cliclick kp:return` and `kp:esc` did not reach the app; System Events `key code 36` / `53` did |
+| 2026-10-22 | Mac mini, same | `a3111b4` | #710 desktop item 2: `cliclick dc:` on "charlie", single click press/release, added text box double-click (also CGEvents at 120 and 300 ms) | word double-click PASS (`charlie`, no editor); single click opens on release (PASS); added text box: first double-click only selects, second opens the editor (#775) |
+| 2026-10-22 | GPD-DAVE WSLg, pointer driven from the Windows side, text read from the Windows clipboard | `a3111b4`, `MegaPDF-linux-x64` from ci.yml run 39792746643 | #710 desktop items 1 and 2: drag + Ctrl+C, right-click > Copy, Ctrl+A + Ctrl+C, no-copy document, double-click, single click, added text box | PASS: the three copies (the clipboard mirror carried the text with `\n`), `owner-only.pdf` Ctrl+C unchanged with the notice in the status bar, word double-click (`charlie`), single click opens on release. NOT SHOWN: the right-click menu on `owner-only.pdf` (#776, app or WSLg not told apart). FAIL: added text box first double-click only selects (#775) |
+
+### #710 desktop items 3, 4 and 5: announcement, auto-scroll while held, Mac highlight colour
+
+| date | machine | build | what | result |
+|---|---|---|---|---|
+| 2026-10-22 | GPD-DAVE (2560x1600, 150 %), person's launch (`MEGAPDF_USER_DATA` scratch), Windows UI lock held | `e709ac7`, Release win-x64 unpackaged | #710 desktop item 3 (Windows, listener half): real input (`mouse_event` with real move events + `SendKeys`) on `selection.pdf` while a UI Automation notification listener (`IUIAutomation5.AddNotificationEventHandler`, desktop root, subtree; a throwaway C# tool) logged `UIA_NotificationEventId`. Narrator NOT run (Dave's) | the app raises, kind 2 / processing 1 / activity `page-focus`: `Selected: Left two bravo and more Left three charlie Left four delta Left five echo Right…` after the drag, `Copied` after Ctrl+C, `Selected: Selection Columns Left one alpha Left two bravo and more Left three charlie Left…` after Ctrl+A. Word double-click: no notification (#774 opened the line editor). Proves what the app raises, not what Narrator speaks |
+| 2026-10-22 | Mac mini (macOS 26.7.1, 2560x1440 @1x), person's launch, VoiceOver on with the caption panel (`SCREnableCaptionPanel`), mini lock held | `e709ac7`, `tools/build-macos-app.sh osx-arm64` | #710 desktop item 3 (Mac): real drag, double-click, Cmd+A, Cmd+C; caption panel frames captured around each; the app's accessibility tree read after each | **FAIL (#778)**: the tree holds `Selected: ...` / `Selected: charlie` / `Copied`, VoiceOver speaks none of them (panel showed only `Select All`, `Copy`, `Left three charlie, text`); the older reading-mode live region is silent the same way; `libAvaloniaNative.dylib` has no `NSAccessibilityPostNotification` symbol. VoiceOver prefs removed afterwards; osascript to VoiceOver raised a TCC prompt, answered Don't Allow |
+| 2026-10-22 | GPD-DAVE, same | `e709ac7` | #710 desktop item 4 (Windows): window 1278x889 (not maximised), press on page 1, drag to 40 px below the window, still for 2.6 s with `CopyFromScreen` shots only, release, Ctrl+C | PASS: pages scrolled during the hold to "Page 2 of 2"; clipboard ran through the last page 2 line (14 lines, `\r\n`); the listener's `Selected:` notification came 4 ms after the release |
+| 2026-10-22 | Mac mini, same | `e709ac7` | #710 desktop item 4 (Mac): window 1200x540 points (not maximised), `cliclick dd:`, 12 `dm:`, `w:2500`, `du:`; shots mid-hold; Cmd+C | PASS: scrolled to "Page 2 of 2" during the hold, page 2 text highlighted mid-hold, clipboard 14 lines with `\n` |
+| 2026-10-22 | GPD-DAVE WSLg, pointer from the Windows side, text read from the Windows clipboard | `e709ac7`, `MegaPDF-linux-x64` from ci.yml run 39832937133 | #710 desktop item 4 (Linux): the window as it opened (fills the screen), press on page 1, drag to 40 px below the page area (inside the status bar), still 2.6 s, release, Ctrl+C | PASS: scrolled to "Page 2 of 2", page 2 highlighted mid-hold, clipboard 14 lines with `\n`. A resize of the WSLg window from outside left its content clipped (not a product measurement) |
+| 2026-10-22 | Mac mini, same | `e709ac7` | #710 desktop item 5: `defaults write -g AppleHighlightColor "1.000000 0.874510 0.701961 Orange"`, launch, real drag, `screencapture`, sample the pixels between glyphs; delete the default, relaunch, repeat | PASS: orange (254, 241, 229) with the override, accent blue (226, 240, 255) without; `defaults read` absent before, after the delete, and at the end |
+
+### #710 item 2 after the fixes (#774, #775; PR #777)
+
+| date | machine | build | what | result |
+|---|---|---|---|---|
+| 2026-10-22 | GPD-DAVE (150 %), Windows UI lock | `857ae61` (PR #777) | Windows `--screenshot-state` select-copy and the states that touch DocumentView text/selection | select-copy 64/64 (was 40; +24 for the second-click decision and the text box); whiteout-text 28/28, fill 17/17, form-flow 29/29, redact 19/19, reading exit 0. Fail-first: with the fix switched off select-copy is 56 passed, 8 failed (the new word and text-box checks). Hosted Windows UI self-test green on the same head |
+| 2026-10-22 | kdocker3, `megapdf:dotnet` container under Xvfb | `857ae61` | Linux `--self-test` (whole), Avalonia headless `CheckTextSelection` with real click-count-2 double-clicks, Core tests | 936 PASS, exit 0; Core tests 574/574. Fail-first: without `TryEditTextBoxAt` the box's "second click opens the editor" and "with its own text" checks fail, everything else passes |
+| 2026-10-22 | Mac mini (macOS 26), fresh clone | `857ae61` | macOS `--self-test` | 925 PASS, exit 0 |
+| 2026-10-22 | GPD-DAVE (win-x64), mini (`cliclick`), WSLg (CI `MegaPDF-linux-x64`), person's launches | `857ae61` | #710 desktop item 2 re-verified with real input: word double-click copy, text-box double-click, single click | PASS on all three (clipboard `charlie`, no editor; text box editor opens on the first double-click; single click opens the line editor). Before (`a3111b4`/`e709ac7`): Windows FAIL (#774), all three FAIL on the box (#775) |
+
+### #778: Mac VoiceOver speaks the announcements (PR #779)
+
+| date | machine | build | what | result |
+|---|---|---|---|---|
+| 2026-10-22 | Mac mini (macOS 26.7.1, arm64), VoiceOver caption panel | `origin/main` 186d958 | drag, double-click, ⌘A, ⌘C, ⇧⌘R with real `cliclick` input | fail-first: no `Selected:`, `Copied` or `Reading mode on` caption; only VoiceOver's own focus and menu speech |
+| 2026-10-22 | Mac mini, VoiceOver | PR #779 (6a712ce's `Announce` path) | the same five actions | `Selected: Left two bravo…`, `Selected: charlie`, `Selected: Selection Columns…`, `Copied`, `Reading mode on` / `off`; ⌘A+⌘C 60 ms apart ends on `Copied`; 4 of 5 double-clicks announced |
+| 2026-10-22 | Mac mini | 6a712ce | `--self-test` | 934 PASS, 0 FAIL, exit 0 |
+| 2026-10-22 | kdocker3 | 6a712ce | Core tests; Linux `--self-test` under Xvfb | 574/0; 944 PASS, 0 FAIL |
+| 2026-10-22 | kdocker3 | 6a712ce with the `NativeAnnouncer?.Invoke` line commented out | Linux `--self-test` | 6 FAIL (the #778 hand-over checks), exit 1 |
+
+### #710 iOS: adjustable handles, Command-C on the iPad, no-copy path (PR #772)
+
+| date | machine | build | what | result |
+|---|---|---|---|---|
+| 2026-10-22 | Mac mini, iPhone 17 Pro + iPad Pro 13" simulators, iOS 26.5, build 32ac588 | #710 iOS: SelectCopyUITests (VoiceOver-adjustable handle step, Command-C on iPad, no-copy path); FormTextUITests, BodyTextEditUITests regression; unit suite 366 | iPhone 4 pass 1 skip, iPad 5/5; regression 7/7 + 3/3; unit 366/0; fail-first mutations each red |
+
+### #711 items 2 and 4: Windows at other scales, Linux under WSLg
+
+| date | machine | build | what | result |
+|---|---|---|---|---|
+| 2026-10-22 | GPD-DAVE (2560x1600; scale 150 %, 100 %, restored to 200 %), elevated launches | `a3111b4` (origin/main), Release win-x64 unpackaged | #711 item 2: `--screenshot-state tab-move fixture.pdf` | exit 0, 70 PASS / 0 FAIL at 150 % and 100 % (70/0 at 200 %, exit not captured); `closes by itself` passed on all three |
+| 2026-10-22 | GPD-DAVE, same | `a3111b4` | #711 item 2: real SendInput drags (tear-out 250 px with an unsaved edit, drop onto another strip, Escape mid-drag, Ctrl+Z in the new window, click on a line in the moved document) at 150 % and 100 % (and 200 % baseline) | all as designed: edit, undo and tab moved with it; Escape cancelled with no stray window; editor opened on the clicked line (not one off); pages sharp (by eye). Item ticked |
+| 2026-10-22 | GPD-DAVE WSLg (Weston/XWayland, 200 %) | `a3111b4`, `MegaPDF-linux-x64` from ci.yml run 39792746643 | #711 item 4: real Windows-pointer drag 200 px down with an unsaved edit; Menu key / right click then Move Tab to New Window; Ctrl+Z | new window made with the edit; Undone. after Ctrl+Z; but window placed at X (10,10) not at the release point, Shift+F10 did not open the menu (Menu key did), WSLg repaint/scale broke after the new window (first window unresponsive); item left open, #773 |
+
+### #711 items 3 and 6: a real tab drag and VoiceOver on the Mac
+
+| date | machine | build | what | result |
+|---|---|---|---|---|
+| 2026-10-22 | Mac mini, scratch clone `~/mp-711` (removed) | `origin/main` a3111b4 + #767 one-liner | item 8, `--window-tabs-check`, no change, design order, deliberate failure | exit **0** with `[FAIL]` lines and no summary; fixed by #767 (exit 1) |
+| 2026-10-22 | Mac mini | same | item 3, real `cliclick` drag: Merge All Windows, unsaved edit, tab dragged 250 pt out, ⌘Z in the new window | new window holds the dirty edit, undo works, both windows draw (393 to 5,190 distinct colours per region), AppKit's preview is window-shaped |
+| 2026-10-22 | Mac mini | same, "Prefer tabs: Always" set and deleted | item 3 step 5: tab dragged onto another window's tab bar (windows not overlapping) | joined: right window 3 tabs, left 2; three earlier tries onto a covered tab bar did not merge |
+| 2026-10-22 | Mac mini | same | item 3 step 6: ⌘W Don't Save, ⌘Q with a dirty tab | prompt each time, Don't Save closes, app quits on the last window or on ⌘Q |
+| 2026-10-22 | Mac mini | same | item 3, defects found | #770 (one 95 % CPU wedge in the tab drag loop, not reproduced in two repeats), #771 (Window menu lacks the tab commands after a fresh launch) |
+| 2026-10-22 | Mac mini, VoiceOver (caption panel) | same | item 6: Move Tab to New Window via System Events | no new-window caption (Finder, same invocation, equally silent) |
+| 2026-10-22 | Mac mini, VoiceOver | same | item 6: Move Tab to New Window with real clicks | `MegaPDF, has new, window` |
+| 2026-10-22 | Mac mini, VoiceOver | same | item 6: real drag of a tab out | `Now in, forms.pdf — MegaPDF, window, Open, button, group` |
+
+### #614: hosted iOS CI beside the standing runner
+
+See tools/mac-mini.md, "The standing runner against hosted". Three dispatched hosted runs
+(runner=hosted): 39818409951 green in 55 min 51 s, 39845022875 red in 53 min 33 s on one
+iPad reading-mode UI test, 39868868578 green in 47 min 59 s. The mini's median job is 15 min
+46 s with a median queue of 15 minutes.
+
 ## Reporting
 
 For each issue: what you clicked, what you expected, what happened, and the PDF
