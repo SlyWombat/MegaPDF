@@ -12,7 +12,8 @@
 # of a page, and the reading one says something as well.
 #
 # Usage: tools/macos-store-captures.sh [lang] [out-dir] [app-bundle]
-#   lang        en (default), fr-CA or fr
+#   lang        en (default), fr-CA, fr, es-419 or es (#724: es-419 is Latin American
+#               Spanish, es is Spain's, the way fr is France's)
 #   out-dir     default artifacts/store/macos-screenshots/<lang>
 #   app-bundle  default ~/app-store/MegaPDF.app, else ~/app-macos/MegaPDF.app
 #
@@ -44,7 +45,13 @@ case "$LANG_TAG" in
     en)    CULTURE=en-CA ;;
     fr-CA) CULTURE=fr-CA ;;
     fr)    CULTURE=fr-FR ;;
-    *) echo "lang must be en, fr-CA or fr" >&2; exit 1 ;;
+    # Spanish (#724). The Mac App Store has no es-419: the folder here is es-419 and the
+    # listing language is es-MX (tools/asc_publish.py REPO_LOCALE maps one to the other).
+    # The app tells the two apart by culture name: es-419 takes the Latin American page
+    # (demo-es), es-ES Spain's own (demo-es-ES, alquiler).
+    es-419) CULTURE=es-419 ;;
+    es)    CULTURE=es-ES ;;
+    *) echo "lang must be en, fr-CA, fr, es-419 or es" >&2; exit 1 ;;
 esac
 
 mkdir -p "$OUT"
@@ -64,6 +71,9 @@ case "$LANG_TAG" in
     fr-CA) FIXTURE="$WORK/fixtures/demo-fr.pdf";    DOC="$WORK/Contrat de location.pdf" ;;
     # France's own page, not Quebec's under a French name (#310).
     fr)    FIXTURE="$WORK/fixtures/demo-fr-FR.pdf"; DOC="$WORK/Contrat de location.pdf" ;;
+    # DemoContent.DocumentFileName's two Spanish names.
+    es-419) FIXTURE="$WORK/fixtures/demo-es.pdf";    DOC="$WORK/Contrato de arrendamiento.pdf" ;;
+    es)    FIXTURE="$WORK/fixtures/demo-es-ES.pdf"; DOC="$WORK/Contrato de alquiler.pdf" ;;
 esac
 [ -f "$FIXTURE" ] || { echo "no demo document at $FIXTURE" >&2; exit 1; }
 cp "$FIXTURE" "$DOC"
@@ -78,6 +88,8 @@ case "$LANG_TAG" in
     en)    LONG_FIXTURE="$WORK/fixtures/demo-pages.pdf" ;;
     fr-CA) LONG_FIXTURE="$WORK/fixtures/demo-fr-pages.pdf" ;;
     fr)    LONG_FIXTURE="$WORK/fixtures/demo-fr-FR-pages.pdf" ;;
+    es-419) LONG_FIXTURE="$WORK/fixtures/demo-es-pages.pdf" ;;
+    es)    LONG_FIXTURE="$WORK/fixtures/demo-es-ES-pages.pdf" ;;
 esac
 [ -f "$LONG_FIXTURE" ] || { echo "no multi-page demo document at $LONG_FIXTURE" >&2; exit 1; }
 mkdir -p "$WORK/long"

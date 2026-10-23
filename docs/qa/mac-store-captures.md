@@ -21,11 +21,15 @@ tools/build-macos-app.sh osx-arm64 ~/app-store
 tools/macos-store-captures.sh en    ~/store/macos-screenshots/en
 tools/macos-store-captures.sh fr-CA ~/store/macos-screenshots/fr-CA
 tools/macos-store-captures.sh fr    ~/store/macos-screenshots/fr
+tools/macos-store-captures.sh es-419 ~/store/macos-screenshots/es-419   # Latin America (#724)
+tools/macos-store-captures.sh es    ~/store/macos-screenshots/es       # Spain
 
 # iOS: six listing images and five review shots per language, per device
 tools/ios-screenshots.sh en    ~/store/ios-screenshots/en
 tools/ios-screenshots.sh fr-CA ~/store/ios-screenshots/fr-CA
 tools/ios-screenshots.sh fr    ~/store/ios-screenshots/fr
+tools/ios-screenshots.sh es-419 ~/store/ios-screenshots/es-419
+tools/ios-screenshots.sh es    ~/store/ios-screenshots/es
 ```
 
 The iOS set is also an Actions workflow (**iOS Screenshots**), which takes the
@@ -44,8 +48,8 @@ rather than a sequence of commands somebody remembers.
 | **The run owns its signature library** | `--signature tools/assets/megawoman-sig.jpg`, into a throwaway library directory the `sign` state makes for itself. The flyout shows exactly one card, "Mega W.". iOS installs into a freshly uninstalled container for the same reason. |
 | **The recents are a fixture** | `--screenshot-state home` fills the list from `DemoContent.Recents` (iOS: `DemoContent.demoRecents`). The machine's own list is whatever it last opened — on the capture Mac that was a path through the sandbox container. |
 | **The zoom is 100%** | The fixture path is new each run, so the recents store has no zoom to restore for it. A round number reads as chosen; Windows shipped a dry run at 109%. |
-| **The document has one name** | `DemoContent.DocumentFileName`, so the status line and the recents list agree. The fixture is `demo-fr.pdf` (fr-CA) or `demo-fr-FR.pdf` (fr, France's own text since #310) on disk and "Contrat de location.pdf" in every shot. |
-| **The language is an argument** | `--language fr-CA` on the Mac, `-AppleLanguages`/`-AppleLocale` on iOS. The machine's own language is never changed, so a run cannot pick up half of it. |
+| **The document has one name** | `DemoContent.DocumentFileName`, so the status line and the recents list agree. The fixture is `demo-fr.pdf` (fr-CA) or `demo-fr-FR.pdf` (fr, France's own text since #310) on disk and "Contrat de location.pdf" in every shot; Spanish (#724) is `demo-es.pdf` (es-419, "Contrato de arrendamiento.pdf") or `demo-es-ES.pdf` (es, Spain's, "Contrato de alquiler.pdf"). |
+| **The language is an argument** | `--language fr-CA` (or `es-419`, `es-ES`) on the Mac, `-AppleLanguages`/`-AppleLocale` on iOS. The machine's own language is never changed, so a run cannot pick up half of it. |
 | **The binary is named** | Each Mac run writes `RUN.txt` with the bundle path and the binary's sha256. This Mac has ~20 stale `com.megapdf.ios` bundles registered, and everything is launched by absolute path rather than through LaunchServices. |
 | **The pointer is off the window** | The Mac shots are the real window on the capture Mac's display, so a pointer resting over it paints hover. A 2026-09-19 re-shot `home` came out with the first recent highlighted and its location tooltip up. Move the pointer to a corner first (it is the one input the script doesn't pose), and read `home` before keeping it. |
 | **The iPhone status bar is fixed** | `simctl status_bar override`: 9:41, full bars, charged. The iPad's date cannot be overridden — see below. |
@@ -58,10 +62,10 @@ run; the rest are read by eye.
 1. **The size is exact.** Mac 1440×900; iPhone 6.9" 1320×2868; iPad 13" 2064×2752.
 2. **Every listing slot is present** — seven for the Mac since #613, the eight
    `docs/app-store-listing.md` maps for iOS — and review shots are not among them.
-3. **The UI language matches the set.** No English in a French shot, no French
+3. **The UI language matches the set.** No English in a French or Spanish shot, no French
    caption on an English one, including the status line and the window title.
 4. **The demo person is right**: Jane Whitfield (en), Hélène Bélanger (fr-CA),
-   Céline Lefèvre (fr). Accents whole — nothing drawn across them.
+   Céline Lefèvre (fr), Sofía Ramírez (es-419), Lucía Fernández (es). Accents whole — nothing drawn across them.
 5. **The toolbar is the current one**: Open / Save / Sign / Add text / Cover /
    Redact / Undo / Redo / zoom / More. If Redact is missing, the set predates 2.0.
 6. **Nothing transient**: nothing *selected* in the wrong place, no first-boot
@@ -138,7 +142,7 @@ the description, where a reader meets it as a choice.
 **Slots 1 and 4 open a different document from the other five.** A Pages sidebar
 with one thumbnail is a picture of nothing and the floating bar would read "Page 1
 of 1", so both open `demo-pages.pdf` (`demo-fr-pages.pdf` / `demo-fr-FR-pages.pdf`
-in French): the same filled, ticked, signed page 1, followed by the agreement's
+in French, `demo-es-pages.pdf` / `demo-es-ES-pages.pdf` in Spanish): the same filled, ticked, signed page 1, followed by the agreement's
 four sections and a landscape rate schedule. It is opened under the same document
 name as the one-page one, so the set is still one document from end to end — check
 that the status line says the same name in all seven.

@@ -550,5 +550,133 @@ class WindowsChromelessPoses(unittest.TestCase):
         self.assertNotEqual(finding["status"], "skip", finding["note"])
 
 
+def _words(path: str, text: str, size: str = "1280x800") -> None:
+    """A white frame with `text` across the middle, large enough for tesseract."""
+    subprocess.run(["convert", "-size", size, "xc:white", "-gravity", "center",
+                    "-pointsize", "56", "-fill", "black", "-annotate", "0", text, path],
+                   check=True, capture_output=True)
+
+
+@unittest.skipUnless(shutil.which("convert"), "ImageMagick is not installed")
+class SpanishSets(unittest.TestCase):
+    """#724: the two Spanish listings are sets of their own.
+
+    `es-419` is Latin American Spanish (its store locale is es-MX, which the gate
+    accepts as a folder name) and a bare `es` is Spain's, the way a bare `fr` is
+    France's. Each has its own demo person, and an English UI word on either is a
+    string that did not come from the Spanish catalogue.
+    """
+
+    def test_the_directory_names_a_spanish_set_has_been_shot_under(self):
+        for name in ("es-419", "es-MX", "es-mx"):
+            self.assertEqual(stores.language_of(name), "es-419", name)
+        for name in ("es-ES", "es-es", "es", "esES"):
+            self.assertEqual(stores.language_of(name), "es-ES", name)
+        # Tags as the rigs spell them, underscores and all.
+        self.assertEqual(stores.canonical("es_MX"), "es-419")
+        self.assertEqual(stores.canonical("es_ES"), "es-ES")
+        # And the French and English ones did not move.
+        self.assertEqual(stores.canonical("fr"), "fr-FR")
+        self.assertEqual(stores.canonical("fr-CA"), "fr-CA")
+        self.assertEqual(stores.canonical("en-US"), "en")
+        self.assertIsNone(stores.canonical("de"))
+
+    def test_the_demo_people_are_the_ones_dave_chose(self):
+        self.assertEqual(stores.PEOPLE["es-419"], "Sof\u00eda Ram\u00edrez")
+        self.assertEqual(stores.PEOPLE["es-ES"], "Luc\u00eda Fern\u00e1ndez")
+
+    def test_one_shot_from_each_is_read_as_its_own_set(self):
+        """The folder names the rigs write (macos-store-captures.sh es-419 / es,
+        store-captures.sh es-419 / es-ES, the Windows -Dir) land in the right set."""
+        with tempfile.TemporaryDirectory() as tmp:
+            for folder in ("es-419", "es-ES", "es", "es-MX"):
+                os.makedirs(os.path.join(tmp, folder))
+            _solid(os.path.join(tmp, "es-419", "01-reading.png"), "1280x800", "white")
+            _solid(os.path.join(tmp, "es-ES", "01-reading.png"), "1280x800", "white")
+            shots = gate.discover(tmp, stores.profile("linux"))
+            self.assertEqual({(os.path.basename(os.path.dirname(s.path)), s.lang)
+                              for s in shots},
+                             {("es-419", "es-419"), ("es-ES", "es-ES")})
+            # The Mac and iOS rigs call Spain's folder plain `es` and the store's
+            # name for the Latin American one `es-MX`; both are read the same way.
+            _solid(os.path.join(tmp, "es", "01-reading.png"), "1280x800", "white")
+            _solid(os.path.join(tmp, "es-MX", "01-reading.png"), "1280x800", "white")
+            langs = {os.path.basename(os.path.dirname(s.path)): s.lang
+                     for s in gate.discover(tmp, stores.profile("linux"))}
+            self.assertEqual(langs["es"], "es-ES")
+            self.assertEqual(langs["es-MX"], "es-419")
+            with tempfile.TemporaryDirectory() as out:
+                result = gate.run(tmp, "linux", out, thumb_width=32)
+            self.assertEqual([s["language"] for s in result["sets"]],
+                             ["es-419", "es-ES"])
+
+    def test_the_ios_and_play_and_linux_file_names_carry_a_spanish_tag(self):
+        ios = stores.STORES["ios"]["parse"]("es-419-iphone-6_9-reading.png")
+        self.assertEqual(ios, ("iphone-6_9", "reading", "es-419"))
+        play = stores.STORES["play"]["parse"]("small__es-ES__light__t01__doc.png")
+        self.assertEqual(play, ("small", "doc", "es-ES"))
+        linux = stores.STORES["linux"]["parse"]("doc_es-419_dark_1280.png")
+        self.assertEqual(linux, ("1280", "doc", "es-419"))
+
+
+@unittest.skipUnless(shutil.which("convert") and shutil.which("tesseract"),
+                     "ImageMagick and tesseract are needed to read a frame")
+class SpanishLanguageChecks(unittest.TestCase):
+    """#724: `language` and `person` read the screen, and now read a Spanish one."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.count = 0
+
+    def _finding(self, folder: str, text: str, check: str):
+        # A new path every time: im.ocr is cached by path, and a frame written over
+        # the last one would be read back as the last one's text.
+        self.count += 1
+        root = os.path.join(self.tmp.name, str(self.count), folder)
+        os.makedirs(root)
+        _words(os.path.join(root, "doc.png"), text)
+        with tempfile.TemporaryDirectory() as out:
+            result = gate.run(root, "linux", out, thumb_width=32)
+        return next(f for f in result["images"][0]["findings"] if f["check"] == check)
+
+    def test_english_ui_words_on_a_spanish_capture_are_flagged(self):
+        for folder in ("es-419", "es-ES"):
+            finding = self._finding(folder, "Cancel   Done   Contrato", "language")
+            self.assertEqual(finding["status"], "flag", finding["note"])
+            self.assertIn(folder, finding["note"])
+
+    def test_the_spanish_words_for_them_are_not_english(self):
+        """\\bcancel\\b is not *cancelar*, and nothing else on a Spanish screen is on the list."""
+        for folder in ("es-419", "es-ES"):
+            finding = self._finding(folder, "Cancelar   Hecho   Agregar texto", "language")
+            self.assertEqual(finding["status"], "pass", finding["note"])
+            self.assertIn("Spanish", finding["note"])
+
+    def test_the_french_check_still_says_french(self):
+        finding = self._finding("fr-CA", "Cancel   Contrat", "language")
+        self.assertEqual(finding["status"], "flag", finding["note"])
+        finding = self._finding("fr-FR", "Annuler   Contrat", "language")
+        self.assertEqual(finding["status"], "pass", finding["note"])
+        self.assertIn("French", finding["note"])
+
+    def test_the_demo_person_of_the_other_spanish_is_flagged(self):
+        # The reader drops accents, so the right name is a pass or a "found it, cannot
+        # judge the accents" skip, never a flag.
+        right = self._finding("es-419", "Nombre: Sof\u00eda Ram\u00edrez", "person")
+        self.assertIn(right["status"], ("pass", "skip"), right["note"])
+        self.assertIn("Sof\u00eda Ram\u00edrez", right["note"])
+        wrong = self._finding("es-419", "Nombre: Luc\u00eda Fern\u00e1ndez", "person")
+        self.assertEqual(wrong["status"], "flag", wrong["note"])
+        spain = self._finding("es-ES", "Nombre: Luc\u00eda Fern\u00e1ndez", "person")
+        self.assertIn(spain["status"], ("pass", "skip"), spain["note"])
+        self.assertIn("Luc\u00eda Fern\u00e1ndez", spain["note"])
+        # Latin America's name on Spain's set, and a French name on either.
+        wrong = self._finding("es-ES", "Nombre: Sof\u00eda Ram\u00edrez", "person")
+        self.assertEqual(wrong["status"], "flag", wrong["note"])
+        wrong = self._finding("es-419", "Nom : C\u00e9line Lef\u00e8vre", "person")
+        self.assertEqual(wrong["status"], "flag", wrong["note"])
+
+
 if __name__ == "__main__":
     unittest.main()

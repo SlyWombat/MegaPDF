@@ -13,7 +13,7 @@
 # are a picture of a page, and the reading one says something as well.
 #
 # Usage: tools/linux/store-captures.sh [lang] [out-dir] [app-tree]
-#   lang      en (default), fr-CA or fr-FR
+#   lang      en (default), fr-CA, fr-FR, es-419 or es-ES (#724)
 #   out-dir   default artifacts/store/linux/<lang>
 #   app-tree  default artifacts/linux/MegaPDF, else artifacts/linux
 #
@@ -60,7 +60,13 @@ case "$LANG_TAG" in
     en)    CULTURE=en-CA ;;
     fr-CA) CULTURE=fr-CA ;;
     fr-FR) CULTURE=fr-FR ;;
-    *) echo "lang must be en, fr-CA or fr-FR" >&2; exit 1 ;;
+    # Spanish (#724). The folder (and the AppStream xml:lang="es") is es-419; the culture
+    # the app is started in is es-MX, which resolves to the neutral Latin American Spanish
+    # catalogue, the way a Mexican user's Linux session does. DemoContent tells it from
+    # es-ES by the culture name, so es-MX takes the Latin American page.
+    es-419) CULTURE=es-MX ;;
+    es-ES) CULTURE=es-ES ;;
+    *) echo "lang must be en, fr-CA, fr-FR, es-419 or es-ES" >&2; exit 1 ;;
 esac
 
 mkdir -p "$OUT/logs"
@@ -103,6 +109,9 @@ case "$LANG_TAG" in
     en)    FIXTURE="$WORK/fixtures/demo.pdf";       DOC="$WORK/Rental Agreement.pdf" ;;
     fr-CA) FIXTURE="$WORK/fixtures/demo-fr.pdf";    DOC="$WORK/Contrat de location.pdf" ;;
     fr-FR) FIXTURE="$WORK/fixtures/demo-fr-FR.pdf"; DOC="$WORK/Contrat de location.pdf" ;;
+    # DemoContent.DocumentFileName's two Spanish names; Spain's page says alquiler.
+    es-419) FIXTURE="$WORK/fixtures/demo-es.pdf";    DOC="$WORK/Contrato de arrendamiento.pdf" ;;
+    es-ES) FIXTURE="$WORK/fixtures/demo-es-ES.pdf"; DOC="$WORK/Contrato de alquiler.pdf" ;;
 esac
 [ -f "$FIXTURE" ] || { echo "no demo document at $FIXTURE" >&2; exit 1; }
 cp "$FIXTURE" "$DOC"
@@ -117,6 +126,8 @@ case "$LANG_TAG" in
     en)    LONG_FIXTURE="$WORK/fixtures/demo-pages.pdf" ;;
     fr-CA) LONG_FIXTURE="$WORK/fixtures/demo-fr-pages.pdf" ;;
     fr-FR) LONG_FIXTURE="$WORK/fixtures/demo-fr-FR-pages.pdf" ;;
+    es-419) LONG_FIXTURE="$WORK/fixtures/demo-es-pages.pdf" ;;
+    es-ES) LONG_FIXTURE="$WORK/fixtures/demo-es-ES-pages.pdf" ;;
 esac
 LONG_DOC="$WORK/long/$(basename "$DOC")"
 mkdir -p "$WORK/long"

@@ -109,7 +109,7 @@ function Shot($h, $name) {
 # Buttons are found by AutomationId, not Name (#91): the UIA Name is what Narrator
 # reads and is localised, so it changes with the app's language. The ids are set
 # in MainWindow.xaml ("OpenButton", "ShrinkButton", ...) and never translate, so
-# the same script shoots English and French.
+# the same script shoots English, French and Spanish.
 function BtnById($root, $id) {
     $c1 = New-Object System.Windows.Automation.PropertyCondition($global:AE::AutomationIdProperty, $id)
     $c2 = New-Object System.Windows.Automation.PropertyCondition($global:AE::ControlTypeProperty, $global:CT::Button)
@@ -194,9 +194,9 @@ function Send-Path($path) {
     $dlg = [IntPtr]::Zero
     for ($i = 0; $i -lt 20; $i++) {
         Start-Sleep -Milliseconds 700
-        # English and French titles: the picker is Windows' own, so it follows the
+        # English, French and Spanish titles: the picker is Windows' own, so it follows the
         # display language, not the app's Language setting.
-        $dlg = Find-Dialog @("Open", "Save As", "Save a smaller copy", "Ouvrir", "Enregistrer sous")
+        $dlg = Find-Dialog @("Open", "Save As", "Save a smaller copy", "Ouvrir", "Enregistrer sous", "Abrir", "Guardar como")
         if ($dlg -ne [IntPtr]::Zero) { break }
     }
     if ($dlg -ne [IntPtr]::Zero) {

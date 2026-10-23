@@ -30,19 +30,28 @@ ACCENT = "#0e6fd8"
 
 # The demo person, per listing language (#146 §3, docs/qa/android-store-captures.md).
 # English keeps Jane Whitfield; each French listing shows a name from its own
-# country, and the accented capitals are there to prove they render.
+# country, and the accented capitals are there to prove they render. The Spanish
+# listings do the same (#724, Dave 2026-10-21): the í and the é/á are the proof.
 PEOPLE = {
     "en": "Jane Whitfield",
     "fr-CA": "Hélène Bélanger",
     "fr-FR": "Céline Lefèvre",
+    "es-419": "Sofía Ramírez",
+    "es-ES": "Lucía Fernández",
 }
 
 # Directory names a language set has been shot under. `fr` means fr-FR
 # everywhere in this repo's capture folders; `fr-CA` is always spelled out.
+# Spanish (#724): `es-419` is the Latin American set, whose store locale is es-MX
+# (App Store Connect and Play have no es-419 folder to name it after, so the
+# store's name is accepted too), and a bare `es` is Spain's, the way a bare `fr`
+# is France's.
 LANG_DIRS = {
     "en": ("en", "en-US", "en-us"),
     "fr-CA": ("fr-CA", "fr-ca", "frCA"),
     "fr-FR": ("fr-FR", "fr-fr", "fr", "frFR"),
+    "es-419": ("es-419", "es-MX", "es-mx"),
+    "es-ES": ("es-ES", "es-es", "es", "esES"),
 }
 
 
@@ -241,7 +250,7 @@ STORES: dict[str, dict] = {
         # rationale for it: tools/store_slots.py (#656). `order_key` in gate.py reads
         # whichever one matches the shot's own device.
         "order": store_slots.gate_order("ios"),
-        "parse": _pose(r"(?:[a-z]-)?(?:(?P<lang>[a-z]{2}(?:-[A-Za-z]{2})?)-)?"
+        "parse": _pose(r"(?:[a-z]-)?(?:(?P<lang>[a-z]{2}(?:-(?:[A-Za-z]{2}|419))?)-)?"
                        r"(?P<device>iphone-[0-9_]+|ipad-[0-9]+)-"
                        r"(?P<pose>[a-z][a-z0-9-]*)\.png$"),
         # iOS draws no toolbar band of the desktop kind, and no zoom chip: the viewer is
@@ -304,7 +313,7 @@ STORES: dict[str, dict] = {
         # Listing order and the rationale for it: tools/store_slots.py (#656).
         "order": store_slots.gate_order("play"),
         "parse": _pose(
-            r"(?P<device>small|tablet|large)__(?P<lang>en|fr-CA|fr-FR)__"
+            r"(?P<device>small|tablet|large)__(?P<lang>en|fr-CA|fr-FR|es-419|es-ES)__"
             r"(?:light|dark)__t\d+__(?P<pose>[A-Za-z0-9-]+)\.png$",
             r"android-(?P<pose>[a-z][a-z0-9-]*)\.png$",
             r"(?:\d+[-_])?(?P<pose>[a-z][a-z0-9-]*)\.png$"),
@@ -392,7 +401,7 @@ STORES: dict[str, dict] = {
         "order": ["doc", "more", "textbox", "redact", "sign", "busy", "empty",
                   "about", "notices", "unsaved", "mode"],
         "parse": _pose(
-            r"(?P<pose>[a-z][a-z0-9-]*)_(?P<lang>en|fr-CA|fr-FR)_"
+            r"(?P<pose>[a-z][a-z0-9-]*)_(?P<lang>en|fr-CA|fr-FR|es-419|es-ES)_"
             r"(?:light|dark)_(?P<device>\d+)(?:-(?P<variant>[a-z0-9-]+))?\.png$",
             r"(?:\d+[-_])?(?P<pose>[a-z][a-z0-9-]*)\.png$"),
         "toolbar": {"depth": 200, "rows": 1, "height": (32, 90),

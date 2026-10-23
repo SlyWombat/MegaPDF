@@ -705,7 +705,7 @@ package's version matches its `-Version`.
     python3 tools/screenshots-windows/gen_store_docs.py artifacts\store\screenshots\en --lang en
     tools\screenshots-windows\Shoot-Set.ps1 -Lang en-US -Dir en `
         -TileX1 82 -TileY1 527 -TileX2 223 -TileY2 527
-    # ... the same for fr-CA and fr-FR, then put the scale back to 200
+    # ... the same for fr-CA, fr-FR, es-419 and es-ES (-Lang es-419 -Dir es-419), then put the scale back to 200
 
 The tile coordinates are read off `work\probe-pages.png` like every other coordinate
 in this harness — running `Shot-Pages.ps1` with none shoots the probe and stops.
@@ -724,9 +724,9 @@ effective and the toolbar keeps icon + label in every language, which is what
 these captions and the description assume. Check the toolbar in the shots before
 uploading; if the labels are gone, the scale is wrong, not the resolution.
 
-**One set per language.** `artifacts/store/screenshots/en/`, `fr-CA/` and `fr-FR/`
+**One set per language.** `artifacts/store/screenshots/en/`, `fr-CA/`, `fr-FR/`, `es-419/` and `es-ES/`
 each hold the eight files, from the same package with the Language setting switched,
-over each language's staging documents (`gen_store_docs.py --lang fr-CA|fr-FR`).
+over each language's staging documents (`gen_store_docs.py --lang fr-CA|fr-FR|es-419|es-ES`).
 Same frame, same eight files, same order — upload each set under its own listing
 language.
 

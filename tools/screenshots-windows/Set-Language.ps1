@@ -1,10 +1,12 @@
 # The language and theme a capture run uses, set the way the app itself stores them.
 #
 # The packaged build has no command line to pass these on (--language only reaches an
-# unpackaged build), so the run writes settings.json and starts the app fresh. The three
-# store sets are en-US, fr-CA and fr-FR (#91).
+# unpackaged build), so the run writes settings.json and starts the app fresh. The five
+# store sets are en-US, fr-CA, fr-FR (#91), es-419 and es-ES (#724). The value written is
+# the tag itself: AppLanguage.Choices holds exactly these five, "es-419" is Latin American
+# Spanish (served by the neutral Strings\es catalogue) and "es-ES" Spain's own.
 param(
-    [ValidateSet('en-US', 'fr-CA', 'fr-FR')][string]$Lang = 'en-US',
+    [ValidateSet('en-US', 'fr-CA', 'fr-FR', 'es-419', 'es-ES')][string]$Lang = 'en-US',
     [ValidateSet('Light', 'Dark')][string]$Theme = 'Light'
 )
 $ErrorActionPreference = 'Stop'

@@ -4,6 +4,8 @@
 #     .\Shoot-Set.ps1 -Lang en-US -Dir en
 #     .\Shoot-Set.ps1 -Lang fr-CA -Dir fr-CA
 #     .\Shoot-Set.ps1 -Lang fr-FR -Dir fr-FR
+#     .\Shoot-Set.ps1 -Lang es-419 -Dir es-419     # Latin American Spanish (#724)
+#     .\Shoot-Set.ps1 -Lang es-ES -Dir es-ES       # Spain
 #
 # Before it: the display at 150 % (Set-Scale.ps1 150, in its own process), the
 # package to be shot installed, and fresh staging documents for the language
@@ -48,10 +50,10 @@
 # Both documents are copied to a staging folder under display names in the set's own
 # language before anything is shot. Three places put a file name on camera -- the
 # title bar, the tab, and reading mode's floating bar -- and "blank-agreement.pdf" on
-# a French listing image is an English word on a French capture, which the 2.0 and
+# a French or Spanish listing image is an English word on a non-English capture, which the 2.0 and
 # 2.1 sets shipped and this one does not.
 param(
-    [ValidateSet('en-US', 'fr-CA', 'fr-FR')][string]$Lang = 'en-US',
+    [ValidateSet('en-US', 'fr-CA', 'fr-FR', 'es-419', 'es-ES')][string]$Lang = 'en-US',
     [string]$Dir = 'en',
     [string]$Version = '2.3.0.0',
     # Which phases to run. Each is a fresh launch, so they can be run one at a time
@@ -80,9 +82,16 @@ Write-Host "package: $($pkg.PackageFullName)"
 # from WSL arrives in the OEM code page (README, "Type the accents").
 $e = [char]0xE9   # e-acute
 $g = [char]0xE8   # e-grave
+$i = [char]0xED   # i-acute
+$a = [char]0xE1   # a-acute
 switch ($Lang) {
     'fr-CA' { $Name = "Nom : H${e}l${g}ne B${e}langer"; $Date = '18 mars 2026'; $Term = 'location' }
     'fr-FR' { $Name = "Nom : C${e}line Lef${g}vre";     $Date = '18 mars 2026'; $Term = 'location' }
+    # Spanish (#724): "Nombre: Sof${i}a Ram${i}rez" -- the document says "Ramirez" and the
+    # edit puts the accent back, as the French sets do. The term has no accent in it (see
+    # Shot-Find.ps1) and occurs on every terms page in both variants.
+    'es-419' { $Name = "Nombre: Sof${i}a Ram${i}rez";   $Date = '18 de marzo de 2026'; $Term = 'equipo' }
+    'es-ES'  { $Name = "Nombre: Luc${i}a Fern${a}ndez"; $Date = '18 de marzo de 2026'; $Term = 'equipo' }
     default { $Name = 'Name: Jane Whitfield';           $Date = 'March 18, 2026'; $Term = 'equipment' }
 }
 # The staging folder and the display names, per language. D:\Documents\<folder> reads
@@ -95,6 +104,16 @@ if ($Lang -eq 'en-US') {
     $docName = 'Equipment Rental Agreement.pdf'
     $termsName = 'Rental Terms and Conditions.pdf'
     $scanName = 'Scanned Agreement.pdf'
+} elseif ($Lang -eq 'es-419') {
+    $folder = 'D:\Documents\Arrendamientos'
+    $docName = 'Contrato de arrendamiento.pdf'
+    $termsName = 'Condiciones de arrendamiento.pdf'
+    $scanName = 'Contrato escaneado.pdf'
+} elseif ($Lang -eq 'es-ES') {
+    $folder = 'D:\Documents\Alquileres'
+    $docName = 'Contrato de alquiler.pdf'
+    $termsName = 'Condiciones de alquiler.pdf'
+    $scanName = 'Contrato escaneado.pdf'
 } else {
     $folder = 'D:\Documents\Locations'
     $docName = 'Contrat de location.pdf'

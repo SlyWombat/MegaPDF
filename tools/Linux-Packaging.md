@@ -168,9 +168,9 @@ The listing screenshots, which are not part of either package but are what the m
 in both of them points at:
 
 ```sh
-for l in en fr-CA fr-FR; do tools/linux/store-captures.sh "$l"; done
+for l in en fr-CA fr-FR es-419 es-ES; do tools/linux/store-captures.sh "$l"; done
 python3 tools/capture-gate/gate.py --store linux artifacts/store/linux -o /tmp/gate
-cp artifacts/store/linux/en/*.png website/megapdf/screenshots/linux/en/          # and the two French
+cp artifacts/store/linux/en/*.png website/megapdf/screenshots/linux/en/          # and the two French and the two Spanish (#724)
 ```
 
 Needs `flatpak flatpak-builder appstream desktop-file-utils dpkg-dev librsvg2-common

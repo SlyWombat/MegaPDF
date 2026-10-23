@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Staging documents for the Microsoft Store screenshots.
 
-Usage: python3 tools/screenshots-windows/gen_store_docs.py [outdir] [--lang fr-CA|fr-FR]
+Usage: python3 tools/screenshots-windows/gen_store_docs.py [outdir] [--lang fr-CA|fr-FR|es-419|es-ES]
 
 --lang fr-CA / fr-FR writes the same two documents in French (a rental agreement,
 so the French screenshots show French chrome over a French form, #91). "fr" alone
@@ -13,6 +13,18 @@ French name (#310, Dave 2026-09-26): week-end for fin de semaine, enlèvement fo
 ramassage, metres and kilograms for feet and pounds, € for $. The
 layout — every y coordinate, the box rows, the signature line — is identical,
 so the harness coordinates read off the English frame still land.
+
+--lang es-419 / es-ES writes them in Spanish (#724), the same rental agreement on the
+same layout. The customer is Sofía Ramírez (es-419) or Lucía Fernández (es-ES), the
+names Dave chose on #724, and the on-camera fix is again the missing accent
+("Ramirez" -> "Ramírez", "Fernandez" -> "Fernández"). "es" alone means es-419, as the
+neutral Spanish does on the desktops. The title, the opening paragraph, the three
+checkbox labels and the signature line are the demo fixture's own wording
+(tools/gen_test_fixtures.py DEMO_TEXT["es"] / ["es-ES"]), so the store images and the
+Linux and phone demo documents say the same thing. Spain's page is es-419's with the
+words that read as Latin American rewritten (alquiler for arrendamiento, recogida for
+recolección, fianza, euros), by the substitution table below, plus its own metric
+lines, so the two variants cannot drift apart in anything but those words.
 
 
 blank-agreement.pdf — the Equipment Rental Agreement from tools/gen_test_fixtures.py
@@ -31,20 +43,25 @@ rental-terms.pdf — twelve pages of the same company's terms (#613). The one-pa
 """
 import io
 import os
+import re
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, os.path.join(REPO, "tools"))
-from gen_test_fixtures import build, stream  # noqa: E402
+from gen_test_fixtures import DEMO_TEXT, build, stream  # noqa: E402
 
 from PIL import Image, ImageDraw, ImageFont  # noqa: E402
 
 # Default alongside the shots themselves; both are build output, not fixtures.
 ARGS = [a for a in sys.argv[1:] if not a.startswith("--")]
 LANG_ARG = sys.argv[sys.argv.index("--lang") + 1] if "--lang" in sys.argv else "en"
-if LANG_ARG not in ("en", "fr", "fr-CA", "fr-FR"):
-    sys.exit(f"unknown --lang {LANG_ARG}: use en, fr-CA or fr-FR")
+if LANG_ARG == "es":
+    LANG_ARG = "es-419"      # the neutral Spanish is Latin American on the desktops
+if LANG_ARG not in ("en", "fr", "fr-CA", "fr-FR", "es-419", "es-ES"):
+    sys.exit(f"unknown --lang {LANG_ARG}: use en, fr-CA, fr-FR, es-419 or es-ES")
+IS_ES = LANG_ARG in ("es-419", "es-ES")
+ES_NAME = {"es-ES": ("Lucía Fernandez", "Lucía Fernández")}.get(LANG_ARG, ("Sofía Ramirez", "Sofía Ramírez"))
 FR_NAME = {"fr-FR": ("Céline Lefevre", "Céline Lefèvre")}.get(LANG_ARG, ("Hélène Belanger", "Hélène Bélanger"))
 OUT = ARGS[0] if ARGS else os.path.join(REPO, "artifacts", "store", "screenshots")
 os.makedirs(OUT, exist_ok=True)
@@ -112,9 +129,68 @@ BODY_FR_FR = [(kind, size, y, FR_FR_LINES.get(y, text)) for kind, size, y, text 
 BOXES_FR_FR = [(508, "Livraison et enlèvement inclus"), (482, "Assurance dommages acceptée"),
                (456, "Tarif week-end prolongé")]
 
+# Spanish (#724). es-419 is written here; Spain's is es-419 put through ES_ES_WORDS,
+# except the lines that differ in more than a word (ES_ES_LINES, keyed by y like France's).
+# The title, opening paragraph, checkbox labels and signature line come from the demo
+# fixture, which hand-writes both variants.
+ES_T, ES_ES_T = DEMO_TEXT["es"], DEMO_TEXT["es-ES"]
+BODY_ES = [
+    ("b", 22, 716, ES_T["title"]),
+    ("r", 11, 688, ES_T["p1"]),
+    ("r", 11, 672, ES_T["p2"]),
+    ("r", 11, 656, ES_T["p3"]),
+    ("b", 13, 620, "Cliente"),
+    ("r", 12, 596, "Nombre: " + ES_NAME[0]),
+    ("r", 12, 576, "Periodo de arrendamiento: del 14 al 18 de marzo"),
+    ("b", 13, 540, "Opciones"),
+    ("b", 13, 420, "Equipo"),
+    ("r", 11, 396, "1 x montacargas telescópico de 2,700 kg, propano, con desplazamiento lateral"),
+    ("r", 11, 380, "2 x secciones de andamio, 1.8 m, con barandales"),
+    ("r", 11, 364, "1 x remolque de 3.7 m, doble eje, rampas incluidas"),
+    ("b", 13, 330, "Términos"),
+    ("r", 11, 306, "El equipo se arrienda tal como fue inspeccionado y se devuelve en el mismo"),
+    ("r", 11, 290, "estado, salvo el desgaste normal. El combustible se factura al costo en la"),
+    ("r", 11, 274, "devolución. Las devoluciones tardías se cobran a la tarifa diaria. El seguro"),
+    ("r", 11, 258, "contra daños, si se acepta arriba, limita la responsabilidad del cliente a $500."),
+    ("b", 13, 220, ES_T["sig"]),
+]
+BOXES_ES = [(508, ES_T["box1"]), (482, ES_T["box2"]), (456, ES_T["box3"])]
+LABELS_ES = {"sign": ES_T["line"], "date": "Fecha", "typo": ES_NAME[0], "fixed": ES_NAME[1]}
+
+# Spain's usage, whole words only (so nothing fires inside another word): the Latin American
+# word on the left, Spain's on the right. Applied to the terms text and the body alike.
+ES_ES_WORDS = [
+    ("Arrendamiento", "Alquiler"), ("arrendamiento", "alquiler"),
+    ("arrienda", "alquila"), ("subarrienda", "subalquila"),
+    ("Recolección", "Recogida"), ("recolección", "recogida"),
+    ("dólares", "euros"), ("concreto", "hormigón"), ("monto", "importe"),
+    ("depósito de garantía", "fianza"), ("días calendario", "días naturales"),
+    ("proporciona", "facilita"), ("Términos", "Condiciones"), ("costo", "coste"),
+]
+ES_ES_LINES = {
+    716: ES_ES_T["title"], 688: ES_ES_T["p1"], 672: ES_ES_T["p2"], 656: ES_ES_T["p3"],
+    396: "1 x carretilla elevadora telescópica de 2.700 kg, propano, con desplazamiento lateral",
+    380: "2 x tramos de andamio, 1,8 m, con barandillas",
+    364: "1 x remolque de 3,7 m, eje tándem, rampas incluidas",
+    258: "contra daños, si se acepta arriba, limita la responsabilidad del cliente a 500 €.",
+}
+
+
+def to_spain(text):
+    for latin, spain in ES_ES_WORDS:
+        text = re.sub(r"(?<!\w)" + re.escape(latin) + r"(?!\w)", spain, text)
+    return text
+
+
+BODY_ES_ES = [(kind, size, y, ES_ES_LINES.get(y) or to_spain(text)) for kind, size, y, text in BODY_ES]
+BOXES_ES_ES = [(508, ES_ES_T["box1"]), (482, ES_ES_T["box2"]), (456, ES_ES_T["box3"])]
+LABELS_ES_ES = {"sign": ES_ES_T["line"], "date": "Fecha", "typo": ES_NAME[0], "fixed": ES_NAME[1]}
+
 BODY, BOXES, LABELS = {
     "en": (BODY_EN, BOXES_EN, LABELS_EN),
     "fr-FR": (BODY_FR_FR, BOXES_FR_FR, LABELS_FR),
+    "es-419": (BODY_ES, BOXES_ES, LABELS_ES),
+    "es-ES": (BODY_ES_ES, BOXES_ES_ES, LABELS_ES_ES),
 }.get(LANG_ARG, (BODY_FR, BOXES_FR, LABELS_FR))
 SIG_LINE_Y = 150
 
@@ -130,7 +206,10 @@ SIG_LINE_Y = 150
 # powershell.exe from WSL arrives in the OEM code page (README, "Type the accents").
 TERMS_TITLE_EN = "Rental Terms and Conditions"
 TERMS_TITLE_FR = "Conditions de location"
-FIND_TERM = {"en": "equipment"}.get(LANG_ARG, "location")
+TERMS_TITLE_ES = "Condiciones de arrendamiento"
+# "equipo" in Spanish: the ordinary word of the trade, no accent, and on every page in
+# both variants (the Spanish page says alquiler or arrendamiento, which differ).
+FIND_TERM = {"en": "equipment", "es-419": "equipo", "es-ES": "equipo"}.get(LANG_ARG, "location")
 
 TERMS_EN = [
     ("1. Scope of this agreement", [
@@ -301,6 +380,88 @@ TERMS_FR = [
     ]),
 ]
 
+TERMS_ES = [
+    ("1. Alcance de este contrato", [
+        "Estas condiciones se aplican a todo arrendamiento de equipo de Arrendamiento de",
+        "Herramientas Amanecer y forman parte del contrato de arrendamiento firmado por el",
+        "cliente. Si el contrato firmado y estas condiciones no coinciden, rige el contrato",
+        "firmado en cuanto al periodo, las tarifas y la lista de equipo, y estas condiciones",
+        "rigen todo lo demás. Nada aquí limita un derecho que la ley otorga al cliente.",
+    ]),
+    ("2. El equipo suministrado", [
+        "El equipo se suministra tal como fue inspeccionado en el almacén. Se invita al",
+        "cliente a revisar cada artículo antes de que salga, y ambas partes anotan en el",
+        "contrato cualquier daño que se encuentre en ese momento. El equipo que no se",
+        "inspeccione en el almacén se considera salido en el estado que describe el contrato.",
+        "Si un artículo no está disponible, puede suministrarse equipo sustituto de capacidad",
+        "equivalente, y la tarifa no cambia por ello.",
+    ]),
+    ("3. Entrega y recolección", [
+        "La entrega y la recolección se cobran aparte del arrendamiento y constan en el",
+        "contrato cuando se aceptaron. El cliente proporciona acceso libre para una",
+        "plataforma de hasta nueve metros y una superficie firme donde descargar. Si se",
+        "niega el acceso o este es inseguro, el equipo vuelve al almacén y el cargo por",
+        "entrega se mantiene.",
+    ]),
+    ("4. El periodo de arrendamiento", [
+        "El periodo de arrendamiento comienza cuando el equipo sale del almacén y termina",
+        "cuando regresa a él, no cuando el cliente deja de usarlo. Un día es un periodo de",
+        "veinticuatro horas. Una semana son siete de ellos. El equipo devuelto después del",
+        "periodo indicado en el contrato se cobra a la tarifa diaria por cada día adicional,",
+        "incluido el día de la devolución.",
+    ]),
+    ("5. Uso del equipo", [
+        "El cliente usa el equipo solo para el trabajo para el que fue fabricado, solo dentro",
+        "de su capacidad nominal y solo mediante personas competentes para operarlo. El equipo",
+        "no se subarrienda, no se traslada a otra obra ni se saca de la jurisdicción sin",
+        "acuerdo por escrito. Las instrucciones de operación y las protecciones que acompañan",
+        "al equipo permanecen con él.",
+    ]),
+    ("6. Combustible, consumibles y limpieza", [
+        "El combustible se factura al costo en la devolución, según la lectura tomada en el",
+        "almacén. Las cuchillas, las brocas, los abrasivos y otros consumibles se cobran",
+        "según el uso. El equipo devuelto con concreto, mortero o tierra se limpia en el",
+        "almacén y la limpieza se cobra a la tarifa publicada.",
+    ]),
+    ("7. Averías y reparaciones", [
+        "Toda avería se avisa al almacén el mismo día. El cliente no intenta ninguna",
+        "reparación ni encarga a otra persona que la intente. Si el equipo falla por desgaste",
+        "normal, se suministra un reemplazo y el arrendamiento continúa con él; no se cobra",
+        "arrendamiento por el tiempo en que el cliente estuvo sin equipo en funcionamiento.",
+    ]),
+    ("8. Daños y pérdida", [
+        "El cliente es responsable del equipo desde que sale del almacén hasta que regresa.",
+        "Esa responsabilidad abarca daños, robo y pérdida, sea cual sea su causa, salvo el",
+        "desgaste normal. El seguro contra daños, si se aceptó en el contrato, limita esa",
+        "responsabilidad a quinientos dólares por incidente; sin él, el cliente responde por",
+        "el costo total de la reparación o de la reposición.",
+    ]),
+    ("9. El seguro que contrata el cliente", [
+        "El cliente contrata un seguro de responsabilidad civil para el trabajo en el que se",
+        "usa el equipo. El seguro contra daños que ofrece el contrato no es un seguro de",
+        "responsabilidad civil ni lo sustituye: cubre el equipo mismo y nada más.",
+    ]),
+    ("10. Cargos y pago", [
+        "El arrendamiento, la entrega, el combustible, los consumibles y la limpieza se",
+        "facturan en la devolución y se pagan en un plazo de treinta días. Una cuenta no",
+        "saldada en ese plazo genera intereses a la tasa publicada. Si se cobró un depósito",
+        "de garantía, se aplica a la factura y se devuelve la diferencia.",
+    ]),
+    ("11. Terminación anticipada", [
+        "El cliente puede terminar un arrendamiento antes de tiempo devolviendo el equipo al",
+        "almacén; el arrendamiento se cobra entonces hasta el día de la devolución, sujeto a",
+        "cualquier periodo mínimo indicado en el contrato. Arrendamiento de Herramientas",
+        "Amanecer puede terminar un arrendamiento si el equipo se usa fuera de estas",
+        "condiciones, y puede recogerlo.",
+    ]),
+    ("12. Avisos y ley aplicable", [
+        "Todo aviso conforme a estas condiciones se da por escrito, a la dirección que figura",
+        "en el contrato, y surte efecto al entregarse. Este contrato se rige por la ley de la",
+        "jurisdicción en la que se encuentra el almacén, y los tribunales de esa jurisdicción",
+        "son competentes respecto de él.",
+    ]),
+]
+
 # The clauses that belong to every section of a terms document rather than to one of
 # them. Three of the six go on each page, rotated by section number, so that a page is
 # a full page of text and no two pages carry the same three. Without them each page
@@ -357,6 +518,31 @@ COMMON_FR = [
      "limitée au montant de la location facturée en vertu du contrat dont elle découle."],
 ]
 
+COMMON_ES = [
+    ["Cuando esta sección se lee junto con otra, ambas se leen en conjunto, y la más",
+     "específica rige el punto que las dos abarcan. Un título es una etiqueta y no limita",
+     "lo que dice la sección que encabeza.",
+     "Una cláusula que se declare inaplicable se separa y el resto del contrato sigue vigente."],
+    ["El plazo no es esencial, salvo donde este contrato diga que lo es. Un día en que el",
+     "almacén está cerrado no se cuenta en un plazo de menos de cinco días, y un plazo de",
+     "cinco días o más se cuenta en días calendario, incluidos aquellos en que el almacén",
+     "está cerrado."],
+    ["Ninguna de las partes responde por un incumplimiento causado por algo fuera de su",
+     "control razonable, como el mal tiempo que vuelva inseguro un sitio, una huelga o el",
+     "cierre de un camino por el que deba circular el equipo. La parte afectada avisa a la",
+     "otra en cuanto razonablemente pueda, y el arrendamiento se suspende mientras dure."],
+    ["Una modificación de este contrato solo surte efecto si consta por escrito y la firman",
+     "ambas partes; una concesión otorgada una vez no es una modificación y no tiene que",
+     "otorgarse de nuevo. Un derecho que no se ejerce no es un derecho al que se renuncia."],
+    ["El cliente no puede ceder este contrato ni ningún derecho derivado de él sin",
+     "consentimiento por escrito. Arrendamiento de Herramientas Amanecer puede cederlo con",
+     "aviso, y los derechos del cliente no se ven afectados por una cesión."],
+    ["Nada en este contrato excluye la responsabilidad por muerte o lesiones personales",
+     "causadas por negligencia, ni por ninguna otra cosa que la ley no permita excluir.",
+     "Cuando una responsabilidad pueda limitarse pero no excluirse, se limita al monto del",
+     "arrendamiento cobrado conforme al contrato del que deriva."],
+]
+
 # France's own wording, on exactly the same layout (#310): the Quebec words that read
 # as Quebec, and the euro. Applied as a substitution so the two French variants cannot
 # drift apart in anything but these words.
@@ -374,8 +560,11 @@ def terms_pages():
     Each page is its section's own paragraph followed by four of the six common
     clauses, rotated by the section's number: a full page, and no two pages the same.
     """
-    title, sections, common = ((TERMS_TITLE_EN, TERMS_EN, COMMON_EN) if LANG_ARG == "en"
-                               else (TERMS_TITLE_FR, TERMS_FR, COMMON_FR))
+    title, sections, common = {
+        "en": (TERMS_TITLE_EN, TERMS_EN, COMMON_EN),
+        "es-419": (TERMS_TITLE_ES, TERMS_ES, COMMON_ES),
+        "es-ES": (TERMS_TITLE_ES, TERMS_ES, COMMON_ES),
+    }.get(LANG_ARG, (TERMS_TITLE_FR, TERMS_FR, COMMON_FR))
     pages = []
     for index, (heading, lines) in enumerate(sections):
         rotated = [common[(index + n) % len(common)] for n in range(4)]
@@ -386,6 +575,9 @@ def terms_pages():
                 text = text.replace(a, b)
             return text
         pages = [(fix(h), [[fix(l) for l in p] for p in paras]) for h, paras in pages]
+    if LANG_ARG == "es-ES":
+        title = to_spain(title)
+        pages = [(to_spain(h), [[to_spain(l) for l in p] for p in paras]) for h, paras in pages]
     return title, pages
 
 

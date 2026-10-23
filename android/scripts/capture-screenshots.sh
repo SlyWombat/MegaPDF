@@ -37,11 +37,15 @@ adb shell settings put global sysui_demo_allowed 1
 # thrown away with the run.
 adb shell settings put secure immersive_mode_confirmations confirmed
 
-# MEGAPDF_LANG=fr-CA (or fr-FR) switches the app's language through Android 13's
-# per-app locale (#91): the app then loads demo-fr.pdf (fr-CA) or demo-fr-FR.pdf
-# (fr-FR, France's own text since #310) and the French names, and
-# every label is French. The system UI stays in the emulator's language, which
-# is fine — the listing crops to the app. Unset or "en" leaves the default.
+# MEGAPDF_LANG=fr-CA (or fr-FR, es-419, es-ES) switches the app's language through
+# Android 13's per-app locale (#91): the app then loads demo-fr.pdf (fr-CA) or
+# demo-fr-FR.pdf (fr-FR, France's own text since #310) and the French names, and
+# every label is French. The tag is passed to `set-app-locales` as it is (#724): es-419
+# resolves to values-b+es+419 (demo-es.pdf, Latin American) and es-ES to the neutral
+# values-es folder (demo-es-ES.pdf, Spain), which is how Android's own resolver sorts
+# them; the app's `screenshot_demo_asset` key says which document each opens. The system
+# UI stays in the emulator's language, which is fine — the listing crops to the app.
+# Unset or "en" leaves the default.
 LANG_TAG="${MEGAPDF_LANG:-en}"
 if [ "$LANG_TAG" != "en" ]; then
     adb shell cmd locale set-app-locales ca.electricrv.megapdf --user 0 --locales "$LANG_TAG"
