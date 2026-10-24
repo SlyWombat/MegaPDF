@@ -160,7 +160,7 @@ struct DocumentSecuritySheet: View {
                 if let error {
                     Text(error).foregroundColor(.red)
                 }
-                Text("The owner of this document restricted what can be changed in it. Enter the owner password to unlock it.")
+                Text("Enter the owner password to allow every change to this document.")
             }
         }
     }

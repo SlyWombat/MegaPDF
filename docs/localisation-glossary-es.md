@@ -231,6 +231,11 @@ refers to the same row in the French file.
 | The author of this document asked that nothing be copied out of it. | El autor de este documento pidió que no se copie nada de él. |  |
 | That's a request rather than a lock, so it's your call. The request stays in the document, and MegaPDF won't ask again while it's open. | Es una petición y no un bloqueo, así que la decisión es tuya. La petición permanece en el documento y MegaPDF no volverá a preguntar mientras esté abierto. |  |
 | asked (of a permission bit) | pidió | un bit de permiso |
+| The author of that file asked that nothing be copied out of it, so its pages can't be added here. | El autor de ese archivo pidió que no se copie nada de él, así que sus páginas no se pueden agregar aquí. | #800, ambos teléfonos: la fila de extracción de #558 con *ese archivo*, más la consecuencia. Sustituye a « Ese archivo no permite que se copie nada de él… » |
+| The author of this document asked that it not be changed. Unlock it with the owner password to edit it. | El autor de este documento pidió que no se modifique. Desbloquéalo con la contraseña del propietario para modificarlo. | #800, solo iOS: el aviso al abrir un documento restringido y en cada edición rechazada; la primera frase es la de la fila del aviso, palabra por palabra. Sustituye a « El propietario de este documento restringió los cambios… » |
+| Enter the owner password to allow every change to this document. | Escribe la contraseña del propietario para permitir todos los cambios en este documento. | Cuerpo del diálogo de desbloqueo (Android `security_unlock_body`) y, desde #800, pie de la hoja de desbloqueo de iOS. Dice qué hace la contraseña del propietario, no qué prohibió el propietario |
+| The author of this document asked that its contents not be changed, so it can't be redacted. | El autor de este documento pidió que no se modifique su contenido, así que no se puede censurar. | #800, iOS: la fila de edición, palabra por palabra, más la consecuencia |
+| Without the owner password, MegaPDF can't make that change. Unlock the document first. | Sin la contraseña del propietario, MegaPDF no puede hacer ese cambio. Primero desbloquea el documento. | #800, ambos teléfonos: definir, cambiar o quitar la contraseña sin acceso total. No es un bit consultivo, así que sigue siendo una negativa y dice qué falta. Nunca *no permite* |
 | Set password | Definir contraseña |  |
 | Remove password | Quitar contraseña |  |
 | crash recovery | recuperación tras un cierre inesperado |  |
@@ -393,7 +398,7 @@ refers to the same row in the French file.
 | The author of this document asked that nothing be copied out of it. (Copy unavailable) | El autor de este documento pidió que no se copie nada de él. (Copiar no disponible) |  |
 | Selected: {0} (announced) | Seleccionado: {0} | #710, las aplicaciones de escritorio: lo que dice el lector de pantalla cuando una selección de texto queda fija; {0} son los primeros 80 caracteres. Solo se oye. Sin espacio antes de los dos puntos |
 | Copied (announced) | Copiado | #710, lo que se oye tras copiar con éxito; igual que la confirmación de Android (*select_copied*) |
-| {0} selected (Android page-grid title while pages are ticked) | Selección: {0} | #724, la barra de selección de la vista de páginas en Android. *Seleccionadas: {0}* daba dos líneas a esa anchura en es-419 y es-ES (“Seleccionadas:” sobre el número), y la forma con el número delante (*{0} seleccionadas*) no concuerda con 1 y casi no cabe con dos cifras; *Selección* no tiene género ni número. Dos puntos sin espacio antes |
+| {0} selected (phone page-grid title while pages are ticked) | Selección: {0} | #724 (Android) y #801 (iOS, que decía *{0} seleccionadas*: « 1 seleccionadas »), la barra de selección de la vista de páginas. *Seleccionadas: {0}* daba dos líneas a esa anchura en es-419 y es-ES (“Seleccionadas:” sobre el número), y la forma con el número delante (*{0} seleccionadas*) no concuerda con 1 y casi no cabe con dos cifras; *Selección* no tiene género ni número. Dos puntos sin espacio antes |
 
 ## Español (España)
 

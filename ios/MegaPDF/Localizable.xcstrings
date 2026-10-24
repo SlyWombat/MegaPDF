@@ -495,30 +495,30 @@
       }
     },
     "%lld selected" : {
-      "comment" : "ES-REVIEW #724 — new, not yet read by the reviewer.",
+      "comment" : "#801: the Pages bar while pages are ticked. FR-REVIEW #801 — noun form, so a selection of one reads right (« Sélection : 1 »), not yet read by the reviewer. ES-REVIEW #801 — noun form, so a selection of one reads right, not yet read by the reviewer.",
       "localizations" : {
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%lld seleccionadas"
+            "value" : "Selección: %lld"
           }
         },
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%lld seleccionadas"
+            "value" : "Selección: %lld"
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%lld sélectionnées"
+            "value" : "Sélection : %lld"
           }
         },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%lld sélectionnées"
+            "value" : "Sélection : %lld"
           }
         }
       }
@@ -2868,6 +2868,35 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Fin de la sélection"
+          }
+        }
+      }
+    },
+    "Enter the owner password to allow every change to this document." : {
+      "comment" : "#800: the footer of the unlock sheet, reached from the Password command and from Unlock with owner password; Android's security_unlock_body word for word. FR-REVIEW #800 — reworded to #558's vocabulary (the author asked), not yet read by the reviewer. ES-REVIEW #800 — reworded to #558's vocabulary (the author asked), not yet read by the reviewer.",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Escribe la contraseña del propietario para permitir todos los cambios en este documento."
+          }
+        },
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Escribe la contraseña del propietario para permitir todos los cambios en este documento."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Entrez le mot de passe du propriétaire pour permettre toutes les modifications de ce document."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Entrez le mot de passe du propriétaire pour permettre toutes les modifications de ce document."
           }
         }
       }
@@ -7573,35 +7602,6 @@
         }
       }
     },
-    "That file doesn't allow anything to be copied out of it, so its pages can't be added here." : {
-      "comment" : "ES-REVIEW #724 — new, not yet read by the reviewer.",
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ese archivo no permite copiar nada de él, así que sus páginas no se pueden añadir aquí."
-          }
-        },
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ese archivo no permite copiar nada de él, así que sus páginas no se pueden agregar aquí."
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ce fichier n'autorise aucune copie de son contenu, alors ses pages ne peuvent pas être ajoutées ici."
-          }
-        },
-        "fr-CA" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ce fichier n'autorise aucune copie de son contenu, alors ses pages ne peuvent pas être ajoutées ici."
-          }
-        }
-      }
-    },
     "That file is no longer accessible. Pick it again to reopen it." : {
       "comment" : "ES-REVIEW #724 — new, not yet read by the reviewer.",
       "localizations" : {
@@ -7718,8 +7718,124 @@
         }
       }
     },
+    "The author of that file asked that nothing be copied out of it, so its pages can't be added here." : {
+      "comment" : "#800: the Pages alert when the file being imported has its copy permission off; MegaPDF really does refuse this one, so the sentence says what was asked and what follows. FR-REVIEW #800 — reworded to #558's vocabulary (the author asked), not yet read by the reviewer. ES-REVIEW #800 — reworded to #558's vocabulary (the author asked), not yet read by the reviewer.",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El autor de ese archivo pidió que no se copie nada de él, así que sus páginas no se pueden añadir aquí."
+          }
+        },
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El autor de ese archivo pidió que no se copie nada de él, así que sus páginas no se pueden agregar aquí."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "L'auteur de ce fichier a demandé que rien n'en soit copié, alors ses pages ne peuvent pas être ajoutées ici."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "L'auteur de ce fichier a demandé que rien n'en soit copié, alors ses pages ne peuvent pas être ajoutées ici."
+          }
+        }
+      }
+    },
+    "The author of this document asked that it not be changed. Unlock it with the owner password to edit it." : {
+      "comment" : "#800: the notice on a restricted open and on every refused edit; iOS still refuses until the owner password is entered, so the unlock path stays named. First sentence is #558's notice row word for word. FR-REVIEW #800 — reworded to #558's vocabulary (the author asked), not yet read by the reviewer. ES-REVIEW #800 — reworded to #558's vocabulary (the author asked), not yet read by the reviewer.",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El autor de este documento pidió que no se modifique. Desbloquéalo con la contraseña del propietario para modificarlo."
+          }
+        },
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El autor de este documento pidió que no se modifique. Desbloquéalo con la contraseña del propietario para modificarlo."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "L'auteur de ce document a demandé qu'il ne soit pas modifié. Déverrouillez-le avec le mot de passe du propriétaire pour le modifier."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "L'auteur de ce document a demandé qu'il ne soit pas modifié. Déverrouillez-le avec le mot de passe du propriétaire pour le modifier."
+          }
+        }
+      }
+    },
+    "The author of this document asked that its contents not be changed, so it can't be redacted." : {
+      "comment" : "#800: the redaction refusal; #558's editing-class row word for word, plus the consequence. FR-REVIEW #800 — reworded to #558's vocabulary (the author asked), not yet read by the reviewer. ES-REVIEW #800 — reworded to #558's vocabulary (the author asked), not yet read by the reviewer.",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El autor de este documento pidió que no se modifique su contenido, así que no se puede censurar."
+          }
+        },
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El autor de este documento pidió que no se modifique su contenido, así que no se puede censurar."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "L'auteur de ce document a demandé que son contenu ne soit pas modifié, alors il ne peut pas être caviardé."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "L'auteur de ce document a demandé que son contenu ne soit pas modifié, alors il ne peut pas être caviardé."
+          }
+        }
+      }
+    },
+    "The author of this document asked that its pages not be reordered, removed or added to." : {
+      "comment" : "#800: the Pages alert when a page change is refused; #558's assembly-class row word for word (the alert's title says nothing was changed). FR-REVIEW #800 — reworded to #558's vocabulary (the author asked), not yet read by the reviewer. ES-REVIEW #800 — reworded to #558's vocabulary (the author asked), not yet read by the reviewer.",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El autor de este documento pidió que no se reordenen, quiten ni añadan sus páginas."
+          }
+        },
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El autor de este documento pidió que no se reordenen, quiten ni agreguen sus páginas."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "L'auteur de ce document a demandé que ses pages ne soient pas réordonnées, retirées ni complétées."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "L'auteur de ce document a demandé que ses pages ne soient pas réordonnées, retirées ni complétées."
+          }
+        }
+      }
+    },
     "The author of this document asked that nothing be copied out of it." : {
-      "comment" : "#710: notice when a document's copy permission is off; the text still selects, Copy is disabled. Reuses #558's extraction-class row word for word. FR-REVIEW #710 — reworded to #558's wording, not yet read by the reviewer. ES-REVIEW #710 — reworded to #558's wording, not yet read by the reviewer.",
+      "comment" : "#710: notice when a document's copy permission is off; the text still selects, Copy is disabled. Reuses #558's extraction-class row word for word. FR-REVIEW #710 — reworded to #558's wording, not yet read by the reviewer. ES-REVIEW #710 — reworded to #558's wording, not yet read by the reviewer. #800: also the Pages alert when saving a selection as a new file is refused (startPageExport); same row, no new wording.",
       "localizations" : {
         "es" : {
           "stringUnit" : {
@@ -7917,64 +8033,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "La police d'origine ne pouvait pas afficher ce texte; une police standard semblable a été utilisée."
-          }
-        }
-      }
-    },
-    "The owner of this document has restricted changes. Unlock it with the owner password to edit it." : {
-      "comment" : "ES-REVIEW #724 — new, not yet read by the reviewer.",
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "El propietario de este documento restringió los cambios. Desbloquéalo con la contraseña del propietario para editarlo."
-          }
-        },
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "El propietario de este documento restringió los cambios. Desbloquéalo con la contraseña del propietario para editarlo."
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Le propriétaire de ce document a restreint les modifications. Déverrouillez-le avec le mot de passe du propriétaire pour le modifier."
-          }
-        },
-        "fr-CA" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Le propriétaire de ce document a restreint les modifications. Déverrouillez-le avec le mot de passe du propriétaire pour le modifier."
-          }
-        }
-      }
-    },
-    "The owner of this document restricted what can be changed in it. Enter the owner password to unlock it." : {
-      "comment" : "ES-REVIEW #724 — new, not yet read by the reviewer.",
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "El propietario de este documento restringió lo que se puede modificar en él. Escribe la contraseña del propietario para desbloquearlo."
-          }
-        },
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "El propietario de este documento restringió lo que se puede modificar en él. Escribe la contraseña del propietario para desbloquearlo."
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Le propriétaire de ce document a restreint ce qui peut y être modifié. Entrez le mot de passe du propriétaire pour le déverrouiller."
-          }
-        },
-        "fr-CA" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Le propriétaire de ce document a restreint ce qui peut y être modifié. Entrez le mot de passe du propriétaire pour le déverrouiller."
           }
         }
       }
@@ -8240,93 +8298,6 @@
         }
       }
     },
-    "This document doesn't allow changes, so it can't be redacted." : {
-      "comment" : "ES-REVIEW #724 — new, not yet read by the reviewer.",
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Este documento no permite cambios, así que no se puede censurar."
-          }
-        },
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Este documento no permite cambios, así que no se puede censurar."
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ce document n'autorise pas les modifications ; il ne peut pas être caviardé."
-          }
-        },
-        "fr-CA" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ce document n'autorise pas les modifications; il ne peut pas être caviardé."
-          }
-        }
-      }
-    },
-    "This document doesn't allow its pages to be copied out. Its owner password would." : {
-      "comment" : "ES-REVIEW #724 — new, not yet read by the reviewer.",
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Este documento no permite extraer sus páginas. La contraseña del propietario sí lo permitiría."
-          }
-        },
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Este documento no permite extraer sus páginas. La contraseña del propietario sí lo permitiría."
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ce document n'autorise pas la copie de ses pages. Son mot de passe de propriétaire le permettrait."
-          }
-        },
-        "fr-CA" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ce document n'autorise pas la copie de ses pages. Son mot de passe de propriétaire le permettrait."
-          }
-        }
-      }
-    },
-    "This document doesn't allow its pages to be rotated, deleted, moved or added to. Its owner password would." : {
-      "comment" : "ES-REVIEW #724 — new, not yet read by the reviewer.",
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Este documento no permite girar, eliminar, mover ni añadir páginas. La contraseña del propietario sí lo permitiría."
-          }
-        },
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Este documento no permite girar, eliminar, mover ni agregar páginas. La contraseña del propietario sí lo permitiría."
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ce document n'autorise pas la rotation, la suppression, le déplacement ni l'ajout de pages. Son mot de passe de propriétaire le permettrait."
-          }
-        },
-        "fr-CA" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ce document n'autorise pas la rotation, la suppression, le déplacement ni l'ajout de pages. Son mot de passe de propriétaire le permettrait."
-          }
-        }
-      }
-    },
     "This document has a digital signature. Saving here will invalidate it." : {
       "comment" : "#481: the Password sheet's message for an ordinary signature -- the sheet offers Continue/Cancel rather than Save a copy, so it stops after what will happen ES-REVIEW #724 — new, not yet read by the reviewer.",
       "localizations" : {
@@ -8584,35 +8555,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Ce document est protégé."
-          }
-        }
-      }
-    },
-    "This document's security doesn't allow that without its owner password." : {
-      "comment" : "ES-REVIEW #724 — new, not yet read by the reviewer.",
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "La seguridad de este documento no permite eso sin la contraseña del propietario."
-          }
-        },
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "La seguridad de este documento no permite eso sin la contraseña del propietario."
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Les réglages de sécurité de ce document ne permettent pas cette action sans le mot de passe du propriétaire."
-          }
-        },
-        "fr-CA" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Les réglages de sécurité de ce document ne permettent pas cette action sans le mot de passe du propriétaire."
           }
         }
       }
@@ -9396,6 +9338,35 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Blanc de correction retiré."
+          }
+        }
+      }
+    },
+    "Without the owner password, MegaPDF can't make that change. Unlock the document first." : {
+      "comment" : "#800: PdfError.restricted: changing the document's password without full access, which is not an advisory bit and stays a refusal (glossary row 210's exception); Android's security_restricted_edit word for word. FR-REVIEW #800 — reworded to #558's vocabulary (the author asked), not yet read by the reviewer. ES-REVIEW #800 — reworded to #558's vocabulary (the author asked), not yet read by the reviewer.",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sin la contraseña del propietario, MegaPDF no puede hacer ese cambio. Primero desbloquea el documento."
+          }
+        },
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sin la contraseña del propietario, MegaPDF no puede hacer ese cambio. Primero desbloquea el documento."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sans le mot de passe du propriétaire, MegaPDF ne peut pas effectuer cette modification. Déverrouillez d'abord le document."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sans le mot de passe du propriétaire, MegaPDF ne peut pas effectuer cette modification. Déverrouillez d'abord le document."
           }
         }
       }

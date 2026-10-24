@@ -113,7 +113,7 @@ Each appears only after 500 ms and stays at least 300 ms.
 - [ ] **D12d** `body_text_layout_render` — other parts of the page would look different
 - [ ] **D12e** `body_text_layout_text_moves` — text elsewhere would move
 - [ ] **D12f** `security_restricted_notice` — shown once when a restricted document opens
-- [ ] **D12g** `security_restricted_edit` — an edit the owner doesn't allow
+- [ ] **D12g** `security_restricted_edit` — a change that needs the owner password (setting, changing or removing the document's password without full access), #800
 
 ### D13 Toasts (system-styled, so these follow the system dark theme)
 
