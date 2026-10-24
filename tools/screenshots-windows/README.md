@@ -132,9 +132,9 @@ breakpoint with a document open and edited, so `Save ●` is showing — the wid
 the bar ever gets, and the one state where clipping could survive the fix.
 Verified 2026-08-13 at 1489 / 1494 / 1509 effective px: clean at all three.
 Since #91 the breakpoint is measured from the labels rather than fixed at 1500
-(about 1430 effective px in English, 1610 in French, bracketed 2026-09-10 with
-this script at 1603 / 1619 effective), so pass `-Widths` straddling the right
-value for the language being shot.
+(re-measured 2026-10-24, see "Toolbar width, with and without the pickers" below: the 1430 / 1610
+that stood here were from before the one-row toolbar of #144 and are no longer true),
+so pass `-Widths` straddling the right value for the language being shot.
 
 `Add-SignatureToLibrary.ps1` imports `tools/assets/megawoman-sig.jpg` through the app's
 own "From photo" flow — how the fixture PNG was made, not how a capture run should set
@@ -184,8 +184,8 @@ Actions workflows, this harness drives a real installed package on a real deskto
 ## Why this frame
 
 2500x1550 at 150% is 1667 effective px, above the toolbar's Full breakpoint
-(measured from the labels — about 1430 in English and 1475 in French; see
-`ApplyToolbarLayout` in `MainWindow.xaml.cs`), so the toolbar shows icon + label. Shoot narrower and the listing's screenshots show a different
+(measured from the labels — 1060 in English and 1187 in French without the pickers,
+1260 and 1387 with them, 2026-10-24; see `ApplyToolbarLayout` in `MainWindow.Toolbar.cs`), so the toolbar shows icon + label. Shoot narrower and the listing's screenshots show a different
 toolbar than its description. Narrower than ~980 the zoom cluster folds into the
 View flyout.
 
@@ -334,9 +334,10 @@ reads those folder names (and the Store listing languages are `es-mx` and `es-es
 - **The language is the tag.** `Set-Language.ps1 -Lang es-419|es-ES` writes
   `"Language": "es-419"` or `"es-ES"` (the two values `AppLanguage.Choices` holds), with no
   BOM, exactly as it does for French. Never switch the machine's own display language.
-- **Packaged build only.** The unpackaged dev build leaves the `x:Uid` toolbar labels in
-  Windows' language whatever `--language` says (`AppLanguage.cs`), so a Spanish set shot from
-  it would have an English toolbar. The package is the one the Store carries
+- **Packaged build only.** The unpackaged dev build leaves the `x:Uid` labels (the Settings
+  flyout, the empty state) in Windows' language whatever `--language` says (`AppLanguage.cs`),
+  so a Spanish set shot from it would have English chrome. (The toolbar's own labels are set
+  from code and do follow `--language`, so its `toolbar:` figure is usable from a dev build.) The package is the one the Store carries
   (`Shoot-Set.ps1 -Version` refuses any other). Installing it is the step that has needed
   Dave at the console in the past (the certificate trust, UAC); see `tools/Store-Submission.md`
   and `tools/windows-qa/qa-safety.ps1` before touching packages, and never remove a
@@ -358,11 +359,31 @@ reads those folder names (and the Store listing languages are `es-mx` and `es-es
   More down to a 1720 px window (1147 effective px), and drop to icons only at 1700 px (1133
   effective px). So the Spanish breakpoint is about 1140 effective px, 520 below the Store
   frame; the widest Spanish label set (es-ES `Añadir texto`) is 12 px narrower than es-419's
-  `Agregar texto`. This was measured without the font/size pickers (they appear only while
-  text is being edited); the 02-text shots show the bar labelled with them absent. The
-  `toolbar:` line `--screenshot` prints (`labelled needs N effective px`) is readable only
-  from an unpackaged launch, whose labels stay English, so the packaged figure is
-  bracketed by width, as above.
+  `Agregar texto`. The font/size pickers (shown only while an added text box is edited or
+  selected) were measured on 2026-10-24: see the next section. The 02-text shots show the
+  bar labelled with them absent.
+
+### Toolbar width, with and without the pickers (#802, 2026-10-24)
+
+The app's own measure (`labelled needs N effective px`, the `toolbar:` line a `--screenshot
+--screenshot-state more|textbox --language <tag> --window 3200x950` run prints, with Save's dot
+counted; `more` has no pickers, `textbox` has them) against the window width at which the
+packaged 2.3.0.0 build, at 150 %, was seen to keep its labels (`Test-PickerBreakpoint.ps1`, one
+`ShotStrip` per width, each strip read). The window figure is the window's pixel width over 1.5, so
+it runs 14 to 20 above the app's figure (the window's frame and shadow margin).
+
+| language | no pickers (app) | with pickers (app) | packaged, pickers shown: icons-only at, labelled at (window px, effective) |
+|---|---|---|---|
+| en | 1060 | 1260 | 1914 (1276), 1922 (1281) |
+| fr-CA, fr-FR | 1187 | 1387 | 2104 (1403), 2116 (1411) (fr-CA only was swept) |
+| es-419 | 1130 | 1330 | 2014 (1343), 2020 (1347) |
+| es-ES | 1122 | 1322 | 2004 (1336), 2008 (1339) |
+
+The pickers cost 200 effective px in every language. The Store frame (1667) clears the widest
+of these (French with pickers, 1387) by 280, and the widest Spanish (1330) by 337. Below the
+breakpoint the bar goes icons-only (every label drops together; nothing is clipped) and then
+into "..." as before. The 2.3 numbers that stood in this file (1430 en, 1475 or 1610 fr) were
+stale from before #144's one-row toolbar.
 
 ## Privacy — this is not optional
 

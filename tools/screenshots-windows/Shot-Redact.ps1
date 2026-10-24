@@ -41,7 +41,20 @@ Shot $h "s6a-redact-marked"
 # its chrome, the remove chip (the X) at the top-right corner (#344).
 Click-InShot $h ([int](($X1 + $X2) / 2)) ([int](($Y1 + $Y2) / 2))
 Start-Sleep -Milliseconds 800
+# The click leaves the pointer over the name, and the viewer draws a dotted underline under
+# the text run the pointer is on (UpdateHoverOverlay). Parking with SetCursorPos is a warp,
+# not a pointer move, so the app never hears the pointer leave and the underline stays on
+# the listing image (#802: it ran under "Name: Jane Whitfield" in every set up to 2.4).
+# Walk the pointer off the text over the left gutter with real moves first, then park.
+$r = New-Object Win+RECT
+if ([Win]::DwmGetWindowAttribute($h, 9, [ref]$r, 16) -ne 0) { [Win]::GetWindowRect($h, [ref]$r) | Out-Null }
+[Win]::SetCursorPos($r.Left + 300, $r.Top + 700) | Out-Null
+Start-Sleep -Milliseconds 200
+Waggle 10 4
 Park $h
+# The moves wake the viewer's thin scroll indicator (a 4 px grey line down the right edge);
+# it hides again a few seconds after the pointer is still, and must have before the shot.
+Start-Sleep -Seconds 5
 Shot $h $Name
 if (-not $Save) { return }
 
