@@ -577,6 +577,54 @@ public class StringCatalogueTests
         Assert.True(found.Count == 0, "A selection title must be the noun form (#801):\n" + string.Join("\n", found));
     }
 
+    /// <summary>
+    /// #800 (glossary rows "asked", the notice row, the redaction row): on both desktops the
+    /// advisory permission bits are reported as a request, in every locale. The author "asked"
+    /// (« a demandé », pidió); the string is never "doesn't allow" (« n'autorise pas »,
+    /// « ne permet pas », no permite), never "the owner restricted it" (« restreint », restringió).
+    /// The one refusal that really is a credential (ErrorRestricted: the Password command) is
+    /// held to the same vocabulary but says what is missing instead of who asked.
+    /// </summary>
+    [Fact]
+    public void DesktopPermissionStringsSayTheAuthorAskedAndNeverThatTheOwnerForbids()
+    {
+        var forbidden = new Regex(
+            @"doesn't allow|does not allow|restricted|owner of|owner's|n'autorise|ne permet|restreint|propri\u00e9taire de ce|propri\u00e9taire du|"
+            + @"no permite|restringi|propietario de este|propietario del",
+            RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        var asked = new Regex(@"\basked\b|a demand\u00e9|pidi\u00f3", RegexOptions.Compiled);
+
+        // Keys that state what the author asked; ErrorRestricted and UnlockPrompt do not.
+        var askedKeys = new[]
+        {
+            "RestrictedNoticeBar.Message", "RestrictedBanner", "ActionRestricted", "RedactNeedsPermission",
+            "PageToolsRestricted", "ExtractRestricted",
+        };
+        var allKeys = askedKeys.Concat(new[] { "UnlockPrompt", "ErrorRestricted" }).ToArray();
+
+        var catalogues = new List<(string Label, Dictionary<string, string> Values)>();
+        foreach (var folder in new[] { "en-US", "fr-CA", "fr-FR", "es", "es-ES" })
+            catalogues.Add(($"Windows {folder}", ResxValues($"src/MegaPDF.App/Strings/{folder}/Resources.resw")));
+        foreach (var suffix in new[] { "", ".fr-CA", ".fr", ".es", ".es-ES" })
+            catalogues.Add(($"macOS/Linux {(suffix == "" ? "en" : suffix)}", ResxValues($"src/MegaPDF.Avalonia/Strings/Strings{suffix}.resx")));
+
+        var found = new List<string>();
+        foreach (var (label, values) in catalogues)
+        {
+            foreach (var key in allKeys)
+            {
+                if (!values.TryGetValue(key, out var value))
+                    continue; // RestrictedBanner is macOS only, RestrictedNoticeBar.Message Windows only
+                if (forbidden.IsMatch(value))
+                    found.Add($"{label} {key}: \"{value}\" says the owner forbids or restricts");
+                if (askedKeys.Contains(key) && !asked.IsMatch(value))
+                    found.Add($"{label} {key}: \"{value}\" does not say the author asked");
+            }
+        }
+
+        Assert.True(found.Count == 0, "Advisory permission wording (#558, #800):\n" + string.Join("\n", found));
+    }
+
     // --- helpers ---
 
     /// <summary>One localization's values out of the iOS string catalog.</summary>

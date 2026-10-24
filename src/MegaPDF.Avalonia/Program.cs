@@ -3594,7 +3594,7 @@ internal static class Program
                   == Strings.PagesRefusedFormFields);
             check("  and it is not the generic change-failed line",
                   Strings.PagesRefusedFormFields != Strings.ChangeFailed);
-            check("  a restricted document's page tools say the owner password would unlock them",
+            check("  a restricted document's page tools say the author asked (#800)",
                   DocumentViewModel.DescribePageToolFailure(
                       new PageToolException(PageToolFailure.Restricted, "x")) == Strings.PageToolsRestricted);
         }

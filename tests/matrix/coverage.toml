@@ -2449,8 +2449,10 @@ tests = [
   "tests/MegaPDF.Core.Tests/CorpusTests.cs::corpus",
   "src/MegaPDF.App/Screenshot.cs::CheckSignedSaveRemovalAsync",
   ".github/workflows/ci.yml::Run-Check \"signed-save-remove\"",
+  "src/MegaPDF.App/Screenshot.Restricted.cs::CheckRestrictedAsync",
+  ".github/workflows/ci.yml::Run-Check \"restricted\"",
 ]
-note = "the gating rules are tested; no self-test state opens a restricted or XFA document in the UI. #576: the signed-save warning's removal tick is now offered here too (parity with macOS/Linux), proved by the `signed-save-remove` self-test state — the dialog read back through DialogGate.Current, the write path driven directly, and the saved file reopened to check what it actually contains, both ticked and not."
+note = "the gating rules are tested; the `restricted` self-test state (#800) opens a restricted document in the UI and reads its banner and refusals back, and no state opens an XFA one. #576: the signed-save warning's removal tick is now offered here too (parity with macOS/Linux), proved by the `signed-save-remove` self-test state — the dialog read back through DialogGate.Current, the write path driven directly, and the saved file reopened to check what it actually contains, both ticked and not."
 [feature.macos]
 presence = "present"
 entry = "src/MegaPDF.Avalonia/ViewModels/DocumentViewModel.cs::DocumentCapabilities"

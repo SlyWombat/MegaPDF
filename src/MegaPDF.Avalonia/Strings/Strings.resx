@@ -737,7 +737,8 @@
     <value>Set, change or remove the document's password</value>
   </data>
   <data name="RestrictedBanner" xml:space="preserve">
-    <value>The owner of this document restricted it, so some tools are unavailable.</value>
+    <value>The author of this document asked that it not be changed. Unlock it with the owner password to edit it.</value>
+    <comment>#800: reworded to the notice row (glossary): the author asked, and the way through is named.</comment>
   </data>
   <data name="UnlockEllipsis" xml:space="preserve">
     <value>Unlock…</value>
@@ -751,7 +752,7 @@
     <comment>Window title</comment>
   </data>
   <data name="UnlockPrompt" xml:space="preserve">
-    <value>The owner of "{0}" restricted what can be done with it. Enter the owner password to use every tool.</value>
+    <value>Enter the owner password to allow every change to "{0}".</value>
   </data>
   <data name="UnlockRetryPrompt" xml:space="preserve">
     <value>That password did not unlock "{0}". Try again?</value>
@@ -760,7 +761,16 @@
     <value>Unlocked. Every tool is available.</value>
   </data>
   <data name="ActionRestricted" xml:space="preserve">
-    <value>The document's owner does not allow that. Unlock it with the owner password first.</value>
+    <value>The author of this document asked that it not be changed. Unlock it with the owner password to edit it.</value>
+    <comment>#800: an advisory-bit gate (edit, sign, redact mark); the notice row, as on the banner.</comment>
+  </data>
+  <data name="ErrorRestricted" xml:space="preserve">
+    <value>Without the owner password, MegaPDF can't make that change. Unlock the document first.</value>
+    <comment>#800: new key, split from ActionRestricted. DocumentRestrictedException from a save means the Password command without full access.</comment>
+  </data>
+  <data name="ExtractRestricted" xml:space="preserve">
+    <value>The author of this document asked that nothing be copied out of it.</value>
+    <comment>#800: new key, split from ActionRestricted. Page extraction refused because the copy permission is withheld; the extraction-class row.</comment>
   </data>
   <data name="RecoveryOffForProtected" xml:space="preserve">
     <value>Crash recovery is off for password-protected documents.</value>
@@ -1233,7 +1243,8 @@
     <value>MegaPDF couldn't take that content apart safely.</value>
   </data>
   <data name="RedactNeedsPermission" xml:space="preserve">
-    <value>This document doesn't allow changes, so it can't be redacted.</value>
+    <value>The author of this document asked that its contents not be changed, so it can't be redacted.</value>
+    <comment>#800: reworded to the editing-class row plus the consequence (glossary).</comment>
   </data>
   <data name="RedactFailed" xml:space="preserve">
     <value>The redaction couldn't be finished, and this file can no longer be saved. Close it and open it again — nothing was written.</value>
@@ -1497,8 +1508,8 @@
     <comment>The engine refuses the last page (#174); said as the rule it is, with the way round it</comment>
   </data>
   <data name="PageToolsRestricted" xml:space="preserve">
-    <value>This document does not allow its pages to be changed. Its owner password would unlock it.</value>
-    <comment>MEGAPDF_ERR_RESTRICTED for a page operation (#174, ADR-004)</comment>
+    <value>The author of this document asked that its pages not be reordered, removed or added to.</value>
+    <comment>#800: reworded to the assembly-class row (glossary). MEGAPDF_ERR_RESTRICTED for a page operation (#174, ADR-004)</comment>
   </data>
   <data name="OtherFileNeedsPassword" xml:space="preserve">
     <value>That PDF needs a password, or it does not allow copying from it.</value>
