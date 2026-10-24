@@ -36,6 +36,30 @@ const FILE = path.join(__dirname, "megapdf", "support", "index.html");
 const HTML = fs.readFileSync(FILE, "utf8");
 const EXPECTED_ANSWERS = (HTML.match(/<details class="answer"/g) || []).length;
 
+// #635: the ids are part of the support-mail interface (the message names them on its
+// "Answer ids:" line and the support system links to them). They may be ADDED to; none of
+// these may be renamed or removed without telling the support system first.
+const REQUIRED_IDS = [
+    "a-adobe-reader",
+    "a-cant-edit-text",
+    "a-checkbox",
+    "a-cover-vs-redact",
+    "a-crash",
+    "a-language",
+    "a-large",
+    "a-markdown",
+    "a-minimum",
+    "a-pages",
+    "a-password",
+    "a-print",
+    "a-privacy",
+    "a-saved-where",
+    "a-signature",
+    "a-signed",
+    "a-update",
+    "a-version",
+];
+
 let fails = 0;
 function check(name, ok, extra) {
     if (ok) { console.log("ok    " + name); return; }
@@ -110,6 +134,16 @@ const titles = (doc) => [...doc.querySelectorAll("#hits .hit h4")].map((h) => h.
     check("the message says what the page suggested",
           /The support page suggested\n- /.test(report.value),
           JSON.stringify(report.value.slice(-300)));
+    {
+        // #635: the same answers by id, in the same order, on one line after the titles.
+        const m = /\nAnswer ids: ([a-z0-9-]+(?:, [a-z0-9-]+)*)\n/.exec(report.value);
+        const ids = m ? m[1].split(", ") : [];
+        const nTitles = (report.value.match(/\n- /g) || []).length;
+        check("the message carries the suggested answers' ids on one line",
+              !!m && ids.length === nTitles && ids.every((i) => doc.getElementById(i)
+                  && doc.getElementById(i).classList.contains("answer")),
+              JSON.stringify(report.value.slice(-400)));
+    }
 
     const before = doc.querySelectorAll("#hits .hit").length;
     const act = (label) => [...doc.querySelectorAll("#hits .hit .acts button")]
@@ -220,6 +254,11 @@ const titles = (doc) => [...doc.querySelectorAll("#hits .hit h4")].map((h) => h.
     check("every answer can be surfaced by its own terms", unreachable.length === 0,
           unreachable.join("; "));
 
+    {
+        const missing = REQUIRED_IDS.filter((i) => !new RegExp('<details class="answer" id="' + i + '"').test(HTML));
+        check("every answer id the support system links to still exists", missing.length === 0,
+              "missing: " + missing.join(", "));
+    }
     console.log(fails ? `\n${fails} failure(s)` : "\nall checks passed");
     process.exit(fails ? 1 : 0);
 })();

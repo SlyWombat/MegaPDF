@@ -947,7 +947,7 @@
             if (shown.length || judged.length) {
                 lines.push("");
                 lines.push("The support page suggested");
-                var listed = {};
+                var listed = {}, listedIds = [];
                 shown.concat(judged).forEach(function (id) {
                     if (listed[id]) { return; }
                     listed[id] = true;
@@ -956,7 +956,12 @@
                     var mark = verdict[id] === "no" ? "  [reader: not it]"
                              : verdict[id] === "yes" ? "  [reader: that was it]" : "";
                     lines.push("- " + a.title + mark);
+                    listedIds.push(a.id);
                 });
+                /* The titles above are for the reader and for us to read; this line is the
+                   machine-readable twin (#635): the same answers by their stable ids, in the
+                   same order, so a support system matches exactly instead of by title text. */
+                if (listedIds.length) { lines.push("Answer ids: " + listedIds.join(", ")); }
             } else {
                 lines.push("");
                 lines.push("The support page suggested nothing.");
