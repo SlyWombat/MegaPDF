@@ -212,3 +212,9 @@ internal fun TextSelectionOverlay(
     }
     DisposableEffect(Unit) { onDispose { toolbar.hide() } }
 }
+
+/**
+ * Where the floating toolbar is told the selection is (#803). [selection] is the selection's box and
+ * [viewport] the content area, both in root pixels; null [viewport] means no limit.
+ */
+internal fun toolbarAnchor(selection: Rect, viewport: Rect?, reservePx: Float): Rect? = selection

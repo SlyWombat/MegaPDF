@@ -34,6 +34,14 @@ data class RecentEntry(
      * and wrong for a word of ours.
      */
     val authority: String? = null,
+    /**
+     * What the document is, apart from the URI it arrived under (#803): its size and last-modified
+     * time as the provider reported them, "size:modified", or null when the provider would not say
+     * both. The picker reaches one file through several providers (by folder, by kind, by
+     * Downloads) and each hands back a different URI, so the URI alone lists one file twice.
+     * Null for an entry stored before this existed, which the default migrates.
+     */
+    val identity: String? = null,
 )
 
 /** A recent entry and whether it can still be opened (#165). */
@@ -53,7 +61,7 @@ class RecentFilesStore(private val file: File, private val maxEntries: Int = 10)
     }
 
     /** Adds or refreshes [entry]; most recent first, deduped by URI, capped. */
-    fun add(entry: RecentEntry): List<RecentEntry> {
+    fun add(entry: RecentEntry, identityOf: (RecentEntry) -> String? = { null }): List<RecentEntry> {
         val updated = (listOf(entry) + load().filterNot { it.uri == entry.uri })
             .take(maxEntries)
         write(updated)
