@@ -621,7 +621,7 @@ grid Windows draws, and Find highlights one hit. On the twelve-page document the
 reads "Page 4 of 12", the pane fills with tiles, and Find counts 29 matches.
 
 **Both documents are staged under display names in the set's own language**
-(`D:\Documents\Rentals\Equipment Rental Agreement.pdf`,
+(`D:\Documents\Rentals\Rental Agreement.pdf`,
 `D:\Documents\Locations\Contrat de location.pdf`, and so on). Three places put a
 file name on camera — the title bar, the tab, and reading mode's floating bar — and
 the 2.0 and 2.1 sets shipped "blank-agreement.pdf" on their French images. This one

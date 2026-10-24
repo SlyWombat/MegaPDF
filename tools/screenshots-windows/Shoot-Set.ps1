@@ -101,16 +101,16 @@ switch ($Lang) {
 # reaching a public capture.
 if ($Lang -eq 'en-US') {
     $folder = 'D:\Documents\Rentals'
-    $docName = 'Equipment Rental Agreement.pdf'
+    $docName = 'Rental Agreement.pdf'
     $termsName = 'Rental Terms and Conditions.pdf'
     $scanName = 'Scanned Agreement.pdf'
 } elseif ($Lang -eq 'es-419') {
-    $folder = 'D:\Documents\Arrendamientos'
+    $folder = 'D:\Documentos\Arrendamientos'
     $docName = 'Contrato de arrendamiento.pdf'
-    $termsName = 'Condiciones de arrendamiento.pdf'
+    $termsName = 'Condiciones generales.pdf'
     $scanName = 'Contrato escaneado.pdf'
 } elseif ($Lang -eq 'es-ES') {
-    $folder = 'D:\Documents\Alquileres'
+    $folder = 'D:\Documentos\Alquileres'
     $docName = 'Contrato de alquiler.pdf'
     $termsName = 'Condiciones de alquiler.pdf'
     $scanName = 'Contrato escaneado.pdf'

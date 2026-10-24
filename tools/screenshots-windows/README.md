@@ -77,8 +77,12 @@ Windows draws, and Find highlights one hit.
 
 All three are copied to a staging folder under **display names in the set's own
 language** before anything is shot (`D:\Documents\Rentals` in English,
-`D:\Documents\Locations` in French, `D:\Documents\Arrendamientos` in es-419 and
-`D:\Documents\Alquileres` in es-ES). Three places put a file name on camera — the
+`D:\Documents\Locations` in French, `D:\Documentos\Arrendamientos` in es-419 and
+`D:\Documentos\Alquileres` in es-ES: the Spanish drive folder is *Documentos*, because
+the recents list prints the whole path and "Documents" is an English word on a Spanish
+capture). The names are also short enough for the tab: a dirty tab (`● name.pdf`) clips a
+name longer than about 28 characters, which is why English's agreement is `Rental
+Agreement.pdf` and es-419's terms are `Condiciones generales.pdf` (2.4 set). Three places put a file name on camera — the
 title bar, the tab, and reading mode's floating bar — and the 2.0 and 2.1 sets
 shipped "blank-agreement.pdf" on their French images. The folder is on camera too,
 in the home slot's recents list, which is why it is a drive and two plain folders
@@ -348,13 +352,17 @@ reads those folder names (and the Store listing languages are `es-mx` and `es-es
   typed from code points by `Shoot-Set.ps1`). Spain's page uses *alquiler*, *recogida*,
   metric lines and euros; Latin America's *arrendamiento*, *recolección* and `$`. The find term is *equipo* in both (no accent, on 11 of the 12 pages).
 - **Width check before shooting (the toolbar).** The Store frame, 2500 px at 150 %, is 1667
-  effective px, and French needs about 1610. Spanish labels are not measured yet. On the
-  packaged build with `"Language": "es-419"`, take the probe frame (`Setup-Frame.ps1 ...
-  -Name probe-frame`) and look at the toolbar: every command must show icon and label and
-  nothing may have dropped into More. If any label is gone, or the toolbar needs more than
-  1667, report it before shooting (the figure is `labelled needs N effective px` on the
-  `toolbar:` line `--screenshot` prints, which only an unpackaged launch can show; the
-  packaged number is bracketed with `Test-FullBreakpoint.ps1 -Widths`, as French's was).
+  effective px. **Measured 2026-10-23 on the packaged 2.3.0.0 build** (`"Language"` set, a
+  document open with a box ticked so Save wears its dot, one window width per shot,
+  `ShotStrip`): es-419 and es-ES both keep icon + label on every command with nothing in
+  More down to a 1720 px window (1147 effective px), and drop to icons only at 1700 px (1133
+  effective px). So the Spanish breakpoint is about 1140 effective px, 520 below the Store
+  frame; the widest Spanish label set (es-ES `Añadir texto`) is 12 px narrower than es-419's
+  `Agregar texto`. This was measured without the font/size pickers (they appear only while
+  text is being edited); the 02-text shots show the bar labelled with them absent. The
+  `toolbar:` line `--screenshot` prints (`labelled needs N effective px`) is readable only
+  from an unpackaged launch, whose labels stay English, so the packaged figure is
+  bracketed by width, as above.
 
 ## Privacy — this is not optional
 
