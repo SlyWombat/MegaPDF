@@ -85,7 +85,10 @@ Android and .NET; Canada is the exact-match region on all four platforms.
   number can be read off a run. English measures about 1430 effective px,
   French about 1610 (measured on the installed package, where every label is
   French; the dev build's figure is lower because its x:Uid labels stay
-  English). The Store frame, 2500 px at 150 % = 1667 effective, clears it.
+  English). The Store frame, 2500 px at 150 % = 1667 effective, clears it. Spanish
+  (es-419 and es-ES, packaged build, Save with its dot, no pickers) keeps every label
+  down to 1147 effective px and loses them at 1133 (measured 2026-10-23 by a width
+  sweep; the English and French figures above were not re-bracketed that day).
 - **Automation.** Every toolbar and flyout control the screenshot harness
   touches has an `AutomationProperties.AutomationId` (`OpenButton`,
   `ShrinkButton`, `SignaturesButton`, …). The UIA `Name` is what Narrator
