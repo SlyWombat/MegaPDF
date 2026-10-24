@@ -547,6 +547,36 @@ public class StringCatalogueTests
         return terms;
     }
 
+    /// <summary>
+    /// The phones' page-grid title while pages are ticked is a noun (#801): "{0} sélectionnées" and
+    /// "{0} seleccionadas" read "1 sélectionnées" at one, and French treats 0 and 1 as singular, so a
+    /// number-first adjective never agrees. The French title also carries U+00A0 before its colon in
+    /// both variants (Québec keeps the space before a colon), which this checks by code point.
+    /// </summary>
+    [Fact]
+    public void PhoneSelectionTitlesAreNounsThatAgreeWithOne()
+    {
+        const string French = "S\u00e9lection\u00a0: ";
+        const string Spanish = "Selecci\u00f3n: ";
+        var found = new List<string>();
+        void Check(string label, string value, string prefix)
+        {
+            if (!value.StartsWith(prefix, StringComparison.Ordinal))
+                found.Add($"{label}: \"{value}\" should start with \"{prefix}\"");
+        }
+
+        foreach (var folder in new[] { "values-fr-rCA", "values-fr" })
+            Check($"Android {folder}", AndroidValues($"android/app/src/main/res/{folder}/strings.xml")["pages_selected"], French);
+        foreach (var folder in new[] { "values-b+es+419", "values-es" })
+            Check($"Android {folder}", AndroidValues($"android/app/src/main/res/{folder}/strings.xml")["pages_selected"], Spanish);
+        foreach (var localization in new[] { "fr-CA", "fr" })
+            Check($"iOS {localization}", IosValues(localization)["%lld selected"], French);
+        foreach (var localization in new[] { "es-419", "es" })
+            Check($"iOS {localization}", IosValues(localization)["%lld selected"], Spanish);
+
+        Assert.True(found.Count == 0, "A selection title must be the noun form (#801):\n" + string.Join("\n", found));
+    }
+
     // --- helpers ---
 
     /// <summary>One localization's values out of the iOS string catalog.</summary>

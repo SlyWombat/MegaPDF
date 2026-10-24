@@ -2954,6 +2954,19 @@ change (it edits pages, not text) and was run for the record only, with `--jobs 
 sequential default to fit the session. Scratch (dumps of every document's text) lived under
 `~/megapdf-781fix-*` on kdocker3 and was deleted.
 
+## Phone wording after #558, and a selection of one (#800, #801), 2026-10-24
+
+**Android** on kdocker2 (`mingc/android-build-box`, work in `/data/megapdf-work`, Gradle home beside
+it): `:app:assembleDebug :app:testDebugUnitTest :engine:testDebugUnitTest` green, 33 result files, 0
+failures and 0 errors. **iOS** on the Mac mini (own simulator `megapdf-agent-800`, iPhone 17 Pro,
+iOS 26.5, deleted afterwards): the MegaPDF scheme's 370 unit tests pass in English, in `fr-CA` and in
+`es-MX`; `SelectCopyUITests` and `PageToolsUITests` (MegaPDFDemo) run 19, 3 skipped (the two iPad-only
+tests and the Command-C test, which skip themselves on a phone), 0 failures; the no-copy banner test,
+which pins the reused extraction sentence, ran and passed. **Core**: `StringCatalogueTests` 29 of 29
+(Windows, with the new `PhoneSelectionTitlesAreNounsThatAgreeWithOne`), including the Spanish glossary
+covering every French term. **Not run**: the Android instrumented tests (kdocker2 has no emulator),
+the iPad UI lane, a phone showing the new strings; hosted CI and the coordinator's re-shoot cover those.
+
 ## Reporting
 
 For each issue: what you clicked, what you expected, what happened, and the PDF
