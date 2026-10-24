@@ -165,8 +165,8 @@
     <!-- Document security (#131): restricted documents, the owner password, and the Password command. -->
     <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
     <string name="security_restricted_notice">El autor de este documento pidió que no se modifique. Aun así puedes modificarlo; MegaPDF te lo advertirá antes.</string>
-    <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
-    <string name="security_restricted_edit">El propietario de este documento no permite ese cambio. Primero desbloquéalo con la contraseña del propietario.</string>
+    <!-- ES-REVIEW #800 — reworded: says what is missing (the owner's credential) rather than what the owner "doesn't allow"; still a real refusal, the exception glossary row 210 keeps, not yet read by the reviewer. -->
+    <string name="security_restricted_edit">Sin la contraseña del propietario, MegaPDF no puede hacer ese cambio. Primero desbloquea el documento.</string>
     <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
     <string name="security_unlock_menu">Desbloquear con la contraseña del propietario…</string>
     <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
@@ -521,8 +521,6 @@
     <string name="redact_refused_layout">Quitarlo cambiaría la página fuera de las áreas que marcaste.</string>
     <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
     <string name="redact_refused_other">MegaPDF no pudo separar ese contenido con seguridad.</string>
-    <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
-    <string name="redact_needs_permission">Este documento no permite cambios, así que no se puede censurar.</string>
     <!-- The fail-closed case the rehearsal says cannot happen (#173) -->
     <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
     <string name="redact_failed">No se pudo terminar la censura y este archivo ya no se puede guardar. Ciérralo y ábrelo de nuevo; no se escribió nada.</string>
@@ -687,12 +685,12 @@
     <!-- A page tool refused (#174). Nothing was changed, and the title says so first. -->
     <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
     <string name="pages_refused_title">No se cambió nada</string>
-    <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
-    <string name="pages_refused_restricted">Este documento no permite girar, eliminar, mover ni agregar sus páginas. La contraseña del propietario sí lo permitiría.</string>
+    <!-- ES-REVIEW #800 — reworded to #558's assembly-class row word for word, not yet read by the reviewer. -->
+    <string name="pages_refused_restricted">El autor de este documento pidió que no se reordenen, quiten ni agreguen sus páginas.</string>
     <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
     <string name="pages_refused_source_password">Ese archivo necesita una contraseña, así que MegaPDF no puede sacar páginas de él.</string>
-    <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
-    <string name="pages_refused_source_restricted">Ese archivo no permite que se copie nada de él, así que sus páginas no se pueden agregar aquí.</string>
+    <!-- ES-REVIEW #800 — reworded in #558's style (the author asked) with the consequence; MegaPDF really does refuse here, not yet read by the reviewer. -->
+    <string name="pages_refused_source_restricted">El autor de ese archivo pidió que no se copie nada de él, así que sus páginas no se pueden agregar aquí.</string>
     <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
     <string name="pages_refused_fields">Esas páginas llevan un campo de formulario cuyo nombre pertenece a un grupo de campos, y este documento ya tiene un campo con ese nombre. MegaPDF no puede cambiarle el nombre sin dañar el formulario, así que no agregó nada para no estropearlo.</string>
     <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->

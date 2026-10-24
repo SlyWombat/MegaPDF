@@ -22,7 +22,7 @@ enum PdfError: Error, Equatable {
     case editFailed
     /// PDFium would change the rest of the page if it rewrote this text (#118), and why (#128).
     case layoutWouldChange(PdfLayoutCause)
-    /// The document's security doesn't allow it; its owner password would (#131).
+    /// Needs the owner password, which this open lacks (#131): setting, changing or removing the password, and the backstop behind a tool the open may not use.
     case restricted
     /// A security handler PDFium can't open, such as a certificate handler (#131, ADR-004 §8).
     case unsupportedSecurity
@@ -52,7 +52,7 @@ extension PdfError: LocalizedError {
         case let .layoutWouldChange(cause):
             return cause.notice
         case .restricted:
-            return String(localized: "This document's security doesn't allow that without its owner password.")
+            return String(localized: "Without the owner password, MegaPDF can't make that change. Unlock the document first.")
         case .unsupportedSecurity:
             return String(localized: "This PDF uses a kind of protection MegaPDF can't open.")
         case .tooLarge:

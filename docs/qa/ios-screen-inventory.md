@@ -182,7 +182,7 @@ square → body-text line → empty page (scanned hint).
 
 | # | Notice |
 |---|---|
-| 6.1 | "The owner of this document has restricted changes. Unlock it with the owner … to edit it." — on a restricted open, and on **every** refused edit |
+| 6.1 | "The author of this document asked that it not be changed. Unlock it with the owner … to edit it." — on a restricted open, and on **every** refused edit |
 | 6.2 | "The original font couldn't show this text, so a similar standard font was used." |
 | 6.3 | "This page is a scanned image, so its text can't be edited." (once per document) |
 | 6.4 | The three layout-refusal notices: moving text elsewhere · making other parts look different · disturbing the layout |

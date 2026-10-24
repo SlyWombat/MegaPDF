@@ -110,7 +110,8 @@
     <!-- #558 : reformulé. « restreint » et le renvoi au mot de passe du propriétaire disaient
          qu\'un verrou bloquait le document; c\'est une demande de l\'auteur, pas un verrou. -->
     <string name="security_restricted_notice">L\'auteur de ce document a demandé qu\'il ne soit pas modifié. Vous pouvez tout de même le modifier&#160;: MegaPDF vous le dira d\'abord.</string>
-    <string name="security_restricted_edit">Le propriétaire de ce document ne permet pas cette modification. Déverrouillez-le d\'abord avec le mot de passe du propriétaire.</string>
+    <!-- FR-REVIEW #800 - reworded: says what is missing (the owner's credential) rather than what the owner "doesn't allow"; still a real refusal, the exception glossary row 210 keeps, not yet read by the reviewer. -->
+    <string name="security_restricted_edit">Sans le mot de passe du propriétaire, MegaPDF ne peut pas effectuer cette modification. Déverrouillez d\'abord le document.</string>
     <string name="security_unlock_menu">Déverrouiller avec le mot de passe du propriétaire…</string>
     <string name="security_unlock_title">Déverrouiller le document</string>
     <string name="security_unlock_body">Entrez le mot de passe du propriétaire pour permettre toutes les modifications de ce document.</string>
@@ -329,8 +330,6 @@
     <string name="redact_refused_layout">Le retrait modifierait la page en dehors des zones marquées.</string>
     <!-- #173 — new French, for francophone review -->
     <string name="redact_refused_other">MegaPDF n\'a pas pu décomposer ce contenu sans risque.</string>
-    <!-- #173 — new French, for francophone review -->
-    <string name="redact_needs_permission">Ce document n\'autorise pas les modifications; il ne peut pas être caviardé.</string>
     <!-- The fail-closed case the rehearsal says cannot happen (#173). #173 — new French, for francophone review -->
     <string name="redact_failed">Le caviardage n\'a pas pu être terminé et ce fichier ne peut plus être enregistré. Fermez-le et rouvrez-le&#160;: rien n\'a été écrit.</string>
 
@@ -403,7 +402,8 @@
     <string name="pages">Pages</string>
     <string name="pages_count">%1$d pages</string>
     <string name="pages_count_one">1 page</string>
-    <string name="pages_selected">%1$d sélectionnées</string>
+    <!-- FR-REVIEW #801 - noun form, so a selection of one reads right, not yet read by the reviewer. -->
+    <string name="pages_selected">Sélection&#160;: %1$d</string>
     <string name="pages_done">Retour au document</string>
     <string name="pages_clear_selection">Effacer la sélection</string>
     <string name="pages_select_all">Tout sélectionner</string>
@@ -446,9 +446,11 @@
     <string name="pages_failed">Cette modification de pages n\'a pas pu être effectuée.</string>
     <string name="pages_save_failed">Ces pages n\'ont pas pu être enregistrées.</string>
     <string name="pages_refused_title">Rien n\'a été modifié</string>
-    <string name="pages_refused_restricted">Ce document n\'autorise pas la rotation, la suppression, le déplacement ni l\'ajout de pages. Son mot de passe de propriétaire le permettrait.</string>
+    <!-- FR-REVIEW #800 - reworded to #558's assembly-class row word for word, not yet read by the reviewer. -->
+    <string name="pages_refused_restricted">L\'auteur de ce document a demandé que ses pages ne soient pas réordonnées, retirées ni complétées.</string>
     <string name="pages_refused_source_password">Ce fichier exige un mot de passe, alors MegaPDF ne peut pas en extraire de pages.</string>
-    <string name="pages_refused_source_restricted">Ce fichier n\'autorise aucune copie de son contenu, alors ses pages ne peuvent pas être ajoutées ici.</string>
+    <!-- FR-REVIEW #800 - reworded in #558's style (the author asked) with the consequence; MegaPDF really does refuse here, not yet read by the reviewer. -->
+    <string name="pages_refused_source_restricted">L\'auteur de ce fichier a demandé que rien n\'en soit copié, alors ses pages ne peuvent pas être ajoutées ici.</string>
     <string name="pages_refused_fields">Ces pages contiennent un champ de formulaire dont le nom appartient à un groupe de champs, et ce document a déjà un champ de ce nom. MegaPDF ne peut pas le renommer sans briser le formulaire, alors il n\'a rien ajouté plutôt que d\'endommager le formulaire.</string>
     <string name="pages_refused_last_page">Un PDF doit conserver au moins une page.</string>
     <string name="pages_refused_file">Le fichier n\'a pas pu être lu ni écrit.</string>

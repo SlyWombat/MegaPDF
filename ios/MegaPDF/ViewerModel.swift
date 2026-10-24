@@ -655,7 +655,7 @@ final class ViewerModel: ObservableObject {
 
     static func describeRefusal(_ report: PdfRedactionReport) -> String {
         if report.needsPermission {
-            return String(localized: "This document doesn't allow changes, so it can't be redacted.")
+            return String(localized: "The author of this document asked that its contents not be changed, so it can't be redacted.")
         }
         let refusal = report.refusals.first
         let why: String
@@ -2041,7 +2041,7 @@ final class ViewerModel: ObservableObject {
 
     /// Why a restricted document won't take an edit, and how to get past it.
     private func showRestrictedNotice() {
-        showNotice(String(localized: "The owner of this document has restricted changes. Unlock it with the owner password to edit it."))
+        showNotice(String(localized: "The author of this document asked that it not be changed. Unlock it with the owner password to edit it."))
     }
 
     /// Passes `allowed` through, showing the restricted notice when it is false — the
@@ -2612,7 +2612,7 @@ final class ViewerModel: ObservableObject {
         guard !targets.isEmpty else { return }
         guard capabilities.canExtractPages else {
             pageToolRefusal = String(localized:
-                "This document doesn't allow its pages to be copied out. Its owner password would.")
+                "The author of this document asked that nothing be copied out of it.")
             return
         }
         // Stop, no progress (#145). One engine call, so there is no count to show — but the
@@ -2746,12 +2746,12 @@ final class ViewerModel: ObservableObject {
         switch refusal {
         case .restricted:
             return String(localized:
-                "This document doesn't allow its pages to be rotated, deleted, moved or added to. Its owner password would.")
+                "The author of this document asked that its pages not be reordered, removed or added to.")
         case .sourceNeedsPassword:
             return String(localized: "That file needs a password, so MegaPDF can't take pages out of it.")
         case .sourceRestricted:
             return String(localized:
-                "That file doesn't allow anything to be copied out of it, so its pages can't be added here.")
+                "The author of that file asked that nothing be copied out of it, so its pages can't be added here.")
         case .fieldHierarchy:
             return String(localized:
                 "Those pages carry a form field whose name belongs to a group of fields, and this document already has a field of that name. MegaPDF can't rename it without breaking the form, so it added nothing rather than damage it.")

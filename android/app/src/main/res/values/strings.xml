@@ -110,7 +110,7 @@
          the way through it is to say so and go on. "asked" and "request", never "restricted",
          "locked" or "protected". -->
     <string name="security_restricted_notice">The author of this document asked that it not be changed. You can still change it — MegaPDF will say so first.</string>
-    <string name="security_restricted_edit">This document\'s owner doesn\'t allow that change. Unlock it with the owner password first.</string>
+    <string name="security_restricted_edit">Without the owner password, MegaPDF can\'t make that change. Unlock the document first.</string>
     <string name="security_unlock_menu">Unlock with owner password…</string>
     <string name="security_unlock_title">Unlock document</string>
     <string name="security_unlock_body">Enter the owner password to allow every change to this document.</string>
@@ -352,7 +352,6 @@
     <string name="redact_refused_shared">Part of that area is drawn from a shared block MegaPDF can\'t take apart safely.</string>
     <string name="redact_refused_layout">Removing it would change the page outside the areas you marked.</string>
     <string name="redact_refused_other">MegaPDF couldn\'t take that content apart safely.</string>
-    <string name="redact_needs_permission">This document doesn\'t allow changes, so it can\'t be redacted.</string>
     <!-- The fail-closed case the rehearsal says cannot happen (#173) -->
     <string name="redact_failed">The redaction couldn\'t be finished, and this file can no longer be saved. Close it and open it again — nothing was written.</string>
 
@@ -469,9 +468,9 @@
     <string name="pages_save_failed">Those pages couldn\'t be saved.</string>
     <!-- A page tool refused (#174). Nothing was changed, and the title says so first. -->
     <string name="pages_refused_title">Nothing was changed</string>
-    <string name="pages_refused_restricted">This document doesn\'t allow its pages to be rotated, deleted, moved or added to. Its owner password would.</string>
+    <string name="pages_refused_restricted">The author of this document asked that its pages not be reordered, removed or added to.</string>
     <string name="pages_refused_source_password">That file needs a password, so MegaPDF can\'t take pages out of it.</string>
-    <string name="pages_refused_source_restricted">That file doesn\'t allow anything to be copied out of it, so its pages can\'t be added here.</string>
+    <string name="pages_refused_source_restricted">The author of that file asked that nothing be copied out of it, so its pages can\'t be added here.</string>
     <!-- The field-hierarchy refusal (#174, #452): about 0.8% of real documents, and deliberate —
          the alternative is a document whose form fields have quietly lost their names. -->
     <string name="pages_refused_fields">Those pages carry a form field whose name belongs to a group of fields, and this document already has a field of that name. MegaPDF can\'t rename it without breaking the form, so it added nothing rather than damage it.</string>
