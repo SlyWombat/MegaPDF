@@ -393,6 +393,7 @@ refers to the same row in the French file.
 | The author of this document asked that nothing be copied out of it. (Copy unavailable) | El autor de este documento pidió que no se copie nada de él. (Copiar no disponible) |  |
 | Selected: {0} (announced) | Seleccionado: {0} | #710, las aplicaciones de escritorio: lo que dice el lector de pantalla cuando una selección de texto queda fija; {0} son los primeros 80 caracteres. Solo se oye. Sin espacio antes de los dos puntos |
 | Copied (announced) | Copiado | #710, lo que se oye tras copiar con éxito; igual que la confirmación de Android (*select_copied*) |
+| {0} selected (Android page-grid title while pages are ticked) | Selección: {0} | #724, la barra de selección de la vista de páginas en Android. *Seleccionadas: {0}* daba dos líneas a esa anchura en es-419 y es-ES (“Seleccionadas:” sobre el número), y la forma con el número delante (*{0} seleccionadas*) no concuerda con 1 y casi no cabe con dos cifras; *Selección* no tiene género ni número. Dos puntos sin espacio antes |
 
 ## Español (España)
 

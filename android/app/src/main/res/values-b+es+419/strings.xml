@@ -608,7 +608,7 @@
     <string name="pages_count_one">1 página</string>
     <!-- …and while something is -->
     <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
-    <string name="pages_selected">Seleccionadas: %1$d</string>
+    <string name="pages_selected">Selección: %1$d</string>
     <!-- The back arrow out of the grid; icon-only, so this is what TalkBack reads -->
     <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
     <string name="pages_done">Volver al documento</string>
