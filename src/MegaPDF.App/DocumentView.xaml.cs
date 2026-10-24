@@ -948,7 +948,10 @@ public sealed partial class DocumentView : UserControl
         // the border across the letters and the × chip over the last one. It stands off the
         // text instead, and the chip sits outside it.
         var isTextBox = annotationId.StartsWith("textbox:", StringComparison.Ordinal);
-        var pad = isTextBox ? 4 : 0;
+        // A redaction mark is the same case (#802): its bounds are the marked words' own box, so
+        // chrome on them left the corner dot and the ✕ chip over the last letter of the name.
+        var standsOff = isTextBox || annotationId.StartsWith(RedactionIdPrefix, StringComparison.Ordinal);
+        var pad = standsOff ? 4 : 0;
         _selection = new StampSelection(canvas, pageView, annotationId, bounds, movable, resizable, run, pad);
 
         var accent = Brand.Brush("BrandAccentBrush");
@@ -1025,7 +1028,7 @@ public sealed partial class DocumentView : UserControl
         const double removeMarginTextBox = -26;
         var remove = new Button
         {
-            Content = new FontIcon { Glyph = "", FontSize = 10 },
+            Content = new FontIcon { Glyph = "\uE711", FontSize = 10 }, // Segoe Fluent Icons "Cancel"; a literal U+E711 here was lost once and left the chip blank (#802)
             Width = removeSize,
             Height = removeSize,
             Padding = new Thickness(0),
@@ -1041,7 +1044,7 @@ public sealed partial class DocumentView : UserControl
             VerticalAlignment = VerticalAlignment.Top,
             Margin = new Thickness(0,
                 HitTargetGeometry.CenteredHostMargin(removeMargin, removeSize, hitTargetSize),
-                HitTargetGeometry.CenteredHostMargin(isTextBox ? removeMarginTextBox : removeMargin, removeSize, hitTargetSize),
+                HitTargetGeometry.CenteredHostMargin(standsOff ? removeMarginTextBox : removeMargin, removeSize, hitTargetSize),
                 0),
         };
         removeHost.Children.Add(remove);
