@@ -44,7 +44,7 @@ APP_ID = "9PF4TRRH4M76"          # Store ID of "Mega PDF"
 TITLE = "Mega PDF"               # must match the name reserved in Partner Center
 API = "https://manage.devcenter.microsoft.com/v1.0/my"
 RESOURCE = "https://manage.devcenter.microsoft.com"
-VERSION = "2.3.0.0"
+VERSION = "2.4.0.0"
 REPO = Path(__file__).resolve().parent.parent
 
 # Partner Center listing language -> the screenshot set and the release-notes block
@@ -75,23 +75,27 @@ LOGO_SIZE = (300, 300)
 OWNED_IMAGE_TYPES = ("Screenshot", LOGO_TYPE)
 
 CERT_NOTES = (
-    "MegaPDF 2.3.0 is a local PDF editor: no account, no sign-in, no network use. "
+    "MegaPDF 2.4.0 is a local PDF editor: no account, no sign-in, no network use. "
     "To try it, open any PDF with the toolbar's Open button (Ctrl+O), or double-click a "
     ".pdf once MegaPDF is the default app. Open a second PDF and it appears as a tab in "
     "the same window (Ctrl+W closes a tab). Click text to edit it, click an empty square "
     "to tick it, use Redact on the toolbar to mark a name (click the mark to select, move "
     "or remove it), and Save. Save As offers Markdown document as well as PDF document: "
     "the Markdown file is a text export and leaves the PDF unchanged. Ctrl+H is reading "
-    "mode, and the Pages pane rotates, deletes, reorders and inserts pages. New in this "
-    "version: Find (Ctrl+F) also searches scanned pages, which have no text of their "
+    "mode, and the Pages pane rotates, deletes, reorders and inserts pages. Find "
+    "(Ctrl+F) also searches scanned pages, which have no text of their "
     "own. It reads them on the device with Windows' built-in text recognition, keeps "
     "the result in memory only, and marks a hit from a scan as possibly containing "
     "mistakes. If Windows has no text-recognition language for the user's language, "
     "Find says so under the search box and offers a button to open Windows language "
-    "settings; MegaPDF downloads and installs nothing itself. If a document already "
+    "settings; MegaPDF downloads and installs nothing itself. New in this version: "
+    "MegaPDF is available in Spanish, for Latin America and for Spain. It follows "
+    "Windows' display language, and the Language choice in Settings overrides that "
+    "(English, French (Canada), French (France), Spanish (Latin America) or Spanish "
+    "(Spain)); the choice changes only the app's own text. If a document already "
     "carries a digital signature, saving says the signature will no longer verify and "
     "offers to remove it; MegaPDF neither creates nor validates cryptographic "
-    "signatures. This update replaces the 2.2.0 x64 and ARM64 packages."
+    "signatures. This update replaces the 2.3.0 x64 and ARM64 packages."
 )
 
 

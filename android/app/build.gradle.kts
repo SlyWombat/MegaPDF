@@ -13,8 +13,8 @@ android {
         applicationId = "ca.electricrv.megapdf"
         minSdk = 26
         targetSdk = 36
-        versionCode = 15
-        versionName = "2.3.0"
+        versionCode = 16
+        versionName = "2.4.0"
         // The app's own instrumented tests (#346): Compose UI tests that drive the viewer on
         // an emulator, in android-ci.yml's instrumented-test job beside the engine's.
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
