@@ -166,8 +166,8 @@
     <value>Choose default apps</value>
   </data>
   <data name="RestrictedNoticeBar.Message" xml:space="preserve">
-    <value>The owner of this document restricted it, so some tools are unavailable.</value>
-    <comment>#131: shown when a document opens without full access</comment>
+    <value>The author of this document asked that it not be changed. Unlock it with the owner password to edit it.</value>
+    <comment>#800: reworded to the notice row (glossary): the author asked, and the way through is named. #131: shown when a document opens without full access</comment>
   </data>
   <data name="UnlockButton.Content" xml:space="preserve">
     <value>Unlock…</value>
@@ -415,7 +415,7 @@
     <value>Unlock document</value>
   </data>
   <data name="UnlockPrompt" xml:space="preserve">
-    <value>The owner of “{0}” restricted what can be done with it. Enter the owner password to use every tool.</value>
+    <value>Enter the owner password to allow every change to “{0}”.</value>
     <comment>{0} is the file name</comment>
   </data>
   <data name="UnlockWrong" xml:space="preserve">
@@ -614,8 +614,8 @@
     <comment>#131: a security handler PDFium does not support</comment>
   </data>
   <data name="ErrorRestricted" xml:space="preserve">
-    <value>The document's owner doesn't allow this. Unlock it with the owner password first.</value>
-    <comment>#131: DocumentRestrictedException</comment>
+    <value>Without the owner password, MegaPDF can't make that change. Unlock the document first.</value>
+    <comment>#800: DocumentRestrictedException now only means the Password command without full access; glossary 'Without the owner password' row. #131: DocumentRestrictedException</comment>
   </data>
   <data name="ErrorGeneric" xml:space="preserve">
     <value>Something went wrong.</value>
@@ -1126,7 +1126,8 @@
     <value>MegaPDF couldn't take that content apart safely.</value>
   </data>
   <data name="RedactNeedsPermission" xml:space="preserve">
-    <value>This document doesn't allow changes, so it can't be redacted.</value>
+    <value>The author of this document asked that its contents not be changed, so it can't be redacted.</value>
+    <comment>#800: reworded to the editing-class row plus the consequence (glossary).</comment>
   </data>
   <data name="RedactFailed" xml:space="preserve">
     <value>The redaction couldn't be finished, and this file can no longer be saved. Close it and open it again — nothing was written.</value>
@@ -1392,8 +1393,12 @@
     <comment>The engine refuses the last page (#174); said as the rule it is, with the way round it</comment>
   </data>
   <data name="PageToolsRestricted" xml:space="preserve">
-    <value>This document does not allow its pages to be changed. Its owner password would unlock it.</value>
-    <comment>MEGAPDF_ERR_RESTRICTED for a page operation (#174, ADR-004)</comment>
+    <value>The author of this document asked that its pages not be reordered, removed or added to.</value>
+    <comment>#800: reworded to the assembly-class row (glossary). MEGAPDF_ERR_RESTRICTED for a page operation (#174, ADR-004)</comment>
+  </data>
+  <data name="ExtractRestricted" xml:space="preserve">
+    <value>The author of this document asked that nothing be copied out of it.</value>
+    <comment>#800: new. Page extraction refused because the copy permission is withheld; the extraction-class row.</comment>
   </data>
   <data name="OtherFileNeedsPassword" xml:space="preserve">
     <value>That PDF needs a password, or it does not allow copying from it.</value>

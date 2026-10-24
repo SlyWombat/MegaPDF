@@ -281,7 +281,7 @@ public sealed partial class DocumentViewModel
             return false;
         if (!Capabilities.CanExtractPages)
         {
-            Status = Strings.ActionRestricted;
+            Status = Strings.ExtractRestricted;
             return false;
         }
         var wanted = pages ?? TargetPages;
@@ -352,7 +352,7 @@ public sealed partial class DocumentViewModel
             return false;
         if (!Capabilities.CanExtractPages)
         {
-            Status = Strings.ActionRestricted;
+            Status = Strings.ExtractRestricted;
             return false;
         }
         var wanted = pages ?? TargetPages;

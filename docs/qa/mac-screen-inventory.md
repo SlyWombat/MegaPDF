@@ -149,7 +149,7 @@ that is by design; note it, don't file it.
 | 7.1 | Open | protected · wrong credential · unreadable · too large · not a valid PDF · error {0} · cancelled · not on the local disk · moved or deleted · cannot be opened for editing from here · unsupported protection |
 | 7.2 | Save | Could not save. · read back failed, original untouched · nowhere to save back to · saved but cannot be shrunk from here |
 | 7.3 | Editing | change could not be made · scanned image · layout guard ×3 · font cannot write those characters · not one of the three faces |
-| 7.4 | Permissions | owner does not allow that · crash recovery is off for protected documents |
+| 7.4 | Permissions | the author asked that it not be changed · crash recovery is off for protected documents |
 | 7.5 | Signatures | could not read that signature · could not read that image · could not save that signature |
 | 7.6 | Shrink | save your changes first · reopen before shrinking · pictures already small · could not shrink |
 | 7.7 | Print | macOS only · could not print · could not load components · components unavailable · path could not be prepared · document could not be prepared · operation could not be created · Sent to the printer. · Printing cancelled. |

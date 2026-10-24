@@ -64,7 +64,7 @@ Check every surface in en, fr-CA and fr-FR, light and dark, at effective widths 
 ## Notices (InfoBars)
 - [ ] **Font notice:** an edit used a substituted font. M
 - [ ] **Scanned-page hint:** the page has no text to edit. M
-- [ ] **Restricted notice** with an Unlock button (the owner doesn't allow changes, #131). M, `encrypted`/restricted fixtures
+- [ ] **Restricted notice** with an Unlock button (the author asked that the document not be changed, #131, #800). M, `encrypted`/restricted fixtures
 - [ ] **Recovery-off notice:** recovery is off for a document opened with a password. M
 - [ ] **Security notice:** password set, changed or removed. M
 - [ ] **Shrink notice:** Smaller copy saved (before and after sizes, Success) or Nothing to shrink (Informational) (#632). R `shrink-notice`

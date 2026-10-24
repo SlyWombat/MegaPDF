@@ -204,8 +204,8 @@
     <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
   </data>
   <data name="RestrictedNoticeBar.Message" xml:space="preserve">
-    <value>El propietario de este documento lo restringió, así que algunas herramientas no están disponibles.</value>
-    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. #131: shown when a document opens without full access</comment>
+    <value>El autor de este documento pidió que no se modifique. Desbloquéalo con la contraseña del propietario para modificarlo.</value>
+    <comment>ES-REVIEW #800 — reworded to the notice row (glossary): the author asked, and the way through is named. Not yet read by the reviewer. #131: shown when a document opens without full access</comment>
   </data>
   <data name="UnlockButton.Content" xml:space="preserve">
     <value>Desbloquear…</value>
@@ -495,8 +495,8 @@
     <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
   </data>
   <data name="UnlockPrompt" xml:space="preserve">
-    <value>El propietario de “{0}” restringió lo que se puede hacer con él. Escribe la contraseña del propietario para usar todas las herramientas.</value>
-    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. {0} is the file name</comment>
+    <value>Escribe la contraseña del propietario para permitir todos los cambios en “{0}”.</value>
+    <comment>ES-REVIEW #800 — reworded to the unlock-dialog body row (glossary), keeping the file name. Not yet read by the reviewer. {0} is the file name</comment>
   </data>
   <data name="UnlockWrong" xml:space="preserve">
     <value>Esa contraseña no desbloqueó el documento. Inténtalo de nuevo.</value>
@@ -741,8 +741,8 @@
     <comment>ES-REVIEW #724 — new, not yet read by the reviewer. #131: a security handler PDFium does not support</comment>
   </data>
   <data name="ErrorRestricted" xml:space="preserve">
-    <value>El propietario del documento no permite esto. Primero desbloquéalo con la contraseña del propietario.</value>
-    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. #131: DocumentRestrictedException</comment>
+    <value>Sin la contraseña del propietario, MegaPDF no puede hacer ese cambio. Primero desbloquea el documento.</value>
+    <comment>ES-REVIEW #800 — DocumentRestrictedException now only means the Password command without full access; glossary 'Without the owner password' row. Not yet read by the reviewer. #131: DocumentRestrictedException</comment>
   </data>
   <data name="ErrorGeneric" xml:space="preserve">
     <value>Algo salió mal.</value>
@@ -1293,8 +1293,8 @@
     <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
   </data>
   <data name="RedactNeedsPermission" xml:space="preserve">
-    <value>Este documento no permite cambios, así que no se puede censurar.</value>
-    <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
+    <value>El autor de este documento pidió que no se modifique su contenido, así que no se puede censurar.</value>
+    <comment>ES-REVIEW #800 — reworded to the editing-class row plus the consequence (glossary). Not yet read by the reviewer.</comment>
   </data>
   <data name="RedactFailed" xml:space="preserve">
     <value>No se pudo terminar la censura y este archivo ya no se puede guardar. Ciérralo y ábrelo de nuevo; no se escribió nada.</value>
@@ -1561,8 +1561,12 @@
     <comment>ES-REVIEW #724 — new, not yet read by the reviewer. The engine refuses the last page (#174); said as the rule it is, with the way round it</comment>
   </data>
   <data name="PageToolsRestricted" xml:space="preserve">
-    <value>Este documento no permite que se cambien sus páginas. La contraseña del propietario lo desbloquearía.</value>
-    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. MEGAPDF_ERR_RESTRICTED for a page operation (#174, ADR-004)</comment>
+    <value>El autor de este documento pidió que no se reordenen, quiten ni agreguen sus páginas.</value>
+    <comment>ES-REVIEW #800 — reworded to the assembly-class row (glossary). Not yet read by the reviewer. MEGAPDF_ERR_RESTRICTED for a page operation (#174, ADR-004)</comment>
+  </data>
+  <data name="ExtractRestricted" xml:space="preserve">
+    <value>El autor de este documento pidió que no se copie nada de él.</value>
+    <comment>ES-REVIEW #800 — new. Page extraction refused because the copy permission is withheld; the extraction-class row. Not yet read by the reviewer.</comment>
   </data>
   <data name="OtherFileNeedsPassword" xml:space="preserve">
     <value>Ese PDF necesita una contraseña o no permite copiar contenido de él.</value>

@@ -296,6 +296,16 @@ internal static partial class Screenshot
             case "shrink-notice":
                 return await CheckShrinkNoticeAsync(window);
 
+            // #800: the sentences a restricted document says, where they land. Needs
+            // owner-only.pdf as the document; the exit code is the test.
+            case "restricted":
+                return await CheckRestrictedAsync(window);
+
+            // #800: the same document's two ContentDialogs, cut with PrintWindow. A capture
+            // rig for a real desktop, not part of CI.
+            case "restricted-dialogs":
+                return await CaptureRestrictedDialogsAsync(window);
+
             default:
                 Console.Error.WriteLine($"unknown --screenshot-state '{state}'");
                 return false;
@@ -1643,7 +1653,7 @@ internal static partial class Screenshot
                       new PageToolException(PageToolFailure.FieldHierarchy, "x")) == Strings.PagesRefusedFormFields);
             Check("  and it is not the generic could-not-edit line",
                   Strings.PagesRefusedFormFields != Strings.CouldNotEditTitle);
-            Check("a restricted document's page tools say the owner password would unlock them",
+            Check("a restricted document's page tools say the author asked (#800)",
                   DocumentViewModel.DescribePageToolFailure(
                       new PageToolException(PageToolFailure.Restricted, "x")) == Strings.PageToolsRestricted);
             Check("and a file that could not be read says so rather than naming an errno",

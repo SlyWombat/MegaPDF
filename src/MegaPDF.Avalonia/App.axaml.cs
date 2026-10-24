@@ -12,6 +12,7 @@ using Avalonia.Platform.Storage;
 using System.Reflection;
 using MegaPDF.Avalonia.ViewModels;
 using MegaPDF.Core.Engine;
+using MegaPDF.Core.Services;
 using MegaPDF.Avalonia.Views;
 
 namespace MegaPDF.Avalonia;
@@ -538,6 +539,59 @@ public partial class App : Application
                     notices.LoadNow();
                     ScreenshotDialog = notices;
                 }, TimeSpan.FromSeconds(1));
+                return true;
+
+            // #800: the restricted-document sentences where they land, on owner-only.pdf
+            // (tools/gen_security_fixtures.sh: every permission withheld). The banner needs no
+            // state: opening the document shows it. Each state below drives the real path that
+            // says one of the other sentences, so a reworded string is seen in the status line
+            // or the dialog it was written for. restricted-redact is the exception: the
+            // redaction refusal is a backstop no gesture reaches (a mark cannot be placed on a
+            // document that withholds modify), so that sentence is put on the status line
+            // directly, to see its length and nothing more.
+            case "restricted-edit":
+            case "restricted-extract":
+            case "restricted-save-security":
+            case "restricted-redact":
+            case "restricted-pages":
+            case "restricted-unlock":
+                if (!viewModel.IsDocumentOpen || !viewModel.IsRestricted)
+                {
+                    Console.Error.WriteLine($"::error::--screenshot-state {state} needs a restricted document (owner-only.pdf).");
+                    return false;
+                }
+                switch (state)
+                {
+                    case "restricted-edit":
+                        // Choosing a signature to place is the gate that says the sentence and
+                        // stays on it; arming Redact is greyed out, and a mark placed past that
+                        // gate is followed by SetMode(Select), whose "Ready." replaces the status.
+                        viewModel.BeginPlacing(new SignatureEntry(Guid.NewGuid(), "restricted", "restricted.png", DateTime.UtcNow));
+                        break;
+                    case "restricted-extract":
+                        await viewModel.ExtractPagesToPathAsync(Path.Combine(Path.GetTempPath(), $"megapdf-restricted-{Guid.NewGuid():N}.pdf"));
+                        break;
+                    case "restricted-save-security":
+                        viewModel.ReportSaveFailure(new DocumentRestrictedException());
+                        break;
+                    case "restricted-redact":
+                        viewModel.Status = Strings.RedactNeedsPermission;
+                        break;
+                    case "restricted-pages":
+                        viewModel.Status = DocumentViewModel.DescribePageToolFailure(
+                            new PageToolException(PageToolFailure.Restricted, "restricted"));
+                        break;
+                    case "restricted-unlock":
+                        DispatcherTimer.RunOnce(() =>
+                        {
+                            var unlock = new PasswordWindow();
+                            unlock.SetUnlockPrompt(viewModel.DocumentName ?? "", retry: false);
+                            unlock.Show(window);
+                            ScreenshotDialog = unlock;
+                        }, TimeSpan.FromSeconds(1));
+                        break;
+                }
+                Console.WriteLine($"screenshot-state {state}: status \"{viewModel.Status}\"");
                 return true;
 
             // The home screen with a recents list (#146 §3). The machine's own list is

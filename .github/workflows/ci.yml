@@ -792,6 +792,9 @@ jobs:
           # Opens selection.pdf, with owner-only.pdf beside it -- both committed fixtures, which
           # gen_test_fixtures.py copies into the fixtures directory.
           Run-Check "select-copy" 60 "$env:RUNNER_TEMP/fixtures/selection.pdf"
+          # #800: a restricted document's banner is open, Extract pages is refused with the
+          # extraction sentence and writes nothing, and each refusal maps to its own sentence.
+          Run-Check "restricted" 60 "$env:RUNNER_TEMP/fixtures/owner-only.pdf"
           Run-Check "about" 45
           # #724: MRT resolves every Latin American Spanish tag to the neutral es folder and
           # Spain to es-ES, asked directly (the dev build's x:Uid labels would not show it).

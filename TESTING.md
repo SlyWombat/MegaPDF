@@ -2967,6 +2967,34 @@ which pins the reused extraction sentence, ran and passed. **Core**: `StringCata
 covering every French term. **Not run**: the Android instrumented tests (kdocker2 has no emulator),
 the iPad UI lane, a phone showing the new strings; hosted CI and the coordinator's re-shoot cover those.
 
+## Desktop wording after #558 (#800), 2026-10-24
+
+What changed: the desktops' advisory-permission strings (Windows `RestrictedNoticeBar.Message`,
+`UnlockPrompt`, `ErrorRestricted`, `RedactNeedsPermission`, `PageToolsRestricted`; Avalonia
+`RestrictedBanner`, `UnlockPrompt`, `ActionRestricted`, `RedactNeedsPermission`,
+`PageToolsRestricted`) now say what the author asked, in the phones' approved glossary rows, in all
+five locales. Two keys were split because one string was doing two jobs: `ExtractRestricted` (new on
+both desktops: Extract pages refused for the copy bit, which used to borrow `PageToolsRestricted` on
+Windows and `ActionRestricted` on Avalonia) and Avalonia's `ErrorRestricted` (the Password command's
+refusal, which used to share `ActionRestricted` with every advisory gate). Not changed on purpose:
+`OtherFileNeedsPassword`, Android `print_pages_restricted`, the Password-command exception strings.
+
+| date | machine | build | what | result |
+|---|---|---|---|---|
+| 2026-10-24 | kdocker3, `megapdf:dotnet` container (PDFium 33 patches), tree rsynced from the worktree | branch `wip/800-desktop-restricted` on `e61e832f` | Core tests, then `StringCatalogueTests` alone | 582/582; catalogue 30/30 (29 + the new `DesktopPermissionStringsSayTheAuthorAskedAndNeverThatTheOwnerForbids`). Fail-first: the same test on the ten catalogues as they were on `origin/main` fails, naming every old string in every locale |
+| 2026-10-24 | kdocker3, same container under Xvfb | same | Linux `tools/build-linux-app.sh`, then the whole `--self-test` | exit 0, 953 PASS, no `[FAIL]`. The macOS binary is this same Avalonia build, not run separately |
+| 2026-10-24 | kdocker3, same | same | `--screenshot --screenshot-state restricted-{edit,extract,save-security,redact,pages,unlock}` (new, capture-only) and the plain banner, on `owner-only.pdf`, in en, fr-CA, fr-FR, es-419, es-ES at 1100x760, 900x600, 800x600, 640x600 (the unlock dialog at 1100 and 800) | 70 + 100 captures, every exit 0. Read: the banner wraps to two lines and the Unlock button stays on screen at 800; the unlock dialog wraps in two lines at its fixed 420 px, nothing clipped; the status line is one trimmed line, and at 800 px the French and Spanish edit notice, the Password-command refusal and the French redaction refusal end in an ellipsis (see the PR) |
+| 2026-10-24 | GPD-DAVE, Release win-x64 unpackaged, built in the worktree with the per-user .NET SDK | same | Windows `--screenshot-state restricted` (new, in CI) on `owner-only.pdf` in en-US, fr-CA, fr-FR, es-419, es-ES | 10 PASS / 0 FAIL in each language. Fail-first: with Extract pages put back on `PageToolsRestricted` the state fails exactly `with the extraction sentence` (9/1) |
+| 2026-10-24 | GPD-DAVE, same | same | Windows `--screenshot-state restricted-dialogs` (new, capture rig, not in CI): the Unlock dialog and the redaction refusal, cut with PrintWindow, in all five languages | all ten dialogs read: both wrap in two lines at the ContentDialog's own width, in fr-CA (the longest) as in the rest; one cosmetic: `owner-only.pdf` breaks at its hyphen in es-ES |
+| 2026-10-24 | GPD-DAVE, same | same | Windows `pages`, `security`, `redact`, `select-copy`, `reading`, `language-es`, `about` | pages 117/0, security 12/0, redact 19/0, select-copy 64/0, about 5/0; reading and language-es exit with no FAIL. The automation launches kept their data under `%TEMP%` and left `%LOCALAPPDATA%\MegaPDF` byte-identical (the #717 guard printed PASS on every run; `Start-QaUserDataWatch` reported unchanged) |
+
+`tools/qa/check-matrix.py --check` clean (the new Windows state is cited by `special-documents`).
+**Not run:** the packaged (MSIX) Windows build, where the XAML labels would follow `--language`
+without the state's compensation (the unpackaged build's `x:Uid` text follows Windows' display
+language, so the state sets the banner's text from the catalogue for the run's language, which is
+what the packaged app does by itself); a real macOS run (same Avalonia binary as Linux, not run on the
+mini); Narrator or VoiceOver reading the new sentences. Not reviewed by Fable.
+
 ## Reporting
 
 For each issue: what you clicked, what you expected, what happened, and the PDF

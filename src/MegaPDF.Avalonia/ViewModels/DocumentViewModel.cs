@@ -3240,7 +3240,7 @@ public sealed partial class DocumentViewModel : ObservableObject, IDisposable
         Status = ex switch
         {
             VerifiedSave.UnreadableOutputException => Strings.SavedDocumentUnreadable,
-            DocumentRestrictedException => Strings.ActionRestricted,
+            DocumentRestrictedException => Strings.ErrorRestricted,
             _ => Strings.WithDetail(Strings.CouldNotSave, ex.Message),
         };
 

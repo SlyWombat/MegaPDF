@@ -161,7 +161,8 @@
     <value>Choisir les applications par défaut</value>
   </data>
   <data name="RestrictedNoticeBar.Message" xml:space="preserve">
-    <value>Le propriétaire de ce document a restreint ce qu'on peut en faire; certains outils ne sont pas disponibles.</value>
+    <value>L'auteur de ce document a demandé qu'il ne soit pas modifié. Déverrouillez-le avec le mot de passe du propriétaire pour le modifier.</value>
+    <comment>FR-REVIEW #800 — reworded to the notice row (glossary): the author asked, and the way through is named. Not yet read by the reviewer.</comment>
   </data>
   <data name="UnlockButton.Content" xml:space="preserve">
     <value>Déverrouiller…</value>
@@ -392,7 +393,8 @@
     <value>Déverrouiller le document</value>
   </data>
   <data name="UnlockPrompt" xml:space="preserve">
-    <value>Le propriétaire de «&#160;{0}&#160;» a restreint ce qu'on peut en faire. Entrez le mot de passe du propriétaire pour utiliser tous les outils.</value>
+    <value>Entrez le mot de passe du propriétaire pour permettre toutes les modifications de «&#160;{0}&#160;».</value>
+    <comment>FR-REVIEW #800 — reworded to the unlock-dialog body row (glossary), keeping the file name. Not yet read by the reviewer.</comment>
   </data>
   <data name="UnlockWrong" xml:space="preserve">
     <value>Ce mot de passe n'a pas déverrouillé le document. Réessayez.</value>
@@ -577,7 +579,8 @@
     <value>Ce PDF utilise un type de protection que MegaPDF ne peut pas ouvrir.</value>
   </data>
   <data name="ErrorRestricted" xml:space="preserve">
-    <value>Le propriétaire du document ne permet pas cette action. Déverrouillez-le d'abord avec le mot de passe du propriétaire.</value>
+    <value>Sans le mot de passe du propriétaire, MegaPDF ne peut pas effectuer cette modification. Déverrouillez d'abord le document.</value>
+    <comment>FR-REVIEW #800 — DocumentRestrictedException now only means the Password command without full access; glossary 'Without the owner password' row. Not yet read by the reviewer.</comment>
   </data>
   <data name="ErrorGeneric" xml:space="preserve">
     <value>Une erreur s'est produite.</value>
@@ -1095,8 +1098,8 @@
     <comment>#173 — new French, for francophone review</comment>
   </data>
   <data name="RedactNeedsPermission" xml:space="preserve">
-    <value>Ce document n'autorise pas les modifications; il ne peut pas être caviardé.</value>
-    <comment>#173 — new French, for francophone review</comment>
+    <value>L'auteur de ce document a demandé que son contenu ne soit pas modifié, alors il ne peut pas être caviardé.</value>
+    <comment>FR-REVIEW #800 — reworded to the editing-class row plus the consequence (glossary). Not yet read by the reviewer.</comment>
   </data>
   <data name="RedactFailed" xml:space="preserve">
     <value>Le caviardage n'a pas pu être terminé et ce fichier ne peut plus être enregistré. Fermez-le et rouvrez-le&#160;: rien n'a été écrit.</value>
@@ -1357,8 +1360,12 @@
     <comment>The engine refuses the last page (#174); said as the rule it is, with the way round it. #174 — new French, for francophone review</comment>
   </data>
   <data name="PageToolsRestricted" xml:space="preserve">
-    <value>Ce document ne permet pas de modifier ses pages. Son mot de passe de propriétaire le déverrouillerait.</value>
-    <comment>MEGAPDF_ERR_RESTRICTED for a page operation (#174, ADR-004). #174 — new French, for francophone review</comment>
+    <value>L'auteur de ce document a demandé que ses pages ne soient pas réordonnées, retirées ni complétées.</value>
+    <comment>FR-REVIEW #800 — reworded to the assembly-class row (glossary). Not yet read by the reviewer. MEGAPDF_ERR_RESTRICTED for a page operation (#174, ADR-004).</comment>
+  </data>
+  <data name="ExtractRestricted" xml:space="preserve">
+    <value>L'auteur de ce document a demandé que rien n'en soit copié.</value>
+    <comment>FR-REVIEW #800 — new. Page extraction refused because the copy permission is withheld; the extraction-class row. Not yet read by the reviewer.</comment>
   </data>
   <data name="OtherFileNeedsPassword" xml:space="preserve">
     <value>Ce PDF exige un mot de passe, ou il n’autorise pas la copie.</value>

@@ -359,7 +359,7 @@ public partial class DocumentViewModel
             return false;
         if (!Capabilities.CanExtractPages)
         {
-            ShowPageToolNotice(Strings.PageToolsRestricted);
+            ShowPageToolNotice(Strings.ExtractRestricted);
             return false;
         }
         var wanted = pages ?? TargetPages;
@@ -446,6 +446,9 @@ public partial class DocumentViewModel
     /// <see cref="PageToolFailure.LastPage"/>, from the same string, so the two cannot drift.
     /// </summary>
     internal void ShowLastPageRefusal() => ShowPageToolNotice(Strings.CannotDeleteLastPage);
+
+    /// <summary>A page-tool refusal, said the way the command would (#800's restricted capture).</summary>
+    internal void ShowPageToolRefusal(PageToolException ex) => ShowPageToolNotice(DescribePageToolFailure(ex));
 
     private void ShowPageToolNotice(string text)
     {

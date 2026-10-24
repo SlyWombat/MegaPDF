@@ -593,7 +593,7 @@ public static partial class Strings
     /// <summary>Set, change or remove the document's password</summary>
     public static string SecurityTooltip => Get("SecurityTooltip");
 
-    /// <summary>The owner of this document restricted it, so some tools are unavailable.</summary>
+    /// <summary>The author of this document asked that it not be changed. Unlock it with the owner password to edit it.</summary>
     public static string RestrictedBanner => Get("RestrictedBanner");
 
     /// <summary>Unlock…</summary>
@@ -605,7 +605,7 @@ public static partial class Strings
     /// <summary>Unlock document</summary>
     public static string UnlockDocument => Get("UnlockDocument");
 
-    /// <summary>The owner of "{0}" restricted what can be done with it. Enter the owner password to use every tool.</summary>
+    /// <summary>Enter the owner password to allow every change to "{0}".</summary>
     public static string UnlockPrompt(object? arg0) => string.Format(CultureInfo.CurrentCulture, Get("UnlockPrompt"), arg0);
 
     /// <summary>That password did not unlock "{0}". Try again?</summary>
@@ -614,8 +614,14 @@ public static partial class Strings
     /// <summary>Unlocked. Every tool is available.</summary>
     public static string DocumentUnlocked => Get("DocumentUnlocked");
 
-    /// <summary>The document's owner does not allow that. Unlock it with the owner password first.</summary>
+    /// <summary>The author of this document asked that it not be changed. Unlock it with the owner password to edit it.</summary>
     public static string ActionRestricted => Get("ActionRestricted");
+
+    /// <summary>Without the owner password, MegaPDF can't make that change. Unlock the document first.</summary>
+    public static string ErrorRestricted => Get("ErrorRestricted");
+
+    /// <summary>The author of this document asked that nothing be copied out of it.</summary>
+    public static string ExtractRestricted => Get("ExtractRestricted");
 
     /// <summary>Crash recovery is off for password-protected documents.</summary>
     public static string RecoveryOffForProtected => Get("RecoveryOffForProtected");
@@ -992,7 +998,7 @@ public static partial class Strings
     /// <summary>MegaPDF couldn't take that content apart safely.</summary>
     public static string RedactRefusedOther => Get("RedactRefusedOther");
 
-    /// <summary>This document doesn't allow changes, so it can't be redacted.</summary>
+    /// <summary>The author of this document asked that its contents not be changed, so it can't be redacted.</summary>
     public static string RedactNeedsPermission => Get("RedactNeedsPermission");
 
     /// <summary>The redaction couldn't be finished, and this file can no longer be saved. Close it and open it again — nothing was written.</summary>
@@ -1190,7 +1196,7 @@ public static partial class Strings
     /// <summary>A PDF has to have at least one page, so this one cannot be deleted. To keep only some pages, use Save Selected Pages As instead.</summary>
     public static string CannotDeleteLastPage => Get("CannotDeleteLastPage");
 
-    /// <summary>This document does not allow its pages to be changed. Its owner password would unlock it.</summary>
+    /// <summary>The author of this document asked that its pages not be reordered, removed or added to.</summary>
     public static string PageToolsRestricted => Get("PageToolsRestricted");
 
     /// <summary>That PDF needs a password, or it does not allow copying from it.</summary>
