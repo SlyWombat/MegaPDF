@@ -158,10 +158,19 @@ if ($Step -in 'all', 'agreement') {
     & "$H\Shot-Checkboxes.ps1" -X 787 -Y1 767 -Y2 819 -Name "03-checkbox"
     & "$H\Open-SignatureFlyout.ps1"
     & "$H\Arm-Signature.ps1" -Notches 0 -X 510 -Y 248
-    & "$H\Place-Signature.ps1" -X 1022 -Y 1460 -Name "04-sign"
+    # Y 1446, not 1460 (#802): the click is the signature's centre, and at 1460 the g of
+    # "MegaWoman" hung its loop down across the "Sign above the line" label under the rule.
+    # 14 px higher the loop ends at the rule and the signature sits above it, which is what
+    # the label asks for. The document is unchanged, so no other coordinate moves.
+    & "$H\Place-Signature.ps1" -X 1022 -Y 1446 -Name "04-sign"
     # Retired from the listing set (#613), still shot, into work\.
     & "$H\Shot-AddText.ps1" -X 1390 -Y 1420 -Text $Date -Name "s-add-text"
-    & "$H\Shot-Redact.ps1" -Lang $Lang -Save -Y1 580 -Y2 616 -Name "07-redact"
+    # The drag starts just before the name. English and French have it at x 850 ("Name:" and
+    # "Nom :" end before that); Spanish's "Nombre:" is longer, so 850 put the start of the mark
+    # through the final "e" of "Nombre" in every Spanish set up to 2.4 (#802). 872 is in the
+    # space before the name.
+    $redactX1 = if ($Lang -in 'es-419', 'es-ES') { 872 } else { 850 }
+    & "$H\Shot-Redact.ps1" -Lang $Lang -Save -X1 $redactX1 -Y1 580 -Y2 616 -Name "07-redact"
 }
 
 # -------------------------------------------- slots 1, 5 and 6: the twelve-page terms
