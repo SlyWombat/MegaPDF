@@ -321,10 +321,14 @@ public partial class MainWindow
         // The focused element is the tab (or something inside it, such as its close button).
         var tab = (TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement() as Visual)
             ?.FindAncestorOfType<TabStripItem>(includeSelf: true);
-        if (tab?.ContextMenu is not { } menu)
+        if (tab?.ContextMenu is null)
             return;
-        menu.Open(tab);
-        e.Handled = true;
+        // The request Avalonia itself raises for the Menu key, so the menu opens exactly as
+        // that does, anchored under the tab. ContextMenu.Open(tab) would put it at the
+        // pointer (measured on GNOME), which is wherever the mouse was left.
+        var request = new ContextRequestedEventArgs();
+        tab.RaiseEvent(request);
+        e.Handled = request.Handled;
     }
 
     // --- Linux: dragging a tab off the strip ---
