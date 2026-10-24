@@ -1436,6 +1436,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
     fun applyScreenshotMode(state: String?) {
         if (state == null) return
         val app = getApplication<Application>()
+        Log.i(SCREENSHOT_TAG, "pose '$state' starting (view model ${System.identityHashCode(this)})")
         seedScreenshotSignatures(app)
         when (state) {
             "home" -> {
@@ -1616,6 +1617,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                                         delay(50)
                                         settle += 50
                                     }
+                                    Log.i(SCREENSHOT_TAG, "redact pose: marking '${line.text}' (blocked=$editingBlocked)")
                                     markForRedaction(0, line.rect)
                                     // The mark lands asynchronously, so this waits for it rather
                                     // than guessing at a delay: this pose is a store capture, and
@@ -1624,8 +1626,38 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                                     // leg placed no mark at all while en and fr-FR did, and the
                                     // shot still reached the artifact between the two.
                                     if (!awaitRedactionMark(3_000)) {
+                                        Log.w(SCREENSHOT_TAG, "redact pose: no mark after 3 s, asking again (blocked=$editingBlocked)")
                                         markForRedaction(0, line.rect)
                                         awaitRedactionMark(3_000)
+                                    }
+                                    // One mark, and the log says how many there were. The
+                                    // redact frames of two runs have had the line's fill darker
+                                    // in one French leg each (fr-CA in 2.2's set, fr-FR in 2.4's,
+                                    // 156/169/181 against 199/206/213 for a single mark: two
+                                    // identical translucent marks stacked), never in en or es. A
+                                    // second mark on the same line is a pose fault, not a
+                                    // feature, so anything past the first is taken off before the
+                                    // shutter and the run says that it did (#802).
+                                    while (editingBlocked && settle < 4_000) {
+                                        delay(50)
+                                        settle += 50
+                                    }
+                                    val onPage = doc.onPageForRedaction(0) { it.redactionMarks() }
+                                    Log.i(
+                                        SCREENSHOT_TAG,
+                                        "redact pose: ${onPage.size} mark(s) on page 1 after the " +
+                                            "settle: ${onPage.map { it.markId }}",
+                                    )
+                                    if (onPage.size > 1) {
+                                        Log.w(
+                                            SCREENSHOT_TAG,
+                                            "redact pose: ${onPage.size} marks stacked on page 1; " +
+                                                "keeping the first, removing ${onPage.drop(1).map { it.markId }}",
+                                        )
+                                        doc.onPageForRedaction(0) { page ->
+                                            onPage.drop(1).forEach { page.removeRedactionMark(it.markId) }
+                                        }
+                                        refreshRedactionMarks()
                                     }
                                     val mark = redactionMarks[0]?.firstOrNull()
                                     if (mark == null) {

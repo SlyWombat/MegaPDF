@@ -37,6 +37,37 @@ adb shell settings put global sysui_demo_allowed 1
 # thrown away with the run.
 adb shell settings put secure immersive_mode_confirmations confirmed
 
+# Gesture navigation, not the three buttons (#802). The emulator image boots with the 3-button
+# bar (back, home, recents) along the bottom, and every Play frame of the 2.2 and 2.4 sets
+# carried it, against runbook item 5, "no navigation buttons". The navigation mode is a
+# SystemUI overlay, and the gestural one is on the image: enabling it exclusively in its
+# category swaps the bar for the thin gesture handle, which is what a phone running Android 10
+# or later shows and what other listings carry. Not a screenshot trick: the app's own bottom bar
+# and insets are laid out for the device's real navigation mode, so the frame is the app on a
+# gesture-navigation phone.
+#
+# Enabled before the status bar is posed (an overlay change restarts the bar's windows), and
+# read back: the overlay list is printed, and a run that did not end up in gesture mode is
+# red, because the images would be the same wrong set as before and nothing else would say so.
+NAVBAR_GESTURAL=com.android.internal.systemui.navbar.gestural
+# Read into a variable, not piped into `grep -q`: with pipefail, grep leaving early can fail the pipeline.
+navbar_overlays() { adb shell cmd overlay list --user 0 2>/dev/null | tr -d '\r' || true; }
+gestural_on() { navbar_overlays | grep -c "^\[x\] $NAVBAR_GESTURAL\$" || true; }
+adb shell cmd overlay enable-exclusive --category "$NAVBAR_GESTURAL" > /dev/null 2>&1 || true
+for _ in $(seq 1 15); do
+    [ "$(gestural_on)" != "0" ] && break
+    adb shell cmd overlay enable --user 0 "$NAVBAR_GESTURAL" > /dev/null 2>&1 || true
+    sleep 2
+done
+echo "--- navigation overlays"
+navbar_overlays | grep -i navbar || true
+echo "navigation_mode: $(adb shell settings get secure navigation_mode 2>/dev/null | tr -d '\r')"
+if [ "$(gestural_on)" = "0" ]; then
+    echo "::error::gesture navigation is not enabled on the emulator; the frames would carry the 3-button bar" >&2
+    exit 1
+fi
+sleep 3
+
 # MEGAPDF_LANG=fr-CA (or fr-FR, es-419, es-ES) switches the app's language through
 # Android 13's per-app locale (#91): the app then loads demo-fr.pdf (fr-CA) or
 # demo-fr-FR.pdf (fr-FR, France's own text since #310) and the French names, and
@@ -129,6 +160,11 @@ for state in reading text-edit sign pages text search redact home; do
     # reaching the gate.
     sleep 2
     adb exec-out screencap -p > "$OUT/android-$state.png"
+    # What the pose said about itself, in the step's own log: info and warnings too, not only
+    # the errors below, because a frame that is wrong without an error (the stacked redact
+    # marks of #802) is explained by what the pose did, and the artifact carries no log.
+    echo "--- pose log: $state"
+    adb logcat -d -s megapdf-screenshot:I 2>/dev/null || true
     if adb logcat -d -s megapdf-screenshot:E 2>/dev/null | grep -q '::error::'; then
         echo "FAILED $state — the pose reported an error:" >&2
         adb logcat -d -s megapdf-screenshot:E | grep '::error::' >&2
