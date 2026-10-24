@@ -208,6 +208,24 @@ jobs:
             -derivedDataPath "$DD" \
             CODE_SIGNING_ALLOWED=NO
 
+      # THE SIMULATOR IS BOOTED BEFORE EACH LANGUAGE PASS (#614, 2026-10-24). The first pass
+      # above puts the app on a device that has never had it. Each pass below installs it OVER
+      # the copy the last one left, and `xcodebuild test-without-building` does that install
+      # while it is still booting the device (it shuts the device down at the end of every
+      # pass). On the Mac mini after its reboot that morning, SpringBoard then refused the
+      # launch for the whole twenty seconds xcodebuild retries for. The simulator's own log:
+      # "Cannot launch application scene ... while it's application is being updated";
+      # xcodebuild's: FBSOpenApplicationServiceErrorDomain Code=1, SBMainWorkspace, Busy
+      # ("Application failed preflight checks"). Measured by hand on one device: app already
+      # installed and the device shut down, 6 passes of 6 refused; the same pass with the
+      # device booted and `bootstatus` finished first, 0 of 5; the first pass on a fresh
+      # device, fine. It is not about Spanish: on one fresh device English passed and French
+      # and Spanish were both refused. With the device booted here, the install is an update
+      # into a running SpringBoard. `ready` leaves it booted, which is where the
+      # next pass and the UI lane want it anyway.
+      - name: Ready the iPhone before the French pass
+        run: bash scripts/ci-simulator.sh ready "$SIM_UDID" "$IPAD_UDID"
+
       # The same suite under the French (Canada) localisation (#91). No test
       # asserts UI text, so this proves the fr-CA catalog compiles and the app
       # launches with it — a broken .xcstrings fails here rather than in review.
@@ -220,6 +238,9 @@ jobs:
             -derivedDataPath "$DD" \
             -testLanguage fr -testRegion CA \
             CODE_SIGNING_ALLOWED=NO
+
+      - name: Ready the iPhone before the Spanish pass
+        run: bash scripts/ci-simulator.sh ready "$SIM_UDID" "$IPAD_UDID"
 
       # And under Spanish (Latin America) (#724): es-MX resolves to the es-419
       # localisation, so this proves the catalogue compiles, that the build holds an

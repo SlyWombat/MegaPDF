@@ -167,6 +167,18 @@ Notes on how it is set up, and why each part is the way it is:
   Agents are not paused for CI and CI is not paused for agents; contention costs
   speed, not correctness. An agent quoting a timing from the Mac says whether
   `pgrep -x Runner.Worker` found a CI job running.
+- **Boot the simulator yourself before an `xcodebuild test-without-building` that follows
+  another pass on the same device (#614, 2026-10-24).** xcodebuild shuts the device down at
+  the end of a pass and, next time, installs the app over the old copy *while it boots the
+  device*. After the 2026-10-24 reboot SpringBoard refused that launch for the full 20 s
+  ("Cannot launch application scene ... while it's application is being updated", surfacing
+  as `SBMainWorkspace ... Busy ("Application failed preflight checks")`): 6 of 6 passes on a
+  device that already had the app, 0 of 5 when the device was booted and `bootstatus` had
+  finished first. `ios-ci.yml` runs `scripts/ci-simulator.sh ready` before the French and
+  Spanish passes for this reason; do the same in any script that runs xcodebuild twice
+  against one simulator. Before the reboot the same sequence passed (every job to
+  2026-10-24 02:27Z), so the reboot changed the timing of the boot against the install; what
+  in the boot changed was not found.
 - **Simulator names: `megapdf-agent-<n>`, never `megapdf-ci-<n>`.** A CI job
   deletes **every** `megapdf-ci-*` simulator when it starts, as leftovers of a
   cancelled job of its own. With an ephemeral runner a CI job rarely overlapped
