@@ -41,7 +41,7 @@ from fix_french_spacing import space_before  # noqa: E402
 # 2.2's check_copy.py has no sync step. The fifth channel, Linux, is an AppStream
 # <release> element rather than a counted field: docs/release-notes/2.2/linux.md holds
 # it, and nothing here reads that file.
-NOTES_VERSION = "2.3"
+NOTES_VERSION = "2.4"
 RELEASE_NOTES = ROOT / "docs/release-notes" / NOTES_VERSION
 
 

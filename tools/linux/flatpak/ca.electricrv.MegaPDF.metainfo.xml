@@ -282,6 +282,20 @@
        tag build is where that is enforced (#254 A3) rather than left to whoever
        remembers. -->
   <releases>
+    <!-- 2.4.0's date is the day the entry was written; make-release-tarball.sh
+         refuses a top entry older than 30 days or in the future, so re-date it to the
+         tag day if the tag comes later. The description is
+         docs/release-notes/2.4/linux.md's, in five paragraphs (English, fr-CA, fr,
+         es, es-ES; Dave, recorded on #724). -->
+    <release version="2.4.0" date="2026-10-24">
+      <description>
+        <p>MegaPDF now speaks Spanish, for Latin America and for Spain. Plus minor bug fixes.</p>
+        <p xml:lang="fr-CA">MegaPDF est maintenant offert en espagnol, pour l'Amérique latine et pour l'Espagne. Et quelques corrections mineures.</p>
+        <p xml:lang="fr">MegaPDF est maintenant offert en espagnol, pour l'Amérique latine et pour l'Espagne. Et quelques corrections mineures.</p>
+        <p xml:lang="es">MegaPDF ahora está disponible en español, para Latinoamérica y para España. Además, correcciones de errores menores.</p>
+        <p xml:lang="es-ES">MegaPDF ahora está disponible en español, para Latinoamérica y para España. Además, correcciones de errores menores.</p>
+      </description>
+    </release>
     <!-- 2.3.0's date is the day the entry was written; make-release-tarball.sh
          refuses a top entry older than 30 days or in the future, so re-date it to the
          tag day if the tag comes later. The description is

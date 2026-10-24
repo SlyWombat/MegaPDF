@@ -188,7 +188,7 @@ def whats_new():
     # The release the notes are taken from, which is not always the release being
     # submitted: a store whose last version is older wants the notes for the version
     # it is going to show. ASC_NOTES_VERSION overrides the default for that case.
-    ver = os.environ.get("ASC_NOTES_VERSION", "2.3")
+    ver = os.environ.get("ASC_NOTES_VERSION", "2.4")
     name = "mac-app-store.md" if PLATFORM == "MAC_OS" else "app-store.md"
     path = os.path.join(ROOT, "docs/release-notes", ver, name)
     if not os.path.exists(path):

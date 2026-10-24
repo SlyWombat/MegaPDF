@@ -115,9 +115,9 @@ Open a PDF from Files, Google Drive, Gmail or any app that hands one over — Me
 MegaPDF is deliberately simple: it doesn't bury you in toolbars. It opens, it fixes, it saves. Done.
 ```
 
-**Release notes** [500] (116) — 2.3, from `docs/release-notes/2.3/google-play.md`
+**Release notes** [500] (82) — 2.4, from `docs/release-notes/2.4/google-play.md`
 ```
-Find now searches scanned pages. MegaPDF reads them on your device, and nothing leaves it. Plus various other fixes.
+MegaPDF now speaks Spanish, for Latin America and for Spain. Plus minor bug fixes.
 ```
 
 ### Français (Canada) — `fr-CA`
@@ -174,9 +174,9 @@ Ouvrez un PDF depuis Fichiers, Google Drive, Gmail ou toute application qui en r
 MegaPDF est volontairement simple : il ne vous noie pas sous les barres d'outils. Il ouvre, il corrige, il enregistre. Terminé.
 ```
 
-**Release notes** [500] (158) — 2.3, from `docs/release-notes/2.3/google-play.md`
+**Release notes** [500] (118) — 2.4, from `docs/release-notes/2.4/google-play.md`
 ```
-La recherche fonctionne maintenant dans les pages numérisées. MegaPDF les lit sur votre appareil; rien n'est envoyé ailleurs. Et plusieurs autres corrections.
+MegaPDF est maintenant offert en espagnol, pour l'Amérique latine et pour l'Espagne. Et quelques corrections mineures.
 ```
 
 ### Français (France) — `fr-FR`
@@ -233,9 +233,9 @@ Ouvrez un PDF depuis Fichiers, Google Drive, Gmail ou toute application qui en r
 MegaPDF est volontairement simple : il ne vous noie pas sous les barres d'outils. Il ouvre, il corrige, il enregistre. Terminé.
 ```
 
-**Release notes** [500] (159) — 2.3, from `docs/release-notes/2.3/google-play.md`
+**Release notes** [500] (118) — 2.4, from `docs/release-notes/2.4/google-play.md`
 ```
-La recherche fonctionne maintenant dans les pages numérisées. MegaPDF les lit sur votre appareil ; rien n'est envoyé ailleurs. Et plusieurs autres corrections.
+MegaPDF est maintenant offert en espagnol, pour l'Amérique latine et pour l'Espagne. Et quelques corrections mineures.
 ```
 
 ### Español (Latinoamérica) — `es-419`
@@ -292,9 +292,9 @@ Abre un PDF desde Archivos, Google Drive, Gmail o cualquier aplicación que te e
 MegaPDF es deliberadamente simple: no te entierra en barras de herramientas. Abre, corrige, guarda. Listo.
 ```
 
-**Release notes** [500] (129) — 2.3, from `docs/release-notes/2.3/google-play.md`
+**Release notes** [500] (116) — 2.4, from `docs/release-notes/2.4/google-play.md`
 ```
-PENDING: the Español (Latinoamérica) release notes are written with docs/release-notes/2.3/google-play.md at release time (#724).
+MegaPDF ahora está disponible en español, para Latinoamérica y para España. Además, correcciones de errores menores.
 ```
 
 ### Español (España) — `es-ES`
@@ -351,9 +351,9 @@ Abre un PDF desde Archivos, Google Drive, Gmail o cualquier aplicación que te e
 MegaPDF es deliberadamente simple: no te entierra en barras de herramientas. Abre, corrige, guarda. Listo.
 ```
 
-**Release notes** [500] (122) — 2.3, from `docs/release-notes/2.3/google-play.md`
+**Release notes** [500] (116) — 2.4, from `docs/release-notes/2.4/google-play.md`
 ```
-PENDING: the Español (España) release notes are written with docs/release-notes/2.3/google-play.md at release time (#724).
+MegaPDF ahora está disponible en español, para Latinoamérica y para España. Además, correcciones de errores menores.
 ```
 
 <!-- /copy-by-language -->
