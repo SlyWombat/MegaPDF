@@ -24,14 +24,17 @@ leaves the 10-inch set on Play exactly as it is, for a release that shot no new 
 <captures> may be `--text-only` instead: the listing text and the release notes
 are set or compared, and the screenshots on Play are left exactly as they are.
 
-<captures> holds {phone,tablet}/{en,fr-CA,fr-FR,es-419,es-ES}/android-<pose>.png; the poses and their
-order are in tools/store_slots.py.
+<captures> holds play/{phone,tablet}/{en,fr-CA,fr-FR,es-419,es-ES}/android-<pose>.png, the layout
+docs/RELEASING.md section 2.4 files a release's captures in (artifacts/store/captures-<ver>/); the older
+flat {phone,tablet}/<lang>/ directly under <captures> is read too. The poses and their order are in
+tools/store_slots.py.
 Key: PLAY_SA_PATH (a file) or PLAY_SA_JSON, as play_submit.py takes it.
 """
 import hashlib
 import os
 import re
 import sys
+import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import play_submit as ps  # noqa: E402
@@ -46,6 +49,7 @@ IMAGE_TYPES = {"phone": "phoneScreenshots", "tablet": "tenInchScreenshots"}
 LIMITS = {"title": 30, "shortDescription": 80, "fullDescription": 4000, "notes": 500}
 CONTACT_WEBSITE = "https://electricrv.ca/megapdf/support/"   # #662: Play shows it under "App support"
 CONTACT_EMAIL = "info@electricrv.ca"
+UPLOAD_TRIES = 4   # one try and three retries when an image upload answers 5xx
 
 
 def copy_by_language():
@@ -76,8 +80,15 @@ def copy_by_language():
     return out
 
 
+def capture_root(captures, device):
+    """Where this device's language folders are: <captures>/play/<device> (the layout
+    docs/RELEASING.md 2.4 files them in) or, as before, <captures>/<device> directly."""
+    nested = os.path.join(captures, "play")
+    return nested if os.path.isdir(os.path.join(nested, device)) else captures
+
+
 def shots(captures, device, folder):
-    files = [os.path.join(captures, device, folder, f)
+    files = [os.path.join(capture_root(captures, device), device, folder, f)
              for f in store_slots.listing_files("play", device)]
     for f in files:
         if not os.path.isfile(f):
@@ -98,8 +109,20 @@ class Edit:
         return ps.api(self.token, method, f"{BASE}/edits/{self.id}{path}", **kw)
 
     def upload(self, path, file):
-        return ps.api(self.token, "POST", f"{UPLOAD}/edits/{self.id}{path}?uploadType=media",
-                      content_type="image/png", raw=open(file, "rb").read())
+        """Upload one image. Play's media endpoint answers 500 now and then for an image
+        that is fine (the 2.4 rehearsal, 2026-10-24: three validate runs in a row stopped
+        on one); the edit is uncommitted until `:commit`, so a retry leaves nothing half done."""
+        data = open(file, "rb").read()
+        for attempt in range(UPLOAD_TRIES):
+            try:
+                return ps.api(self.token, "POST", f"{UPLOAD}/edits/{self.id}{path}?uploadType=media",
+                              content_type="image/png", raw=data)
+            except SystemExit as e:
+                if attempt == UPLOAD_TRIES - 1 or not re.search(r"-> 5\d\d:", str(e)):
+                    raise
+                print(f"  {os.path.basename(file)}: Play answered 5xx; retry {attempt + 1}/{UPLOAD_TRIES - 1}",
+                      file=sys.stderr)
+                time.sleep(5 * (attempt + 1))
 
     def discard(self):
         ps.api(self.token, "DELETE", f"{BASE}/edits/{self.id}")

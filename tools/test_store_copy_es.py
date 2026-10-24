@@ -154,6 +154,62 @@ class Tools(unittest.TestCase):
         finally:
             play_listing.ROOT = old
 
+    def _captures(self, nested):
+        """A captures folder holding one Play phone set per language folder, filed as
+        docs/RELEASING.md 2.4 says (play/phone/<lang>/) or as before (phone/<lang>/)."""
+        import store_slots
+        root = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, root, True)
+        for folder in play_listing.LOCALES.values():
+            d = os.path.join(root, *(["play"] if nested else []), "phone", folder)
+            os.makedirs(d)
+            for name in store_slots.listing_files("play", "phone"):
+                open(os.path.join(d, name), "wb").close()
+        return root
+
+    def test_play_finds_the_captures_in_the_documented_layout(self):
+        for nested in (True, False):
+            root = self._captures(nested)
+            for folder in play_listing.LOCALES.values():
+                with self.subTest(nested=nested, folder=folder):
+                    files = play_listing.shots(root, "phone", folder)
+                    self.assertEqual(len(files), 8)
+                    self.assertTrue(all(os.sep + folder + os.sep in f for f in files))
+
+    def test_play_names_a_missing_capture(self):
+        root = self._captures(True)
+        os.remove(os.path.join(root, "play", "phone", "es-419", "android-reading.png"))
+        with self.assertRaises(SystemExit) as cm:
+            play_listing.shots(root, "phone", "es-419")
+        self.assertIn("android-reading.png", str(cm.exception))
+
+    def test_play_retries_an_image_upload_that_answers_5xx(self):
+        calls = []
+
+        def flaky(*args, **kwargs):
+            calls.append(1)
+            if len(calls) < 3:
+                raise SystemExit("POST /upload/x -> 500: {}")
+            return {"image": "ok"}
+
+        def refused(*args, **kwargs):
+            raise SystemExit("POST /upload/x -> 400: bad")
+
+        shot = os.path.join(self._captures(True), "play", "phone", "en", "android-home.png")
+        edit = play_listing.Edit.__new__(play_listing.Edit)   # no network: skip __init__
+        edit.token, edit.id = "-", "e"
+        old_api, old_sleep = play_listing.ps.api, play_listing.time.sleep
+        play_listing.time.sleep = lambda s: None
+        try:
+            play_listing.ps.api = flaky
+            self.assertEqual(edit.upload("/listings/en/phoneScreenshots", shot), {"image": "ok"})
+            self.assertEqual(len(calls), 3)
+            play_listing.ps.api = refused        # a 4xx is a real refusal: no retry
+            with self.assertRaises(SystemExit):
+                edit.upload("/listings/en/phoneScreenshots", shot)
+        finally:
+            play_listing.ps.api, play_listing.time.sleep = old_api, old_sleep
+
 
 class Metainfo(unittest.TestCase):
     XML_LANG = "{http://www.w3.org/XML/1998/namespace}lang"
