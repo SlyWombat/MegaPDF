@@ -2865,6 +2865,18 @@ and unmilestoned: #770, #771, #773, #776.
 | 2026-10-22 | Mac mini, VoiceOver | same | item 6: Move Tab to New Window with real clicks | `MegaPDF, has new, window` |
 | 2026-10-22 | Mac mini, VoiceOver | same | item 6: real drag of a tab out | `Now in, forms.pdf — MegaPDF, window, Open, button, group` |
 
+### #773: Shift+F10 on a focused document tab, Linux (PR #798)
+
+| date | machine | build | what | result |
+|---|---|---|---|---|
+| 2026-10-24 | kdocker3, `megapdf:dotnet` container under Xvfb | `e1ae212` | whole Linux `--self-test`, with `CheckMoveTabToNewWindow` now sending real key events (Shift+F10, Menu key, F10 alone, Shift+F10 with focus on a toolbar button) | exit 0, no `[FAIL]`. Fail-first: handler line disabled gives exactly one `[FAIL]`, "Shift+F10 on the focused tab opens its context menu"; the Menu-key check still passes |
+| 2026-10-24 | kdocker3, same | `452d56c` | same, after changing to the Menu key's own ContextRequested event | exit 0, no `[FAIL]` |
+| 2026-10-24 | slymega (ThinkPad X250, Ubuntu 26.04, GNOME 50 Wayland + Xwayland, 1366x768), `/dev/uinput` keyboard and absolute pointer | `e1ae212`, `MegaPDF-linux-x64` from the PR's CI run | two documents open, tab clicked, pointer parked at (900,600), Shift+F10 | menu opened, but at the pointer (900,600) not under the tab: `ContextMenu.Open(tab)` places at the pointer. The Menu key put it under the tab (386,252). Fixed in `452d56c` |
+| 2026-10-24 | slymega, same | `452d56c`, `MegaPDF-linux-x64` from CI run 40103895894 | Shift+F10 on the focused tab, three times on each of the two tabs, pointer parked at (900,600) | 6 of 6 opened one popup, 109x20, "Move Tab to New Window", at (386,252) for the first tab and (473,252) for the second, under the tab and identical to the Menu key |
+| 2026-10-24 | slymega, same | `452d56c` | the other keys: Menu key (2 runs, plus once after clicking the page), right-click each tab, F10 alone, Shift alone, Shift+F10 after clicking a toolbar zoom button | Menu key opens under the tab each time; right-click opens at the pointer (433,239) and (526,239); F10 alone and Shift alone open nothing; with a toolbar button focused, neither Shift+F10 nor the Menu key opens anything. Clicking the page does not take focus off the tab, so Shift+F10 still opens the tab menu there, as the Menu key does |
+
+Not measured: KDE or Xorg, a Wayland-native Avalonia window (the app uses its X11 backend under Xwayland), the Mac (no change there: the handler is registered on Linux only), activating the menu item from the keyboard after Shift+F10.
+
 ### #614: hosted iOS CI beside the standing runner
 
 See tools/mac-mini.md, "The standing runner against hosted". Three dispatched hosted runs
