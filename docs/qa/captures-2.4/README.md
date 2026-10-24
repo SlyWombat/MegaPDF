@@ -90,11 +90,12 @@ by the coordinator per store group (Spanish play, Windows and iOS/Mac), and foun
   frames still read "2 selected", were re-shot as a control and came out identical to the filed ones apart
   from rendering noise (3-5 on a 0-765 channel-sum scale), so they were not replaced, and no other iOS
   frame shows the string (it exists in one place, `PagesView.swift`; OCR of all 90 filed images finds it only
-  in the 10 pages frames). **The iPad date cell of the four new iPad frames was spliced in from the filed
-  frame of the same slot**: the simulator draws "Sat Oct 24" on 2026-10-24 and `simctl status_bar
-  override --time` does not move it, so the date cell (a 172 x 52 px rectangle at the top left) is the
-  filed "Fri Oct 23" from the same slot's previous image, and the 41 other iPad frames still agree with it.
-  Details and every check in `apple-READING.md` ("Re-shoot of the pages frames").
+  in the 10 pages frames). **The four new iPad frames are pure captures and show "Sat Oct 24"**: the simulator draws the host's date and
+  `simctl status_bar override --time` does not move it, so the four iPad `pages` frames in fr-CA, fr, es-419 and es
+  read "Sat Oct 24" in the status bar while the other 41 iPad frames read "Fri Oct 23". Dave's decision B
+  (2026-10-24): the dates need not match. These four were first filed with the date cell pasted in from the old
+  frames; they were re-shot (rig unmodified, `pages` state only) and replaced with the frames exactly as the rig
+  wrote them, no pixels edited (Refs #800). Details and every check in `apple-READING.md` ("Re-shoot of the pages frames").
 
 - Android, pages view: the Spanish selection title read "Seleccionadas:" over "2" on two lines in es-419 and
   es-ES. The string is now "Selección: %1$d" (es-419 hand-written, es-ES derived; `ES-REVIEW #724`, Fable has not
@@ -165,5 +166,5 @@ stale from before the one-row toolbar and are corrected in `tools/screenshots-wi
   not strictly back to back; the ten `04-sign` and `07-redact` files were then re-shot on 2026-10-24
   (#802) in one run per language, from the package named above rather than the 2.3.0.0 CI package
   of 2026-10-23. Not exercised by hand: clicking the remove chip (the `redact` and `sign` Windows
-  self-test states pass locally and drive that route in code, 19 and 12 checks). The five iPad sets were: 19:20 to 19:56 EDT, all showing the same date.
+  self-test states pass locally and drive that route in code, 19 and 12 checks). The five iPad sets were: 19:20 to 19:56 EDT, all showing the same date, except the four `pages` frames re-shot on 2026-10-24 (see below).
 - `website/megapdf/screenshots/linux/` is not updated.

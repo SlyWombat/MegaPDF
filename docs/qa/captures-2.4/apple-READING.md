@@ -15,7 +15,7 @@ Mac App Store (7 slots x 5 languages = 35) and App Store iPhone 6.9" + iPad 13" 
 
 ## The iPad same-day check
 
-The iPad date is drawn by the simulator and cannot be posed. All 45 iPad images read **"Fri Oct 23"** (in the four re-shot `pages` frames the date cell is spliced; see "Re-shoot of the pages frames") (checked by eye on every one; the gate's status-bar sibling check agrees: no `chrome`/`siblings` flag on any iPad image in any language). File times on the mini: first iPad image 19:26:14 (en pages), last 19:55:23 (es home).
+The iPad date is drawn by the simulator and cannot be posed. 41 of the 45 iPad images read **"Fri Oct 23"**; the four `pages` frames re-shot on 2026-10-24 (fr-CA, fr, es-419, es) read **"Sat Oct 24"**, Dave's decision B (2026-10-24: the dates need not match; see "Re-shoot of the pages frames"). Checked by eye on every one. The gate's status-bar sibling check agreed for the 41 and flags exactly those four, as expected (below). File times on the mini: first iPad image 19:26:14 (en pages), last 19:55:23 (es home).
 
 ## Re-shoot of the pages frames (2026-10-24, #800, #801)
 
@@ -50,21 +50,26 @@ pixels):
 **Status bar.** iPhone: "9:41", signal, wifi and battery are pixel-identical to the filed frames of other slots
 with the same background (sign: 0 differing pixels in the clock and icon boxes) in all four languages. iPad:
 "9:41 AM" and the icons are identical to the filed search, redact and reading frames (0 differing pixels in
-the boxes), and the date is spliced, as follows.
+the boxes), and the date reads "Sat Oct 24", as follows.
 
-**The iPad date, and the splice.** The date on the iPad's status bar is drawn by the simulator from the
-host's clock. Today is Sat Oct 24, so the new raw iPad frames read **"Sat Oct 24"** against "Fri Oct 23"
-on the other 41 filed iPad frames. `simctl status_bar override --time` accepts an ISO date (it needs
-fractional seconds and an offset, `2026-10-23T09:41:00.000-04:00`) and changes the clock text, but I measured
-that it does not move the date (tried 2026-10-23 and 2007-01-09; the date still read Sat Oct 24), and the
-host's clock and timezone cannot be moved on a machine that is also CI's. So that the iPad set keeps one
-date, **in each of the four new iPad frames I copied the date cell, a 172 x 52 px rectangle at x 160, y 6,
-from the filed frame of the same slot and language over the new frame** (PIL paste; the background in the
-rectangle is the same flat toolbar colour in both). I checked that before the paste the two frames differ in
-that rectangle only in the date glyphs (1,798 pixels, one cluster), and after it the only differences
-left are the footer title and the noise above. These four iPad files are therefore not pure captures. If Dave
-would rather file the unspliced frames with "Sat Oct 24" (or re-shoot the whole iPad set on one day), say so;
-the raw frames are not kept in the repo.
+**The iPad date.** The date on the iPad's status bar is drawn by the simulator from the
+host's clock. The four iPad `pages` frames in fr-CA, fr, es-419 and es read **"Sat Oct 24"** (read by eye in
+each, at full size and in a crop of the status bar), against "Fri Oct 23" on the other 41 filed iPad frames.
+`simctl status_bar override --time` accepts an ISO date (it needs fractional seconds and an offset,
+`2026-10-23T09:41:00.000-04:00`) and changes the clock text, but I measured that it does not move the date
+(tried 2026-10-23 and 2007-01-09; the date still read Sat Oct 24), and the host's clock and timezone cannot be
+moved on a machine that is also CI's. Dave decided (2026-10-24, option B) that the dates need not match.
+
+The first re-shoot (PR #811) pasted the old date cell into these four frames; that was replaced the same
+day. The four files are now **pure captures, exactly as `tools/ios-screenshots.sh` wrote them**: shot on the
+Mac mini on 2026-10-24 17:00-17:04 EDT from `e61e832f` (main after #811), one simulator of my own (iPad Pro
+13-inch M5, iOS 26.5, 9:41 override, light appearance, fresh install, full-screen-apps setup run by the
+script), the script restricted in the clone to the iPad device and the `pages` state and nothing else (device
+regex and state list only). Each launch reported "6 pages, 2 selected". The simulator was deleted afterwards.
+Against the spliced frames they replace, the four differ in the date cell only (1,769 pixels above 5 on the
+765 scale, all inside the 172 x 52 px cell at x 160, y 6) plus 29 to 61 pixels of at most 5 elsewhere (noise);
+the footer title ("Sélection : 2" / "Selección: 2"), the page tiles, the document and the "9:41 AM" clock are
+identical to the spliced frames, hence pixel-identical in content to what #811 reviewed.
 
 **Each new frame, read at full size** (Read tool, all eight; the two English control frames were compared by
 pixels and not displayed):
@@ -72,13 +77,13 @@ pixels and not displayed):
 | Language | Device | Footer now reads | Other checks |
 |---|---|---|---|
 | fr-CA | iPhone | `Sélection : 2` | no clipping; 2 tiles ticked; space before the colon is the narrow gap of a no-break space; tab title "Contrat de loc..." as before |
-| fr-CA | iPad | `Sélection : 2` | date "Fri Oct 23" (spliced); hint over tiles 3/4 as before (#794) |
+| fr-CA | iPad | `Sélection : 2` | date "Sat Oct 24"; hint over tiles 3/4 as before (#794) |
 | fr | iPhone | `Sélection : 2` | same; body text is the France set ("enlèvement", "week-end") |
-| fr | iPad | `Sélection : 2` | date as above; hint |
+| fr | iPad | `Sélection : 2` | date "Sat Oct 24"; hint |
 | es-419 | iPhone | `Selección: 2` | no space before the colon, as Spanish wants; no clipping |
-| es-419 | iPad | `Selección: 2` | date as above; hint "Mantén presionada una página para moverla" runs past the sidebar's left edge (the old frame's too) |
+| es-419 | iPad | `Selección: 2` | date "Sat Oct 24"; hint "Mantén presionada una página para moverla" runs past the sidebar's left edge (the old frame's too) |
 | es | iPhone | `Selección: 2` | no clipping; "Contrato de alquil..." as before |
-| es | iPad | `Selección: 2` | date as above; hint "Mantén pulsada una página para moverla" |
+| es | iPad | `Selección: 2` | date "Sat Oct 24"; hint "Mantén pulsada una página para moverla" |
 
 The iPad hint "Hold a page to move it" (#794, not fixed) is still the only defect in the iPad frames, as
 before. Nobody who reads French or Spanish natively has looked at the new titles; the colon spacing was
@@ -90,7 +95,16 @@ before too; iPad and iPhone `text`, "Sofía Ramírez": the OCR cannot read Spani
 (`text`, "Lucía Fernández", the same OCR caveat). That is identical to the earlier run. Against the filed 2.4
 set: en 0 flagged and no difference; the iPhone `pages` frames of fr-CA, fr-FR, es-419 and es-ES read
 "certified" at 0.10-0.11 % of pixels differing (the title, which is what was meant); the iPad `pages` frames did
-not trip the threshold; no `chrome` or `siblings` flag on any image.
+not trip the threshold; no `chrome` or `siblings` flag on any image (that run was on the spliced frames).
+
+**Gate, rerun on the pure frames** (whole 2.4 iOS set, `--only /listing`, 9 min 37 s; OCR eng+fra). Exactly
+one new kind of flag, as expected: the four iPad `pages` frames (fr-CA, fr-FR, es-419, es-ES) each carry
+`chrome: the status bar differs from en's by 36.7 % of its ink` and `...from the rest of the set by 36.7 %`.
+That is the "Sat Oct 24" against "Fri Oct 23" of the other iPad frames, accepted under Dave's decision B. The
+36.7 % is the date glyphs against the rest of the bar's ink; the clock and icons were not flagged. Everything
+else is as before: es-419 iPad `pages` clipping (the document text behind the sidebar, flagged before too), and
+the Spanish `text` frames, where the OCR drops the accents of "Sofía Ramírez" / "Lucía Fernández" (whole by eye,
+false positives). fr-CA and fr-FR: only the date flag, 1 image each; en: nothing.
 
 ## Gate results
 
@@ -221,7 +235,7 @@ For reference the **2.2 sets** (`docs/qa/captures-2.2/macos-screenshots`) pass t
 
 ## App Store iPad 13", 2064x2752 (45)
 
-Slot order is the iPad's own (pages, reading, text-edit, sign, draw, text, search, redact, home). Every status bar reads 9:41 AM and "Fri Oct 23".
+Slot order is the iPad's own (pages, reading, text-edit, sign, draw, text, search, redact, home). Every status bar reads 9:41 AM; all read "Fri Oct 23" except the four re-shot `pages` frames (fr-CA, fr, es-419, es), which read "Sat Oct 24".
 
 | Language | Slot | File | In the frame | Verdict |
 |---|---|---|---|---|
@@ -234,7 +248,7 @@ Slot order is the iPad's own (pages, reading, text-edit, sign, draw, text, searc
 | en | 7 | `ios-screenshots/en/listing/ipad-13-search.png` | Find bar under the toolbar with "rental", "1 of 3", first hit selected, Search toggled on. | OK |
 | en | 8 | `ios-screenshots/en/listing/ipad-13-redact.png` | First line marked: box, handles, remove mark; Undo live, Save enabled. | OK |
 | en | 9 | `ios-screenshots/en/listing/ipad-13-home.png` | Home with three recents ("Rental Agreement.pdf" first; "On My iPad" location), status bar with the date. | OK |
-| fr-CA | 1 | `ios-screenshots/fr-CA/listing/ipad-13-pages.png` | Pages sidebar on the left (6 tiles, 2 ticked, footer "Sélection : 2"), document at the right, iPad toolbar with Pages toggled on. Re-shot 2026-10-24 (#800/#801); date cell spliced from the filed frame. Faint white hint "Hold a page to move it" (localised) sits across the tiles at mid-sidebar, and the document text runs off the right edge behind the sidebar; both are the same in the 2.2 shot. | OK, with a note (see Findings 3) |
+| fr-CA | 1 | `ios-screenshots/fr-CA/listing/ipad-13-pages.png` | Pages sidebar on the left (6 tiles, 2 ticked, footer "Sélection : 2"), document at the right, iPad toolbar with Pages toggled on. Re-shot 2026-10-24 (#800/#801), a pure capture; date reads "Sat Oct 24", not "Fri Oct 23" like the other iPad frames (Dave, decision B). Faint white hint "Hold a page to move it" (localised) sits across the tiles at mid-sidebar, and the document text runs off the right edge behind the sidebar; both are the same in the 2.2 shot. | OK, with a note (see Findings 3) |
 | fr-CA | 2 | `ios-screenshots/fr-CA/listing/ipad-13-reading.png` | Reading mode on the iPad: page 1, bar pinned at the bottom ("1/6" … "Sortir"), status bar with the date. | OK |
 | fr-CA | 3 | `ios-screenshots/fr-CA/listing/ipad-13-text-edit.png` | Edit-text popover on the heading, caret in the field, docked hardware-style keyboard below; toolbar visible behind. | OK, with a note (see Findings 4) |
 | fr-CA | 4 | `ios-screenshots/fr-CA/listing/ipad-13-sign.png` | Signatures popover from the toolbar's Sign button, one card "Mega W.", add buttons in the set's language. | OK |
@@ -243,7 +257,7 @@ Slot order is the iPad's own (pages, reading, text-edit, sign, draw, text, searc
 | fr-CA | 7 | `ios-screenshots/fr-CA/listing/ipad-13-search.png` | Find bar under the toolbar with "location", "1 sur 3", first hit selected, Search toggled on. | OK |
 | fr-CA | 8 | `ios-screenshots/fr-CA/listing/ipad-13-redact.png` | First line marked: box, handles, remove mark; Undo live, Save enabled. | OK |
 | fr-CA | 9 | `ios-screenshots/fr-CA/listing/ipad-13-home.png` | Home with three recents ("Contrat de location.pdf" first; "On My iPad" location), status bar with the date. | OK |
-| fr (France) | 1 | `ios-screenshots/fr/listing/ipad-13-pages.png` | Pages sidebar on the left (6 tiles, 2 ticked, footer "Sélection : 2"), document at the right, iPad toolbar with Pages toggled on. Re-shot 2026-10-24 (#800/#801); date cell spliced from the filed frame. Faint white hint "Hold a page to move it" (localised) sits across the tiles at mid-sidebar, and the document text runs off the right edge behind the sidebar; both are the same in the 2.2 shot. | OK, with a note (see Findings 3) |
+| fr (France) | 1 | `ios-screenshots/fr/listing/ipad-13-pages.png` | Pages sidebar on the left (6 tiles, 2 ticked, footer "Sélection : 2"), document at the right, iPad toolbar with Pages toggled on. Re-shot 2026-10-24 (#800/#801), a pure capture; date reads "Sat Oct 24", not "Fri Oct 23" like the other iPad frames (Dave, decision B). Faint white hint "Hold a page to move it" (localised) sits across the tiles at mid-sidebar, and the document text runs off the right edge behind the sidebar; both are the same in the 2.2 shot. | OK, with a note (see Findings 3) |
 | fr (France) | 2 | `ios-screenshots/fr/listing/ipad-13-reading.png` | Reading mode on the iPad: page 1, bar pinned at the bottom ("1/6" … "Sortir"), status bar with the date. | OK |
 | fr (France) | 3 | `ios-screenshots/fr/listing/ipad-13-text-edit.png` | Edit-text popover on the heading, caret in the field, docked hardware-style keyboard below; toolbar visible behind. | OK, with a note (see Findings 4) |
 | fr (France) | 4 | `ios-screenshots/fr/listing/ipad-13-sign.png` | Signatures popover from the toolbar's Sign button, one card "Mega W.", add buttons in the set's language. | OK |
@@ -252,7 +266,7 @@ Slot order is the iPad's own (pages, reading, text-edit, sign, draw, text, searc
 | fr (France) | 7 | `ios-screenshots/fr/listing/ipad-13-search.png` | Find bar under the toolbar with "location", "1 sur 3", first hit selected, Search toggled on. | OK |
 | fr (France) | 8 | `ios-screenshots/fr/listing/ipad-13-redact.png` | First line marked: box, handles, remove mark; Undo live, Save enabled. | OK |
 | fr (France) | 9 | `ios-screenshots/fr/listing/ipad-13-home.png` | Home with three recents ("Contrat de location.pdf" first; "On My iPad" location), status bar with the date. | OK |
-| es-419 | 1 | `ios-screenshots/es-419/listing/ipad-13-pages.png` | Pages sidebar on the left (6 tiles, 2 ticked, footer "Selección: 2"), document at the right, iPad toolbar with Pages toggled on. Re-shot 2026-10-24 (#800/#801); date cell spliced from the filed frame. Faint white hint "Hold a page to move it" (localised) sits across the tiles at mid-sidebar, and the document text runs off the right edge behind the sidebar; both are the same in the 2.2 shot. | OK, with a note (see Findings 3) |
+| es-419 | 1 | `ios-screenshots/es-419/listing/ipad-13-pages.png` | Pages sidebar on the left (6 tiles, 2 ticked, footer "Selección: 2"), document at the right, iPad toolbar with Pages toggled on. Re-shot 2026-10-24 (#800/#801), a pure capture; date reads "Sat Oct 24", not "Fri Oct 23" like the other iPad frames (Dave, decision B). Faint white hint "Hold a page to move it" (localised) sits across the tiles at mid-sidebar, and the document text runs off the right edge behind the sidebar; both are the same in the 2.2 shot. | OK, with a note (see Findings 3) |
 | es-419 | 2 | `ios-screenshots/es-419/listing/ipad-13-reading.png` | Reading mode on the iPad: page 1, bar pinned at the bottom ("1/6" … "Salir"), status bar with the date. | OK |
 | es-419 | 3 | `ios-screenshots/es-419/listing/ipad-13-text-edit.png` | Edit-text popover on the heading, caret in the field, docked hardware-style keyboard below; toolbar visible behind. | OK, with a note (see Findings 4) |
 | es-419 | 4 | `ios-screenshots/es-419/listing/ipad-13-sign.png` | Signatures popover from the toolbar's Sign button, one card "Mega W.", add buttons in the set's language. | OK |
@@ -261,7 +275,7 @@ Slot order is the iPad's own (pages, reading, text-edit, sign, draw, text, searc
 | es-419 | 7 | `ios-screenshots/es-419/listing/ipad-13-search.png` | Find bar under the toolbar with "arrendamiento", "1 de 3", first hit selected, Search toggled on. | OK |
 | es-419 | 8 | `ios-screenshots/es-419/listing/ipad-13-redact.png` | First line marked: box, handles, remove mark; Undo live, Save enabled. | OK |
 | es-419 | 9 | `ios-screenshots/es-419/listing/ipad-13-home.png` | Home with three recents ("Contrato de arrendamiento.pdf" first; "On My iPad" location), status bar with the date. | OK |
-| es (Spain) | 1 | `ios-screenshots/es/listing/ipad-13-pages.png` | Pages sidebar on the left (6 tiles, 2 ticked, footer "Selección: 2"), document at the right, iPad toolbar with Pages toggled on. Re-shot 2026-10-24 (#800/#801); date cell spliced from the filed frame. Faint white hint "Hold a page to move it" (localised) sits across the tiles at mid-sidebar, and the document text runs off the right edge behind the sidebar; both are the same in the 2.2 shot. | OK, with a note (see Findings 3) |
+| es (Spain) | 1 | `ios-screenshots/es/listing/ipad-13-pages.png` | Pages sidebar on the left (6 tiles, 2 ticked, footer "Selección: 2"), document at the right, iPad toolbar with Pages toggled on. Re-shot 2026-10-24 (#800/#801), a pure capture; date reads "Sat Oct 24", not "Fri Oct 23" like the other iPad frames (Dave, decision B). Faint white hint "Hold a page to move it" (localised) sits across the tiles at mid-sidebar, and the document text runs off the right edge behind the sidebar; both are the same in the 2.2 shot. | OK, with a note (see Findings 3) |
 | es (Spain) | 2 | `ios-screenshots/es/listing/ipad-13-reading.png` | Reading mode on the iPad: page 1, bar pinned at the bottom ("1/6" … "Salir"), status bar with the date. | OK |
 | es (Spain) | 3 | `ios-screenshots/es/listing/ipad-13-text-edit.png` | Edit-text popover on the heading, caret in the field, docked hardware-style keyboard below; toolbar visible behind. | OK, with a note (see Findings 4) |
 | es (Spain) | 4 | `ios-screenshots/es/listing/ipad-13-sign.png` | Signatures popover from the toolbar's Sign button, one card "Mega W.", add buttons in the set's language. | OK |
