@@ -77,6 +77,8 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.geometry.Size
 import com.megapdf.android.ui.Brand
 import androidx.compose.ui.graphics.asImageBitmap
@@ -815,6 +817,8 @@ fun ViewerScreen(
     // #145: Stop for a cancellable sweep (search) rides a Snackbar rather than a button in the
     // strip — see [BusyStopSnackbar] for why.
     val snackbarHostState = remember { SnackbarHostState() }
+    // Where the pages are, between the title bar and the system bars, in window pixels (#803).
+    var contentBounds by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
     if (busy != null) BusyStopSnackbar(busy.document, snackbarHostState)
 
     Scaffold(
@@ -1118,6 +1122,8 @@ fun ViewerScreen(
             Modifier
                 .fillMaxSize()
                 .padding(padding)
+                // The content area, in the window: what the Copy pill is kept inside (#803).
+                .onGloballyPositioned { contentBounds = it.boundsInRoot() }
                 // The wall the pages sit on follows the page colours (#513): a mid-grey
                 // gutter around a night-mode page is brighter than the page itself.
                 .background(Brand.backdrop(pageTint))
@@ -1572,6 +1578,7 @@ fun ViewerScreen(
                                     canCopy = textSelectionHost.canCopy,
                                     onChange = textSelectionHost.onChange,
                                     onCopy = textSelectionHost.onCopy,
+                                    viewport = contentBounds,
                                 )
                             }
                         }

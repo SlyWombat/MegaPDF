@@ -34,6 +34,14 @@ data class RecentEntry(
      * and wrong for a word of ours.
      */
     val authority: String? = null,
+    /**
+     * What the document is, apart from the URI it arrived under (#803): its size and last-modified
+     * time as the provider reported them, "size:modified", or null when the provider would not say
+     * both. The picker reaches one file through several providers (by folder, by kind, by
+     * Downloads) and each hands back a different URI, so the URI alone lists one file twice.
+     * Null for an entry stored before this existed, which the default migrates.
+     */
+    val identity: String? = null,
 )
 
 /** A recent entry and whether it can still be opened (#165). */
@@ -52,10 +60,23 @@ class RecentFilesStore(private val file: File, private val maxEntries: Int = 10)
         }
     }
 
-    /** Adds or refreshes [entry]; most recent first, deduped by URI, capped. */
-    fun add(entry: RecentEntry): List<RecentEntry> {
-        val updated = (listOf(entry) + load().filterNot { it.uri == entry.uri })
-            .take(maxEntries)
+    /**
+     * Adds or refreshes [entry]; most recent first, one row per document, capped.
+     *
+     * A document is the same document when its URI is the same, or when its name and
+     * [RecentEntry.identity] are (#803): the picker reaches one file through several providers
+     * and each hands back its own URI. An entry stored before identities existed has none, so
+     * where the name matches it is asked once through [identityOf] (a provider query, the caller's
+     * to make); an answer that is null or different keeps it.
+     */
+    fun add(entry: RecentEntry, identityOf: (RecentEntry) -> String? = { null }): List<RecentEntry> {
+        val identity = entry.identity
+        fun sameDocument(other: RecentEntry): Boolean = when {
+            other.uri == entry.uri -> true
+            identity == null || other.displayName != entry.displayName -> false
+            else -> (other.identity ?: identityOf(other)) == identity
+        }
+        val updated = (listOf(entry) + load().filterNot(::sameDocument)).take(maxEntries)
         write(updated)
         return updated
     }

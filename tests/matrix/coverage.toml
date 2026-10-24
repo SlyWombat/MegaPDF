@@ -650,8 +650,10 @@ tests = [
   "android/app/src/androidTest/java/com/megapdf/android/TextSelectCopyTest.kt::class",
   "android/engine/src/androidTest/java/com/megapdf/engine/TextSelectionEngineTest.kt::class",
   "android/app/src/test/java/com/megapdf/android/TextSelectionTest.kt::class",
+  "android/app/src/test/java/com/megapdf/android/ToolbarAnchorTest.kt::class",
+  "android/app/src/androidTest/java/com/megapdf/android/TextSelectionToolbarTest.kt::class",
 ]
-note = "#710: long-press on page text selects the word (it was unused on the page); the highlight is LocalTextSelectionColors, the two handles are drawn and dragged in Compose, and Copy is the system's floating text toolbar (LocalTextToolbar), which a Compose test cannot see, so TextSelectCopyTest calls ViewerViewModel.copySelectedText, the toolbar's own callback, and reads the real clipboard back. One page only: a handle stops at the page's last character. A tap with a selection only releases it. Copy follows DocumentCapabilities.canCopyText (the copy permission); a document that forbids it still selects. Reading mode is a tint of the same page, so it selects there too and has no reflowed text to wrap in a SelectionContainer."
+note = "#710: long-press on page text selects the word (it was unused on the page); the highlight is LocalTextSelectionColors, the two handles are drawn and dragged in Compose, and Copy is the system's floating text toolbar (LocalTextToolbar), which a Compose test cannot see, so TextSelectCopyTest calls ViewerViewModel.copySelectedText, the toolbar's own callback, and reads the real clipboard back. One page only: a handle stops at the page's last character. A tap with a selection only releases it. The Copy pill follows the selection but is kept inside the content area (#803): toolbarAnchor cuts its box to the area between the title bar and the system bars and holds its top a pill-height below the area's top, and a selection scrolled wholly out has none; ToolbarAnchorTest holds the rule and TextSelectionToolbarTest hosts the real overlay with a recording toolbar and moves the page under it. Copy follows DocumentCapabilities.canCopyText (the copy permission); a document that forbids it still selects. Reading mode is a tint of the same page, so it selects there too and has no reflowed text to wrap in a SelectionContainer."
 
 [[feature]]
 id = "reading-mode"

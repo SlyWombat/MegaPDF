@@ -41,6 +41,9 @@ import kotlin.math.roundToInt
 internal const val SELECTION_START_HANDLE_TAG = "selection-start-handle"
 internal const val SELECTION_END_HANDLE_TAG = "selection-end-handle"
 
+/** The room the floating toolbar needs above a selection: its 48dp and the margin the system leaves around it. */
+private val TOOLBAR_RESERVE = 64.dp
+
 /** How far from a character's own middle the word probe may land and still count as on it. */
 private const val STEP_PROBE_TOLERANCE_POINTS = 1.0
 
@@ -66,6 +69,7 @@ internal fun TextSelectionOverlay(
     canCopy: Boolean,
     onChange: (TextSelection) -> Unit,
     onCopy: () -> Unit,
+    viewport: Rect? = null,
 ) {
     val colors = LocalTextSelectionColors.current
     val rects = remember(selection, selectable) { selectable.rects(selection.start, selection.end) }
@@ -194,15 +198,20 @@ internal fun TextSelectionOverlay(
     // The floating toolbar, over the selection: Copy when the document allows it, and nothing
     // otherwise (the reason is said once, when the selection is made). Hidden while a handle is
     // being dragged, as a TextView's is, and re-placed when the selection or the page moves.
+    val reservePx = with(density) { TOOLBAR_RESERVE.toPx() }
     val rootRect = origin?.let { at ->
         if (rects.isEmpty()) null else {
             val sxp = pagePixels.width / pageSize.widthPoints.toFloat()
             val syp = pagePixels.height / pageSize.heightPoints.toFloat()
-            Rect(
-                at.x + rects.minOf { it.left }.toFloat() * sxp,
-                at.y + rects.minOf { (pageSize.heightPoints - it.top).toFloat() } * syp,
-                at.x + rects.maxOf { it.right }.toFloat() * sxp,
-                at.y + rects.maxOf { (pageSize.heightPoints - it.bottom).toFloat() } * syp,
+            toolbarAnchor(
+                Rect(
+                    at.x + rects.minOf { it.left }.toFloat() * sxp,
+                    at.y + rects.minOf { (pageSize.heightPoints - it.top).toFloat() } * syp,
+                    at.x + rects.maxOf { it.right }.toFloat() * sxp,
+                    at.y + rects.maxOf { (pageSize.heightPoints - it.bottom).toFloat() } * syp,
+                ),
+                viewport,
+                reservePx,
             )
         }
     }
@@ -211,4 +220,29 @@ internal fun TextSelectionOverlay(
         else toolbar.showMenu(rect = rootRect, onCopyRequested = if (canCopy) onCopy else null)
     }
     DisposableEffect(Unit) { onDispose { toolbar.hide() } }
+}
+
+/**
+ * Where the floating toolbar is told the selection is (#803).
+ *
+ * The toolbar is a system window that knows the app's window and nothing of its layout, so it will
+ * happily float above a selection that has scrolled up under the title bar, and that is where the
+ * Copy pill ended on the Pixel 4 XL. This keeps it in the content area: it still follows the
+ * selection, but the box it is given is cut to the [viewport], and its top is held [reservePx] below
+ * the viewport's top, which is the room the pill needs above the box. A selection with nothing
+ * left in view (scrolled out above, below or sideways) has no pill, as in a `TextView` inside a
+ * scrolling parent, and it comes back as the selection scrolls back.
+ *
+ * Both rectangles are in root pixels. A null [viewport] means no limit. The result is null for
+ * "hide the toolbar".
+ */
+internal fun toolbarAnchor(selection: Rect, viewport: Rect?, reservePx: Float): Rect? {
+    if (viewport == null) return selection
+    if (selection.bottom < viewport.top || selection.top > viewport.bottom) return null
+    val left = maxOf(selection.left, viewport.left)
+    val right = minOf(selection.right, viewport.right)
+    if (left > right) return null
+    val top = maxOf(selection.top, viewport.top + reservePx)
+    val bottom = maxOf(minOf(selection.bottom, viewport.bottom), top)
+    return Rect(left, top, right, bottom)
 }

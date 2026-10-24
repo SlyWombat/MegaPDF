@@ -2390,12 +2390,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         // list must not query a provider per row while it draws. Never a password:
         // whatever opened it stays with the open document.
         unavailableChecked -= uri.toString()
-        recentsStore.add(
-            RecentEntry(
-                uri.toString(), name, System.currentTimeMillis(),
-                DocumentLocations.segmentsFor(getApplication(), uri), uri.authority,
-            )
-        )
+        addRecent(uri, name)
         uiState = ViewerUiState.Viewing(name, opened.pageSizes, opened.flags.isDynamicXfa)
         // *Open documents in reading mode* (#513), applied here rather than remembered per
         // document (#168 decision 2): one app-level answer, asked of every document alike.
@@ -3634,12 +3629,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                     persistPermission(uri)
                     val name = queryDisplayName(uri)
                     unavailableChecked -= uri.toString()
-                    recentsStore.add(
-                        RecentEntry(
-                            uri.toString(), name, System.currentTimeMillis(),
-                            DocumentLocations.segmentsFor(getApplication(), uri), uri.authority,
-                        )
-                    )
+                    addRecent(uri, name)
                     (uiState as? ViewerUiState.Viewing)?.let {
                         uiState = it.copy(displayName = name)
                     }
@@ -3993,6 +3983,25 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
      */
     private fun defaultSignatureName(): String =
         str(R.string.signature_default_name, signatures.size + 1)
+
+    /**
+     * Puts [uri] in Recents once, however it was reached (#803): an entry for the same file under
+     * another provider's URI is replaced, and one stored before identities existed is asked about
+     * (one query, only where the name matches) and replaced if it is the same file.
+     */
+    private fun addRecent(uri: Uri, name: String) {
+        val app = getApplication<Application>()
+        recentsStore.add(
+            RecentEntry(
+                uri.toString(), name, System.currentTimeMillis(),
+                DocumentLocations.segmentsFor(app, uri), uri.authority,
+                identity = DocumentLocations.identityFor(app, uri),
+            ),
+            identityOf = { old ->
+                if (old.uri.startsWith("content://")) DocumentLocations.identityFor(app, Uri.parse(old.uri)) else null
+            },
+        )
+    }
 
     private fun persistPermission(uri: Uri) {
         // Read and write when offered, read alone otherwise (UriGrants). Null is a
