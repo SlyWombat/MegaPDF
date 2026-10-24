@@ -12,6 +12,11 @@ Shot on 2026-10-23 from `main` after the Spanish rigs landed (#789, d065597). Th
 version number plus everything merged since; `main` still reports 2.3.0 in `android/app/build.gradle`
 and the Avalonia csproj.
 
+**The Google Play phone set (`play/phone/`) was re-shot on 2026-10-24** from `main` 925bb492 (it
+contains #805 to #808), after the Android fixes for #802 landed: gesture navigation, the shorter
+Spanish demo names, the single-mark redact fill and the French "Sélection : N" title. All 40 images
+come from one run, 40124348645; everything about them is in `play-linux-READING.md`.
+
 ## What is here
 
 | Folder | Store | Images | Rig | Read in |
@@ -19,7 +24,7 @@ and the Avalonia csproj.
 | `microsoft-screenshots/<lang>/` | Microsoft Store | 8 × 5 = 40 | `tools/screenshots-windows/Shoot-Set.ps1` on the packaged build | `microsoft-READING.md` |
 | `macos-screenshots/<lang>/` | Mac App Store, 1440x900 | 7 × 5 = 35, with a `RUN.txt` per language | `tools/macos-store-captures.sh` | `apple-READING.md` |
 | `ios-screenshots/<lang>/listing/` | App Store, iPhone and iPad | 9 × 2 × 5 = 90, with logs beside each PNG | `tools/ios-screenshots.sh` | `apple-READING.md` |
-| `play/phone/<lang>/` | Google Play phone, 1080x2400 | 8 × 5 = 40 | the hosted **Android Screenshots** workflow (run 40038655357) | `play-linux-READING.md` |
+| `play/phone/<lang>/` | Google Play phone, 1080x2400 | 8 × 5 = 40 | the hosted **Android Screenshots** workflow (run 40124348645, `main` 925bb492) | `play-linux-READING.md` |
 | `linux/<lang>/` | Linux listing, 1280x800 | 7 × 5 = 35, with a `RUN.txt` per language | `tools/linux/store-captures.sh` | `play-linux-READING.md` |
 
 Folder names: `fr-FR` is `fr` for the Mac and iOS rigs (App Store Connect's name), and Spain is `es` on
@@ -85,19 +90,38 @@ by the coordinator per store group (Spanish play, Windows and iOS/Mac), and foun
   Screenshots workflow (run 40052390473, branch `wip/pages-selected-es`): one line in both. The other 38 Play
   images were not replaced; en, fr-CA, es-419 and es-ES came out byte-identical to the filed ones apart from
   these two, and fr-FR differed in the status-bar icon pixels (seven frames) and in the redact frame (not investigated; those files were not replaced).
+- Android, all 40 Play frames re-shot together (2026-10-24, run 40124348645, `main` 925bb492) for #802 items 1, 2
+  and 4, and the French pages title from #808. Verified on the new images, not on the PRs' say-so:
+  - **Item 2, navigation bar: fixed.** In the bottom 130 rows of every one of the 35 non-immersive frames the only
+    thing drawn is the gesture handle, 284 x 11 px at x 398-681, y 2363-2373, identical in all 35. `reading`
+    is immersive (floating bar only) and is pixel-identical to the filed frame in en, fr-CA and es-ES and
+    differs by 2 pixels in the bottom row in fr-FR and es-419 (shadow noise). The run's log lists
+    `navbar.gestural` as the enabled overlay in every leg.
+  - **Item 1, file names: fixed (rig).** es-419 reads "Arrendamiento.pdf" and es-ES "Alquiler.pdf", whole, in the
+    title bar of `text-edit`, `sign`, `text` and `redact` and in the Recent list on `home` (read at native resolution
+    for es-ES, the crop that had not been read before). French and English were already whole.
+  - **Item 4, redact fill: fixed.** A pixel on the marked line is (199, 206, 213) in all five languages; no pixel
+    anywhere near the line is the stacked-marks colour (156, 169, 181). The run's own log says "1 mark(s) on page 1
+    after the settle: [1]" in all five legs. One run proves the fix only so far as one run can (the fault was a race that
+    showed in 3 of 4 earlier runs, one French leg each); it did not occur here.
+  - **#808, French pages title:** fr-CA and fr-FR read "Sélection : 2" (the space is U+00A0 in
+    `values-fr/` and `values-fr-rCA/strings.xml`, `&#160;`), es-419 and es-ES "Selección: 2", en "2 selected".
 
 ## Found and not fixed (for Dave)
 
-- **Android title bar:** the file name is ellipsised in es-419 and es-ES, and es-ES cuts into the
-  extension ("Contrato de alquiler.p…"). Cosmetic.
-- **Every Play frame shows the 3-button navigation bar.** It is the same in the signed-off 2.2 set;
-  the runbook says "no navigation buttons".
+- **Android Play frames, still imperfect (cosmetic, none is a defect in the app):** in fr-CA, fr-FR and es-419 the
+  `text-edit` field wraps "(2026)" onto a second line; the Spanish demo document's first paragraph has a short
+  second line ("abajo, y abarca el equipo en arrendamiento, las opciones de entrega" then "y los términos...") that
+  the English and French do not; the `redact` mark's fill covers the right end of its line so the last word is
+  cut by the red chip ("...de este doc"); I did not compare that with the earlier frames. (The title-bar and navigation-bar items that were
+  listed here are fixed; see above.)
 - **iPad `pages` slot:** a faint "Hold a page to move it" hint is drawn across the page 3 and 4 tiles,
   in all five languages and in 2.2 too. A product fix, not a re-shoot. No issue filed.
 - **Windows empty state (`08-home`):** Undo and Redo are drawn darker than the other disabled
   commands, in every language and in 2.2. The run's own check reports all disabled but Open.
-- **Android `redact` slot, fr-CA and fr-FR:** the marked line's fill is lighter than in 2.2 (now the
-  grey-blue English always had). Inside the mark only; the commit that changed it was not found.
+- **Android `redact` slot, fr-CA and fr-FR (explained and fixed, #802 item 4):** the fill had been darker in one
+  French leg per run (two 24 % marks stacked, a race in `refreshRedactionMarks`); the single-mark colour
+  is now what every language shows.
 
 ## Spanish toolbar width (Windows)
 
