@@ -119,9 +119,8 @@ class RecentFilesStoreTest {
         val s = store()
         s.add(picked("content://old/document/1", identity = null, at = 1))
         s.add(picked("content://new/document/2", at = 2), identityOf = { "1:1" })
-        s.add(picked("content://gone/document/3", name = "selection.pdf", identity = null, at = 3))
-        s.add(picked("content://new/document/4", at = 4), identityOf = { null })
-        assertEquals(4, s.load().size)
+        s.add(picked("content://new/document/3", identity = "7:7", at = 3), identityOf = { null })
+        assertEquals(3, s.load().size)
     }
 
     @Test

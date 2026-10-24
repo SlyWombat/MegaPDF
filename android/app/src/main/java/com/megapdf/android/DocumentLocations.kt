@@ -72,6 +72,29 @@ object DocumentLocations {
      */
     private const val MEDIA = "com.android.providers.media.documents"
 
+    /**
+     * What [uri] is apart from how it was reached (#803): its size and last-modified time as the
+     * provider reports them, "size:modified". Null when either is missing or zero, or the provider
+     * will not be asked: a name and a size alone would join two different files, so with less than
+     * this a document is known only by its URI. Called when a document is opened, like [segmentsFor].
+     */
+    fun identityFor(context: Context, uri: Uri): String? = try {
+        context.contentResolver.query(
+            uri,
+            arrayOf(DocumentsContract.Document.COLUMN_SIZE, DocumentsContract.Document.COLUMN_LAST_MODIFIED),
+            null, null, null,
+        )?.use { c ->
+            if (!c.moveToFirst() || c.columnCount < 2 || c.isNull(0) || c.isNull(1)) null
+            else {
+                val size = c.getLong(0)
+                val modified = c.getLong(1)
+                if (size > 0 && modified > 0) "$size:$modified" else null
+            }
+        }
+    } catch (_: Exception) {
+        null
+    }
+
     /** Where [uri] lives, outermost first, or empty if Android will not say. */
     fun segmentsFor(context: Context, uri: Uri): List<String> {
         val authority = uri.authority
