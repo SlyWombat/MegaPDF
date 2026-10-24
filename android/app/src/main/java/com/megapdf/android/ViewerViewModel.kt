@@ -562,7 +562,19 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
      * left `redactionMarkCount` non-zero, so Save asked about a redaction the new document
      * did not have.
      */
+    private var redactionRefreshTicket = 0
+
     private suspend fun refreshRedactionMarks() {
+        // Only the newest read may write (#802). This reads the core one page at a time on the
+        // engine's single queue, so two reads overlap whenever one starts before the other has
+        // finished: attach() starts one at the document's open, and the engine is still busy
+        // with the page checks when a mark is placed and its own read begins. The older read had
+        // already passed page 1 before the mark existed, finished last, and wrote "no marks"
+        // over the mark just read back — the mark was in the core and not on the screen. The
+        // capture rig saw it as a missing mark, asked again and stacked a second one (the
+        // darker fill in one French leg of two Play sets); a person marking a line in the
+        // first seconds after opening would have seen a mark that was not drawn.
+        val ticket = ++redactionRefreshTicket
         val doc = document
         if (doc == null) {
             redactionMarks = emptyMap()
@@ -574,6 +586,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
             val marks = doc.onPageForRedaction(index) { it.redactionMarks() }
             if (marks.isNotEmpty()) byPage[index] = marks
         }
+        if (ticket != redactionRefreshTicket) return
         redactionMarks = byPage
         // A selection the core no longer has is not a selection: undo, a removal and a clear
         // all take marks away, and chrome left pointing at one would move a mark that is not
@@ -1626,8 +1639,20 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                                     // leg placed no mark at all while en and fr-FR did, and the
                                     // shot still reached the artifact between the two.
                                     if (!awaitRedactionMark(3_000)) {
-                                        Log.w(SCREENSHOT_TAG, "redact pose: no mark after 3 s, asking again (blocked=$editingBlocked)")
-                                        markForRedaction(0, line.rect)
+                                        // Ask the core before asking again: a mark that is in
+                                        // the core and not yet on the screen must not be made
+                                        // twice (#802).
+                                        val inCore = doc.onPageForRedaction(0) { it.redactionMarks() }.size
+                                        Log.w(
+                                            SCREENSHOT_TAG,
+                                            "redact pose: no mark on screen after 3 s; the core has $inCore " +
+                                                "(blocked=$editingBlocked)",
+                                        )
+                                        if (inCore > 0) {
+                                            refreshRedactionMarks()
+                                        } else {
+                                            markForRedaction(0, line.rect)
+                                        }
                                         awaitRedactionMark(3_000)
                                     }
                                     // One mark, and the log says how many there were. The
