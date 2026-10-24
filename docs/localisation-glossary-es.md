@@ -265,7 +265,7 @@ refers to the same row in the French file.
 | Save a copy, keeping the invalid signature | Guardar una copia conservando la firma inválida |  |
 | Copy | Copiar |  |
 | This page has no text to select. | Esta página no tiene texto que seleccionar. |  |
-| The owner of this document doesn't allow copying its text. | El propietario de este documento no permite copiar su texto. |  |
+| The author of this document asked that nothing be copied out of it. | El autor de este documento pidió que no se copie nada de él. | #710 phones: #558's extraction-class row (above) word for word; replaces « El propietario… no permite copiar su texto » (Dave 2026-10-23) |
 | Start of selection / End of selection | Inicio de la selección / Fin de la selección |  |
 | Next word / Previous word | Palabra siguiente / Palabra anterior |  |
 | This field is read-only. | Este campo es de solo lectura. |  |

@@ -175,7 +175,7 @@ final class SelectCopyUITests: XCTestCase {
 
         let banner = app.staticTexts["noticeBanner"]
         XCTAssertTrue(banner.waitForExistence(timeout: 15), "nothing says why Copy is disabled")
-        XCTAssertEqual(banner.label, "The owner of this document doesn't allow copying its text.")
+        XCTAssertEqual(banner.label, "The author of this document asked that nothing be copied out of it.")
         XCTAssertEqual(readPasteboard(), "untouched", "tapping the disabled Copy must copy nothing")
     }
 

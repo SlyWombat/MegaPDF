@@ -702,8 +702,8 @@
     <string name="pages_refused_engine">MegaPDF no pudo hacer ese cambio de página de forma segura, así que dejó el documento como estaba.</string>
 
     <!-- Selecting and copying text (#710), and read-only form fields (#712) -->
-    <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
-    <string name="select_copy_forbidden">Este documento no permite copiar su texto.</string>
+    <!-- ES-REVIEW #710 — reworded to #558's extraction-class wording, not yet read by the reviewer. -->
+    <string name="select_copy_forbidden">El autor de este documento pidió que no se copie nada de él.</string>
     <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
     <string name="select_copied">Copiado</string>
     <!-- ES-REVIEW #710 — new, not yet read by the reviewer. -->
