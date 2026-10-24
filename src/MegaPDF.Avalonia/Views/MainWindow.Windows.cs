@@ -281,13 +281,23 @@ public partial class MainWindow
         return menu;
     }
 
-    /// <summary>For the self-test: the tab container's own context menu, as Shift+F10 would open it.</summary>
+    /// <summary>For the self-test: the tab container's own context menu, as the Menu key or Shift+F10 would open it.</summary>
     internal ContextMenu? TabContextMenuForTest(int index) =>
         (DocumentTabStrip.ContainerFromIndex(index) as Control)?.ContextMenu;
 
     private void WireTabStrip()
     {
         DocumentTabStrip.ContainerPrepared += (_, e) => e.Container.ContextMenu ??= BuildTabMenu(e.Container);
+
+        // Shift+F10 (#773). Avalonia opens a focused control's ContextMenu on key-up of the
+        // keys in PlatformHotkeyConfiguration.OpenContextMenu, which is the Menu key alone,
+        // so Shift+F10 did nothing here (measured on GNOME) although the Menu key and a
+        // right-click work. Shift+F10 is the Windows/Linux (GNOME, KDE) convention and is
+        // wired on Linux only; the Mac's convention is Ctrl+click or the Menu key, and its
+        // tabs are AppKit's own, not this strip. Tunnelling, so it is seen before anything
+        // else treats F10 as its own; only a focused tab answers, not the rest of the window.
+        if (OperatingSystem.IsLinux())
+            DocumentTabStrip.AddHandler(KeyDownEvent, OnTabStripKeyDown, RoutingStrategies.Tunnel);
 
         // Bubbling, and handled events too: the strip's own items handle the press (it is
         // what selects them), and this must see it regardless. Not tunnelling: Avalonia moves
@@ -302,6 +312,19 @@ public partial class MainWindow
             if (ReferenceEquals(e.Source, DocumentTabStrip))
                 EndTabDrag();
         }, RoutingStrategies.Bubble, handledEventsToo: true);
+    }
+
+    private void OnTabStripKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.F10 || e.KeyModifiers != KeyModifiers.Shift)
+            return;
+        // The focused element is the tab (or something inside it, such as its close button).
+        var tab = (TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement() as Visual)
+            ?.FindAncestorOfType<TabStripItem>(includeSelf: true);
+        if (tab?.ContextMenu is not { } menu)
+            return;
+        menu.Open(tab);
+        e.Handled = true;
     }
 
     // --- Linux: dragging a tab off the strip ---

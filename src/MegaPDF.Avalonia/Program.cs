@@ -7644,6 +7644,50 @@ internal static class Program
                   window.TabContextMenuForTest(shell.Documents.IndexOf(tabA)) is { } menu
                   && menu.Items.OfType<MenuItem>().Any(i => Equals(i.Header, Strings.MoveTabToNewWindow)));
 
+            // The keyboard itself (#773): the check above only proves the menu exists. Avalonia
+            // opens it for the Menu key alone, so Shift+F10 on a focused tab is ours, and on
+            // Linux only (the Mac's tabs are AppKit's, its convention is Ctrl+click).
+            if (OperatingSystem.IsLinux())
+            {
+                static void Chord(Views.MainWindow w, Key key, RawInputModifiers mods, PhysicalKey physical)
+                {
+                    HeadlessWindowExtensions.KeyPress(w, key, mods, physical, null);
+                    HeadlessWindowExtensions.KeyRelease(w, key, mods, physical, null);
+                    MenuProbe.Pump();
+                }
+
+                var tabItem = window.DocumentTabStrip.ContainerFromIndex(shell.Documents.IndexOf(tabA)) as Control;
+                var tabMenu = tabItem?.ContextMenu;
+                tabItem?.Focus();
+                MenuProbe.Pump();
+                check("a tab can hold keyboard focus", tabItem is not null && tabItem.IsFocused);
+                Chord(window, Key.F10, RawInputModifiers.Shift, PhysicalKey.F10);
+                check("Shift+F10 on the focused tab opens its context menu", tabMenu is { IsOpen: true });
+                tabMenu?.Close();
+                MenuProbe.Pump();
+                Chord(window, Key.Apps, RawInputModifiers.None, PhysicalKey.ContextMenu);
+                check("  and the Menu key still does", tabMenu is { IsOpen: true });
+                tabMenu?.Close();
+                MenuProbe.Pump();
+                Chord(window, Key.F10, RawInputModifiers.None, PhysicalKey.F10);
+                check("  F10 alone on the tab does not", tabMenu is not { IsOpen: true });
+                tabMenu?.Close();
+                MenuProbe.Pump();
+                // A real control that is not a tab (a toolbar button): the page area is not
+                // focusable, so focusing it would leave the focus on the tab.
+                window.GetVisualDescendants().OfType<Button>()
+                    .FirstOrDefault(b => b.Focusable && b.IsEffectivelyVisible && b.IsEffectivelyEnabled
+                                         && !window.DocumentTabStrip.IsVisualAncestorOf(b))?.Focus();
+                MenuProbe.Pump();
+                check("  focus is on a control outside the strip",
+                      TopLevel.GetTopLevel(window)?.FocusManager?.GetFocusedElement() is Visual focused
+                      && !window.DocumentTabStrip.IsVisualAncestorOf(focused));
+                Chord(window, Key.F10, RawInputModifiers.Shift, PhysicalKey.F10);
+                check("  Shift+F10 with the focus off the tabs opens no tab menu", tabMenu is not { IsOpen: true });
+                tabMenu?.Close();
+                MenuProbe.Pump();
+            }
+
             // The state that has to survive: an unsaved edit with its undo step, a zoom, a
             // scroll position and an open find bar.
             shell.ActivateTab(tabA);
