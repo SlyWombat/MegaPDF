@@ -177,6 +177,15 @@ building the subject, and `check-support-page.js` pins every combination):
   reader who copies the message instead of using the button sends no subject at all
   (and no `[...]` tags), so a consumer should fall back to the `Reference:` line in the
   body and treat the tags as a hint, not a guarantee.
+- **Answers the reader was shown:** after the free text, a heading line `The support page
+  suggested` and one line per answer, `- <answer title>` plus `  [reader: not it]` or
+  `  [reader: that was it]` when the reader judged it (or the single line `The support page
+  suggested nothing.`). From 2.4 the same answers follow on **one machine-readable line**,
+  `Answer ids: a-version, a-update`: the answers' stable ids, same order, comma and space
+  separated (#635, Dave 2026-10-24). The titles are for people and can be reworded; the ids are
+  the interface. `check-support-page.js` pins that the line is there and that every id in its
+  `REQUIRED_IDS` list still exists: an id may be added, but none may be renamed or removed without
+  telling the support system first.
 - **Reply threads:** the page tells readers to quote the reference in a later email, so
   a reply's subject still contains `MP-YYMMDD-XXXX` after any `Re:`.
 
