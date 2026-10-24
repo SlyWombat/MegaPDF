@@ -53,7 +53,7 @@ by the coordinator per store group (Spanish play, Windows and iOS/Mac), and foun
   The 2.2 sets pass with 0 flagged.
 - **Against 2.2:** French and English differ only where something changed on purpose or by shorter
   staged file names (below). Mac `01-reading` and `07-home` are pixel-identical to 2.2, the other five
-  slots differ by the 49 px strip only. Every iPhone image matches 2.2, so none of the 2.3 or 2.4
+  slots differ by the 49 px strip only. Every iPhone image matches 2.2 except the fr-CA, fr, es-419 and es `pages` frames, which differ by the one selection title (see Defects), so none of the 2.3 or 2.4
   phone work shows in a listing frame. All nine iPad images differ slightly (a little wider and lower
   layout, a different text-edit keyboard state); nobody attributed it to a commit.
 
@@ -83,6 +83,18 @@ by the coordinator per store group (Spanish play, Windows and iOS/Mac), and foun
   40106879293), test-signed and installed through `Install-QaTestPackage`.
 - iOS: the English iPhone text-edit had no caret on the first take; re-shot six times on a fresh
   install, all six showed it.
+- iOS, pages view (#800, #801; re-shot 2026-10-24 from `main` 925bb492, which has PR #808): the phone
+  selection title changed from "2 sélectionnées" / "2 seleccionadas" to `Sélection : 2` (U+00A0 before the
+  colon, fr-CA and fr) and `Selección: 2` (es-419 and es). The 8 files `iphone-6_9-pages.png` and
+  `ipad-13-pages.png` in fr-CA, fr, es-419 and es were replaced; nothing else was. The English pages
+  frames still read "2 selected", were re-shot as a control and came out identical to the filed ones apart
+  from rendering noise (3-5 on a 0-765 channel-sum scale), so they were not replaced, and no other iOS
+  frame shows the string (it exists in one place, `PagesView.swift`; OCR of all 90 filed images finds it only
+  in the 10 pages frames). **The iPad date cell of the four new iPad frames was spliced in from the filed
+  frame of the same slot**: the simulator draws "Sat Oct 24" on 2026-10-24 and `simctl status_bar
+  override --time` does not move it, so the date cell (a 172 x 52 px rectangle at the top left) is the
+  filed "Fri Oct 23" from the same slot's previous image, and the 41 other iPad frames still agree with it.
+  Details and every check in `apple-READING.md` ("Re-shoot of the pages frames").
 
 - Android, pages view: the Spanish selection title read "Seleccionadas:" over "2" on two lines in es-419 and
   es-ES. The string is now "Selección: %1$d" (es-419 hand-written, es-ES derived; `ES-REVIEW #724`, Fable has not

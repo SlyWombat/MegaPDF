@@ -1,6 +1,6 @@
 # Apple store captures 2.4: as read
 
-Mac App Store (7 slots x 5 languages = 35) and App Store iPhone 6.9" + iPad 13" (9 slots x 2 devices x 5 languages = 90). 125 images. Shot on the in-house Mac mini on 2026-10-23 from origin/main `d065597e` (Merge of #789, the Spanish rigs), and filed here as shot. Nothing was uploaded; putting images on a listing is Dave's call.
+Mac App Store (7 slots x 5 languages = 35) and App Store iPhone 6.9" + iPad 13" (9 slots x 2 devices x 5 languages = 90). 125 images. Shot on the in-house Mac mini on 2026-10-23 from origin/main `d065597e` (Merge of #789, the Spanish rigs), and filed here as shot, **except the eight `pages` frames re-shot on 2026-10-24 (see "Re-shoot of the pages frames" below)**. Nothing was uploaded; putting images on a listing is Dave's call.
 
 **Every one of the 125 images was opened and looked at with the Read tool at full size**, not read from the gate sheet. (My first pass over each language's set returned no pixels for a number of images; I noticed, kept a ledger of which images I had actually seen, and re-read every one that was missing until the ledger was complete. The table below is from that complete read.) The per-image sentence says what was in the frame; the verdict is mine. Where the gate disagreed with my eye, it is said.
 
@@ -15,7 +15,82 @@ Mac App Store (7 slots x 5 languages = 35) and App Store iPhone 6.9" + iPad 13" 
 
 ## The iPad same-day check
 
-The iPad date is drawn by the simulator and cannot be posed. All 45 iPad images read **"Fri Oct 23"** (checked by eye on every one; the gate's status-bar sibling check agrees: no `chrome`/`siblings` flag on any iPad image in any language). File times on the mini: first iPad image 19:26:14 (en pages), last 19:55:23 (es home).
+The iPad date is drawn by the simulator and cannot be posed. All 45 iPad images read **"Fri Oct 23"** (in the four re-shot `pages` frames the date cell is spliced; see "Re-shoot of the pages frames") (checked by eye on every one; the gate's status-bar sibling check agrees: no `chrome`/`siblings` flag on any iPad image in any language). File times on the mini: first iPad image 19:26:14 (en pages), last 19:55:23 (es home).
+
+## Re-shoot of the pages frames (2026-10-24, #800, #801)
+
+PR #808 changed the iOS phone selection title (`"%lld selected"`, shown by `PagesView.swift` as the Pages
+sheet's footer on iPhone and iPad): fr and fr-CA `Sélection : N` with U+00A0 before the colon (checked by
+code point in `Localizable.xcstrings`), es and es-419 `Selección: N`; English stays "2 selected". The eight
+filed `pages` frames in those four languages still read "2 sélectionnées" / "2 seleccionadas" (read at full
+size before re-shooting) and are replaced. Nothing else in the 90 iOS images shows the string: it is used in
+one place only, OCR (eng+fra) of all 90 filed images finds "selected"/"sélectionnées"/"seleccionadas" only in
+the 10 pages frames, and the other strings #808 changed (owner-password and "the author asked that..." notices
+in `DocumentSecuritySheet`, `PdfEngine`, `ViewerModel`) appear in no pose. I did not re-read the 80 other
+images by eye in this pass; they are untouched files and were read in the original run.
+
+| | |
+|---|---|
+| Shot from | `main` 925bb492 (contains #808), cloned on the Mac mini from a git bundle. The mini's CI runner had no job (`pgrep -x Runner.Worker` empty) when the build and the shots started; I waited about 15 minutes for one to finish first. |
+| Rig | `tools/ios-screenshots.sh` unchanged, run from a copy on the mini that I changed only to (a) shoot the `pages` state alone, (b) use my own simulators, `megapdf-agent-800-iphone` (iPhone 17 Pro Max, iOS 26.5) and `megapdf-agent-800-ipad` (iPad Pro 13-inch M5, iOS 26.5), the same models and runtime as the filed set, (c) skip the viewer and dark shots. Same clock (`9:41`), battery, bars, light appearance, fresh install per language, same fixtures. Languages fr-CA, fr, es-419, es and en (en as a control), one after another, 15:32-15:44 EDT. Both simulators were deleted afterwards, with the clone, the build and the bundle. |
+| Frames replaced | `ios-screenshots/{fr-CA,fr,es-419,es}/listing/{iphone-6_9,ipad-13}-pages.png` (8). Not replaced: the English pair (control), and the other 82. |
+| App's own log | every shot printed `screenshot pages: 6 pages, 2 selected` on stdout; those logs were not filed (the filed pages frames have none beside them either). |
+
+**What changed, by image diff** (new against filed, every pixel; regions found by dilating the differing
+pixels):
+
+- iPhone, fr-CA / fr / es-419 / es: only the footer title (a box about 280 x 53 px at x 60-344, y 2659-2712).
+  Everything else is identical, apart from 1,321 pixels of at most 5 (sum over three channels, scale 765)
+  along the sheet edge in fr-CA, the same pixels as in the English control: rendering noise, not content.
+- iPad, same four: only the footer title (about 200 x 44 px at x 21-225, y 2638-2682) and the date cell
+  (below). fr also has 32 pixels of at most 4 in the toolbar buttons' edges; the English control has 64.
+- English control, iPhone and iPad: 1,323 and 64 pixels of at most 5 and 4, plus the iPad date. The English
+  frames are therefore not changed by #808 and were not replaced.
+
+**Status bar.** iPhone: "9:41", signal, wifi and battery are pixel-identical to the filed frames of other slots
+with the same background (sign: 0 differing pixels in the clock and icon boxes) in all four languages. iPad:
+"9:41 AM" and the icons are identical to the filed search, redact and reading frames (0 differing pixels in
+the boxes), and the date is spliced, as follows.
+
+**The iPad date, and the splice.** The date on the iPad's status bar is drawn by the simulator from the
+host's clock. Today is Sat Oct 24, so the new raw iPad frames read **"Sat Oct 24"** against "Fri Oct 23"
+on the other 41 filed iPad frames. `simctl status_bar override --time` accepts an ISO date (it needs
+fractional seconds and an offset, `2026-10-23T09:41:00.000-04:00`) and changes the clock text, but I measured
+that it does not move the date (tried 2026-10-23 and 2007-01-09; the date still read Sat Oct 24), and the
+host's clock and timezone cannot be moved on a machine that is also CI's. So that the iPad set keeps one
+date, **in each of the four new iPad frames I copied the date cell, a 172 x 52 px rectangle at x 160, y 6,
+from the filed frame of the same slot and language over the new frame** (PIL paste; the background in the
+rectangle is the same flat toolbar colour in both). I checked that before the paste the two frames differ in
+that rectangle only in the date glyphs (1,798 pixels, one cluster), and after it the only differences
+left are the footer title and the noise above. These four iPad files are therefore not pure captures. If Dave
+would rather file the unspliced frames with "Sat Oct 24" (or re-shoot the whole iPad set on one day), say so;
+the raw frames are not kept in the repo.
+
+**Each new frame, read at full size** (Read tool, all eight; the two English control frames were compared by
+pixels and not displayed):
+
+| Language | Device | Footer now reads | Other checks |
+|---|---|---|---|
+| fr-CA | iPhone | `Sélection : 2` | no clipping; 2 tiles ticked; space before the colon is the narrow gap of a no-break space; tab title "Contrat de loc..." as before |
+| fr-CA | iPad | `Sélection : 2` | date "Fri Oct 23" (spliced); hint over tiles 3/4 as before (#794) |
+| fr | iPhone | `Sélection : 2` | same; body text is the France set ("enlèvement", "week-end") |
+| fr | iPad | `Sélection : 2` | date as above; hint |
+| es-419 | iPhone | `Selección: 2` | no space before the colon, as Spanish wants; no clipping |
+| es-419 | iPad | `Selección: 2` | date as above; hint "Mantén presionada una página para moverla" runs past the sidebar's left edge (the old frame's too) |
+| es | iPhone | `Selección: 2` | no clipping; "Contrato de alquil..." as before |
+| es | iPad | `Selección: 2` | date as above; hint "Mantén pulsada una página para moverla" |
+
+The iPad hint "Hold a page to move it" (#794, not fixed) is still the only defect in the iPad frames, as
+before. Nobody who reads French or Spanish natively has looked at the new titles; the colon spacing was
+checked by code point in the catalogue and by eye in the image.
+
+**Gate** (`tools/capture-gate/gate.py --store ios --only /listing`). Without `--against`: en 0 flagged,
+fr-CA 0, fr-FR 0, es-419 3 (iPad pages "clipping: right edge", the document text behind the sidebar, flagged
+before too; iPad and iPhone `text`, "Sofía Ramírez": the OCR cannot read Spanish accents, whole by eye), es-ES 2
+(`text`, "Lucía Fernández", the same OCR caveat). That is identical to the earlier run. Against the filed 2.4
+set: en 0 flagged and no difference; the iPhone `pages` frames of fr-CA, fr-FR, es-419 and es-ES read
+"certified" at 0.10-0.11 % of pixels differing (the title, which is what was meant); the iPad `pages` frames did
+not trip the threshold; no `chrome` or `siblings` flag on any image.
 
 ## Gate results
 
@@ -42,7 +117,7 @@ For reference the **2.2 sets** (`docs/qa/captures-2.2/macos-screenshots`) pass t
 
 **iOS (no `--against`)**: en 0 flagged. **es-419 ipad-13-pages** "clipping: right edge": the document text runs off the right edge behind the Pages sidebar; the same layout is in the en and fr shots (the Spanish line is longer, so it trips the heuristic). **es-419 and es `text` on both devices**: the same accent-drop OCR caveat as above, read by eye, accents whole.
 
-**iOS `--against 2.2` (en, fr-CA, fr)**: all 9 iPad images in each language read "certified" (en: ipad reading 0.2 %, draw 1.4 %, sign 2.3 %, home 2.3 %, redact 3.4 %, text 3.5 %, search 4.3 %, pages 4.8 %, text-edit 48.9 %). Every **iPhone image is identical to 2.2** (en: reading, text-edit, pages, text, search, redact, home 0 px; sign 27 px; draw 477 px; nothing else). See Findings 2 and 4 for the iPad differences.
+**iOS `--against 2.2` (en, fr-CA, fr)**: all 9 iPad images in each language read "certified" (en: ipad reading 0.2 %, draw 1.4 %, sign 2.3 %, home 2.3 %, redact 3.4 %, text 3.5 %, search 4.3 %, pages 4.8 %, text-edit 48.9 %). Every **iPhone image is identical to 2.2** (original run; the fr-CA, fr, es-419 and es `pages` frames now differ from 2.2 by the selection title) (en: reading, text-edit, pages, text, search, redact, home 0 px; sign 27 px; draw 477 px; nothing else). See Findings 2 and 4 for the iPad differences.
 
 ## Findings
 
@@ -111,7 +186,7 @@ For reference the **2.2 sets** (`docs/qa/captures-2.2/macos-screenshots`) pass t
 | fr-CA | 2 | `ios-screenshots/fr-CA/listing/iphone-6_9-text-edit.png` | Edit-text sheet on the document heading with "(2026)" appended, caret in the field, keyboard up, no first-run QuickPath tip. | OK |
 | fr-CA | 3 | `ios-screenshots/fr-CA/listing/iphone-6_9-sign.png` | Signatures sheet with one card, "Mega W.", and the three add buttons in the set's language over the dimmed document. | OK |
 | fr-CA | 4 | `ios-screenshots/fr-CA/listing/iphone-6_9-draw.png` | Draw-a-signature pad with the demo "MegaWoman" signature drawn, Cancel / Clear / Save in the set's language. | OK |
-| fr-CA | 5 | `ios-screenshots/fr-CA/listing/iphone-6_9-pages.png` | Pages sheet, "6 pages", pages 2 and 3 ticked, "2 selected" in the set's language, page tiles in the set's language. | OK |
+| fr-CA | 5 | `ios-screenshots/fr-CA/listing/iphone-6_9-pages.png` | Pages sheet, "6 pages", pages 2 and 3 ticked, "Sélection : 2" (re-shot 2026-10-24, #800/#801: was "2 sélectionnées"/"2 seleccionadas"), page tiles in the set's language. | OK |
 | fr-CA | 6 | `ios-screenshots/fr-CA/listing/iphone-6_9-text.png` | Add-text sheet with "Hélène Bélanger" typed, Size 12, Font Helvetica; accents whole by eye (the gate's OCR drops them in es). | OK |
 | fr-CA | 7 | `ios-screenshots/fr-CA/listing/iphone-6_9-search.png` | Find bar with "location", "1 sur 3", first hit selected, other hits highlighted. | OK |
 | fr-CA | 8 | `ios-screenshots/fr-CA/listing/iphone-6_9-redact.png` | First line marked with box, handles and remove mark; Save enabled, Undo live; no selection anywhere else. | OK |
@@ -120,7 +195,7 @@ For reference the **2.2 sets** (`docs/qa/captures-2.2/macos-screenshots`) pass t
 | fr (France) | 2 | `ios-screenshots/fr/listing/iphone-6_9-text-edit.png` | Edit-text sheet on the document heading with "(2026)" appended, caret in the field, keyboard up, no first-run QuickPath tip. | OK |
 | fr (France) | 3 | `ios-screenshots/fr/listing/iphone-6_9-sign.png` | Signatures sheet with one card, "Mega W.", and the three add buttons in the set's language over the dimmed document. | OK |
 | fr (France) | 4 | `ios-screenshots/fr/listing/iphone-6_9-draw.png` | Draw-a-signature pad with the demo "MegaWoman" signature drawn, Cancel / Clear / Save in the set's language. | OK |
-| fr (France) | 5 | `ios-screenshots/fr/listing/iphone-6_9-pages.png` | Pages sheet, "6 pages", pages 2 and 3 ticked, "2 selected" in the set's language, page tiles in the set's language. | OK |
+| fr (France) | 5 | `ios-screenshots/fr/listing/iphone-6_9-pages.png` | Pages sheet, "6 pages", pages 2 and 3 ticked, "Sélection : 2" (re-shot 2026-10-24, #800/#801: was "2 sélectionnées"/"2 seleccionadas"), page tiles in the set's language. | OK |
 | fr (France) | 6 | `ios-screenshots/fr/listing/iphone-6_9-text.png` | Add-text sheet with "Céline Lefèvre" typed, Size 12, Font Helvetica; accents whole by eye (the gate's OCR drops them in es). | OK |
 | fr (France) | 7 | `ios-screenshots/fr/listing/iphone-6_9-search.png` | Find bar with "location", "1 sur 3", first hit selected, other hits highlighted. | OK |
 | fr (France) | 8 | `ios-screenshots/fr/listing/iphone-6_9-redact.png` | First line marked with box, handles and remove mark; Save enabled, Undo live; no selection anywhere else. | OK |
@@ -129,7 +204,7 @@ For reference the **2.2 sets** (`docs/qa/captures-2.2/macos-screenshots`) pass t
 | es-419 | 2 | `ios-screenshots/es-419/listing/iphone-6_9-text-edit.png` | Edit-text sheet on the document heading with "(2026)" appended, caret in the field, keyboard up, no first-run QuickPath tip. | OK |
 | es-419 | 3 | `ios-screenshots/es-419/listing/iphone-6_9-sign.png` | Signatures sheet with one card, "Mega W.", and the three add buttons in the set's language over the dimmed document. | OK |
 | es-419 | 4 | `ios-screenshots/es-419/listing/iphone-6_9-draw.png` | Draw-a-signature pad with the demo "MegaWoman" signature drawn, Cancel / Clear / Save in the set's language. | OK |
-| es-419 | 5 | `ios-screenshots/es-419/listing/iphone-6_9-pages.png` | Pages sheet, "6 pages", pages 2 and 3 ticked, "2 selected" in the set's language, page tiles in the set's language. | OK |
+| es-419 | 5 | `ios-screenshots/es-419/listing/iphone-6_9-pages.png` | Pages sheet, "6 pages", pages 2 and 3 ticked, "Selección: 2" (re-shot 2026-10-24, #800/#801: was "2 seleccionadas"), page tiles in the set's language. | OK |
 | es-419 | 6 | `ios-screenshots/es-419/listing/iphone-6_9-text.png` | Add-text sheet with "Sofía Ramírez" typed, Size 12, Font Helvetica; accents whole by eye (the gate's OCR drops them in es). | OK |
 | es-419 | 7 | `ios-screenshots/es-419/listing/iphone-6_9-search.png` | Find bar with "arrendamiento", "1 de 3", first hit selected, other hits highlighted. | OK |
 | es-419 | 8 | `ios-screenshots/es-419/listing/iphone-6_9-redact.png` | First line marked with box, handles and remove mark; Save enabled, Undo live; no selection anywhere else. | OK |
@@ -138,7 +213,7 @@ For reference the **2.2 sets** (`docs/qa/captures-2.2/macos-screenshots`) pass t
 | es (Spain) | 2 | `ios-screenshots/es/listing/iphone-6_9-text-edit.png` | Edit-text sheet on the document heading with "(2026)" appended, caret in the field, keyboard up, no first-run QuickPath tip. | OK |
 | es (Spain) | 3 | `ios-screenshots/es/listing/iphone-6_9-sign.png` | Signatures sheet with one card, "Mega W.", and the three add buttons in the set's language over the dimmed document. | OK |
 | es (Spain) | 4 | `ios-screenshots/es/listing/iphone-6_9-draw.png` | Draw-a-signature pad with the demo "MegaWoman" signature drawn, Cancel / Clear / Save in the set's language. | OK |
-| es (Spain) | 5 | `ios-screenshots/es/listing/iphone-6_9-pages.png` | Pages sheet, "6 pages", pages 2 and 3 ticked, "2 selected" in the set's language, page tiles in the set's language. | OK |
+| es (Spain) | 5 | `ios-screenshots/es/listing/iphone-6_9-pages.png` | Pages sheet, "6 pages", pages 2 and 3 ticked, "Selección: 2" (re-shot 2026-10-24, #800/#801: was "2 seleccionadas"), page tiles in the set's language. | OK |
 | es (Spain) | 6 | `ios-screenshots/es/listing/iphone-6_9-text.png` | Add-text sheet with "Lucía Fernández" typed, Size 12, Font Helvetica; accents whole by eye (the gate's OCR drops them in es). | OK |
 | es (Spain) | 7 | `ios-screenshots/es/listing/iphone-6_9-search.png` | Find bar with "alquiler", "1 de 3", first hit selected, other hits highlighted. | OK |
 | es (Spain) | 8 | `ios-screenshots/es/listing/iphone-6_9-redact.png` | First line marked with box, handles and remove mark; Save enabled, Undo live; no selection anywhere else. | OK |
@@ -159,7 +234,7 @@ Slot order is the iPad's own (pages, reading, text-edit, sign, draw, text, searc
 | en | 7 | `ios-screenshots/en/listing/ipad-13-search.png` | Find bar under the toolbar with "rental", "1 of 3", first hit selected, Search toggled on. | OK |
 | en | 8 | `ios-screenshots/en/listing/ipad-13-redact.png` | First line marked: box, handles, remove mark; Undo live, Save enabled. | OK |
 | en | 9 | `ios-screenshots/en/listing/ipad-13-home.png` | Home with three recents ("Rental Agreement.pdf" first; "On My iPad" location), status bar with the date. | OK |
-| fr-CA | 1 | `ios-screenshots/fr-CA/listing/ipad-13-pages.png` | Pages sidebar on the left (6 tiles, 2 ticked), document at the right, iPad toolbar with Pages toggled on. Faint white hint "Hold a page to move it" (localised) sits across the tiles at mid-sidebar, and the document text runs off the right edge behind the sidebar; both are the same in the 2.2 shot. | OK, with a note (see Findings 3) |
+| fr-CA | 1 | `ios-screenshots/fr-CA/listing/ipad-13-pages.png` | Pages sidebar on the left (6 tiles, 2 ticked, footer "Sélection : 2"), document at the right, iPad toolbar with Pages toggled on. Re-shot 2026-10-24 (#800/#801); date cell spliced from the filed frame. Faint white hint "Hold a page to move it" (localised) sits across the tiles at mid-sidebar, and the document text runs off the right edge behind the sidebar; both are the same in the 2.2 shot. | OK, with a note (see Findings 3) |
 | fr-CA | 2 | `ios-screenshots/fr-CA/listing/ipad-13-reading.png` | Reading mode on the iPad: page 1, bar pinned at the bottom ("1/6" … "Sortir"), status bar with the date. | OK |
 | fr-CA | 3 | `ios-screenshots/fr-CA/listing/ipad-13-text-edit.png` | Edit-text popover on the heading, caret in the field, docked hardware-style keyboard below; toolbar visible behind. | OK, with a note (see Findings 4) |
 | fr-CA | 4 | `ios-screenshots/fr-CA/listing/ipad-13-sign.png` | Signatures popover from the toolbar's Sign button, one card "Mega W.", add buttons in the set's language. | OK |
@@ -168,7 +243,7 @@ Slot order is the iPad's own (pages, reading, text-edit, sign, draw, text, searc
 | fr-CA | 7 | `ios-screenshots/fr-CA/listing/ipad-13-search.png` | Find bar under the toolbar with "location", "1 sur 3", first hit selected, Search toggled on. | OK |
 | fr-CA | 8 | `ios-screenshots/fr-CA/listing/ipad-13-redact.png` | First line marked: box, handles, remove mark; Undo live, Save enabled. | OK |
 | fr-CA | 9 | `ios-screenshots/fr-CA/listing/ipad-13-home.png` | Home with three recents ("Contrat de location.pdf" first; "On My iPad" location), status bar with the date. | OK |
-| fr (France) | 1 | `ios-screenshots/fr/listing/ipad-13-pages.png` | Pages sidebar on the left (6 tiles, 2 ticked), document at the right, iPad toolbar with Pages toggled on. Faint white hint "Hold a page to move it" (localised) sits across the tiles at mid-sidebar, and the document text runs off the right edge behind the sidebar; both are the same in the 2.2 shot. | OK, with a note (see Findings 3) |
+| fr (France) | 1 | `ios-screenshots/fr/listing/ipad-13-pages.png` | Pages sidebar on the left (6 tiles, 2 ticked, footer "Sélection : 2"), document at the right, iPad toolbar with Pages toggled on. Re-shot 2026-10-24 (#800/#801); date cell spliced from the filed frame. Faint white hint "Hold a page to move it" (localised) sits across the tiles at mid-sidebar, and the document text runs off the right edge behind the sidebar; both are the same in the 2.2 shot. | OK, with a note (see Findings 3) |
 | fr (France) | 2 | `ios-screenshots/fr/listing/ipad-13-reading.png` | Reading mode on the iPad: page 1, bar pinned at the bottom ("1/6" … "Sortir"), status bar with the date. | OK |
 | fr (France) | 3 | `ios-screenshots/fr/listing/ipad-13-text-edit.png` | Edit-text popover on the heading, caret in the field, docked hardware-style keyboard below; toolbar visible behind. | OK, with a note (see Findings 4) |
 | fr (France) | 4 | `ios-screenshots/fr/listing/ipad-13-sign.png` | Signatures popover from the toolbar's Sign button, one card "Mega W.", add buttons in the set's language. | OK |
@@ -177,7 +252,7 @@ Slot order is the iPad's own (pages, reading, text-edit, sign, draw, text, searc
 | fr (France) | 7 | `ios-screenshots/fr/listing/ipad-13-search.png` | Find bar under the toolbar with "location", "1 sur 3", first hit selected, Search toggled on. | OK |
 | fr (France) | 8 | `ios-screenshots/fr/listing/ipad-13-redact.png` | First line marked: box, handles, remove mark; Undo live, Save enabled. | OK |
 | fr (France) | 9 | `ios-screenshots/fr/listing/ipad-13-home.png` | Home with three recents ("Contrat de location.pdf" first; "On My iPad" location), status bar with the date. | OK |
-| es-419 | 1 | `ios-screenshots/es-419/listing/ipad-13-pages.png` | Pages sidebar on the left (6 tiles, 2 ticked), document at the right, iPad toolbar with Pages toggled on. Faint white hint "Hold a page to move it" (localised) sits across the tiles at mid-sidebar, and the document text runs off the right edge behind the sidebar; both are the same in the 2.2 shot. | OK, with a note (see Findings 3) |
+| es-419 | 1 | `ios-screenshots/es-419/listing/ipad-13-pages.png` | Pages sidebar on the left (6 tiles, 2 ticked, footer "Selección: 2"), document at the right, iPad toolbar with Pages toggled on. Re-shot 2026-10-24 (#800/#801); date cell spliced from the filed frame. Faint white hint "Hold a page to move it" (localised) sits across the tiles at mid-sidebar, and the document text runs off the right edge behind the sidebar; both are the same in the 2.2 shot. | OK, with a note (see Findings 3) |
 | es-419 | 2 | `ios-screenshots/es-419/listing/ipad-13-reading.png` | Reading mode on the iPad: page 1, bar pinned at the bottom ("1/6" … "Salir"), status bar with the date. | OK |
 | es-419 | 3 | `ios-screenshots/es-419/listing/ipad-13-text-edit.png` | Edit-text popover on the heading, caret in the field, docked hardware-style keyboard below; toolbar visible behind. | OK, with a note (see Findings 4) |
 | es-419 | 4 | `ios-screenshots/es-419/listing/ipad-13-sign.png` | Signatures popover from the toolbar's Sign button, one card "Mega W.", add buttons in the set's language. | OK |
@@ -186,7 +261,7 @@ Slot order is the iPad's own (pages, reading, text-edit, sign, draw, text, searc
 | es-419 | 7 | `ios-screenshots/es-419/listing/ipad-13-search.png` | Find bar under the toolbar with "arrendamiento", "1 de 3", first hit selected, Search toggled on. | OK |
 | es-419 | 8 | `ios-screenshots/es-419/listing/ipad-13-redact.png` | First line marked: box, handles, remove mark; Undo live, Save enabled. | OK |
 | es-419 | 9 | `ios-screenshots/es-419/listing/ipad-13-home.png` | Home with three recents ("Contrato de arrendamiento.pdf" first; "On My iPad" location), status bar with the date. | OK |
-| es (Spain) | 1 | `ios-screenshots/es/listing/ipad-13-pages.png` | Pages sidebar on the left (6 tiles, 2 ticked), document at the right, iPad toolbar with Pages toggled on. Faint white hint "Hold a page to move it" (localised) sits across the tiles at mid-sidebar, and the document text runs off the right edge behind the sidebar; both are the same in the 2.2 shot. | OK, with a note (see Findings 3) |
+| es (Spain) | 1 | `ios-screenshots/es/listing/ipad-13-pages.png` | Pages sidebar on the left (6 tiles, 2 ticked, footer "Selección: 2"), document at the right, iPad toolbar with Pages toggled on. Re-shot 2026-10-24 (#800/#801); date cell spliced from the filed frame. Faint white hint "Hold a page to move it" (localised) sits across the tiles at mid-sidebar, and the document text runs off the right edge behind the sidebar; both are the same in the 2.2 shot. | OK, with a note (see Findings 3) |
 | es (Spain) | 2 | `ios-screenshots/es/listing/ipad-13-reading.png` | Reading mode on the iPad: page 1, bar pinned at the bottom ("1/6" … "Salir"), status bar with the date. | OK |
 | es (Spain) | 3 | `ios-screenshots/es/listing/ipad-13-text-edit.png` | Edit-text popover on the heading, caret in the field, docked hardware-style keyboard below; toolbar visible behind. | OK, with a note (see Findings 4) |
 | es (Spain) | 4 | `ios-screenshots/es/listing/ipad-13-sign.png` | Signatures popover from the toolbar's Sign button, one card "Mega W.", add buttons in the set's language. | OK |
