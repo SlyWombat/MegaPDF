@@ -57,11 +57,15 @@ by the coordinator per store group (Spanish play, Windows and iOS/Mac), and foun
 - iOS: the English iPhone text-edit had no caret on the first take; re-shot six times on a fresh
   install, all six showed it.
 
+- Android, pages view: the Spanish selection title read "Seleccionadas:" over "2" on two lines in es-419 and
+  es-ES. The string is now "Selección: %1$d" (es-419 hand-written, es-ES derived; `ES-REVIEW #724`, Fable has not
+  read it), and the two `play/phone/{es-419,es-ES}/android-pages.png` files were re-shot from the Android
+  Screenshots workflow (run 40052390473, branch `wip/pages-selected-es`): one line in both. The other 38 Play
+  images were not replaced; en, fr-CA, es-419 and es-ES came out byte-identical to the filed ones apart from
+  these two, and fr-FR differed in the status-bar icon pixels (seven frames) and in the redact frame (not investigated; those files were not replaced).
+
 ## Found and not fixed (for Dave)
 
-- **Pages view, Spanish selection bar, Android:** the title reads "Seleccionadas:" over "2" on two
-  lines in es-419 and es-ES. It does not clip, but it is visible in the Play listing image. Fixing it
-  is a string change and another Fable review.
 - **Android title bar:** the file name is ellipsised in es-419 and es-ES, and es-ES cuts into the
   extension ("Contrato de alquiler.p…"). Cosmetic.
 - **Every Play frame shows the 3-button navigation bar.** It is the same in the signed-off 2.2 set;
