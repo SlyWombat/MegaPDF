@@ -32,6 +32,10 @@ by the coordinator per store group (Spanish play, Windows and iOS/Mac), and foun
 `python3 tools/capture-gate/gate.py --store <store> <set> --out <dir>`, then again with
 `--against docs/qa/captures-2.2/<set>` for `en`, `fr-CA` and `fr-FR`.
 
+- **Microsoft after the #802 re-shoot:** en, fr-CA and fr-FR 0 to look at; es-419 and es-ES 2 each
+  (03 and 04, the same `person` OCR-accent false positive; accents checked whole by eye in 04 and 07).
+  Against 2.2 (en, fr-CA, fr-FR): 04 differs by 0.43 percent and 07 by about 0.5 percent of pixels, all
+  inside the signature and the marked name, which is what changed on purpose.
 - **Microsoft, Play, Linux:** every flag is the `person` check on a Spanish image, and every one was
   checked at full size. The gate's OCR has no Spanish data (`eng+fra` only) and drops accents, so
   it cannot clear `Sofía Ramírez` or `Lucía Fernández`; the accents are whole in every image.
@@ -54,6 +58,24 @@ by the coordinator per store group (Spanish play, Windows and iOS/Mac), and foun
   `Condiciones generales.pdf`. The Spanish recents list printed "D: › Documents"; the staging folder
   is now `D:\Documentos\`. The English tab read "Equipment Rental Agreement.pd" (also in the 2.2 set);
   the staged file is now `Rental Agreement.pdf` and English was re-shot.
+- Windows `sign` and `redact` (#802, re-shot 2026-10-24, all five languages, 04 and 07 only; the
+  other six slots are untouched and a re-run of 02 and 03 came out pixel-identical to the filed
+  ones). Four causes, three of them in what we ship or how we pose it, none of them DWM or Skia text
+  clipping: (1) the remove chip's X had been blank in the app since 2d9960cc (#348, 2026-09-24):
+  moving the code lost the private-use character from the string literal, so the chip in the
+  `redact` frame was an empty white square (it was empty in the 2.2 set too); fixed in
+  `DocumentView.xaml.cs` (`"\uE711"`). (2) The corner dot and the chip sat on the last letter of the
+  name because a redaction mark's selection chrome was drawn exactly on the marked words' box; it now
+  stands off by 4 dip the way an added text box's already did. (3) A dotted underline ran under
+  "Name: Jane Whitfield": the viewer's hover cue for the text run under the pointer, left on by the
+  rig parking the cursor with a warp the app never hears; `Shot-Redact.ps1` now walks the pointer off
+  the text first. (4) The signature's `g` loop hung across the "Sign above the line" label: the rig
+  clicks the signature's centre and 14 px higher the loop ends at the rule, so `Shoot-Set.ps1`
+  places it at Y 1446 instead of 1460. Also seen while reading: in es-419 and es-ES the redaction
+  mark began through the last "e" of "Nombre" (the drag starts at x 850 and the Spanish label is
+  longer); the Spanish sets now start it at x 872, in the space before the name. The package these
+  frames come from is the CI build of PR #805's app change (`MegaPDF.App_2.3.0.0_x64.msix`, run
+  40106879293), test-signed and installed through `Install-QaTestPackage`.
 - iOS: the English iPhone text-edit had no caret on the first take; re-shot six times on a fresh
   install, all six showed it.
 
@@ -74,8 +96,6 @@ by the coordinator per store group (Spanish play, Windows and iOS/Mac), and foun
   in all five languages and in 2.2 too. A product fix, not a re-shoot. No issue filed.
 - **Windows empty state (`08-home`):** Undo and Redo are drawn darker than the other disabled
   commands, in every language and in 2.2. The run's own check reports all disabled but Open.
-- **Windows `sign` and `redact`:** the signature descender touches the footer label and the selection
-  handle covers the last letter of the name. Both are the pose and match 2.2.
 - **Android `redact` slot, fr-CA and fr-FR:** the marked line's fill is lighter than in 2.2 (now the
   grey-blue English always had). Inside the mark only; the commit that changed it was not found.
 
@@ -83,8 +103,21 @@ by the coordinator per store group (Spanish play, Windows and iOS/Mac), and foun
 
 Measured on the packaged build: es-419 and es-ES keep icon and label on every command down to a 1720 px
 window (1147 effective px) and go icon-only at 1700 px (1133 effective px). The Store frame is 1667 effective px, so Spanish
-clears it by about 520. The font and size pickers shown during text editing were not measured. Recorded
-in `tools/screenshots-windows/README.md` and `docs/localisation.md`.
+clears it by about 520. **The font and size pickers were measured on 2026-10-24 (#802):** they add 200 effective
+px in every language, and Spanish still clears the Store frame by more than 330.
+
+| language | no pickers (app's own measure) | with pickers (app) | packaged, pickers shown: icons-only at / labelled at |
+|---|---|---|---|
+| en | 1060 | 1260 | 1914 px (1276 eff) / 1922 px (1281 eff) |
+| fr-CA, fr-FR | 1187 | 1387 | 2104 px (1403) / 2116 px (1411), fr-CA swept |
+| es-419 | 1130 | 1330 | 2014 px (1343) / 2020 px (1347) |
+| es-ES | 1122 | 1322 | 2004 px (1336) / 2008 px (1339) |
+
+Spanish is narrower than French in both states (by 57 to 65 effective px), and French was signed off, so
+**no Spanish label needs shortening** and none was changed. Below the breakpoint every label drops together
+(icons only, nothing clipped). The numbers that stood in the docs for English and French (1430, 1475, 1610) were
+stale from before the one-row toolbar and are corrected in `tools/screenshots-windows/README.md`,
+`docs/localisation.md` and `docs/microsoft-store-listing.md`. Recorded there too.
 
 ## Not verified
 
@@ -93,5 +126,8 @@ in `tools/screenshots-windows/README.md` and `docs/localisation.md`.
   *arrendamiento* and *recolección* in Latin America).
 - No Retina Mac image, no real iPhone (neither is a gate), no phone of Dave's for Play.
 - The Windows set was shot in two sessions about 20 minutes apart (fr-CA and fr-FR first), so it is
-  not strictly back to back. The five iPad sets were: 19:20 to 19:56 EDT, all showing the same date.
+  not strictly back to back; the ten `04-sign` and `07-redact` files were then re-shot on 2026-10-24
+  (#802) in one run per language, from the package named above rather than the 2.3.0.0 CI package
+  of 2026-10-23. Not exercised by hand: clicking the remove chip (the `redact` and `sign` Windows
+  self-test states pass locally and drive that route in code, 19 and 12 checks). The five iPad sets were: 19:20 to 19:56 EDT, all showing the same date.
 - `website/megapdf/screenshots/linux/` is not updated.

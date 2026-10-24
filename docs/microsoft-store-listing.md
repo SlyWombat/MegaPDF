@@ -717,8 +717,9 @@ Store's minimum on both axes, and all eight share one frame.
 **Display scale matters as much as resolution.** `ApplyToolbarLayout` switches on
 *effective* pixels, so at 200% scale a 2500 px window is only 1250 effective —
 below the toolbar's Full breakpoint, and the toolbar loses its labels. The
-breakpoint is measured from the labels themselves since #91 (about 1430
-effective px in English, 1610 in French). The capture machine is set to **150%**
+breakpoint is measured from the labels themselves since #91 (1060 effective px
+in English, 1187 in French, 1130 and 1122 in es-419 and es-ES; 200 more while the
+font and size pickers show, 2026-10-24). The capture machine is set to **150%**
 (`tools/screenshots-windows/Set-Scale.ps1 150`) so 2500 px reads as 1667
 effective and the toolbar keeps icon + label in every language, which is what
 these captions and the description assume. Check the toolbar in the shots before

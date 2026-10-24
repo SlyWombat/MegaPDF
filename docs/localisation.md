@@ -82,13 +82,15 @@ Android and .NET; Canada is the exact-match region on all four platforms.
   asks the bar for its desired width with every label showing and Save wearing
   its dot, and sheds labels below that. `--screenshot` prints the resolved
   labels and the measured breakpoint to stderr (`toolbar: …`) so a language's
-  number can be read off a run. English measures about 1430 effective px,
-  French about 1610 (measured on the installed package, where every label is
-  French; the dev build's figure is lower because its x:Uid labels stay
-  English). The Store frame, 2500 px at 150 % = 1667 effective, clears it. Spanish
-  (es-419 and es-ES, packaged build, Save with its dot, no pickers) keeps every label
-  down to 1147 effective px and loses them at 1133 (measured 2026-10-23 by a width
-  sweep; the English and French figures above were not re-bracketed that day).
+  number can be read off a run. The toolbar labels are set from code, so the dev
+  build's `--language` figure is the real one (cross-checked 2026-10-24 against a
+  width sweep of the packaged build, within 5 effective px). Measured with Save wearing
+  its dot, effective px: English 1060, French (fr-CA and fr-FR) 1187, es-419 1130,
+  es-ES 1122. The font and size pickers, which show while an added text box is edited
+  or selected, add 200 in every language: English 1260, French 1387, es-419 1330, es-ES 1322.
+  The Store frame, 2500 px at 150 % = 1667 effective, clears every one of them. Spanish is
+  narrower than French in both states (by 57 to 65), so no Spanish label needs shortening
+  for the toolbar. Packaged brackets are in `tools/screenshots-windows/README.md`.
 - **Automation.** Every toolbar and flyout control the screenshot harness
   touches has an `AutomationProperties.AutomationId` (`OpenButton`,
   `ShrinkButton`, `SignaturesButton`, …). The UIA `Name` is what Narrator
