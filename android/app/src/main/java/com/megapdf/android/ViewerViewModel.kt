@@ -562,7 +562,19 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
      * left `redactionMarkCount` non-zero, so Save asked about a redaction the new document
      * did not have.
      */
+    private var redactionRefreshTicket = 0
+
     private suspend fun refreshRedactionMarks() {
+        // Only the newest read may write (#802). This reads the core one page at a time on the
+        // engine's single queue, so two reads overlap whenever one starts before the other has
+        // finished: attach() starts one at the document's open, and the engine is still busy
+        // with the page checks when a mark is placed and its own read begins. The older read had
+        // already passed page 1 before the mark existed, finished last, and wrote "no marks"
+        // over the mark just read back — the mark was in the core and not on the screen. The
+        // capture rig saw it as a missing mark, asked again and stacked a second one (the
+        // darker fill in one French leg of two Play sets); a person marking a line in the
+        // first seconds after opening would have seen a mark that was not drawn.
+        val ticket = ++redactionRefreshTicket
         val doc = document
         if (doc == null) {
             redactionMarks = emptyMap()
@@ -574,6 +586,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
             val marks = doc.onPageForRedaction(index) { it.redactionMarks() }
             if (marks.isNotEmpty()) byPage[index] = marks
         }
+        if (ticket != redactionRefreshTicket) return
         redactionMarks = byPage
         // A selection the core no longer has is not a selection: undo, a removal and a clear
         // all take marks away, and chrome left pointing at one would move a mark that is not
@@ -1436,6 +1449,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
     fun applyScreenshotMode(state: String?) {
         if (state == null) return
         val app = getApplication<Application>()
+        Log.i(SCREENSHOT_TAG, "pose '$state' starting (view model ${System.identityHashCode(this)})")
         seedScreenshotSignatures(app)
         when (state) {
             "home" -> {
@@ -1616,6 +1630,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                                         delay(50)
                                         settle += 50
                                     }
+                                    Log.i(SCREENSHOT_TAG, "redact pose: marking '${line.text}' (blocked=$editingBlocked)")
                                     markForRedaction(0, line.rect)
                                     // The mark lands asynchronously, so this waits for it rather
                                     // than guessing at a delay: this pose is a store capture, and
@@ -1624,8 +1639,50 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                                     // leg placed no mark at all while en and fr-FR did, and the
                                     // shot still reached the artifact between the two.
                                     if (!awaitRedactionMark(3_000)) {
-                                        markForRedaction(0, line.rect)
+                                        // Ask the core before asking again: a mark that is in
+                                        // the core and not yet on the screen must not be made
+                                        // twice (#802).
+                                        val inCore = doc.onPageForRedaction(0) { it.redactionMarks() }.size
+                                        Log.w(
+                                            SCREENSHOT_TAG,
+                                            "redact pose: no mark on screen after 3 s; the core has $inCore " +
+                                                "(blocked=$editingBlocked)",
+                                        )
+                                        if (inCore > 0) {
+                                            refreshRedactionMarks()
+                                        } else {
+                                            markForRedaction(0, line.rect)
+                                        }
                                         awaitRedactionMark(3_000)
+                                    }
+                                    // One mark, and the log says how many there were. The
+                                    // redact frames of two runs have had the line's fill darker
+                                    // in one French leg each (fr-CA in 2.2's set, fr-FR in 2.4's,
+                                    // 156/169/181 against 199/206/213 for a single mark: two
+                                    // identical translucent marks stacked), never in en or es. A
+                                    // second mark on the same line is a pose fault, not a
+                                    // feature, so anything past the first is taken off before the
+                                    // shutter and the run says that it did (#802).
+                                    while (editingBlocked && settle < 4_000) {
+                                        delay(50)
+                                        settle += 50
+                                    }
+                                    val onPage = doc.onPageForRedaction(0) { it.redactionMarks() }
+                                    Log.i(
+                                        SCREENSHOT_TAG,
+                                        "redact pose: ${onPage.size} mark(s) on page 1 after the " +
+                                            "settle: ${onPage.map { it.markId }}",
+                                    )
+                                    if (onPage.size > 1) {
+                                        Log.w(
+                                            SCREENSHOT_TAG,
+                                            "redact pose: ${onPage.size} marks stacked on page 1; " +
+                                                "keeping the first, removing ${onPage.drop(1).map { it.markId }}",
+                                        )
+                                        doc.onPageForRedaction(0) { page ->
+                                            onPage.drop(1).forEach { page.removeRedactionMark(it.markId) }
+                                        }
+                                        refreshRedactionMarks()
                                     }
                                     val mark = redactionMarks[0]?.firstOrNull()
                                     if (mark == null) {

@@ -332,6 +332,10 @@ ES_419_TO_ES_ES = [
     # name, edited heading, search term) carry it, and the search term must occur in
     # the page the captures open.
     ("arrendamiento", "alquiler"),
+    # The phones' document name is a bare noun, so it starts a capital: "Arrendamiento.pdf"
+    # (es-419) is "Alquiler.pdf" in Spain. Short on purpose, because the title bar cuts a
+    # longer name before the extension (#802).
+    ("Arrendamiento", "Alquiler"),
     ("Español (Latinoamérica)", "Español (Latinoamérica)"),  # language names never change
 ]
 

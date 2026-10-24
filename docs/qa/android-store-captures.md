@@ -53,6 +53,13 @@ Each of these has been a defect at least once, so each is named:
   navigation buttons beside it — it was in all 24 tablet captures. The script
   disables the launcher for the run and puts it back on the way out. No effect on a
   phone: the captures come out byte-identical either way.
+- **The 3-button navigation bar** (#802). The emulator image boots with back / home /
+  recents along the bottom, and every Play frame of the 2.2 and 2.4 sets carried it. The
+  script now enables the `navbar.gestural` overlay (`cmd overlay enable-exclusive --category`)
+  and fails the run if it did not take. What is drawn instead is the thin gesture handle
+  (about 284 x 11 px at 1080 wide, centred, on every frame but `reading`, which is
+  immersive and draws none); the app's bottom bar sits about 31 px lower because the
+  system inset is smaller.
 - **Android's immersive-mode lesson.** The first time an app hides the system bars,
   SystemUI puts a teal panel over the top half of the screen — *"Viewing full screen
   / To exit, swipe down from the top / GOT IT"* — and dims everything under it.
@@ -101,7 +108,7 @@ Look at every image. A set ships only when all of this holds:
 4. **The right demo person per language**, accents rendering.
 5. **A clean status bar**: 9:41, full battery, no "no internet" badge, no
    notification icons, nothing of the emulator's own. And a clean *bottom*: no
-   taskbar, no navigation buttons. **`reading` is the exception and has no
+   taskbar, no navigation buttons (the gesture handle is what a gesture-navigation phone draws, and is allowed). **`reading` is the exception and has no
    status bar at all** — the mode goes immersive, which is the feature. The gate
    knows (`barless_poses` in the `play` profile) and turns the check around for
    that one pose: a posed bar appearing there would mean immersive mode did not
