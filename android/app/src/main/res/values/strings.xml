@@ -481,7 +481,7 @@
     <string name="pages_refused_engine">MegaPDF couldn\'t make that page change safely, so it left the document as it was.</string>
 
     <!-- Selecting and copying text (#710), and read-only form fields (#712) -->
-    <string name="select_copy_forbidden">This document doesn\'t allow copying its text.</string>
+    <string name="select_copy_forbidden">The author of this document asked that nothing be copied out of it.</string>
     <string name="select_copied">Copied</string>
     <string name="selection_start_handle">Start of selection</string>
     <string name="selection_end_handle">End of selection</string>

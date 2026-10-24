@@ -454,8 +454,8 @@
     <string name="pages_refused_poisoned">Un caviardage de ce document ne s\'est pas terminé, alors il ne peut plus qu\'être fermé. Fermez-le et ouvrez-le de nouveau — rien n\'a été écrit.</string>
     <string name="pages_refused_engine">MegaPDF n\'a pas pu effectuer cette modification de pages en toute sûreté, alors le document est resté tel quel.</string>
 
-    <!-- FR-REVIEW #710 - new with text selection, not yet read by the reviewer. -->
-    <string name="select_copy_forbidden">Ce document n\'autorise pas la copie de son texte.</string>
+    <!-- FR-REVIEW #710 - reworded to #558's extraction-class wording, not yet read by the reviewer. -->
+    <string name="select_copy_forbidden">L\'auteur de ce document a demandé que rien n\'en soit copié.</string>
     <!-- FR-REVIEW #710 -->
     <string name="select_copied">Copié</string>
     <!-- FR-REVIEW #710 - TalkBack name of the selection's start handle (iOS's wording). -->

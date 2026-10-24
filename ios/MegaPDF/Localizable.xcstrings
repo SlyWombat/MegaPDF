@@ -7718,6 +7718,35 @@
         }
       }
     },
+    "The author of this document asked that nothing be copied out of it." : {
+      "comment" : "#710: notice when a document's copy permission is off; the text still selects, Copy is disabled. Reuses #558's extraction-class row word for word. FR-REVIEW #710 — reworded to #558's wording, not yet read by the reviewer. ES-REVIEW #710 — reworded to #558's wording, not yet read by the reviewer.",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El autor de este documento pidió que no se copie nada de él."
+          }
+        },
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El autor de este documento pidió que no se copie nada de él."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "L'auteur de ce document a demandé que rien n'en soit copié."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "L'auteur de ce document a demandé que rien n'en soit copié."
+          }
+        }
+      }
+    },
     "The copy carries the original's digital signature, and it is no longer valid." : {
       "comment" : "#481, #576: said once, quietly, after a Save a copy that kept the signature -- the common, already-safe path still deserves the one fact about what became of the signature. FR-REVIEW #576 — corrected wording, not yet read by the reviewer. The previous wording said the signature does not carry over to the copy, which is untrue: only its validity fails to carry over. ES-REVIEW #724 — new, not yet read by the reviewer.",
       "localizations" : {
@@ -7888,35 +7917,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "La police d'origine ne pouvait pas afficher ce texte; une police standard semblable a été utilisée."
-          }
-        }
-      }
-    },
-    "The owner of this document doesn't allow copying its text." : {
-      "comment" : "#710: notice when a document's copy permission is off; the text still selects, Copy is disabled. FR-REVIEW #710 — new, not yet read by the reviewer. ES-REVIEW #724 — new, not yet read by the reviewer.",
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "El propietario de este documento no permite copiar su texto."
-          }
-        },
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "El propietario de este documento no permite copiar su texto."
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Le propriétaire de ce document n'autorise pas la copie de son texte."
-          }
-        },
-        "fr-CA" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Le propriétaire de ce document n'autorise pas la copie de son texte."
           }
         }
       }

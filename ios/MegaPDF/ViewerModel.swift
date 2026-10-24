@@ -1879,7 +1879,7 @@ final class ViewerModel: ObservableObject {
             }
             setTextSelection(PageTextSelection(pageIndex: pageIndex, word: word), snapshot: snapshot)
             if !canCopyText {
-                showNotice(String(localized: "The owner of this document doesn't allow copying its text."))
+                showNotice(String(localized: "The author of this document asked that nothing be copied out of it."))
             }
             // The menu waits for the finger to come up: shown under it, it is taken away again.
             if !selectionPressDown { selectionMenuRequest += 1 }
@@ -1946,7 +1946,7 @@ final class ViewerModel: ObservableObject {
     /// document forbids copying: the menu already shows Copy disabled, so this is the backstop.
     func copyTextSelection() {
         guard canCopyText else {
-            showNotice(String(localized: "The owner of this document doesn't allow copying its text."))
+            showNotice(String(localized: "The author of this document asked that nothing be copied out of it."))
             return
         }
         let text = selectedText
