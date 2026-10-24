@@ -1,0 +1,7 @@
+app:      /Users/claude/cap24/app/MegaPDF.app
+binary:   eff4ca4c768469342fd5db03f5f90db9e925f2b4998b62170b4f893c0e8c4b48
+language: es-419 (es-419)
+window:   1440x900
+document: Contrato de arrendamiento.pdf (from demo-es.pdf)
+pages doc: Contrato de arrendamiento.pdf (from demo-es-pages.pdf), slots 01-reading and 04-pages
+taken:    2026-10-23T23:19:20Z
