@@ -3,7 +3,9 @@
 The order of operations for a release, on every channel at once: the gates, the command
 that proves each one, and what has bitten before. The deep steps live in the documents
 this one links to; this is the one you open first. Written after 2.1.1 (#395, 2026-09-26),
-the release that found four show-stoppers *after* CI was green.
+the release that found four show-stoppers *after* CI was green, and revised after 2.4.0
+(#817, 2026-10-25), whose gates found a permission 2.3.0 had shipped (§2.3), three
+redaction defects (§2.2) and a Linux listing pointing at 404s (§3).
 
 | For | Read |
 |---|---|
@@ -18,8 +20,15 @@ the release that found four show-stoppers *after* CI was green.
 
 Start by opening an issue from the **Release checklist** template
 (`.github/ISSUE_TEMPLATE/release-checklist.md`) and work down it. 2.0 was #146, 2.1.1 was
-#395; every finding, run number, submission id and hash goes in that issue's comments as
-it happens, because the consoles are reachable from nowhere else in this repo.
+#395, 2.4.0 was #817; every finding, run number, submission id and hash goes in that issue's
+comments as it happens, because the consoles are reachable from nowhere else in this repo.
+
+Keep one line per platform at the top of the issue — tag, full SHA, workflow run — filled in
+as each is cut (§3, the tag rule): 2.4.0's platforms were not all built from one commit.
+**A decision that is Dave's** (a defect that is already live, a promotion, wording) goes to
+him one at a time, each with a recommendation, and his answer is recorded as a timestamped
+comment on the issue the moment he gives it (2.4.0's two are the Android permissions and the
+privacy policy, both on #817).
 
 ## 0. Always ready
 
@@ -33,7 +42,9 @@ the Mac mini CI runner (switched on, picking up jobs).
 `--machines` adds the leftovers check on the Mac mini, kdocker2, kdocker3 and GPD-DAVE (§4's
 "machines left as found"); `--stores` adds §4's read-backs. `.github/workflows/readiness.yml`
 runs the plain check weekly and keeps one "Release readiness" issue in step with it. The aim
-is that §1 starts from a repo with nothing on that list.
+is that §1 starts from a repo with nothing on that list. After the version bump two lines
+read `ATTENTION` on purpose until go-live: the README's "Store status as of" and the support
+page's "The current release is" (§2.7's sweep clears both).
 
 ## 1. What a release is
 
@@ -96,7 +107,10 @@ release and claiming to replace the wrong packages (fixed for 2.2.0 in #647); an
 Each gate has the command that proves it and what "done" looks like. A show-stopper at
 any gate stops the release; its fix is a PR to `main`, and **the release commit moves to
 the merge** — packages and tags are cut from the final tree, never from the commit that
-was being verified (§3, the tag rule).
+was being verified (§3, the tag rule). A defect found here that is **already in the live
+release** is not automatically a show-stopper: put it to Dave with a recommendation and
+record his ruling on the checklist issue (2.4.0: the Android rotation bug #826 shipped
+unfixed by his decision; the permissions, #821, did not).
 
 ### 2.1 CI green on the release commit
 
@@ -115,24 +129,60 @@ commit has no CI run and no `MegaPDF-store-packages` artifact of its own; the Wi
 packages then come from the last run whose tree matches (`git diff --stat <that sha>
 <release sha> -- . ':!android' ':!ios'` must be empty). Record the run id in the issue.
 
+A job that a version bump cannot have broken and that passes on a re-run of the failed job
+is still recorded: file the flake as an issue rather than letting the retry hide it
+(2.4.0: Android `ShrinkForEmailTest`, #820).
+
 ### 2.2 Corpus batteries, on kdocker3
 
-The 4,337-PDF corpus is at `~/pdf-test` on **kdocker3** (`/mnt/pdf-test` here) — not
-kdocker2, which has no corpus-battery role; two agents hit this during 2.2.0 and both
-ran on kdocker3 instead, documenting the deviation. Results go
-to the **gitignored** `tests/Private/stress/release-<x.y.z>-kdocker3/`; no corpus
-filename is ever written into the repo, an issue or a commit message.
+The corpora are on **kdocker3** — `~/pdf-test` (4,337 PDFs; `/mnt/pdf-test` here),
+`~/pdf-public`, `~/pdf-test-ca`, `~/pdf-test-un` and `~/pdf-test-vendor` — not kdocker2,
+which has no corpus-battery role; two agents hit this during 2.2.0 and both ran on kdocker3
+instead, documenting the deviation. Run all five (vendor is reported, never committed).
+Build the release commit **and the previous release's commit** the same way in a throwaway
+container (2.4.0: `git archive` of each into `megapdf:dotnet`), so every comparison is the
+same machine and the same PDFium. Results go to the **gitignored**
+`tests/Private/stress/release-<x.y.z>-kdocker3/`; no corpus filename is ever written into
+the repo, an issue or a commit message.
 
 ```
 tools/stress/structure-battery.sh <megapdf_structure_check> ~/pdf-test <out> --reference --cli <megapdf-cli>
 tools/stress/markdown-battery.sh <megapdf-cli> <cmark> ~/pdf-test <out>
-MegaPDF.Stress run --root ~/pdf-test --out <out>/edits   # the editing harness, tools/stress/README.md
+tools/stress/pages-battery.sh <megapdf-cli> ~/pdf-test <out> --jobs 4
+tools/stress/redaction-battery.sh <megapdf_leakcheck> ~/pdf-test <out>   # leakcheck is built with the core tests
+MegaPDF.Stress run --root ~/pdf-test --out <out>/edits --phases edits   # the editing harness, tools/stress/README.md
 python3 tools/stress/compare_runs.py <previous release's run> <out>/edits
 ```
 
 Done: F1 ≥ 0.998, order τ ≥ 0.9, 0 crashes, 0 hangs, 0 cmark failures, 0 read-back
-failures, and `compare_runs.py` against the previous release's run explains every
-change. (2.1.1 at `029c849`: F1 0.998401, τ 0.934, 0/0, and 0 changes in 22,267 edits.)
+failures; pages 0 qpdf failures, count mismatches and write failures; redaction 0 leaked,
+0 changed outside the marked areas, 0 hung (the script's exit code, and `summary-redact.txt`);
+and `compare_runs.py` against the previous release's run explains every change. (2.1.1 at
+`029c849`: F1 0.998401, τ 0.934, 0/0, and 0 changes in 22,267 edits.) Redaction was not on
+this list before 2.4.0 and TESTING.md holds no earlier full-corpus redaction record, so
+2.4.0's run is the first baseline.
+
+**A line that does not read zero is "present in the previous release too" only if the
+previous release's build, built and run the same way on the same machine, prints the same
+line.** 2.4.0 rebuilt 2.3.0 (`80dfb5d`) and got identical per-document redaction lines, which
+is how the four below were known to predate it; there was no earlier record to lean on.
+Whether a pre-existing line blocks is Dave's call: record it and his ruling on the issue.
+
+Lines known not to read zero at 2.4.0 (delete a row when its issue closes, and re-run
+rather than trust this list):
+
+| battery | line | issue |
+|---|---|---|
+| structure | public corpus F1 0.981815 | #498 |
+| edits | 6 `delete_word` read-back failures on two copies of one vertical-writing fixture | #824 |
+| redaction | 9 documents leave the redacted word in an `/XFA` packet | #822 |
+| redaction | 1 hang: an outline whose entries name each other as `/Next` | #823 |
+| redaction | 43 private documents change outside the marked area | #825 |
+| pages | 9 "REFUSED, other" on the public corpus | #445 |
+| all batteries | the `*.pdf` walk skips the 179 upper-case `*.PDF` files of the private corpus (the edit harness sees them) | #825 |
+
+The time is a gate too (§5, #704): compare per-document times against the previous release's
+run, not only the scores.
 
 ### 2.3 Real-machine verification, per platform
 
@@ -185,8 +235,31 @@ other name) for the primary argument.
 | Windows | GPD-DAVE | `gh run download <run> -n MegaPDF-store-packages` → `python3 tools/check-native-arch.py x64/arm64 <msix>`, identity and resource-map checks (`tools/Store-Submission.md` § Verify) → `tools/windows-qa/qa-safety.ps1`: `Start-QaUserDataWatch`, then `Install-QaTestPackage <x64 msix>` (never a bare `Remove-AppxPackage`: it would take a Store install's data with it, #717) | About; `Get-AppxPackage ElectricRV.MegaPDF` |
 | Mac | Mac mini | `tools/build-macos-app.sh osx-arm64 ~/app-macos`, `--self-test`, then the real app (`tools/mac-mini.md` § Recipes) | `Contents/Info.plist` CFBundleShortVersionString |
 | iOS | Mac mini | `xcodebuild test` then a simulator run of the app; Files → share sheet → MegaPDF | built `Info.plist` |
-| Android | emulator (Pixel 6 / API 33 was used) | the release build; Files → Open with | `aapt dump badging` |
+| Android | the Pixel 4 XL over adb (2.4.0) or an emulator (Pixel 6 / API 33) | the release commit's debug APK (`megapdf-debug-apk` of `android-ci.yml`; the signed build exists only once tagged, so the manifest is checked again below); Files → Open with | `aapt dump badging` |
 | Linux | clean containers | `tools/linux/check-apt-repo.sh <repo> <fixtures>` (installs on Debian 12/13, Ubuntu 22.04/24.04/26.04 and **runs `megapdf-cli`** in each); `package-check.sh`; the tarball's `install.sh` as non-root | `MegaPDF --install-kind`, `megapdf-cli --version` |
+
+**Android: read the merged manifest, not ours (#821).** 2.3.0 shipped asking for `INTERNET`
+and `ACCESS_NETWORK_STATE`, merged in from ML Kit's library (#676) while our own manifest
+declared none, and every store text said the app asks for no permissions and makes no network
+connections. On a Pixel, one OCR Find queued ML Kit usage events and POSTed them to
+`firebaselogging.googleapis.com` (HTTP 200). So, every release:
+
+- `./gradlew :app:checkNoPermissions` passes. It reads the merged debug and release manifests
+  and fails on any `uses-permission` except androidx.core's signature-level
+  `DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`; `assembleRelease`/`bundleRelease` depend on it and
+  `android-ci.yml` runs it, so a library bump that adds one fails there. Strip an unwanted one
+  with `tools:node="remove"` in the app manifest; adding to the allow-list instead is a change
+  to the store copy, not a build fix.
+- On the Pixel: `adb shell dumpsys package ca.electricrv.megapdf` lists neither permission;
+  the app process's `/proc/<pid>/status` `Groups:` has no `3003` (inet: a process outside it
+  cannot open a socket); OCR Find on an image-only PDF still finds the word (the scan
+  highlight and the "Read from a scanned page" notice).
+- The signed bundle, once `android-release.yml` has built it (§3): download `app-release.aab`
+  and read `base/manifest/AndroidManifest.xml` — no `INTERNET`, no `ACCESS_NETWORK_STATE`
+  (2.4.0 searched the protobuf manifest's strings; that machine had no `aapt2`).
+- Every "no permissions" and "no network" claim is re-read against that manifest before
+  submitting: `android/RELEASING.md` (Data safety), the generated `docs/app-store-listing.md`,
+  the website and the privacy policy.
 
 Done: one comment per platform on the checklist issue, "no show-stopper", naming the
 commit and what was clicked — or the issue number of the show-stopper and the hold.
@@ -213,7 +286,9 @@ with `ios-screenshots/<lang>/`, `macos-screenshots/<lang>/`, `play/phone/<lang>/
 Windows in `artifacts/store/screenshots/<lang>/` — the layout `asc_publish.py` and
 `play_listing.py` read. Never a home folder, a Desktop or a scratchpad; a rig may write
 into its own machine's `artifacts/`, then the set is copied here and the remote copy
-removed.
+removed. The folder is named by the checklist's commands: 2.4 staged `captures-2.4`,
+matching `docs/qa/captures-2.4`, not `captures-2.4.0` — the tools take it as an argument,
+so any name works, but every command on the issue must use the one that exists.
 
 **Every image is read by eye.** The gate compares images with each other, so it cannot
 see a constant: a keyboard tip, a resize grabber, a real clock, a debug cog, a file
@@ -267,9 +342,15 @@ Register-ScheduledTask -TaskName 'MegaPDF WACK' … -LogonType Interactive -RunL
 Start-ScheduledTask -TaskName 'MegaPDF WACK'      # only when Dave is at the console to click Yes
 ```
 
+**Dave has to be at the console** to click Yes on the UAC prompt, so tell him the time you
+will start the task and wait for his word; the run takes about three minutes (2.4.0: 19:52 to
+19:55 EDT, `appcert test exit: 0`, `LastTaskResult 0`).
+
 Done: `artifacts/store/wack-done.marker` exists, the report says PASS with only the two
-known optional FAILs, and it is renamed `artifacts/store/wack-report-<x.y.z.0>-<date>.xml`.
-Delete the scheduled task afterwards.
+known optional FAILs (#58 "General metadata correctness" and #88 "Blocked executables", both
+marked OPTIONAL), and it is renamed `artifacts/store/wack-report-<x.y.z.0>-<date>.xml`. Keep
+that report and `wack-run-<date>.log`, and quote `OVERALL_RESULT` and `APP_VERSION` on the
+issue. Delete the scheduled task afterwards.
 
 ### 2.7 Docs
 
@@ -279,12 +360,26 @@ docs edit (it fails Linux CI, not a doc review): since #652, this release's
 still-true features fold into the highlighted-features section (organised by what the
 app does, not by release — nothing added there expires when the next version ships), the
 gallery from this release's sets (`docs/release-notes/<x.y.z>/website-renders/`), the
-source link in the footer, the privacy policy's effective date if it changed, and
-`website/megapdf/support/index.html`'s "The current release is **x.y.z** everywhere"
-line — prose, not a version string, so §1's grep does not catch a stale one either. A
-**New in x.y** block starts fresh at 2.3 and stays a single current block with no stack
-behind it; until then there is no per-release block to maintain. The site is **not
-deployed** until the go-lives (§3, website).
+source link in the footer, and the privacy policy's effective date if it changed. The site
+is **not deployed** until the go-lives (§3, website).
+
+**The hand-written sweep.** These name the release in prose or in a claim and §1's grep
+cannot see any of them (2.4.0's landing page still said "New in 2.3" after its deploy, #830):
+
+- `website/megapdf/index.html`: the **New in x.y** section — a single current block with no
+  stack behind it, so replace the previous one — and the "Private by design" card's list of
+  languages ("English, French and Spanish", #830).
+- `website/megapdf/support/index.html`: "The current release is **x.y.z** everywhere" and the
+  version placeholder in the form. Word the sentence for what is live at that moment, and
+  re-read the stores immediately before deploying: iOS went live in the middle of 2.4.0's
+  go-live deploy, so the page said "arriving on iPhone and iPad" for about twenty minutes
+  (#829). Run `website/check-support-page.js` after any change to the page (`npm install
+  jsdom` once, `node website/check-support-page.js`).
+- `README.md`: "Store status as of x.y.z on <date>", one line per platform as read back (§4).
+- `website/README.md`: the support-mailbox and support-system lines, if either changed.
+- `docs/release-notes/<x.y.z>/*`: the "Draft … not yet approved" headers once Dave approves
+  and the stores are live, and any "not yet reviewed" sentence once the reviewer has approved.
+  Never touch a translated line or its `FR-REVIEW`/`ES-REVIEW` marker for this.
 
 ## 3. Submission, per channel
 
@@ -299,6 +394,13 @@ merge of its last show-stopper fix, not the commit that was under test. A moved 
 re-runs the workflow and makes a **new build number** (iOS build 33 replaced 32 after
 ITMS-90788), so tag once, after the gates, and record the run id in the issue.
 
+Platforms may be cut from different commits: 2.4.0's Android was tagged at `14f7b505`
+(#821 moved its tree) after iOS, Mac, Linux and the CLIs were tagged at `72268e9f`. That is
+fine when the diff between the two commits (`git diff --stat <tag's sha> <new sha>`) touches
+nothing the already-tagged platforms ship — read it, and say so on the issue — and it is why
+the per-platform SHA line at the top of the issue exists. Verification done on the earlier
+commit still stands for the others, not for the platform whose tree moved.
+
 **Windows** — `tools/Store-Submission.md` § Submitting through the API. Both packages in
 `artifacts/store/rc-<x.y.z.0>/` with `SHA256SUMS` naming the CI run.
 
@@ -311,8 +413,9 @@ tools/msstore.sh submit     # clone, replace packages and screenshots, upload, c
 tools/msstore.sh status     # read it back: id, status Certification, publish Immediate
 ```
 
-2.1.1.0 was submission `1152921505701982919`. Certification takes hours; the listing goes
-public on its own (publish mode Immediate).
+`build` reads `artifacts/store/rc-<x.y.z.0>/SHA256SUMS` first; without it, it ends in a
+traceback, not a message. 2.1.1.0 was submission `1152921505701982919`. Certification takes
+hours; the listing goes public on its own (publish mode Immediate).
 
 **iOS** — `docs/app-store-listing.md`. Wait for `ios-release.yml` to finish and App Store
 Connect to process the build before `build`.
@@ -323,16 +426,18 @@ tools/asc-publish.sh version <x.y.z>
 tools/asc-publish.sh copy
 tools/asc-publish.sh screenshots artifacts/store/captures-<x.y.z>
 tools/asc-publish.sh review
-tools/asc-publish.sh assets-state        # loop until every screenshot is COMPLETE, none FAILED
+tools/asc-publish.sh assets-state        # loop until every screenshot is COMPLETE, none FAILED; previews carry over (6 iOS, 3 Mac)
 tools/asc-publish.sh build <N>
 tools/asc-publish.sh version-info        # the record as Apple holds it: version, build, state
 tools/asc-publish.sh submit
 ```
 
 **Mac** — the same record, a second platform: build with
-`gh workflow run macos-appstore.yml -f upload=true`, then the sequence above with
-`ASC_PLATFORM=MAC_OS` in front of each `tools/asc-publish.sh` call (the captures come
-from `macos-screenshots/<lang>/` in the same folder).
+`gh workflow run macos-appstore.yml -f upload=true --ref ios-v<x.y.z>` (the tag, so it
+builds the release tree and the run's `headSha` says so; without `--ref` it builds `main`),
+then the sequence above with `ASC_PLATFORM=MAC_OS` in front of each `tools/asc-publish.sh`
+call (the captures come from `macos-screenshots/<lang>/` in the same folder). The Mac build
+number is the version string (`2.4.0`), so `build` takes that, not an integer.
 
 **Google Play** — `android/RELEASING.md`. The tag puts the bundle on **internal**;
 production is a separate, deliberate step, and `push` without `--commit` validates only.
@@ -346,6 +451,13 @@ tools/play.sh listing readback artifacts/store/captures-<x.y.z> --production <ve
 tools/play.sh listing contact                       # says "(the support page)"; the first time add --website https://electricrv.ca/megapdf/support/ --commit (#662)
 ```
 
+`contact --commit` prints a harmless 400 afterwards (it deletes an already-committed edit),
+and the phone reads "the 888 555 placeholder" by Dave's instruction (#417). **A new locale
+has no 10-inch tablet set**: `--phone-only` pushes none and leaves the existing ones, so
+decide before the release whether a locale without one is acceptable (es-419 and es-ES
+shipped without in 2.4.0). Run the tools from a tree at `origin/main` (§5, the first trap):
+2.4.0's Play push used a fresh worktree because the shared checkout was behind.
+
 **Linux** — `tools/Linux-Packaging.md` § The day. Not a store: the tag build makes a
 *draft* release; publishing it is the go-live. Check `git log --oneline -1 HEAD`
 against `origin/main` before any `deploy.py` call below — a checkout even a few commits
@@ -355,15 +467,22 @@ deploy from it then regresses the live site rather than advancing it.
 The dry run comes **before** `gh release edit --draft=false`. Publishing cannot be taken
 back, and the rehearsal exists to fail while failing is free (#668).
 
+**The metainfo's screenshot URLs must answer before the `.deb` is public.** The metainfo
+inside the package points at `https://electricrv.ca/megapdf/screenshots/linux/<locale>/…`;
+for a **new locale** those images must already be in `website/megapdf/screenshots/linux/` and
+go up with the release's `deploy.py`, or the shipped package points at 404s and cannot be
+fixed without a new one. 2.4.0's es-419 and es-ES were missing (14 of the 35 URLs, #724).
+The read-back is in §4.
+
 ```
 git tag -a linux-v$(tools/linux/package-version.sh <x.y.z>) <sha> -m "MegaPDF <x.y.z> for Linux" && git push origin linux-v<x.y.z>
 gh run download <run> -n MegaPDF-apt-repository -D <scratch>/apt   # NOT straight into website/megapdf/apt: the artifact also carries
                                                                      # the tracked megapdf.asc/.gpg/.sources and a direct download collides on them
 diff <scratch>/apt/megapdf.asc website/megapdf/apt/megapdf.asc     # confirm the signing key is unchanged (and the other tracked key files), then
 cp -r <scratch>/apt/dists <scratch>/apt/pool website/megapdf/apt/  # only dists/ and pool/ — both gitignored; the tracked key files are untouched
-python3 website/deploy.py --dry-run --linux --privacy               # read the last four lines: "Login file ... - found" must be one of them; then, and only then, publish
+python3 website/deploy.py --dry-run --linux --snap --support --privacy   # read the last four lines: "Login file ... - found" must be one of them; then, and only then, publish
 gh release edit linux-v<x.y.z> --draft=false
-python3 website/deploy.py --linux --privacy
+python3 website/deploy.py --linux --snap --support --privacy
 ```
 
 **CLI archives** — a draft release per tag; **run the published files** before publishing
@@ -376,40 +495,38 @@ gh release download windows-cli-v<x.y.z> -D <scratch>      # then run megapdf-cl
 gh release edit windows-cli-v<x.y.z> --draft=false; gh release edit macos-cli-v<x.y.z> --draft=false
 ```
 
-**Snap** — `tools/Linux-Packaging.md` § The Snap Store. The upload goes to **edge**.
-Promotion to stable used to be "a click in the Snap Store dashboard, never this
-workflow" — that was a policy, not a limit, since the stored login carries
-`package_release` on stable too (#654, 2026-10-02). It is now a second, deliberate run of
-the same workflow; the revision is **required and never inferred** — promoting the wrong
-one publishes the wrong build to everyone on stable.
+**Snap** — `tools/Linux-Packaging.md` § The Snap Store. The upload goes to **edge**;
+promotion to stable is a second, deliberate run of the same workflow (#654, since the stored
+login carries `package_release` on stable too), and the revision is **required and never
+inferred** — promoting the wrong one publishes the wrong build to everyone on stable. Run
+both **`--ref linux-v<x.y.z>`**, so the snap is built from the release tree rather than from
+whatever `main` is by then (2.4.0 did; 2.3.0 ran from `main`). Install the edge build and run it
+before promoting (2.3.0, in WSL: `sudo snap install megapdf --edge`, `megapdf.cli --version`,
+an extract, then remove it), and put the promotion to Dave first: it is public.
 
 ```
-gh workflow run snap.yml -f upload=true --ref main                              # ~6 min, edge only
-sudo snap install megapdf --edge                                                # verify edge
-gh workflow run snap.yml -f promote=true -f promote_revision=<n> --ref main     # the exact revision, read off the Store or the upload's output
+gh workflow run snap.yml -f upload=true --ref linux-v<x.y.z>                            # ~6 min, edge only
+sudo snap install megapdf --edge                                                         # verify edge
+gh workflow run snap.yml -f promote=true -f promote_revision=<n> --ref linux-v<x.y.z>    # the exact revision, read off the Store or the upload's output
 ```
 
-**Promoting Snap to stable — 2.2 only.** Dave's decision, 1 October 2026: the Snap
-moves edge → stable once, as part of the 2.2 release; 2.1 was never promoted and
-stays on edge. This is a click in the Snap Store dashboard's Releases tab, on
-Dave's snapcraft credentials, so it cannot be automated from here — do it after
-2.2's edge build above is verified, before the website `--snap` deploy step below.
+The promote run's log says nothing useful; the evidence is the channel map (§4).
 
 **Website** — after the go-lives, never before (`website/README.md` § Launch runbook).
-**A bare `deploy.py` downgrades the live site**: without `--linux` it takes `linux/`
-and `apt/` off the server and resolves every page back to "coming soon" — correct
-before Linux shipped, wrong now that it's live and linked from the landing page.
-`--linux` is therefore part of the command every release from here on, not an
-occasional extra. `--snap` cuts both ways too: add it only once the promotion above
-is done — the live page has no Snap section yet, so `--snap` before that links one
-that isn't there, and leaving it off after hides one that is. This deploy is also
-what fixes 2.2's Linux screenshots, renamed by #616: the new files 404 on the
-server until it runs. `--privacy` and `--support` stay opt-in as before;
-`--support` refuses without `--privacy` (#418 is Dave's, not shipped).
+**A deploy without a flag leaves that flag's part out**: without `--linux` it takes `linux/`
+and `apt/` off the server and resolves every page back to "coming soon"; without `--support`
+the support page stays off and no page links it; without `--snap` the Snap section is hidden.
+Every release deploy is therefore **`--linux --snap --support --privacy`** (`--snap` since
+the Snap reached stable with 2.3.0, `--support` since the page shipped with 2.4.0; `--support`
+still refuses without `--privacy`, and `--snap` without `--linux`). The Snap
+section stays up through a new edge upload, because stable still serves the previous
+revision. Deploy again after any later website change, with the same four
+flags (2.4.0 deployed four times), each from a fresh worktree at `origin/main`, dry run
+first.
 
 ```
-python3 website/deploy.py --dry-run --linux --privacy    # add --snap once promoted; its "Login file ... - found" line must be there
-python3 website/deploy.py --linux --privacy              # add --snap once promoted
+python3 website/deploy.py --dry-run --linux --snap --support --privacy    # its "Login file ... - found" line must be there
+python3 website/deploy.py --linux --snap --support --privacy
 ```
 
 ## 4. Read-backs and close-out
@@ -419,24 +536,50 @@ issue:
 
 ```
 tools/msstore.sh status                                                  # and https://apps.microsoft.com/detail/9PF4TRRH4M76
-curl -s 'https://itunes.apple.com/lookup?id=6799522972' | python3 -c 'import json,sys; r=json.load(sys.stdin)["results"][0]; print(r["version"], r["currentVersionReleaseDate"])'
+for c in us ca fr gb; do curl -s "https://itunes.apple.com/lookup?id=6799522972&country=$c&_=$(date +%s)" | python3 -c 'import json,sys; r=json.load(sys.stdin)["results"][0]; print(r["version"], r["currentVersionReleaseDate"])'; done
+curl -sL -A 'Mozilla/5.0' 'https://apps.apple.com/ca/app/id6799522972?platform=mac' | grep -o 'Version [0-9.]*' | head -1   # the Mac record
 curl -s -o /dev/null -w '%{http_code}\n' 'https://play.google.com/store/apps/details?id=ca.electricrv.megapdf'   # 404 until public; tools/play.sh listing status for the track
 curl -s https://electricrv.ca/megapdf/apt/dists/stable/InRelease | head -5
 curl -s https://electricrv.ca/megapdf/apt/dists/stable/main/binary-amd64/Packages | grep -A1 '^Package: megapdf'
 curl -s -H 'Snap-Device-Series: 16' 'https://api.snapcraft.io/v2/snaps/info/megapdf?fields=version,revision,private,publisher'
 curl -s -H 'Snap-Device-Series: 16' 'https://api.snapcraft.io/v2/snaps/info/megapdf?fields=links'   # contact and issues are the support page (#662)
 gh release view linux-v<x.y.z> --json assets -q '.assets[].name'      # and the two CLI tags
+grep -o 'https://electricrv.ca/[^<"]*\.png' tools/linux/flatpak/ca.electricrv.MegaPDF.metainfo.xml | sort -u | while read -r u; do curl -s -o /dev/null -w "%{http_code} %{content_type} $u\n" "$u"; done   # every line: 200 image/png
 ```
+
+How to read each store, because the obvious read is often wrong:
+
+- **Windows.** The public Store page shows no version; `tools/msstore.sh status` is the
+  evidence (Published, the version, no pending submission).
+- **Apple.** The iTunes lookup is cached per storefront: add a throwaway query parameter
+  and look in more than one country (2.4.0's `ca` answered a stale 2.3.0 for minutes after
+  `us`, `fr`, `gb`, `mx` and `es` had 2.4.0). The id lookup returns the **iOS** record only; the
+  Mac app is read from `ASC_PLATFORM=MAC_OS tools/asc-publish.sh status` (READY_FOR_DISTRIBUTION)
+  and its public page (`?platform=mac`).
+- **Play.** `tools/play.sh listing status` says `completed`, which is the rollout state and
+  not the review verdict; the verdict is only in the Console's Publishing overview. The public
+  page keeps serving the old version until approval, and its embedded data names the new one
+  after it. The privacy-policy URL is a Console-only field the API does not expose: read it there.
+- **Snap.** The Store API call above (`Snap-Device-Series: 16`) lists the channel map; after a
+  promotion `stable` and `edge` both show the revision. The promote run's log shows nothing.
+- **Support path, after any change to the page.** `node website/check-support-page.js`, then
+  one real message sent by a person from a real mail client through the live page's button,
+  landing in Dave's `MegaPDF support` folder with a `MegaPDF support MP-…` subject
+  (`info@electricrv.ca` is an alias that forwards to his mailbox). Not a script's send.
+- **The release-notes and README claims** are written from these reads, at the moment of
+  writing (§2.7's sweep).
 
 Then the close-out, all of it:
 
 - the checklist issue's last comment says what went live where, with ids and hashes;
 - the checklist issue is closed; the milestone is left exactly as it is — opening or closing one is Dave's call;
 - a handoff memory (what shipped, what was deferred, what bit);
-- **machines left as found**: the WACK task deleted, no test package or window left on
-  GPD-DAVE, the Mac mini's and kdocker2's `~/megapdf-work/<task>/` gone, every agent
-  worktree and branch pruned (`git worktree prune`; `git cherry origin/main <branch>`
-  before deleting one), `D:\megapdf-qa\` emptied of this release's scratch.
+- **machines left as found**: the WACK task deleted, no test package left on GPD-DAVE, the
+  Mac mini's and kdocker2's `~/megapdf-work/<task>/` gone, every agent worktree and branch
+  pruned (`git worktree prune`; `git cherry origin/main <branch>` before deleting one),
+  `D:\megapdf-qa\` emptied of this release's scratch — and **no window or dialog left open**:
+  after any capture or QA rig, look at the screen and the window list
+  (`Get-Process | ? MainWindowTitle`), not only for MegaPDF processes.
 
 ## 5. Traps
 
@@ -458,7 +601,7 @@ Terse, with the date each one bit.
 - **WACK can silently do nothing, and it looks exactly like not having started** (2026-10-01). `wack-launch.ps1` wrote its log to `D:\megapdf-qa\` as its first statement; an agent's routine scratch cleanup had deleted that directory, so the script threw before it ever raised the UAC prompt. Symptom: "no WACK on screen". Diagnose with `Get-ScheduledTaskInfo -TaskName 'MegaPDF WACK'` — `LastTaskResult 267011` with a 1999 `LastRunTime` means it has never run. The launcher now creates the directory. Also move the **done-marker** aside with the report, not just the report — a stale marker can make the gate look finished when it is not.
 - **Windows PowerShell reads a BOM-less `.ps1` as ANSI** (2026-10-01). A non-ASCII character in a *comment* broke string parsing with a misleading `Missing closing '}'` pointing at an unrelated line. Keep the `tools/windows-qa` scripts ASCII-only.
 - **Renaming capture slots silently breaks `tools/asc_publish.py`** (2026-10-01, #655). It hardcodes slot names. After the 2.2 capture work renamed them, `screenshots` uploaded **1 of 7** on Mac — only `02-text` survived the rename — and would have uploaded **0** on iOS, whose captures sit in a `listing/` subdirectory the tool did not read. It printed "1 screenshots" and exited 0. Fixed in #655 to fail loudly on a short set. Since #656 the slots live in `tools/store_slots.py` alone; change them there, update the capture rig the test names, and run `python3 tools/test_store_slots.py`. iPhone and iPad have **different** orders by decision.
-- **`deploy.py` from a worktree (#668).** Fixed: it finds the login file beside the main checkout. If its dry run says `Login file ... - NOT FOUND`, set `MEGAPDF_DEPLOY_ENV_DIR` to the folder that holds it; never symlink a folder into `.claude/worktrees/` (2.2.1's workaround). The rehearsal is run before the release is published; only the real deploy follows publishing.
+- **`deploy.py` from a worktree (#668).** Fixed: it finds the login file beside the main checkout (2.4.0's four go-live deploys all ran from fresh worktrees at `origin/main`). If its dry run says `Login file ... - NOT FOUND`, set `MEGAPDF_DEPLOY_ENV_DIR` to the folder that holds it; never symlink a folder into `.claude/worktrees/` (2.2.1's workaround). The rehearsal is run before the release is published; only the real deploy follows publishing.
 - **Publish the release before deploying the website** (2026-10-02). Deploying first left the live Linux page offering 2.2.0 `.deb` and tarball links that **404'd**, because the GitHub release was still a draft. `gh release edit linux-v<x.y.z> --draft=false` first, then deploy — §3's Linux sequence already has this order; this is the concrete failure that order prevents.
 - **Deploying from a stale checkout silently regresses the live site** (2026-10-02). A `--dry-run` from a tree 63 commits behind reported "`linux/index.html` offers 2.1.1" against a repository holding 2.1.1 — passed, because both sides were stale the same way — but a real deploy from that tree would have rolled the live Linux section **back** from 2.2.0. §3's Linux step now opens with the `git log` check this would have caught.
 - **`deploy.py --linux`'s refusal is correct; a direct download into `website/megapdf/apt` is not** (2026-10-02). "`linux/index.html` offers X, but the repository holds Y" means run the tag build and download its `MegaPDF-apt-repository` artifact — but downloading straight into `website/megapdf/apt` fails "file exists" and can abort part-way, because the artifact also carries the **tracked** `megapdf.asc`/`.gpg`/`.sources`. §3's Linux step now extracts to a scratch directory and copies in only `dists/` and `pool/`.
@@ -466,3 +609,7 @@ Terse, with the date each one bit.
 - **Push at most three tags at once** (2026-10-19). GitHub creates no events when more than three tags arrive in one push: four release tags went up together and not one workflow started, with nothing to say so. Delete the remote tags and push them one at a time; then check `gh run list` shows a run per tag before moving on.
 - **A corpus battery's time is a gate too** (2026-10-19, #704). The 2.3.0 markdown run's scores matched 2.2.0's. What was wrong was its time, and it was Dave who noticed the run going long: two large JPEG 2000 scans took 382 s and 462 s, against 14 s and 15 s. Cause: `FPDFImageObj_GetImageMetadata` decodes a whole JPX or JBIG2 image to report bit depth and colour space. Compare per-file times against the last release's run, not only the scores; and read an image's filter with `FPDFImageObj_GetImageFilter`, which costs nothing, before asking PDFium for anything that needs its pixels.
 - **The App Review notes grow past 4000 between releases** (2026-10-20, #707). Feature work adds to them mid-cycle (#676 did), and nothing counts them until submission: 2.3.0's iOS notes stood at 4,454 characters before the release added a word. Count them in §2.5 the way `asc_publish.py`'s `review_notes()` does (blockquotes dropped, emphasis stripped), before `asc-publish.sh review` refuses.
+- **Ready the simulator before every later `xcodebuild` pass** (2026-10-24, #809). `test-without-building` shuts the simulator down at the end of a pass, and the next pass installs the app over the old copy while still booting the device; SpringBoard refuses the launch ("Application failed preflight checks"). On the mini: 6 of 6 passes refused with the device shut down, 0 of 5 once `simctl bootstatus -b` had finished first. `ios-ci.yml` now runs `scripts/ci-simulator.sh ready` before the French and Spanish passes; any script that runs `xcodebuild` twice against one simulator needs the same (`tools/mac-mini.md`).
+- **Never reboot the Mac mini without Dave, and re-dispatch after any reboot before calling anything verified** (2026-10-24, #614). #614 was closed on "the runner comes back online after the restart"; every iOS job after that reboot failed until #809. A runner that is online is not a build that passes: run a self-hosted iOS dispatch to green first.
+- **A library can add permissions you never wrote** (2026-10-24, #821). §2.3's Android paragraph: the guard is `:app:checkNoPermissions`, and the store texts are re-read against the merged manifest.
+- **The metainfo points at images the website must already serve** (2026-10-24, #724). §3, Linux; the read-back is the last line of §4's block.
