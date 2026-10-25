@@ -5,7 +5,7 @@ The Linux channel's what's new is a `<release>` entry in
 no character limit. **Linux says the same as every other channel:** Spanish is on all five
 platforms, Linux included (the shared Avalonia catalogue serves Mac and Linux, #724).
 
-Draft. Shape set by Dave on 2026-10-23 (recorded on #724). Not yet approved by Dave.
+Shape set by Dave on 2026-10-23 (recorded on #724). Approved by Dave (2026-10-25) and **released**: the 2.4.0 `.deb`, tarball and APT repository, and Snap stable (revision 4), are live (2026-10-24/25).
 **`FR-REVIEW #724`, `ES-REVIEW #724`: the French and the Spanish below are not yet
 reviewed**; they are the same sentences as the store blocks in this folder, and
 `check_copy.py` fails if they drift from them. Fable reads the fr-CA and es-419 text in the

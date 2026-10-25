@@ -2,9 +2,9 @@
 
 Play Console → the release → **Release notes**, per language. `tools/play_listing.py` pushes it once `tools/gen_listing_copy.py` has copied it into `android/RELEASING.md`. Limit **500 characters**.
 
-Draft. Shape set by Dave on 2026-10-23 ("Spanish support and minor bug fixes", recorded
+Shape set by Dave on 2026-10-23 ("Spanish support and minor bug fixes", recorded
 on #724): one line saying Spanish is supported, then one generic line for the other fixes.
-No feature is named. Not yet approved by Dave. **`FR-REVIEW #724`, `ES-REVIEW #724`: the
+No feature is named. Approved by Dave (2026-10-25) and **released**: 2.4.0 (versionCode 16) is on the production track with status completed, and the Play page showed 2.4.0 on 2026-10-25. **`FR-REVIEW #724`, `ES-REVIEW #724`: the
 French and the Spanish below are not yet reviewed.** Fable reads the fr-CA and es-419
 blocks in the Wave 3 string pass; any change after that needs another review. The France
 and Spain blocks are derived by `check_copy.py` in this folder: edit the Canadian or Latin
