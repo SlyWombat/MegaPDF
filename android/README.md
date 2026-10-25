@@ -21,6 +21,10 @@ the credits, and the bundled `THIRD-PARTY-NOTICES.txt` (SDD §4.3).
 - Same product principles as desktop: no accounts, no cloud, no network — all
   processing is local. The manifest declares **zero permissions**; keep it that way
   (SAF and the Photo Picker don't need any).
+  A library can add one to the *merged* manifest without touching ours (ML Kit brought
+  INTERNET and ACCESS_NETWORK_STATE in 2.3.0, #817), so `./gradlew :app:checkNoPermissions`
+  reads the merged debug and release manifests and fails on any `uses-permission`; CI runs it
+  and `assembleRelease`/`bundleRelease` depend on it. Strip a new one with `tools:node="remove"`.
 - PDFium is pinned to the same major version as `libs/pdfium/win-x64` (152.x,
   bblanchon/pdfium-binaries).
 

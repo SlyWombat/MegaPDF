@@ -93,3 +93,61 @@ dependencies {
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     androidTestImplementation(libs.androidx.test.espresso.intents)
 }
+
+// #817: the app declares no permissions, and the Play listing, the website and the privacy policy
+// all say so. A library can add one without anyone editing our manifest (ML Kit text recognition,
+// #676, brought INTERNET and ACCESS_NETWORK_STATE in 2.3.0 and nobody noticed for a release), so
+// this reads the MERGED manifests, the ones that ship, and fails on any uses-permission in them.
+//
+// The one allowed entry is androidx.core's `<applicationId>.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`:
+// a signature-level permission in our own namespace that no other app can hold, never shown to a
+// person and not a capability (aapt lists it, Play's permission list does not). Anything else, even
+// a harmless-looking one, has to be a decision: strip it with tools:node="remove" in the app manifest
+// or change the copy, then add it here with the reason.
+//
+// Run by android-ci.yml and a dependency of assembleRelease / bundleRelease, so a signed bundle
+// cannot be cut with one. `./gradlew :app:checkNoPermissions`.
+val appIdForPermissionCheck = android.defaultConfig.applicationId ?: error("applicationId unset")
+val mergedManifests = listOf("debug", "release").associateWith { variant ->
+    layout.buildDirectory.file(
+        "intermediates/merged_manifest/$variant/process${variant.replaceFirstChar { it.uppercase() }}MainManifest/AndroidManifest.xml"
+    )
+}
+val checkNoPermissions by tasks.registering {
+    group = "verification"
+    description = "Fails if the merged debug or release manifest declares any uses-permission (#817)."
+    dependsOn("processDebugMainManifest", "processReleaseMainManifest")
+    inputs.files(mergedManifests.values)
+    val allowed = setOf("$appIdForPermissionCheck.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION")
+    val manifestFiles = mergedManifests.mapValues { it.value.get().asFile }
+    doLast {
+        val androidNs = "http://schemas.android.com/apk/res/android"
+        val problems = ArrayList<String>()
+        for ((variant, file) in manifestFiles) {
+            check(file.isFile) { "merged $variant manifest not found at $file" }
+            val factory = javax.xml.parsers.DocumentBuilderFactory.newInstance()
+            factory.isNamespaceAware = true
+            val root = factory.newDocumentBuilder().parse(file).documentElement
+            val found = ArrayList<String>()
+            for (tag in listOf("uses-permission", "uses-permission-sdk-23", "uses-permission-sdk-m")) {
+                val nodes = root.getElementsByTagName(tag)
+                for (i in 0 until nodes.length) {
+                    found += (nodes.item(i) as org.w3c.dom.Element).getAttributeNS(androidNs, "name")
+                }
+            }
+            logger.lifecycle("merged $variant manifest uses-permission: ${found.ifEmpty { listOf("(none)") }}")
+            for (name in found) if (name !in allowed) problems += "$variant: $name"
+        }
+        if (problems.isNotEmpty()) {
+            throw GradleException(
+                "The merged manifest declares permissions, but the app promises none (#817): " +
+                    problems.joinToString() +
+                    ". Strip each with <uses-permission android:name=\"...\" tools:node=\"remove\"/> in " +
+                    "app/src/main/AndroidManifest.xml, or change the Play listing, website and privacy policy."
+            )
+        }
+    }
+}
+tasks.configureEach {
+    if (name == "assembleRelease" || name == "bundleRelease") dependsOn(checkNoPermissions)
+}

@@ -17,7 +17,7 @@ Each cell says two things and both are checked against the code:
 | `GAP` | the feature is **missing** where it should exist — the #571 shape |
 | `+m` | a by-hand step in `TESTING.md` / `docs/RELEASING.md` covers it too |
 
-235 pairings: 144 UI, 59 eng, 14 —, 14 n/a, 4 GAP.
+235 pairings: 144 UI, 60 eng, 13 —, 14 n/a, 4 GAP.
 
 This map is about *what is covered*, not whether the covering tests pass — that is the
 other jobs' business — and it does not replace the by-hand pass in `docs/RELEASING.md`
@@ -39,7 +39,7 @@ Nothing is failing; nothing is looking. #571 (Linux had an About window with no 
 | A withheld permission is said out loud, and the person may continue (`permission-override`) | macos | same as Windows — the shared MegaPDF.Core DocumentCapabilities both desktops consume is the half that has to change, so these two land together. | #558 |
 | A withheld permission is said out loud, and the person may continue (`permission-override`) | windows | still refuses. DocumentCapabilities.cs reads the bits and the toolbar greys out what the author withheld; megapdf_security_override() is in the core and unbound in CoreNative.cs. | #558 |
 
-### Present, nothing automated (14)
+### Present, nothing automated (13)
 
 The feature is reachable and no test in CI touches it.
 
@@ -47,7 +47,6 @@ The feature is reachable and no test in CI touches it.
 |---|---|---|---|
 | About, the version, and the third-party notices (`about-notices`) | ios | no test opens About or the notices on iOS. | — |
 | Keyboard-only operation (`keyboard-only`) | ios | iPad keyboard commands are declared and no test presses one, on either destination. | — |
-| The build a user installs (MSIX, App Store sandbox, .deb, Snap, Flatpak, tarball) (`packaged-install`) | android | CI assembles a debug APK and tests it; the release AAB is only verified by hand. | — |
 | The build a user installs (MSIX, App Store sandbox, .deb, Snap, Flatpak, tarball) (`packaged-install`) | ios | CI builds and tests on the simulator only; nothing checks the shipped archive beyond the release workflow's own packaging. | — |
 | Device rotation (`device-rotation`) | android | a blind spot, and rotation on Android destroys and recreates the activity, which is where unsaved edits and an armed tool would go missing. | — |
 | Device rotation (`device-rotation`) | ios | a blind spot. The app declares every orientation and no test rotates anything, on the iPhone or the iPad destination. | — |
@@ -60,7 +59,7 @@ The feature is reachable and no test in CI touches it.
 | Print (`print`) | windows | nothing automated touches printing on Windows: no self-test state, no core test of PdfPrinter, and tools/windows-qa's print flow is manual. | — |
 | A small side indicator of scroll position, including in reading mode (`scroll-position-indicator`) | ios | pre-existing: SwiftUI's default fading scroll indicator, never overridden by `.scrollIndicators(...)` anywhere in the app, so reading mode (which hides only the nav/bottom bars and the tool strip) leaves it exactly as it is outside reading mode. The page list is one continuous ScrollView/LazyVStack over every page, so the indicator is whole-document position. Nothing automated asserts the indicator itself — it is not exposed to the accessibility tree XCUITest reads, the same reason ViewerZoomUITests has to sleep 1.5s for it to fade rather than assert on it directly. | — |
 
-### Engine only — this platform's own path is untested (59)
+### Engine only — this platform's own path is untested (60)
 
 The shared core proves the operation. Nothing proves this platform reaches it correctly, which is where #401 and #412 lived.
 
@@ -68,6 +67,7 @@ The shared core proves the operation. Nothing proves this platform reaches it co
 |---|---|---|---|
 | About, the version, and the third-party notices (`about-notices`) | android | the notices' paragraph formatting is unit-tested; no instrumented test opens the dialog. | — |
 | English, French (fr-CA, fr-FR) and Spanish (es-419, es-ES) (`localisation`) | android | nothing on Android runs in French at all — no locale-qualified instrumented run, unlike iOS. The catalogue is checked from the .NET side. | — |
+| The build a user installs (MSIX, App Store sandbox, .deb, Snap, Flatpak, tarball) (`packaged-install`) | android | CI assembles a debug APK and tests it; the release AAB is only verified by hand. Since #817 CI also reads the MERGED debug and release manifests and fails on any uses-permission (the app promises none; ML Kit had added INTERNET and ACCESS_NETWORK_STATE in 2.3.0 unnoticed, and its datatransport was uploading usage events to Google). That proves what the manifest declares, not what the shipped AAB contains or how the app behaves. | — |
 | The build a user installs (MSIX, App Store sandbox, .deb, Snap, Flatpak, tarball) (`packaged-install`) | macos | the App Store build runs --self-test out of the bundle; the sandboxed, signed, installed app is only ever run by hand on the Mac mini. | — |
 | The build a user installs (MSIX, App Store sandbox, .deb, Snap, Flatpak, tarball) (`packaged-install`) | windows | the MSIX's identity, architecture and resource map are checked; nothing runs the installed MSIX in CI, which is where #401 was. | — |
 | Screen-reader names and announcements (`screen-reader`) | android | touch-exploration arithmetic and notice formatting; no instrumented test reads a content description back, and TalkBack is by hand. | — |
@@ -213,7 +213,7 @@ The shared core proves the operation. Nothing proves this platform reaches it co
 | **Keyboard-only operation** | UI | UI | UI | — | n/a |
 | **About, the version, and the third-party notices** | UI+m | UI | UI | —+m | eng |
 | **Protected, restricted, XFA and damaged documents** | UI | UI | UI | UI | UI |
-| **The build a user installs (MSIX, App Store sandbox, .deb, Snap, Flatpak, tarball)** | eng+m | eng+m | UI+m | —+m | —+m |
+| **The build a user installs (MSIX, App Store sandbox, .deb, Snap, Flatpak, tarball)** | eng+m | eng+m | UI+m | —+m | eng+m |
 
 ## Cell by cell
 
@@ -692,7 +692,7 @@ as dev builds in CI and as real installs only by hand (docs/RELEASING.md §2.3).
 - **macOS** — eng+m. coverage: engine only. reachable from `src/MegaPDF.Avalonia/Platform/MacApplication.cs::NSApplication`. tests: `.github/workflows/macos-appstore.yml::--self-test`. by hand: `docs/RELEASING.md::tools/build-macos-app.sh`. the App Store build runs --self-test out of the bundle; the sandboxed, signed, installed app is only ever run by hand on the Mac mini.
 - **Linux** — UI+m. coverage: UI/VM. reachable from `tools/linux/megapdf.desktop::Exec=megapdf %F`. tests: `tests/MegaPDF.Core.Tests/LinuxInstallTests.cs::Install`, `tests/MegaPDF.Core.Tests/UserDataPathsTests.cs::Paths`, `.github/workflows/ci.yml::Install the .deb and run the app out of it`. by hand: `docs/RELEASING.md::tools/linux/check-apt-repo.sh`. the strongest install coverage anywhere: .deb and Flatpak installed and run in CI, lintian and the Flathub linter, the tarball's install.sh as non-root, and --self-test inside both sandboxes. The APT matrix across five distributions is by hand.
 - **iOS/iPadOS** — —+m. coverage: nothing. reachable from `ios/project.yml::PRODUCT_BUNDLE_IDENTIFIER`. by hand: `docs/RELEASING.md::xcodebuild test` then a simulator run`. CI builds and tests on the simulator only; nothing checks the shipped archive beyond the release workflow's own packaging.
-- **Android** — —+m. coverage: nothing. reachable from `android/app/src/main/AndroidManifest.xml::android:name`. by hand: `docs/RELEASING.md::aapt dump badging`. CI assembles a debug APK and tests it; the release AAB is only verified by hand.
+- **Android** — eng+m. coverage: engine only. reachable from `android/app/src/main/AndroidManifest.xml::android:name`. tests: `android/app/build.gradle.kts::checkNoPermissions`, `.github/workflows/android-ci.yml::Merged manifests declare no permissions`. by hand: `docs/RELEASING.md::aapt dump badging`. CI assembles a debug APK and tests it; the release AAB is only verified by hand. Since #817 CI also reads the MERGED debug and release manifests and fails on any uses-permission (the app promises none; ML Kit had added INTERNET and ACCESS_NETWORK_STATE in 2.3.0 unnoticed, and its datatransport was uploading usage events to Google). That proves what the manifest declares, not what the shipped AAB contains or how the app behaves.
 
 ## Test files deliberately not on the map
 

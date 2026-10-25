@@ -38,6 +38,13 @@ jobs:
       - name: Build and test
         run: ./gradlew --no-daemon :app:assembleDebug :app:testDebugUnitTest :engine:testDebugUnitTest
 
+      # #817: the app promises no permissions (Play listing, website, privacy policy), and a
+      # library can add one to the merged manifest without anyone touching ours -- ML Kit added
+      # INTERNET and ACCESS_NETWORK_STATE in 2.3.0 and it went unnoticed for a release. Fails if
+      # the merged debug or release manifest declares ANY uses-permission.
+      - name: Merged manifests declare no permissions
+        run: ./gradlew --no-daemon :app:checkNoPermissions
+
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
