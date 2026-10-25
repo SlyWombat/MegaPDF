@@ -1,6 +1,6 @@
 # MegaPDF 2.4 — what's new
 
-**Approved by Dave on 2026-10-25 ("The majority are 2.4, so go live with what we have") and released on the platforms below where it is live.** As of 2026-10-25: Windows, Mac, Linux and Android are live on 2.4.0; **iOS is pending**, waiting for App Review (build 36).
+**Approved by Dave on 2026-10-25 ("The majority are 2.4, so go live with what we have") and released on the platforms below where it is live.** As of 2026-10-25: Windows, Mac, Linux, Android and iOS are all live on 2.4.0.
 Dave set the shape on 2026-10-23 (recorded on
 [#724](https://github.com/SlyWombat/MegaPDF/issues/724)): "The 2.4 release notes are
 simple, 'Spanish support and minor bug fixes'." One line saying Spanish is supported, then
