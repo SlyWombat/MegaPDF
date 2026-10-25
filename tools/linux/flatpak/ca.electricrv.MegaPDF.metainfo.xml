@@ -25,7 +25,7 @@
   <summary>Fill in, sign and redact PDF forms</summary>
   <summary xml:lang="fr">Remplir, signer et caviarder des formulaires PDF</summary>
   <summary xml:lang="fr-CA">Remplir, signer et caviarder des formulaires PDF</summary>
-  <!-- ES-REVIEW #724: the Spanish name, summary and captions are not yet read by the reviewer. -->
+  <!-- ES-REVIEW #724: the Spanish name, summary and captions were read by the reviewer (Fable: first review 2026-10-22, finding 5 calcomanía; the fix approved in the re-review on PR #758). The marker stays by design. -->
   <summary xml:lang="es">Llena, firma y censura formularios PDF</summary>
   <summary xml:lang="es-ES">Rellena, firma y censura formularios PDF</summary>
 
