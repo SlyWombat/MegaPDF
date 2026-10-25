@@ -147,14 +147,14 @@ once the page is up, so the policy can go first) and `linux/` (the footer link).
 ### The support mailbox: what the page writes and who reads it (#635)
 
 The support page's intake is deliberately the oldest one there is: a `mailto:` to
-`info@electricrv.ca`, a Microsoft 365 mailbox. Nothing is collected server-side and
+`info@electricrv.ca`, an alias that forwards to Dave's mailbox (it is not a Microsoft 365 mailbox of its own). Nothing is collected server-side and
 there is no endpoint (option A of #635; Dave's decision of 2026-10-21). What reads the
 mailbox is **not in this repository**: an in-house, multi-product support system with
 its own repo, built on the house mail service. It triages, flags what needs Dave's
 review, and after his decision sends the disposition itself. MegaPDF's whole part is the
 convention below, which that system consumes, and the policy paragraph that discloses it
-(§4, `id="support-triage"`). Link the system's repo here once Dave creates it:
-**support system repo: not yet created.**
+(§4, `id="support-triage"`). The system's repo is `SlyWombat/product-support` on GitHub
+(**private**).
 
 **An obligation the support system inherits.** §4 promises: "If that software ever uses an
 outside service to read your message, this policy will name the service before it does."

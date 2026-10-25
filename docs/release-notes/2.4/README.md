@@ -1,12 +1,12 @@
-# MegaPDF 2.4 — what's new, for Dave to approve
+# MegaPDF 2.4 — what's new
 
-**Draft. Nothing here has been pasted into a console and no publishing tool was run.**
+**Approved by Dave on 2026-10-25 ("The majority are 2.4, so go live with what we have") and released on the platforms below where it is live.** As of 2026-10-25: Windows, Mac, Linux and Android are live on 2.4.0; **iOS is pending**, waiting for App Review (build 36).
 Dave set the shape on 2026-10-23 (recorded on
 [#724](https://github.com/SlyWombat/MegaPDF/issues/724)): "The 2.4 release notes are
 simple, 'Spanish support and minor bug fixes'." One line saying Spanish is supported, then
 one generic line for the other fixes, as 2.3's notes did for scanned pages. No feature list
 and no per-issue detail: selection and copy (#710), tab windows (#711) and the rest are not
-named. Dave sets the shape and approves; this is not approved yet.
+named. Dave set the shape and approved it.
 
 | File | Channel | Field | Limit | Says |
 |---|---|---|---|---|

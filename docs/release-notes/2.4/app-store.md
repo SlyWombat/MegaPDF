@@ -2,9 +2,9 @@
 
 App Store Connect → the iOS version → **What's New in This Version**, per localisation. Latin American Spanish is listed as `es-MX`: App Store Connect has no es-419. Limit **4000 characters**.
 
-Draft. Shape set by Dave on 2026-10-23 ("Spanish support and minor bug fixes", recorded
+Shape set by Dave on 2026-10-23 ("Spanish support and minor bug fixes", recorded
 on #724): one line saying Spanish is supported, then one generic line for the other fixes.
-No feature is named. Not yet approved by Dave. **`FR-REVIEW #724`, `ES-REVIEW #724`: the
+No feature is named. Approved by Dave (2026-10-25: "The majority are 2.4, so go live with what we have"). **Not yet released:** iOS 2.4.0 (build 36) was waiting for App Review on 2026-10-25 and the App Store was still serving 2.3.0. **`FR-REVIEW #724`, `ES-REVIEW #724`: the
 French and the Spanish below are not yet reviewed.** Fable reads the fr-CA and es-419
 blocks in the Wave 3 string pass; any change after that needs another review. The France
 and Spain blocks are derived by `check_copy.py` in this folder: edit the Canadian or Latin

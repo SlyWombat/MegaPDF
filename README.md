@@ -41,10 +41,11 @@ No account. No cloud. No subscription. All processing is local.
 ## Get it
 
 **[electricrv.ca/megapdf](https://electricrv.ca/megapdf/)** has the store badges
-for every platform plus the Linux install page. Store status as of 2.3.0:
-**Linux** (APT repository, `.deb`, tarball, or `sudo snap install megapdf`),
-**Google Play**, **Windows** (Microsoft Store) and **iOS** are live; **Mac** is
-submitted and awaiting App Store review.
+for every platform plus the Linux install page. Store status as of 2.4.0 on
+2026-10-25: **Linux** (APT repository, `.deb`, tarball, or `sudo snap install
+megapdf`), **Google Play**, **Windows** (Microsoft Store) and **Mac** (Mac App
+Store) are live on 2.4.0; **iOS** 2.4.0 is submitted and awaiting App Review, so
+the App Store still serves 2.3.0 until it is approved.
 
 ## Design
 
