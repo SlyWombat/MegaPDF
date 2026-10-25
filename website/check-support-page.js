@@ -254,6 +254,42 @@ const titles = (doc) => [...doc.querySelectorAll("#hits .hit h4")].map((h) => h.
     check("every answer can be surfaced by its own terms", unreachable.length === 0,
           unreachable.join("; "));
 
+    // The "Common questions" links in front of the form (#635 follow-up): every one must
+    // land on an answer that exists, clicking one opens it, and an answer that does not apply
+    // to the chosen platform is left off the list by the same data-plat rule the matcher uses.
+    {
+        const dom4 = load();
+        const doc4 = dom4.window.document;
+        const win4 = dom4.window;
+        await settle();
+        const links = [...doc4.querySelectorAll(".common a[href^='#a-']")];
+        const bad = links.filter((a) => {
+            const t = doc4.getElementById(a.getAttribute("href").slice(1));
+            return !(t && t.classList.contains("answer"));
+        }).map((a) => a.getAttribute("href"));
+        check("every Common questions link points at a real answer",
+              links.length >= 8 && bad.length === 0, bad.join(", "));
+        const target = doc4.getElementById("a-password");
+        check("an answer starts closed", !target.open);
+        links.find((a) => a.getAttribute("href") === "#a-password")
+            .dispatchEvent(new win4.MouseEvent("click", { bubbles: true, cancelable: true }));
+        check("clicking a Common questions link opens that answer", target.open);
+        const crash = () => links.find((a) => a.getAttribute("href") === "#a-crash").parentElement;
+        const r = (v) => {
+            const el = doc4.querySelector(`input[name=plat][value=${v}]`);
+            el.checked = true;
+            el.dispatchEvent(new win4.Event("change", { bubbles: true }));
+        };
+        r("ios");
+        check("a desktop-only answer is left off the Common questions list on iOS", crash().hidden);
+        r("linux");
+        check("and listed on Linux", !crash().hidden);
+        const priv = doc4.querySelector("details.privacy");
+        check("the privacy explanation is on the page, collapsed, and says nothing leaves the browser",
+              !!priv && !priv.open && /Nothing leaves your browser/.test(priv.textContent) &&
+              /A person decides what happens to your message/.test(priv.textContent));
+    }
+
     {
         const missing = REQUIRED_IDS.filter((i) => !new RegExp('<details class="answer" id="' + i + '"').test(HTML));
         check("every answer id the support system links to still exists", missing.length === 0,
