@@ -4,7 +4,7 @@ App Store Connect → the iOS version → **What's New in This Version**, per lo
 
 Shape set by Dave on 2026-10-23 ("Spanish support and minor bug fixes", recorded
 on #724): one line saying Spanish is supported, then one generic line for the other fixes.
-No feature is named. Approved by Dave (2026-10-25: "The majority are 2.4, so go live with what we have"). **Not yet released:** iOS 2.4.0 (build 36) was waiting for App Review on 2026-10-25 and the App Store was still serving 2.3.0. **`FR-REVIEW #724`, `ES-REVIEW #724`: the
+No feature is named. Approved by Dave (2026-10-25: "The majority are 2.4, so go live with what we have") and **released**: iOS 2.4.0 (build 36) was Ready for Distribution on 2026-10-25 (released 2026-10-25T18:43Z) and the iTunes lookup served 2.4.0. **`FR-REVIEW #724`, `ES-REVIEW #724`: the
 French and the Spanish below are not yet reviewed.** Fable reads the fr-CA and es-419
 blocks in the Wave 3 string pass; any change after that needs another review. The France
 and Spain blocks are derived by `check_copy.py` in this folder: edit the Canadian or Latin
