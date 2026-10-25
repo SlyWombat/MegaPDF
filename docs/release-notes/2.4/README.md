@@ -63,19 +63,22 @@ The headings are what the listing tools find, so they are not decoration:
   and `es-ES`, as its `LANGS` table has them.
 - `check_copy.py` fails if a heading's code is not the one its tool wants.
 
-## Not reviewed, and what remains
+## Review status, and what remains
 
-- **French: not reviewed.** `FR-REVIEW #724`. Fable reviews the fr-CA block in the Wave 3
-  string pass. The fr-FR block is derived, not reviewed on its own.
-- **Spanish: not reviewed.** `ES-REVIEW #724`. Fable reviews the es-419 block in the same
-  pass. The es-ES block is derived. Any change to either after that review needs another.
-- **Dave's approval of the shape and the wording is pending.**
+- **French: reviewed.** `FR-REVIEW #724` stays in the files by design. Fable approved the fr-CA
+  block on 2026-10-23 ([#724](https://github.com/SlyWombat/MegaPDF/issues/724): "fr-CA block
+  APPROVED", identical in all five channel files). The fr-FR block is derived from it by
+  `tools/gen_strings.py`; Fable recomputed it with the real `to_france` and found it equal.
+- **Spanish: reviewed.** `ES-REVIEW #724` stays in the files by design. Fable approved the es-419
+  block on 2026-10-23 (same comment). The es-ES block is derived and was verified equal. Any
+  change to either block after that review needs another Fable review.
+- **Dave's approval of the shape and the wording: given.** 2026-10-23 for the shape and all
+  five blocks as drafted (recorded on #724), and again on 2026-10-25 ("go live with what we have").
 - **The claim must still be true at release.** Spanish must be in every build that ships
-  these words.
-- **Version strings** in `tools/gen_listing_copy.py` (`NOTES_VERSION`),
-  `tools/msstore_submit.py` and `tools/asc_publish.py` are bumped at release time, per
-  `docs/RELEASING.md`, not here. Until `NOTES_VERSION` is `"2.4"`, the listing generator
-  reads 2.3's folder and still prints its `PENDING` line for Spanish.
+  these words. It was: all five channels are live on 2.4.0 (read back 2026-10-25).
+- **Version strings** `NOTES_VERSION` in `tools/gen_listing_copy.py` is `"2.4"`. The version
+  strings in `tools/msstore_submit.py` and `tools/asc_publish.py` are bumped at release time,
+  per `docs/RELEASING.md`, not in this folder.
 - **`devolverlo completado`** (the ruling on #724 for the 2.4 store copy) is a phrase in the
-  store *descriptions*, not in these notes, which have no such sentence. It is not applied
-  here.
+  store *descriptions*, not in these notes, which have no such sentence. Fable read it as right
+  in both store sentences on 2026-10-23 and #785 applied it to the descriptions.

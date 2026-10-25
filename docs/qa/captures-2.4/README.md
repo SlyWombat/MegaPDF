@@ -3,10 +3,16 @@
 The reviewed store images for 2.4 in five locales (`en`, `fr-CA`, `fr-FR`, `es-419`, `es-ES`), filed
 the way `docs/qa/captures-2.2/` is, so the set that was looked at is the set that goes up.
 
-**Nothing here is published.** Putting images on a listing is a separate, deliberate act in each
-console (App Store Connect, the Play Console, Partner Center) and is Dave's call. The website is not
-deployed either: `website/megapdf/screenshots/linux/` has no `es-419` or `es-ES` folder yet, and the
-Linux metainfo points at them.
+**Published since.** These sets were filed here first and uploaded afterwards, a separate, deliberate
+act in each console (App Store Connect, the Play Console, Partner Center) that was Dave's call. The
+read-back of 2026-10-25 on [#724](https://github.com/SlyWombat/MegaPDF/issues/724) found the Spanish
+listings live on every store with screenshots on them (Microsoft 8 each, iOS 9 iPhone and 9 iPad each,
+Mac 7 each, Play 8 phone each); that audit counted images and did not compare them byte for byte with
+this folder. The Play 10-inch tablet slots have none for `es-419` and `es-ES`, and no decision about
+tablets is recorded. The Linux set is served from the website: the `es-419` and `es-ES` folders under
+`website/megapdf/screenshots/linux/` are byte-identical copies of `linux/es-419/` and `linux/es-ES/`
+here (the seven PNGs each, not `RUN.txt`), added for #724 because the metainfo in the 2.4.0 `.deb`
+already pointed at them.
 
 Shot on 2026-10-23 from `main` after the Spanish rigs landed (#789, d065597). The apps are the 2.3.0
 version number plus everything merged since; `main` still reports 2.3.0 in `android/app/build.gradle`
@@ -98,8 +104,8 @@ by the coordinator per store group (Spanish play, Windows and iOS/Mac), and foun
   wrote them, no pixels edited (Refs #800). Details and every check in `apple-READING.md` ("Re-shoot of the pages frames").
 
 - Android, pages view: the Spanish selection title read "Seleccionadas:" over "2" on two lines in es-419 and
-  es-ES. The string is now "Selección: %1$d" (es-419 hand-written, es-ES derived; `ES-REVIEW #724`, Fable has not
-  read it), and the two `play/phone/{es-419,es-ES}/android-pages.png` files were re-shot from the Android
+  es-ES. The string is now "Selección: %1$d" (es-419 hand-written, es-ES derived; `ES-REVIEW #724`; Fable approved it
+  for release on 2026-10-23, #796), and the two `play/phone/{es-419,es-ES}/android-pages.png` files were re-shot from the Android
   Screenshots workflow (run 40052390473, branch `wip/pages-selected-es`): one line in both. The other 38 Play
   images were not replaced; en, fr-CA, es-419 and es-ES came out byte-identical to the filed ones apart from
   these two, and fr-FR differed in the status-bar icon pixels (seven frames) and in the redact frame (not investigated; those files were not replaced).
@@ -167,4 +173,5 @@ stale from before the one-row toolbar and are corrected in `tools/screenshots-wi
   (#802) in one run per language, from the package named above rather than the 2.3.0.0 CI package
   of 2026-10-23. Not exercised by hand: clicking the remove chip (the `redact` and `sign` Windows
   self-test states pass locally and drive that route in code, 19 and 12 checks). The five iPad sets were: 19:20 to 19:56 EDT, all showing the same date, except the four `pages` frames re-shot on 2026-10-24 (see below).
-- `website/megapdf/screenshots/linux/` is not updated.
+- The Linux website folders `es-419` and `es-ES` were added for #724 (see the top of this file); the
+  `en`, `fr-CA` and `fr-FR` folders there were not touched or compared with this folder by that change.
