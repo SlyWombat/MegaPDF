@@ -2542,9 +2542,13 @@ note = "CI builds and tests on the simulator only; nothing checks the shipped ar
 [feature.android]
 presence = "present"
 entry = "android/app/src/main/AndroidManifest.xml::android:name"
-coverage = "none"
+coverage = "engine"
+tests = [
+  "android/app/build.gradle.kts::checkNoPermissions",
+  ".github/workflows/android-ci.yml::Merged manifests declare no permissions",
+]
 manual = "docs/RELEASING.md::aapt dump badging"
-note = "CI assembles a debug APK and tests it; the release AAB is only verified by hand."
+note = "CI assembles a debug APK and tests it; the release AAB is only verified by hand. Since #817 CI also reads the MERGED debug and release manifests and fails on any uses-permission (the app promises none; ML Kit had added INTERNET and ACCESS_NETWORK_STATE in 2.3.0 unnoticed, and its datatransport was uploading usage events to Google). That proves what the manifest declares, not what the shipped AAB contains or how the app behaves."
 
 
 # =============================================================================
