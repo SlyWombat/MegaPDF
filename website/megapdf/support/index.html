@@ -12,7 +12,7 @@
     <style>
         :root {
             --bg: #0c1220; --bg2: #10233b; --card: rgba(255,255,255,.04);
-            --line: rgba(15,168,198,.22); --text: #e2e8f0; --muted: #a9b4cc;
+            --line: rgba(15,168,198,.22); --text: #e2e8f0; --muted: #c0cade; --placeholder: #9ba7c0;
             --blue: #0A5BC4; --teal: #0FA8C6; --accent: #35b6e0; --code: #070c16;
         }
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -46,6 +46,37 @@
         .note p + p { margin-top: 10px; }
         .note ul { margin: 8px 0 0 20px; }
         .note strong { color: var(--text); }
+        .note h2 { margin-top: 14px; }
+        .note > h2:first-child { margin-top: 0; }
+        details.privacy { padding: 0; }
+        details.privacy > summary {
+            cursor: pointer; padding: 14px 20px; font-family: 'Space Grotesk', sans-serif;
+            font-size: 16px; color: var(--accent); list-style: none;
+        }
+        details.privacy > summary::-webkit-details-marker { display: none; }
+        details.privacy > summary::before { content: "+ "; }
+        details.privacy[open] > summary::before { content: "− "; }
+        details.privacy > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+        details.privacy > :not(summary) { margin-left: 20px; margin-right: 20px; }
+        details.privacy > :last-child { margin-bottom: 18px; }
+        details.privacy > p:first-of-type { margin-top: 0; }
+
+        /* Common questions: plain links to the answers further down, so the known
+           answers are in front of the form rather than after it. Nothing here decides
+           anything; the form is below and always complete. */
+        .common { margin: 22px 0 0; }
+        .common h2 { font-size: 17px; margin-bottom: 10px; }
+        .common ul { list-style: none; display: flex; flex-wrap: wrap; gap: 10px; }
+        .common li[hidden] { display: none; }
+        .common a {
+            display: inline-block; background: var(--card); border: 1px solid var(--line);
+            border-radius: 999px; padding: 8px 16px; font-size: 14.5px; color: var(--text);
+            text-decoration: none;
+        }
+        .common a:hover { border-color: var(--accent); color: var(--accent); }
+        .common a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+        .common a.all { color: var(--accent); }
+        ::placeholder { color: var(--placeholder); opacity: 1; }
 
         section.step { margin: 34px 0; }
         section.step > h2 { font-size: 22px; margin-bottom: 4px; }
@@ -172,21 +203,38 @@
     <main class="wrap">
         <section class="intro">
             <h1>Support</h1>
-            <p>This page is for MegaPDF. Tell it what is happening and it will show you
-            any known answer that matches — then help you write to us if none of them
-            does. Electric RV's other apps will get their section here when they need
-            one.</p>
+            <p>This page is for MegaPDF. Look through the common questions below, or
+            tell it what is happening and it will show you any known answer that
+            matches &mdash; then help you write to us if none of them does.</p>
+            <p>A person reads your message, and you can write in English or in French.</p>
+        </section>
+
+        <nav class="common" aria-labelledby="common-h">
+            <h2 id="common-h">Common questions</h2>
+            <ul>
+                <li><a href="#a-password">Password-protected or restricted</a></li>
+                <li><a href="#a-cant-edit-text">Text that can't be changed</a></li>
+                <li><a href="#a-print">Printing</a></li>
+                <li><a href="#a-signature">Signatures</a></li>
+                <li><a href="#a-version">Which version I have</a></li>
+                <li><a href="#a-update">How updates work</a></li>
+                <li><a href="#a-crash">MegaPDF closed before I saved</a></li>
+                <li><a href="#a-large">A very large PDF</a></li>
+                <li><a href="#a-saved-where">Where my saved file went</a></li>
+                <li><a class="all" href="#answers">All answers</a></li>
+            </ul>
+        </nav>
+
+        <details class="note privacy">
+            <summary>What happens to what you type, and to your message</summary>
             <p><strong>A person decides what happens to your message.</strong> It lands in
             our support mailbox, where software may sort it and flag what needs attention;
             someone at Electric RV decides what is to be done, and you get a reply saying
             so, usually within a few days. There is no account to make and no ticket number
-            to look up; the reference below keeps a thread together if you write again.
-            Write in English or in French. If you would
-            rather talk in public, everything about MegaPDF is developed in the open at
+            to look up; the reference in step 4 keeps a thread together if you write again.
+            Write in English or in French. If you would rather talk in public, everything
+            about MegaPDF is developed in the open at
             <a href="https://github.com/SlyWombat/MegaPDF/issues">github.com/SlyWombat/MegaPDF</a>.</p>
-        </section>
-
-        <div class="note">
             <h2>What this page does with what you type</h2>
             <p><strong>Nothing leaves your browser.</strong> There is no form submission
             on this page. The matching below runs in your own browser against a list of
@@ -204,7 +252,7 @@
             don't attach it up front.</p>
             <p>What happens to a message once you have sent it is in the
             <a href="../privacy/#support">privacy policy</a>.</p>
-        </div>
+        </details>
 
         <!-- ─────────────────────────── the form ─────────────────────────────────
              Not a <form> with an action: there is nowhere to post it. Everything
@@ -1048,7 +1096,29 @@
             }
         }());
 
+        /* The common-questions links open the answer they point at, and an answer
+           that does not apply to the chosen platform is left off the list by the same
+           data-plat rule the matcher uses. They are links, not verdicts: the full list
+           further down still holds every answer. */
+        function commonList() {
+            var p = plat();
+            [].forEach.call(document.querySelectorAll(".common li"), function (li) {
+                var a = li.querySelector("a[href^='#a-']"), t = a && byId(a.getAttribute("href").slice(1));
+                li.hidden = !!(t && p && t.plats.indexOf("all") < 0 && t.plats.indexOf(p) < 0);
+            });
+        }
+        [].forEach.call(document.querySelectorAll(".common a[href^='#a-']"), function (a) {
+            a.addEventListener("click", function () {
+                var t = byId(a.getAttribute("href").slice(1));
+                if (t) { t.el.open = true; }
+            });
+        });
+        [].forEach.call(document.querySelectorAll("input[name=plat]"), function (r) {
+            r.addEventListener("change", commonList);
+        });
+
         versionHint();
+        commonList();
         compose();
     }());
     </script>
