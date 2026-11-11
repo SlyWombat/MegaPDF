@@ -20,6 +20,13 @@ website/deploy.py ...`. That is the folder, never the file's contents. The dry r
   reader's own email program. **Only goes up with `--support`, which itself
   refuses to run without `--privacy`.** Policy §4 is its disclosure.
 - `icon.png` (512, from the iOS AppIcon)
+- `fonts/` — Space Grotesk, the heading face, self-hosted with its licence
+  (`OFL.txt`). **No page loads anything from a third party** (#846): body text
+  uses the platform's own font, and `deploy.py` refuses a page that fetches a
+  font, script, stylesheet or image from any host but electricrv.ca or megapdf.ca.
+- `social-card.png` — the 1200 x 630 link preview (`og:image`, #845), built by
+  `python3 website/make_social_card.py` from the screenshots, icon and font in this
+  tree. Rebuild it whenever the gallery screenshots are re-shot.
 - `screenshot-viewer.png`, `shot-*.png` — the gallery. Where each one comes
   from is below.
 - `megapdf/screenshots/linux/` — the AppStream screenshots for the Flatpak

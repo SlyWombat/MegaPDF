@@ -325,7 +325,7 @@ def check_support(include_privacy):
                              f"({label}) — the only one it may load is the page-view counter "
                              "disclosed in policy §3.")
         origins = sorted({m for m in re.findall(r"https?://([a-z0-9.\-]+)/", sent)})
-        allowed = ["electricrv.ca", "fonts.googleapis.com", "github.com"]
+        allowed = ["electricrv.ca", "github.com"]  # #846: no third-party fonts
         if origins != allowed:
             raise SystemExit(f"--support: the support page names the origin(s) {origins} "
                              f"({label}); only {allowed} are accounted for in the privacy "
@@ -457,6 +457,39 @@ def only(targets, names):
     return kept
 
 
+# #846: hosts a page may load anything from. Links people click (the stores, GitHub)
+# are not loads and are not checked; fonts, scripts, styles, images and frames are.
+OWN_HOSTS = {"electricrv.ca", "megapdf.ca", "www.megapdf.ca"}
+LOAD = re.compile(
+    r"<(?:script|img|iframe|source|video|audio|embed)\b[^>]*?\b(?:src|poster)\s*=\s*[\"']([^\"']+)"
+    r"|<link\b([^>]*)>"
+    r"|url\(\s*[\"']?([^\"')]+)"
+    r"|@import\s+[\"']([^\"']+)", re.I)
+
+
+def third_party_loads(html):
+    """Every URL the page would fetch from a host that is not ours. The privacy
+    policy says no third party is involved in this site (§3), so a font, script,
+    stylesheet or image from anywhere else is a broken promise, not a style
+    choice. <link rel="canonical"> and rel="alternate" name pages; they load nothing."""
+    found = []
+    for m in LOAD.finditer(strip_comments(html)):
+        url = m.group(1) or m.group(3) or m.group(4)
+        if m.group(2) is not None:
+            attrs = m.group(2)
+            rel = re.search(r"\brel\s*=\s*[\"']([^\"']+)", attrs, re.I)
+            if rel and set(rel.group(1).lower().split()) <= {"canonical", "alternate"}:
+                continue
+            href = re.search(r"\bhref\s*=\s*[\"']([^\"']+)", attrs, re.I)
+            url = href.group(1) if href else None
+        if not url:
+            continue
+        host = re.match(r"(?:https?:)?//([^/:?#]+)", url.strip(), re.I)
+        if host and host.group(1).lower() not in OWN_HOSTS:
+            found.append(url.strip())
+    return found
+
+
 def staged(targets, live):
     """The files as they will be uploaded: every .html resolved into a temporary
     copy under its own name, everything else as it is on disk."""
@@ -466,6 +499,12 @@ def staged(targets, live):
         if path.endswith(".html"):
             with open(path, encoding="utf-8") as f:
                 html = resolve(f.read(), live)
+            outside = third_party_loads(html)
+            if outside:
+                shutil.rmtree(tmp, ignore_errors=True)
+                raise SystemExit(f"{os.path.relpath(path, SITE)} loads from outside this site: "
+                                 f"{', '.join(outside)}. Policy §3 says no third party is "
+                                 "involved; serve it from here instead (#846).")
             copy_dir = os.path.join(tmp, str(i))
             os.makedirs(copy_dir)
             copy = os.path.join(copy_dir, os.path.basename(path))

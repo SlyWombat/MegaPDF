@@ -4,65 +4,83 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <!--linux:live-->
-    <meta name="description" content="MegaPDF fills, checks, signs and redacts PDF forms — free, open source, on Windows, Mac, iPhone, iPad, Android and Linux. No account, no cloud, no tracking. Open. Fix. Save. Done.">
+    <meta name="description" content="Fill in a PDF form, sign it and send it back, on Windows, Mac, iPhone, iPad, Android and Linux. Free, no account, and your document never leaves your device.">
     <!--linux:soon
-    <meta name="description" content="MegaPDF fills, checks, signs and redacts PDF forms — free, open source, on Windows, Mac, iPhone, iPad and Android, with Linux coming soon. No account, no cloud, no tracking. Open. Fix. Save. Done.">
+    <meta name="description" content="Fill in a PDF form, sign it and send it back, on Windows, Mac, iPhone, iPad and Android, with Linux coming soon. Free, no account, and your document never leaves your device.">
     linux:end-->
-    <link rel="canonical" href="https://electricrv.ca/megapdf/">
-    <title>MegaPDF — Fill, check &amp; sign PDFs. Free, private, everywhere.</title>
-    <meta property="og:title" content="MegaPDF — Fill, check &amp; sign PDFs">
-    <!--linux:live-->
-    <meta property="og:description" content="Free, open-source PDF form filler for Windows, Mac, iPhone, iPad, Android and Linux. No account, no cloud, no tracking.">
-    <!--linux:soon
-    <meta property="og:description" content="Free, open-source PDF form filler for Windows, Mac, iPhone, iPad and Android, with Linux coming soon. No account, no cloud, no tracking.">
-    linux:end-->
+    <link rel="canonical" href="https://megapdf.ca/">
+    <link rel="alternate" hreflang="en" href="https://megapdf.ca/">
+    <link rel="alternate" hreflang="x-default" href="https://megapdf.ca/">
+    <title>MegaPDF — Fill in, sign and send back any PDF. Free and private.</title>
+    <meta property="og:title" content="MegaPDF — Someone sent you a PDF. Send it back done.">
+    <meta property="og:description" content="Fill in the form, sign it, send it back. Free, no account, and your document never leaves your device.">
     <meta property="og:type" content="website">
-    <meta property="og:url" content="https://electricrv.ca/megapdf/">
-    <meta property="og:image" content="https://electricrv.ca/megapdf/icon.png">
+    <meta property="og:url" content="https://megapdf.ca/">
+    <meta property="og:image" content="https://megapdf.ca/social-card.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="MegaPDF on a phone and a laptop: a rental agreement with checked boxes and a signature">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="theme-color" content="#0c1220">
     <link rel="icon" href="icon.png">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
     <style>
+        /* The heading face is served from this site (#846): no font, script or
+           stylesheet on this page comes from a third party. Body text uses the
+           platform's own font. */
+        @font-face {
+            font-family: 'Space Grotesk'; font-style: normal; font-weight: 300 700; font-display: swap;
+            src: url(fonts/space-grotesk-latin.woff2) format('woff2');
+            unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+        }
+        @font-face {
+            font-family: 'Space Grotesk'; font-style: normal; font-weight: 300 700; font-display: swap;
+            src: url(fonts/space-grotesk-latin-ext.woff2) format('woff2');
+            unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+        }
         :root {
             --bg: #0c1220; --bg2: #10233b; --card: rgba(255,255,255,.04);
             --line: rgba(15,168,198,.22); --text: #e2e8f0; --muted: #a9b4cc;
             --blue: #0A5BC4; --teal: #0FA8C6; --accent: #35b6e0;
+            --head: 'Space Grotesk', system-ui, sans-serif;
         }
         * { margin: 0; padding: 0; box-sizing: border-box; }
+        html { scroll-behavior: smooth; }
         body {
-            background: linear-gradient(135deg, var(--bg) 0%, #141c2e 55%, var(--bg2) 100%);
-            color: var(--text); font-family: 'Inter', -apple-system, sans-serif;
-            line-height: 1.6; min-height: 100vh;
+            background: linear-gradient(160deg, var(--bg) 0%, #141c2e 50%, var(--bg2) 100%);
+            color: var(--text); line-height: 1.6; min-height: 100vh;
+            font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
         }
-        h1, h2, h3 { font-family: 'Space Grotesk', sans-serif; }
-        .wrap { max-width: 1060px; margin: 0 auto; padding: 0 24px; }
-        header.site { padding: 18px 0; border-bottom: 1px solid rgba(255,255,255,.06); }
-        header.site .wrap { display: flex; align-items: center; gap: 12px; }
-        header.site img { width: 34px; height: 34px; border-radius: 8px; }
-        header.site .name { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 18px; }
-        header.site a.home { margin-left: auto; color: var(--muted); text-decoration: none; font-size: 14px; }
-        header.site a.home:hover { color: var(--text); }
+        h1, h2, h3 { font-family: var(--head); line-height: 1.15; }
+        a { color: var(--accent); }
+        .wrap { max-width: 1080px; margin: 0 auto; padding: 0 20px; }
+        .skip { position: absolute; left: -9999px; }
+        .skip:focus { left: 12px; top: 12px; background: var(--accent); color: #061325; padding: 8px 12px; border-radius: 6px; z-index: 9; }
+        :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 
-        .hero { display: flex; gap: 48px; align-items: center; padding: 64px 0 48px; flex-wrap: wrap; }
-        .hero .copy { flex: 1 1 420px; min-width: 0; }
-        .badge {
-            display: inline-block; background: linear-gradient(135deg, var(--blue), var(--teal));
-            color: #061325; font-family: 'Space Grotesk', sans-serif; font-size: 11px;
-            font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase;
-            padding: 4px 14px; border-radius: 20px; margin-bottom: 18px;
-        }
-        .hero h1 { font-size: 44px; line-height: 1.1; margin-bottom: 10px; }
-        .hero h1 span { color: var(--accent); }
-        .tagline { font-family: 'Space Grotesk', sans-serif; font-size: 20px; color: var(--accent);
-                   letter-spacing: .5px; margin-bottom: 16px; }
-        .hero p.sub { color: var(--muted); font-size: 17px; max-width: 54ch; margin-bottom: 28px; }
-        .cta {
-            display: inline-block; background: var(--accent); color: #061325; font-weight: 700;
-            font-size: 15px; padding: 13px 26px; border-radius: 10px; text-decoration: none;
-        }
-        .cta:hover { background: #6fd0f0; }
-        .cta.ghost { background: transparent; color: var(--text); border: 1px solid rgba(255,255,255,.25); }
-        .cta.ghost:hover { border-color: var(--accent); color: var(--accent); background: transparent; }
+        /* Header */
+        header.site { padding: 14px 0; border-bottom: 1px solid rgba(255,255,255,.06); }
+        header.site .wrap { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+        header.site .brand { display: flex; align-items: center; gap: 10px; color: var(--text); text-decoration: none; }
+        header.site img { width: 34px; height: 34px; border-radius: 8px; }
+        header.site .name { font-family: var(--head); font-weight: 700; font-size: 19px; }
+        header.site nav { margin-left: auto; display: flex; gap: 18px; font-size: 14.5px; flex-wrap: wrap; }
+        header.site nav a { color: var(--muted); text-decoration: none; }
+        header.site nav a:hover { color: var(--text); }
+
+        /* Hero */
+        .hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 44px;
+                align-items: center; padding: 64px 0 40px; }
+        .eyebrow { display: inline-block; background: linear-gradient(135deg, var(--blue), var(--teal));
+                   color: #061325; font-family: var(--head); font-size: 11.5px; font-weight: 700;
+                   letter-spacing: 1.4px; text-transform: uppercase; padding: 4px 14px;
+                   border-radius: 20px; margin-bottom: 18px; }
+        .hero h1 { font-size: clamp(34px, 5.2vw, 52px); margin-bottom: 18px; letter-spacing: -.5px; }
+        .hero h1 span { color: var(--accent); display: block; }
+        .hero p.sub { color: var(--muted); font-size: 18px; max-width: 52ch; margin-bottom: 26px; }
+        .hero p.sub strong { color: var(--text); font-weight: 600; }
+        .foryou { font-size: 14.5px; color: var(--muted); margin-bottom: 12px; min-height: 1.6em; }
+        .foryou b { color: var(--text); }
+
         /* Store links: each store's own official badge, unaltered (sources and
            guidelines in website/README.md). Every badge is 48px tall, above
            Apple's 40px minimum, and the 16px gap keeps the clear space the badge
@@ -71,12 +89,14 @@
            in by that margin to line up with the others. The Linux link has no
            store badge; it is a plain button of the same height and shape. It
            links linux/ only in a deploy made with --linux; otherwise it is the
-           dashed "soon" button (see website/README.md). */
-        .storelinks { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; margin-top: 4px; }
+           dashed "soon" button (see website/README.md). The script at the end of
+           the page only reorders these and adds a ring to the visitor's own
+           platform; with scripts off, every badge shows as written. */
+        .storelinks { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; }
         .storelinks a { display: inline-block; line-height: 0; border-radius: 8px; }
-        .storelinks a:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
         .storelinks img { height: 48px; width: auto; display: block; }
         .storelinks a.gplay img { height: 71.4px; margin: -11.7px; }
+        .storelinks a.mine { box-shadow: 0 0 0 3px var(--accent); }
         .storelinks .linux, .storelinks .soon {
             display: inline-flex; flex-direction: column; justify-content: center;
             height: 48px; padding: 0 18px; border-radius: 7px; line-height: 1.15;
@@ -86,53 +106,100 @@
         .storelinks .where { font-size: 11px; font-weight: 400; display: block; }
         .storelinks .soon { background: transparent; border-style: dashed; border-color: rgba(255,255,255,.3); color: var(--muted); }
 
-        .shot { flex: 0 1 300px; }
-        .shot img {
-            width: 100%; max-width: 300px; border-radius: 24px; display: block;
-            border: 1px solid rgba(255,255,255,.12);
-            box-shadow: 0 24px 60px rgba(4, 33, 61, .55);
-        }
+        .proof { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 22px; color: var(--muted); font-size: 14px; list-style: none; }
+        .proof li::before { content: "✓ "; color: var(--accent); font-weight: 700; }
 
-        section h2.sec { font-size: 26px; margin-bottom: 6px; }
-        section p.lead { color: var(--muted); margin-bottom: 26px; }
-        .features { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
-                    gap: 18px; padding: 24px 0 40px; }
-        .feature { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 24px; }
-        .feature h3 { font-size: 17px; margin-bottom: 8px; color: var(--text); }
-        .feature h3 .dot { color: var(--accent); }
+        .heroshots { position: relative; padding: 0 10% 18% 0; }
+        .heroshots .laptop { width: 100%; height: auto; border-radius: 12px; border: 1px solid rgba(255,255,255,.12);
+                             box-shadow: 0 24px 60px rgba(4,33,61,.55); display: block; }
+        .heroshots .phone { position: absolute; width: 27%; height: auto; right: 0; bottom: 0; border-radius: 18px;
+                            border: 1px solid rgba(255,255,255,.18); box-shadow: 0 24px 50px rgba(0,0,0,.6); }
+
+        /* Sections */
+        section.block { padding: 56px 0 8px; }
+        section.block h2 { font-size: clamp(26px, 3.4vw, 34px); margin-bottom: 10px; }
+        section.block p.lead { color: var(--muted); font-size: 17px; max-width: 64ch; margin-bottom: 30px; }
+
+        .steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 22px; counter-reset: step; }
+        .step { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 18px 18px 22px; }
+        .step img { width: 100%; height: auto; aspect-ratio: 440 / 560; object-fit: cover; object-position: center 12%;
+                    border-radius: 10px; display: block; margin-bottom: 16px; border: 1px solid rgba(255,255,255,.1); }
+        .step h3 { font-size: 20px; margin-bottom: 6px; }
+        .step h3::before { counter-increment: step; content: counter(step); display: inline-grid; place-items: center;
+                           width: 28px; height: 28px; border-radius: 50%; margin-right: 10px; font-size: 15px;
+                           background: var(--accent); color: #061325; vertical-align: 2px; }
+        .step p { color: var(--muted); font-size: 15px; }
+
+        .privacy { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 40px; align-items: start; }
+        .compare { border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+        .compare table { width: 100%; border-collapse: collapse; font-size: 15px; }
+        .compare th, .compare td { padding: 12px 14px; text-align: left; border-bottom: 1px solid rgba(255,255,255,.06); vertical-align: top; }
+        .compare thead th { font-family: var(--head); font-size: 14px; letter-spacing: .3px; background: rgba(255,255,255,.03); }
+        .compare thead th:last-child { color: var(--accent); }
+        .compare td:first-child { color: var(--muted); width: 38%; }
+        .compare td:nth-child(2) { color: var(--muted); }
+        .compare td:last-child { color: var(--text); }
+        .compare tr:last-child td { border-bottom: 0; }
+        .points { list-style: none; display: grid; gap: 18px; }
+        .points li { padding-left: 34px; position: relative; color: var(--muted); }
+        .points li::before { content: "✓"; position: absolute; left: 0; top: 0; width: 24px; height: 24px;
+                             border-radius: 50%; background: rgba(53,182,224,.15); color: var(--accent);
+                             display: grid; place-items: center; font-weight: 700; font-size: 13px; }
+        .points strong { color: var(--text); display: block; font-family: var(--head); font-size: 17px; }
+
+        .features { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+        .feature { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 20px 22px; }
+        .feature h3 { font-size: 17px; margin-bottom: 6px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 6px; }
+        .feature h3 .dot { color: var(--accent); display: inline-block; min-width: 1.4em; }
         .feature p { color: var(--muted); font-size: 14.5px; }
+        .new { font-family: var(--head); font-size: 10.5px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
+               color: #061325; background: var(--accent); border-radius: 10px; padding: 1px 8px; }
 
-        .gallery { padding: 16px 0 48px; }
-        .gallery h2 { font-size: 26px; margin-bottom: 6px; }
-        .gallery p.lead { color: var(--muted); margin-bottom: 26px; }
-        .gallery .shots { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-                          gap: 22px; }
+        .gallery .desktops { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr)); gap: 22px; margin-bottom: 26px; }
+        .gallery .shots { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 230px)); gap: 24px; justify-content: center; }
         .gallery figure { margin: 0; }
-        .gallery .desktops { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr));
-                             gap: 22px; margin-bottom: 26px; }
+        .gallery img { width: 100%; height: auto; border-radius: 16px; display: block; border: 1px solid rgba(255,255,255,.12);
+                       box-shadow: 0 14px 36px rgba(4,33,61,.45); }
         .gallery .desktops img { border-radius: 12px; }
-        .gallery img {
-            width: 100%; border-radius: 18px; display: block;
-            border: 1px solid rgba(255,255,255,.12);
-            box-shadow: 0 14px 36px rgba(4, 33, 61, .45);
-        }
-        .gallery figcaption { color: var(--muted); font-size: 13.5px; margin-top: 10px;
-                              text-align: center; }
+        .gallery figcaption { color: var(--muted); font-size: 13.5px; margin-top: 10px; text-align: center; }
 
-        .strip { border-top: 1px solid rgba(255,255,255,.06); padding: 34px 0; color: var(--muted);
-                 font-size: 15px; }
-        .strip .wrap { display: flex; gap: 20px; flex-wrap: wrap; justify-content: space-between; align-items: center; }
-        .strip b { color: var(--text); font-family: 'Space Grotesk', sans-serif; }
+        .platforms { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; margin-top: 28px; list-style: none; }
+        .platforms li { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; font-size: 14px; color: var(--muted); }
+        .platforms b { display: block; color: var(--text); font-family: var(--head); font-size: 16px; }
 
-        footer { border-top: 1px solid rgba(255,255,255,.06); padding: 26px 0 40px;
-                 color: var(--muted); font-size: 13.5px; }
+        .faq details { border-bottom: 1px solid rgba(255,255,255,.08); padding: 16px 0; }
+        .faq summary { cursor: pointer; font-family: var(--head); font-size: 18px; list-style: none; display: flex; justify-content: space-between; gap: 16px; }
+        .faq summary::-webkit-details-marker { display: none; }
+        .faq summary::after { content: "+"; color: var(--accent); font-size: 22px; line-height: 1; }
+        .faq details[open] summary::after { content: "–"; }
+        .faq details p { color: var(--muted); margin-top: 10px; max-width: 72ch; }
+
+        .closing { text-align: center; padding: 64px 0 56px; }
+        .closing h2 { font-size: clamp(26px, 3.4vw, 34px); margin-bottom: 10px; }
+        .closing p { color: var(--muted); margin-bottom: 22px; }
+        .cta { display: inline-block; background: var(--accent); color: #061325; font-weight: 700; font-size: 15px;
+               padding: 13px 26px; border-radius: 10px; text-decoration: none; }
+        .cta:hover { background: #6fd0f0; }
+        .cta.ghost { background: transparent; color: var(--text); border: 1px solid rgba(255,255,255,.25); }
+        .cta.ghost:hover { border-color: var(--accent); color: var(--accent); }
+
+        footer { border-top: 1px solid rgba(255,255,255,.06); padding: 26px 0 40px; color: var(--muted); font-size: 13.5px; }
         footer .wrap { display: flex; gap: 18px; flex-wrap: wrap; align-items: center; }
         footer a { color: var(--muted); }
         footer a:hover { color: var(--text); }
-        @media (max-width: 640px) {
-            .hero { padding: 40px 0 24px; }
-            .hero h1 { font-size: 32px; }
+
+        @media (max-width: 860px) {
+            .hero { grid-template-columns: 1fr; padding: 40px 0 24px; gap: 36px; }
+            .heroshots { max-width: 560px; }
+            .privacy { grid-template-columns: 1fr; }
         }
+        @media (max-width: 640px) {
+            .steps { grid-template-columns: 1fr; }
+            .step img { aspect-ratio: 440 / 380; }
+            header.site nav { margin-left: 0; width: 100%; gap: 14px; }
+            .compare th, .compare td { padding: 10px; font-size: 14px; }
+        }
+        @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
     </style>
     <!-- #501: electricrv.ca's own cookie-free page-view counter. First-party, no
          cookies, no third party, and never recorded for a browser sending Do Not
@@ -141,253 +208,299 @@
     <script defer src="https://electricrv.ca/api/analytics/a.js"></script>
 </head>
 <body>
+    <a class="skip" href="#main">Skip to content</a>
     <header class="site">
         <div class="wrap">
-            <img src="icon.png" alt="">
-            <span class="name">MegaPDF</span>
-            <a class="home" href="/">ElectricRV home</a>
+            <a class="brand" href="./"><img src="icon.png" alt=""><span class="name">MegaPDF</span></a>
+            <nav aria-label="Site">
+                <a href="#how">How it works</a>
+                <a href="#private">Privacy</a>
+                <a href="#features">Features</a>
+                <a href="#download">Download</a>
+                <!--support:live--><a href="support/">Support</a><!--support:soon support:end-->
+            </nav>
         </div>
     </header>
 
-    <main class="wrap">
+    <main id="main" class="wrap">
         <section class="hero">
             <div class="copy">
-                <span class="badge">Free &amp; Open Source</span>
+                <span class="eyebrow">Free · No account · Open source</span>
                 <h1>Someone sent you a PDF. <span>Send it back done.</span></h1>
-                <p class="tagline">Open. Fix. Save. Done.</p>
                 <p class="sub">
-                    MegaPDF does the one job most people actually have with a PDF:
-                    check the boxes, drop in your signature, and save it back —
-                    without an account, a subscription, or your document ever
-                    leaving your device.
+                    Tick the boxes, type on the lines, add your signature, and send it
+                    back, from your phone or your computer. <strong>Your document never
+                    leaves your device</strong>, and there is nothing to sign up for.
                 </p>
-                <div class="storelinks">
-                    <a href="https://apps.microsoft.com/detail/9PF4TRRH4M76">
+                <p class="foryou" id="foryou" hidden></p>
+                <div class="storelinks" id="stores">
+                    <a data-os="windows" href="https://apps.microsoft.com/detail/9PF4TRRH4M76">
                         <img src="badges/get-it-from-microsoft.svg" width="176" height="48" alt="Download from the Microsoft Store">
                     </a>
-                    <a href="https://apps.apple.com/app/id6799522972">
+                    <a data-os="ios" href="https://apps.apple.com/app/id6799522972">
                         <img src="badges/download-on-the-app-store.svg" width="144" height="48" alt="Download on the App Store">
                     </a>
-                    <a href="https://apps.apple.com/app/id6799522972?platform=mac">
+                    <a data-os="mac" href="https://apps.apple.com/app/id6799522972?platform=mac">
                         <img src="badges/download-on-the-mac-app-store.svg" width="187" height="48" alt="Download on the Mac App Store">
                     </a>
-                    <a class="gplay" href="https://play.google.com/store/apps/details?id=ca.electricrv.megapdf">
+                    <a data-os="android" class="gplay" href="https://play.google.com/store/apps/details?id=ca.electricrv.megapdf">
                         <img src="badges/get-it-on-google-play.png" width="185" height="71" alt="Get it on Google Play">
                     </a>
                     <!--linux:live-->
-                    <a class="linux" href="linux/"><span class="where">Install on</span>Linux</a>
+                    <a data-os="linux" class="linux" href="linux/"><span class="where">Install on</span>Linux</a>
                     <!--linux:soon
                     <span class="soon"><span class="where">Coming to</span>Linux</span>
                     linux:end-->
                 </div>
+                <ul class="proof" aria-label="In short">
+                    <li>Free, no ads, nothing to buy</li>
+                    <li>Works with no internet</li>
+                    <li>English, French and Spanish</li>
+                </ul>
             </div>
-            <div class="shot">
-                <img src="screenshot-viewer.png"
-                     alt="MegaPDF on iPhone showing a rental agreement with checked boxes and a signature">
+            <div class="heroshots">
+                <img class="laptop" src="shot-desktop.png" width="960" height="600"
+                     alt="MegaPDF on a Mac with a rental agreement open in a tab">
+                <img class="phone" src="screenshot-viewer.png" width="660" height="1434"
+                     alt="MegaPDF on iPhone showing the same rental agreement with checked boxes and a signature">
             </div>
         </section>
 
-        <section aria-label="New in 2.4">
-            <h2 class="sec">New in 2.4</h2>
+        <section class="block" id="how" aria-labelledby="how-h">
+            <h2 id="how-h">Done in three steps</h2>
+            <p class="lead">No upload, no account, no learning curve. Open the PDF the way you
+                open anything else, and it is ready to fill in.</p>
+            <div class="steps">
+                <article class="step">
+                    <img src="shot-home.png" width="440" height="956" loading="lazy"
+                         alt="The MegaPDF home screen listing recent documents">
+                    <h3>Open it</h3>
+                    <p>From the email it came in, from Files, from a share sheet, or with a
+                       double-click on your computer. MegaPDF opens it right where it is.</p>
+                </article>
+                <article class="step">
+                    <img src="shot-text.png" width="440" height="956" loading="lazy"
+                         alt="Typing a name onto a rental agreement, with size and font pickers">
+                    <h3>Fill it in and sign</h3>
+                    <p>Tick any box, even plain printed squares. Type on any line, in a size and
+                       face that match the form. Then add your signature: draw it, type it, or
+                       use a photo of the one on paper.</p>
+                </article>
+                <article class="step">
+                    <img src="shot-viewer.png" width="440" height="956" loading="lazy"
+                         alt="The rental agreement with two checked boxes and a handwritten signature">
+                    <h3>Send it back</h3>
+                    <p>Save, then Share it on your phone or attach it from your computer. Too big
+                       for email? <em>Shrink for email</em> makes a smaller copy and tells you
+                       honestly when it can't.</p>
+                </article>
+            </div>
+        </section>
+
+        <section class="block" id="private" aria-labelledby="private-h">
+            <h2 id="private-h">Online PDF tools want your document. MegaPDF doesn't.</h2>
+            <p class="lead">A lease, a tax form, a medical record: the PDFs people need to sign
+                are the ones they should least want to upload to a stranger's server. MegaPDF
+                does all of it on your own device.</p>
+            <div class="privacy">
+                <div class="compare">
+                    <table>
+                        <thead>
+                            <tr><th scope="col"></th><th scope="col">A typical online PDF tool</th><th scope="col">MegaPDF</th></tr>
+                        </thead>
+                        <tbody>
+                            <tr><td>Where your document goes</td><td>Uploaded to their server</td><td>Stays on your device</td></tr>
+                            <tr><td>Account</td><td>Often required</td><td>None, ever</td></tr>
+                            <tr><td>Cost</td><td>Free with limits, then a subscription</td><td>Free, with nothing to buy</td></tr>
+                            <tr><td>Without internet</td><td>Doesn't work</td><td>Works the same</td></tr>
+                            <tr><td>Can you check what it does?</td><td>Rarely</td><td>Yes: the code is open</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <ul class="points">
+                    <li><strong>Nothing to connect to</strong>The app opens no network connection of its
+                        own. There is no MegaPDF server for your documents or signatures to reach.</li>
+                    <li><strong>Nothing collected</strong>No analytics, no crash reports, no advertising
+                        identifiers, no permissions to grant. The <a href="privacy/">privacy policy</a>
+                        says it in full.</li>
+                    <li><strong>Redaction that really removes</strong>Mark a name or an address and
+                        MegaPDF takes it out of the file, rather than drawing a box over it that
+                        someone else can lift off.</li>
+                    <li><strong>Open source</strong>Every line is <a href="https://github.com/SlyWombat/MegaPDF">on
+                        GitHub</a> under the Apache 2.0 licence, so anyone can check these claims.</li>
+                </ul>
+            </div>
+        </section>
+
+        <section class="block" id="features" aria-labelledby="features-h">
+            <h2 id="features-h">Everything else you'll need, one day</h2>
+            <p class="lead">Most days it's fill in and sign. For the other days, it's all there,
+                on every platform.</p>
             <div class="features">
                 <article class="feature">
-                    <h3><span class="dot">🌐</span> MegaPDF speaks Spanish</h3>
-                    <p>MegaPDF now speaks Spanish, for Latin America and for Spain, on
-                       Windows, Mac, iPhone, iPad, Android and Linux. Plus minor bug
-                       fixes.</p>
+                    <h3><span class="dot">✏</span>Fix the document's own text</h3>
+                    <p>Wrong date or a misspelled name? Click the line and retype it. MegaPDF keeps
+                       the document's own font where it can, and Undo puts the original back exactly.</p>
+                </article>
+                <article class="feature">
+                    <h3><span class="dot">■</span>Redact for real</h3>
+                    <p>What you mark comes out of the file, so no other app can copy it or search
+                       for it. Whiteout is there too, and says plainly that it only covers.</p>
+                </article>
+                <article class="feature">
+                    <h3><span class="dot">✉</span>Shrink for email</h3>
+                    <p>Make a smaller copy that fits as an attachment. Your original stays as it was,
+                       and if the copy wouldn't be smaller, MegaPDF tells you instead.</p>
+                </article>
+                <article class="feature">
+                    <h3><span class="dot">🔍</span>Find any word</h3>
+                    <p>Search the whole document as you type, including scanned pages, which are read
+                       on your device (everywhere but Linux).</p>
+                </article>
+                <article class="feature">
+                    <h3><span class="dot">⊞</span>Page tools</h3>
+                    <p>Rotate a page scanned sideways, delete one, reorder by dragging, insert pages
+                       from another PDF, or save the pages you picked as their own file.</p>
+                </article>
+                <article class="feature">
+                    <h3><span class="dot">◐</span>Reading mode</h3>
+                    <p>One tap hides the toolbars and leaves the page, in Normal, Sepia for a long
+                       read, or Night for a dark room.</p>
+                </article>
+                <article class="feature">
+                    <h3><span class="dot">⧉</span>Tabs on your computer</h3>
+                    <p>On Windows, Mac and Linux, each PDF opens in a tab of the same window, with its
+                       own undo, find and zoom.</p>
+                </article>
+                <article class="feature">
+                    <h3><span class="dot">🔑</span>Protected PDFs</h3>
+                    <p>Open one with its password, respect its owner's restrictions, or set, change and
+                       remove a password yourself.</p>
+                </article>
+                <article class="feature">
+                    <h3><span class="dot">XL</span>Very large files</h3>
+                    <p>A 2.5 GB PDF opens straight away, without using gigabytes of memory. Banner-size
+                       pages measure at their real size.</p>
+                </article>
+                <article class="feature">
+                    <h3><span class="dot">💾</span>Saves you can trust</h3>
+                    <p>Every save is checked before it replaces your original, so a failed write can
+                       never ruin the file someone sent you.</p>
+                </article>
+                <article class="feature">
+                    <h3><span class="dot">M↓</span>Text out, as Markdown</h3>
+                    <p>Export the document's text with its headings, lists and filled-in values. On a
+                       computer, <code>megapdf-cli</code> does the same from a terminal.</p>
+                </article>
+                <article class="feature">
+                    <h3><span class="dot">🌐</span>Your language <span class="new">New in 2.4</span></h3>
+                    <p>English, French and Spanish, for Latin America and for Spain, following your
+                       device's setting.</p>
                 </article>
             </div>
         </section>
 
-        <section aria-label="Highlighted features">
-            <h2 class="sec">Highlighted features</h2>
-            <p class="lead">What MegaPDF does today, not a log of what changed to get here.</p>
-            <div class="features">
-                <article class="feature">
-                    <h3><span class="dot">✓</span> Check any box</h3>
-                    <p>Real form fields and plain printed squares alike — MegaPDF recognizes
-                       drawn checkboxes that other apps treat as decoration.</p>
-                </article>
-                <article class="feature">
-                    <h3><span class="dot">T</span> Type on any line</h3>
-                    <p>Tap or click where the answer goes and type it. Pick the size and
-                       the face so it matches the form you are filling in — then drag it
-                       into place, or open it again to fix a typo.</p>
-                </article>
-                <article class="feature">
-                    <h3><span class="dot">✏</span> Fix the document's own text</h3>
-                    <p>Wrong date? Misspelled name? Tap or click the line and retype it.
-                       MegaPDF keeps the document's own font where it can, says so when it
-                       had to use a similar one, and Undo puts the original back exactly.
-                       It stays layout-safe on a very wide range of edits: a 22,000-edit
-                       test run found none that disturbed the page.</p>
-                </article>
-                <article class="feature">
-                    <h3><span class="dot">■</span> Redact, and it really is gone</h3>
-                    <p>Mark what has to come out — a name, an address, a picture — and
-                       MegaPDF takes it out of the file rather than covering it over. What
-                       was underneath is gone: no other app can copy it or search for it.
-                       Whiteout (Cover on the Mac) still only covers, and says so. A mark
-                       can be selected, moved, reshaped and removed before you save — one
-                       drag is one undo step, Clear all marks drops every mark at once, and
-                       a mark never outlives the document it was made on.</p>
-                </article>
-                <article class="feature">
-                    <h3><span class="dot">✎</span> Sign like you mean it</h3>
-                    <p>Draw your signature, type it, or use a photo of the one on paper —
-                       the white background disappears. Place it, move it, resize it until it sits
-                       right on the line.</p>
-                </article>
-                <article class="feature">
-                    <h3><span class="dot">◐</span> Reading mode</h3>
-                    <p>One tap or click takes the toolbars — and the side pane on the
-                       desktops — off the screen and leaves the page. A small bar carries
-                       the page number and the way back. Page colours sit beside it:
-                       Normal, Sepia for a long read, or Night for a dark room — and
-                       <em>Open documents in reading mode</em> starts every one that way.</p>
-                </article>
-                <article class="feature">
-                    <h3><span class="dot">⊞</span> Page tools</h3>
-                    <p>A Pages pane puts the document's pages in front of you: rotate
-                       one that was scanned sideways, delete it, drag pages into a
-                       different order, insert a blank page or another PDF's pages, or
-                       save the pages you picked as a file of their own. Each is one
-                       step in the undo history.</p>
-                </article>
-                <article class="feature">
-                    <h3><span class="dot">⊕</span> Zoom where you're looking</h3>
-                    <p>Zoom holds the point you're pointing at instead of the corner of
-                       the page, however you ask for it — the menu, the keyboard, a pinch,
-                       or the wheel.</p>
-                </article>
-                <article class="feature">
-                    <h3><span class="dot">⧉</span> Tabs</h3>
-                    <p>On Windows, Mac and Linux, a second PDF opens in a tab beside the
-                       first, in the same window — from Open, from a file dropped on the
-                       window, or from a double-click in the file manager, which lands in
-                       the window you already have. Each tab keeps its own undo, find and
-                       zoom, and closing asks about each document that needs saving.</p>
-                </article>
-                <article class="feature">
-                    <h3><span class="dot">↗</span> Open with, and Share</h3>
-                    <p>On iPhone, iPad and Android, MegaPDF is a PDF viewer: open a PDF
-                       from Files, Mail, Drive or any app's share sheet straight into it,
-                       and send it back with Share. With unsaved changes, it asks — Save,
-                       Share without saving, or Cancel.</p>
-                </article>
-                <article class="feature">
-                    <h3><span class="dot">M↓</span> Export as Markdown</h3>
-                    <p>Save As (Export as Markdown on Android, iPhone and iPad) writes
-                       the document's text as a Markdown file: headings,
-                       paragraphs, lists and the values you filled in. An export, not a
-                       save — the PDF is untouched. The same text comes out of a
-                       terminal with <code>megapdf-cli extract</code>, on Linux, Windows
-                       and Mac.</p>
-                </article>
-                <article class="feature">
-                    <h3><span class="dot">💾</span> Save without fear</h3>
-                    <p>Every save is verified before it touches your original, so a failed
-                       write can never corrupt the file someone sent you.</p>
-                </article>
-                <article class="feature">
-                    <h3><span class="dot">🔍</span> Find any word</h3>
-                    <p>Search the whole document as you type. Every match lights up, the
-                       counter tells you how many, and one tap or Enter walks you to the next.
-                       Scanned pages are searched too, read on your device, everywhere but
-                       Linux.</p>
-                </article>
-                <article class="feature">
-                    <h3><span class="dot">🔑</span> Protected PDFs</h3>
-                    <p>Open one with its password. If its owner restricted what may be
-                       changed, MegaPDF respects that and says so, and the owner password
-                       unlocks it. Set a password on a document, change it, or remove it.</p>
-                </article>
-                <article class="feature">
-                    <h3><span class="dot">XL</span> Very large PDFs</h3>
-                    <p>A 2.5 GB file opens straight away, without using gigabytes of
-                       memory. Banner-size pages measure at their real size, and pages
-                       full of pictures draw several times faster.</p>
-                </article>
-                <article class="feature">
-                    <h3><span class="dot">▤</span> One toolbar, fit to the platform</h3>
-                    <p>On Windows, Mac and Linux, the toolbar is a single row, with
-                       pickers appearing beside the tool they belong to and everything
-                       else under More. On iPad, the everyday tools sit in a wide row of
-                       their own under the navigation bar, each with its title beside its
-                       icon.</p>
-                </article>
-                <article class="feature">
-                    <h3><span class="dot">🔒</span> Private by design</h3>
-                    <p>No permissions to grant, no network access, no analytics. There is no
-                       server for your documents to go to — and the code is open, so
-                       anyone can check. In English, French and Spanish, following your device.</p>
-                </article>
-            </div>
-        </section>
-
-        <section class="gallery" aria-label="Screenshots">
-            <h2>See it in action</h2>
-            <p class="lead">The real app, doing the real job — no mockups.</p>
+        <section class="block gallery" aria-labelledby="gallery-h">
+            <h2 id="gallery-h">The real app, doing the real job</h2>
+            <p class="lead">No mockups. Every picture here is MegaPDF as you'll get it.</p>
             <div class="desktops">
                 <figure>
-                    <img src="shot-desktop.png" alt="MegaPDF on a Mac: a single row of tools, the rental agreement open in a tab, and its first line marked for redaction — the mark selected, with the ✕ that removes it at its corner">
-                    <figcaption>Redact removes it. It does not just cover it.</figcaption>
+                    <img src="shot-desktop.png" width="960" height="600" loading="lazy"
+                         alt="MegaPDF on a Mac: a single row of tools, the rental agreement open in a tab, and its first line marked for redaction, with the ✕ that removes the mark at its corner">
+                    <figcaption>Redact removes it. It doesn't just cover it.</figcaption>
                 </figure>
                 <figure>
-                    <img src="screenshots/linux/en/04-pages.png" alt="MegaPDF on Linux, showing the rental agreement with two checked boxes and a signature, beside a strip of page thumbnails with two pages picked out">
-                    <!--linux:live--><figcaption>The same app on Linux — <a href="linux/" style="color:inherit">how to install it</a></figcaption><!--linux:soon
-                    <figcaption>The same app on Linux — coming soon</figcaption>
+                    <img src="screenshots/linux/en/04-pages.png" width="1280" height="800" loading="lazy"
+                         alt="MegaPDF on Linux, showing the rental agreement with two checked boxes and a signature, beside a strip of page thumbnails with two pages picked out">
+                    <!--linux:live--><figcaption>The same app on Linux, with the page tools open. <a href="linux/" style="color:inherit">How to install it</a></figcaption><!--linux:soon
+                    <figcaption>The same app on Linux, coming soon</figcaption>
                     linux:end-->
                 </figure>
             </div>
             <div class="shots">
                 <figure>
-                    <img src="shot-viewer.png" alt="A rental agreement with two checked boxes and a handwritten MegaWoman signature">
-                    <figcaption>Checked and signed in under a minute</figcaption>
-                </figure>
-                <figure>
-                    <img src="shot-text.png" alt="Typing a name onto a rental agreement, with size and font pickers below the text field">
-                    <figcaption>Type on the blank line — your size, your font</figcaption>
-                </figure>
-                <figure>
-                    <img src="shot-search.png" alt="Searching a rental agreement for the word rental, with three matches highlighted and a 1 of 3 counter">
+                    <img src="shot-search.png" width="440" height="956" loading="lazy"
+                         alt="Searching a rental agreement for the word rental, with three matches highlighted and a 1 of 3 counter">
                     <figcaption>Find any word, on every page</figcaption>
                 </figure>
                 <figure>
-                    <img src="shot-sign.png" alt="The signature library sheet">
-                    <figcaption>Your signatures, saved on your device</figcaption>
+                    <img src="shot-sign.png" width="440" height="956" loading="lazy" alt="The signature library sheet">
+                    <figcaption>Your signatures, kept on your device</figcaption>
                 </figure>
                 <figure>
-                    <img src="shot-draw.png" alt="Drawing a signature with a finger">
+                    <img src="shot-draw.png" width="440" height="956" loading="lazy" alt="Drawing a signature with a finger">
                     <figcaption>Draw it once, use it everywhere</figcaption>
                 </figure>
-                <figure>
-                    <img src="shot-home.png" alt="The home screen with recent documents">
-                    <figcaption>No account. No cloud. No tracking.</figcaption>
-                </figure>
             </div>
         </section>
 
-        <section class="strip">
-            <div class="wrap" style="padding:0">
-                <span><b>One engine, five platforms.</b> Documents you sign on Windows
-                      open perfectly on a Mac, an iPhone, an iPad, Android or Linux — and
-                      vice versa.</span>
-                <span>Windows&nbsp;11 · macOS · iOS&nbsp;/&nbsp;iPadOS · Android · Linux</span>
-            </div>
+        <section class="block" id="download" aria-labelledby="download-h">
+            <h2 id="download-h">Get MegaPDF</h2>
+            <p class="lead">One app on six platforms, from each platform's own store. A document you
+                sign on one opens exactly the same on all the others.</p>
+            <ul class="platforms">
+                <li><b>Windows</b>Windows 10 version 1809 or newer, Intel, AMD or Arm.
+                    <a href="https://apps.microsoft.com/detail/9PF4TRRH4M76">Microsoft Store</a></li>
+                <li><b>Mac</b>macOS 12 Monterey or newer, Apple silicon or Intel.
+                    <a href="https://apps.apple.com/app/id6799522972?platform=mac">Mac App Store</a></li>
+                <li><b>iPhone and iPad</b>iOS or iPadOS 16 or newer.
+                    <a href="https://apps.apple.com/app/id6799522972">App Store</a></li>
+                <li><b>Android</b>Android 8.0 or newer.
+                    <a href="https://play.google.com/store/apps/details?id=ca.electricrv.megapdf">Google Play</a></li>
+                <!--linux:live-->
+                <li><b>Linux</b>64-bit, Ubuntu 22.04 or anything as recent. APT, Snap, .deb or a tarball.
+                    <a href="linux/">How to install</a></li>
+                <!--linux:soon
+                <li><b>Linux</b>Coming soon.</li>
+                linux:end-->
+            </ul>
         </section>
 
-        <!--support:live-->
-        <section class="strip" aria-label="Support">
-            <div class="wrap" style="padding:0">
-                <span><b>Something not working?</b> The support page answers the things
-                      people ask most — and helps you write to us about anything it
-                      doesn't. One person reads those messages, and nothing you type on
-                      that page is sent anywhere until you send it yourself.</span>
-                <a class="cta ghost" href="support/">Support</a>
-            </div>
+        <section class="block faq" id="faq" aria-labelledby="faq-h">
+            <h2 id="faq-h">Questions people ask</h2>
+            <details>
+                <summary>Is it really free?</summary>
+                <p>Yes. No ads, no subscription, no premium tier and nothing to buy inside the app.
+                   MegaPDF is open source under the Apache 2.0 licence, made by Electric RV.</p>
+            </details>
+            <details>
+                <summary>Is my signature a digital signature?</summary>
+                <p>No. MegaPDF places an <em>electronic signature</em>: the one you draw, type or
+                   photograph, put on the page where it belongs. A <em>digital signature</em> is a
+                   different thing, backed by a certificate, and MegaPDF doesn't make one. If a document
+                   already carries one, MegaPDF tells you. If you're unsure which kind a form needs, ask
+                   whoever sent it.</p>
+            </details>
+            <details>
+                <summary>Does it need the internet?</summary>
+                <p>No. It works the same in airplane mode, because it never connects anywhere. Your
+                   documents and signatures stay on your device.</p>
+            </details>
+            <details>
+                <summary>Will the person I send it to be able to open it?</summary>
+                <p>Yes. MegaPDF saves an ordinary PDF that opens in any PDF reader. Your ticks, text and
+                   signature are saved into the file itself, so they see exactly what you did.</p>
+            </details>
+            <details>
+                <summary>What languages does it speak?</summary>
+                <p>English, French and Spanish (for Latin America and for Spain). It follows your
+                   device's language setting.</p>
+            </details>
+            <!--support:live-->
+            <details>
+                <summary>Something isn't working. Who do I ask?</summary>
+                <p>The <a href="support/">support page</a> answers what people ask most and helps you
+                   write to us about anything it doesn't. One person reads those messages, and nothing
+                   you type there is sent anywhere until you send it yourself.</p>
+            </details>
+            <!--support:soon support:end-->
         </section>
-        <!--support:soon support:end-->
+
+        <section class="closing">
+            <h2>That PDF in your inbox is waiting.</h2>
+            <p>Free on Windows, Mac, iPhone, iPad, Android and Linux.</p>
+            <a class="cta" href="#download">Get MegaPDF</a>
+        </section>
     </main>
 
     <footer>
@@ -395,9 +508,31 @@
             <span>© 2026 Electric RV</span>
             <a href="privacy/">Privacy policy</a>
             <!--support:live--><a href="support/">Support</a><!--support:soon support:end-->
-            <a href="https://github.com/SlyWombat/MegaPDF">View the source on GitHub</a>
-            <a href="/">ElectricRV</a>
+            <a href="https://github.com/SlyWombat/MegaPDF">Source code on GitHub</a>
+            <a href="https://electricrv.ca/">Electric RV</a>
         </div>
     </footer>
+
+    <script>
+        // Puts the visitor's own platform first and rings its badge. Runs entirely in
+        // the browser: it reads the user agent, sends nothing, stores nothing.
+        (function () {
+            var ua = navigator.userAgent, os = null, name = '';
+            if (/iPhone|iPod/.test(ua)) { os = 'ios'; name = 'iPhone'; }
+            else if (/iPad/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)) { os = 'ios'; name = 'iPad'; }
+            else if (/Android/.test(ua)) { os = 'android'; name = 'Android'; }
+            else if (/Windows/.test(ua)) { os = 'windows'; name = 'Windows'; }
+            else if (/Macintosh/.test(ua)) { os = 'mac'; name = 'Mac'; }
+            else if (/Linux|X11/.test(ua) && !/CrOS/.test(ua)) { os = 'linux'; name = 'Linux'; }
+            var stores = document.getElementById('stores');
+            var mine = os && stores.querySelector('[data-os="' + os + '"]');
+            if (!mine) return;
+            mine.classList.add('mine');
+            stores.insertBefore(mine, stores.firstChild);
+            var p = document.getElementById('foryou');
+            p.innerHTML = 'You’re on <b>' + name + '</b>. Here’s MegaPDF for it, free:';
+            p.hidden = false;
+        })();
+    </script>
 </body>
 </html>

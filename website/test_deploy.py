@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Tests for website/deploy.py's login-file lookup (#668).
+"""Tests for website/deploy.py: its login-file lookup (#668) and its refusal to
+upload a page that loads anything from a third party (#846).
 
 Run as a script: python3 website/test_deploy.py -v
 
@@ -98,6 +99,62 @@ class LoginFileFollowsTheMainCheckout(unittest.TestCase):
             d = load_deploy()
             with mock.patch.dict(os.environ, {VARIABLE: folder}):
                 self.assertEqual(d.env_path(), (os.path.join(folder, ".env"), True))
+
+
+class NoPageLoadsFromAThirdParty(unittest.TestCase):
+    """#846: the pages loaded Google Fonts while the privacy policy said no third
+    party was involved. deploy.py now refuses any page that fetches from a host
+    that is not ours, and every page in the tree has to pass, in every state a
+    deploy can put it in."""
+
+    def setUp(self):
+        self.deploy = load_deploy()
+
+    def test_every_page_passes_with_its_regions_live_and_held_back(self):
+        site = os.path.join(os.path.dirname(DEPLOY), "megapdf")
+        pages = [os.path.join(root, name) for root, _, files in os.walk(site)
+                 for name in files if name.endswith(".html")]
+        self.assertGreaterEqual(len(pages), 4)
+        for page in pages:
+            with open(page, encoding="utf-8") as f:
+                source = f.read()
+            for live in (True, False):
+                html = self.deploy.resolve(source, {"linux": live, "snap": live, "support": live})
+                with self.subTest(page=os.path.relpath(page, site), live=live):
+                    self.assertEqual(self.deploy.third_party_loads(html), [])
+
+    def test_google_fonts_is_refused(self):
+        html = ('<link rel="preconnect" href="https://fonts.googleapis.com">\n'
+                '<link href="https://fonts.googleapis.com/css2?family=Inter" rel="stylesheet">')
+        self.assertEqual(len(self.deploy.third_party_loads(html)), 2)
+
+    def test_scripts_images_frames_and_css_urls_are_checked(self):
+        for html in ('<script src="https://cdn.example.com/x.js"></script>',
+                     '<img alt="" src="//images.example.com/a.png">',
+                     '<iframe src="https://www.youtube.com/embed/x"></iframe>',
+                     '<style>@font-face { src: url("https://fonts.gstatic.com/a.woff2") }</style>',
+                     '<style>@import "https://example.com/a.css";</style>'):
+            with self.subTest(html=html):
+                self.assertEqual(len(self.deploy.third_party_loads(html)), 1)
+
+    def test_our_own_hosts_links_and_page_names_are_not_loads(self):
+        html = ('<link rel="canonical" href="https://megapdf.ca/">'
+                '<link rel="alternate" hreflang="fr" href="https://megapdf.ca/fr/">'
+                '<script defer src="https://electricrv.ca/api/analytics/a.js"></script>'
+                '<a href="https://apps.apple.com/app/id6799522972">App Store</a>'
+                '<a href="https://github.com/SlyWombat/MegaPDF">source</a>'
+                '<style>@font-face { src: url(fonts/space-grotesk-latin.woff2) }</style>'
+                '<img alt="" src="shot-viewer.png">')
+        self.assertEqual(self.deploy.third_party_loads(html), [])
+
+    def test_a_dry_run_refuses_a_page_with_a_third_party_load(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            page = os.path.join(tmp, "index.html")
+            with open(page, "w", encoding="utf-8") as f:
+                f.write('<link href="https://fonts.googleapis.com/css2?x" rel="stylesheet">')
+            with self.assertRaises(SystemExit) as caught:
+                self.deploy.staged([(page, "/public_html/megapdf")], {})
+            self.assertIn("fonts.googleapis.com", str(caught.exception))
 
 
 if __name__ == "__main__":
