@@ -24,9 +24,25 @@ website/deploy.py ...`. That is the folder, never the file's contents. The dry r
   (`OFL.txt`). **No page loads anything from a third party** (#846): body text
   uses the platform's own font, and `deploy.py` refuses a page that fetches a
   font, script, stylesheet or image from any host but electricrv.ca or megapdf.ca.
-- `social-card.png` — the 1200 x 630 link preview (`og:image`, #845), built by
-  `python3 website/make_social_card.py` from the screenshots, icon and font in this
-  tree. Rebuild it whenever the gallery screenshots are re-shot.
+- `site.css`, `site.js` — shared by the three landing pages. The script only
+  reorders the store badges to put the visitor's own platform first; it reads the
+  user agent and sends nothing.
+- `fr/`, `es/` — the French (fr-CA) and Spanish (es-419) landing pages (#845),
+  hand-written like the apps' own fr-CA and es-419. They are not derived:
+  fr-FR and es-ES visitors get these pages. Their pictures in `fr/img/` and
+  `es/img/` come from the release's localized captures, so the app and its sample
+  document are in the page's language. The privacy, support and Linux pages are
+  English only, and the French and Spanish pages say so where they link them.
+- `social-card.png`, `fr/social-card.png`, `es/social-card.png` — each page's
+  1200 x 630 link preview (`og:image`).
+- **`python3 website/make_page_images.py`** rebuilds `fr/img/`, `es/img/` and all
+  three social cards from `docs/qa/captures-2.4/` (pass `--captures` for a later
+  release), the icon and the self-hosted font. Run it whenever a release re-shoots
+  its captures.
+- `badges/*-fr*`, `badges/*-es*` — the stores' official French and Spanish
+  badges, from the same sources as the English ones (table below) with the locale
+  swapped: Apple `fr-ca` and `es-mx`, Google `fr-ca` and `es-419`, and Microsoft
+  `fr` and `es` (its generator has no regional variant).
 - `screenshot-viewer.png`, `shot-*.png` — the gallery. Where each one comes
   from is below.
 - `megapdf/screenshots/linux/` — the AppStream screenshots for the Flatpak

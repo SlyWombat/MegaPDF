@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="fr-CA">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <!-- FR-REVIEW #845: the whole page is new French (fr-CA, hand-written; the
+         French of France is not derived for the website). Glossary:
+         docs/localisation-glossary.md. -->
+    <!--linux:live-->
+    <meta name="description" content="Remplissez un formulaire PDF, signez-le et renvoyez-le, sur Windows, Mac, iPhone, iPad, Android et Linux. Gratuit, sans compte, et votre document ne quitte jamais votre appareil.">
+    <!--linux:soon
+    <meta name="description" content="Remplissez un formulaire PDF, signez-le et renvoyez-le, sur Windows, Mac, iPhone, iPad et Android, et bientôt sur Linux. Gratuit, sans compte, et votre document ne quitte jamais votre appareil.">
+    linux:end-->
+    <link rel="canonical" href="https://megapdf.ca/fr/">
+    <link rel="alternate" hreflang="en" href="https://megapdf.ca/">
+    <link rel="alternate" hreflang="fr" href="https://megapdf.ca/fr/">
+    <link rel="alternate" hreflang="es" href="https://megapdf.ca/es/">
+    <link rel="alternate" hreflang="x-default" href="https://megapdf.ca/">
+    <title>MegaPDF — Remplissez, signez et renvoyez n'importe quel PDF. Gratuit et privé.</title>
+    <meta property="og:title" content="MegaPDF — Quelqu'un vous a envoyé un PDF. Renvoyez-le, c'est réglé.">
+    <meta property="og:description" content="Remplissez le formulaire, signez-le, renvoyez-le. Gratuit, sans compte, et votre document ne quitte jamais votre appareil.">
+    <meta property="og:type" content="website">
+    <meta property="og:locale" content="fr_CA">
+    <meta property="og:url" content="https://megapdf.ca/fr/">
+    <meta property="og:image" content="https://megapdf.ca/fr/social-card.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="MegaPDF sur un téléphone et un ordinateur : un contrat de location avec des cases cochées et une signature">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="theme-color" content="#0c1220">
+    <link rel="icon" href="../icon.png">
+    <link rel="stylesheet" href="../site.css">
+    <!-- #501: electricrv.ca's own cookie-free page-view counter, as on the English
+         page. Disclosed in the privacy policy, section 3. -->
+    <script defer src="https://electricrv.ca/api/analytics/a.js"></script>
+</head>
+<body>
+    <a class="skip" href="#main">Aller au contenu</a>
+    <header class="site">
+        <div class="wrap">
+            <a class="brand" href="./"><img src="../icon.png" alt=""><span class="name">MegaPDF</span></a>
+            <nav aria-label="Site">
+                <a href="#how">Comment ça marche</a>
+                <a href="#private">Confidentialité</a>
+                <a href="#features">Fonctions</a>
+                <a href="#download">Télécharger</a>
+                <!--support:live--><a href="../support/" hreflang="en">Soutien <small>(en anglais)</small></a><!--support:soon support:end-->
+            </nav>
+            <nav class="langs" aria-label="Langue">
+                <a href="../" hreflang="en" lang="en">English</a>
+                <a href="./" hreflang="fr" lang="fr" aria-current="page">Français</a>
+                <a href="../es/" hreflang="es" lang="es">Español</a>
+            </nav>
+        </div>
+    </header>
+
+    <main id="main" class="wrap">
+        <section class="hero">
+            <div class="copy">
+                <span class="eyebrow">Gratuit · Sans compte · Code source ouvert</span>
+                <h1>Quelqu'un vous a envoyé un PDF. <span>Renvoyez-le, c'est réglé.</span></h1>
+                <p class="sub">
+                    Cochez les cases, écrivez sur les lignes, ajoutez votre signature et
+                    renvoyez-le, depuis votre téléphone ou votre ordinateur. <strong>Votre
+                    document ne quitte jamais votre appareil</strong>, et vous n'avez aucun
+                    compte à créer.
+                </p>
+                <p class="foryou" id="foryou" data-text="Vous êtes sur {os}. Voici MegaPDF pour cet appareil, gratuitement :" hidden></p>
+                <div class="storelinks" id="stores">
+                    <a data-os="windows" href="https://apps.microsoft.com/detail/9PF4TRRH4M76?hl=fr-ca">
+                        <img src="../badges/get-it-from-microsoft-fr.svg" width="176" height="48" alt="Télécharger dans le Microsoft Store">
+                    </a>
+                    <a data-os="ios" href="https://apps.apple.com/app/id6799522972">
+                        <img src="../badges/download-on-the-app-store-fr-ca.svg" width="152" height="48" alt="Télécharger dans l'App Store">
+                    </a>
+                    <a data-os="mac" href="https://apps.apple.com/app/id6799522972?platform=mac">
+                        <img src="../badges/download-on-the-mac-app-store-fr-ca.svg" width="187" height="48" alt="Télécharger dans le Mac App Store">
+                    </a>
+                    <a data-os="android" class="gplay" href="https://play.google.com/store/apps/details?id=ca.electricrv.megapdf&amp;hl=fr_CA">
+                        <img src="../badges/get-it-on-google-play-fr.png" width="185" height="71" alt="Disponible sur Google Play">
+                    </a>
+                    <!--linux:live-->
+                    <a data-os="linux" class="linux" href="../linux/" hreflang="en"><span class="where">Installer sur</span>Linux</a>
+                    <!--linux:soon
+                    <span class="soon"><span class="where">Bientôt sur</span>Linux</span>
+                    linux:end-->
+                </div>
+                <ul class="proof" aria-label="En bref">
+                    <li>Gratuit, sans publicité, rien à acheter</li>
+                    <li>Fonctionne sans Internet</li>
+                    <li>En français, en anglais et en espagnol</li>
+                </ul>
+            </div>
+            <div class="heroshots">
+                <img class="laptop" src="img/shot-desktop.png" width="960" height="600"
+                     alt="MegaPDF sur un Mac, avec un contrat de location ouvert dans un onglet">
+                <img class="phone" src="img/screenshot-viewer.png" width="660" height="1434"
+                     alt="MegaPDF sur iPhone, montrant le même contrat de location avec des cases cochées et une signature">
+            </div>
+        </section>
+
+        <section class="block" id="how" aria-labelledby="how-h">
+            <h2 id="how-h">Trois étapes, et c'est réglé</h2>
+            <p class="lead">Aucun téléversement, aucun compte, rien à apprendre. Ouvrez le PDF comme
+                vous ouvrez n'importe quel fichier : il est prêt à remplir.</p>
+            <div class="steps">
+                <article class="step">
+                    <img src="img/shot-home.png" width="440" height="956" loading="lazy"
+                         alt="L'écran d'accueil de MegaPDF avec la liste des documents récents">
+                    <h3>Ouvrez-le</h3>
+                    <p>Depuis le courriel où il est arrivé, depuis Fichiers, depuis une feuille de
+                       partage, ou d'un double-clic sur votre ordinateur. MegaPDF l'ouvre là où il
+                       se trouve.</p>
+                </article>
+                <article class="step">
+                    <img src="img/shot-text.png" width="440" height="956" loading="lazy"
+                         alt="Un nom tapé sur un contrat de location, avec le choix de la taille et de la police">
+                    <h3>Remplissez et signez</h3>
+                    <p>Cochez n'importe quelle case, même un simple carré imprimé. Écrivez sur
+                       n'importe quelle ligne, dans une taille et une police assorties au formulaire.
+                       Puis ajoutez votre signature : dessinez-la, tapez-la, ou servez-vous d'une
+                       photo de celle que vous avez sur papier.</p>
+                </article>
+                <article class="step">
+                    <img src="img/shot-signed.png" width="440" height="956" loading="lazy"
+                         alt="Le contrat de location rempli, avec deux cases cochées et une signature manuscrite">
+                    <h3>Renvoyez-le</h3>
+                    <p>Enregistrez, puis partagez-le depuis votre téléphone ou joignez-le depuis votre
+                       ordinateur. Trop lourd pour un courriel? <em>Réduire pour courriel</em> en fait
+                       une copie plus petite, et vous dit franchement quand c'est impossible.</p>
+                </article>
+            </div>
+        </section>
+
+        <section class="block" id="private" aria-labelledby="private-h">
+            <h2 id="private-h">Les outils PDF en ligne veulent votre document. MegaPDF,&nbsp;non.</h2>
+            <p class="lead">Un bail, une déclaration de revenus, un dossier médical : les PDF qu'on doit
+                signer sont justement ceux qu'on voudrait le moins téléverser sur le serveur d'un
+                inconnu. MegaPDF fait tout sur votre propre appareil.</p>
+            <div class="privacy">
+                <div class="compare">
+                    <table>
+                        <thead>
+                            <tr><th scope="col"></th><th scope="col">Un outil PDF en ligne typique</th><th scope="col">MegaPDF</th></tr>
+                        </thead>
+                        <tbody>
+                            <tr><td>Où va votre document</td><td>Téléversé sur leur serveur</td><td>Il reste sur votre appareil</td></tr>
+                            <tr><td>Compte</td><td>Souvent obligatoire</td><td>Aucun, jamais</td></tr>
+                            <tr><td>Prix</td><td>Gratuit avec des limites, puis un abonnement</td><td>Gratuit, rien à acheter</td></tr>
+                            <tr><td>Sans Internet</td><td>Ne fonctionne pas</td><td>Fonctionne de la même façon</td></tr>
+                            <tr><td>Pouvez-vous vérifier ce qu'il fait?</td><td>Rarement</td><td>Oui : le code est ouvert</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <ul class="points">
+                    <li><strong>Rien à quoi se connecter</strong>L'application n'ouvre aucune connexion
+                        réseau d'elle-même. Il n'existe aucun serveur MegaPDF où vos documents ou vos
+                        signatures pourraient aboutir.</li>
+                    <li><strong>Rien de recueilli</strong>Aucune analytique, aucun rapport de plantage,
+                        aucun identifiant publicitaire, aucune autorisation à accorder. La
+                        <a href="../privacy/" hreflang="en">politique de confidentialité</a> (en anglais)
+                        le dit en détail.</li>
+                    <li><strong>Un caviardage qui retire vraiment</strong>Marquez un nom ou une adresse :
+                        MegaPDF le retire du fichier, au lieu d'y dessiner un rectangle que quelqu'un
+                        d'autre pourrait enlever.</li>
+                    <li><strong>Code source ouvert</strong>Chaque ligne est
+                        <a href="https://github.com/SlyWombat/MegaPDF">sur GitHub</a>, sous licence
+                        Apache 2.0 : n'importe qui peut vérifier ce que nous affirmons ici.</li>
+                </ul>
+            </div>
+        </section>
+
+        <section class="block" id="features" aria-labelledby="features-h">
+            <h2 id="features-h">Tout le reste, pour le jour où vous en aurez besoin</h2>
+            <p class="lead">La plupart du temps, c'est remplir et signer. Pour les autres jours, tout y
+                est, sur chaque plateforme.</p>
+            <div class="features">
+                <article class="feature">
+                    <h3><span class="dot">✏</span>Corrigez le texte du document</h3>
+                    <p>Une date erronée, un nom mal orthographié? Cliquez sur la ligne et retapez-la.
+                       MegaPDF garde la police du document quand il le peut, et Annuler remet l'original
+                       exactement comme il était.</p>
+                </article>
+                <article class="feature">
+                    <h3><span class="dot">■</span>Un vrai caviardage</h3>
+                    <p>Ce que vous marquez est retiré du fichier : aucune autre application ne peut le
+                       copier ni le rechercher. Le correcteur est là aussi, et dit clairement qu'il ne
+                       fait que masquer.</p>
+                </article>
+                <article class="feature">
+                    <h3><span class="dot">✉</span>Réduire pour courriel</h3>
+                    <p>Créez une copie plus petite qui passe en pièce jointe. Votre original reste tel
+                       quel, et si la copie ne serait pas plus petite, MegaPDF vous le dit plutôt.</p>
+                </article>
+                <article class="feature">
+                    <h3><span class="dot">🔍</span>Trouvez n'importe quel mot</h3>
+                    <p>Cherchez dans tout le document à mesure que vous tapez, y compris dans les pages
+                       numérisées, lues sur votre appareil (partout sauf sur Linux).</p>
+                </article>
+                <article class="feature">
+                    <h3><span class="dot">⊞</span>Outils de pages</h3>
+                    <p>Faites pivoter une page numérisée de travers, supprimez-en une, réordonnez-les
+                       en les glissant, insérez les pages d'un autre PDF, ou enregistrez les pages
+                       choisies dans leur propre fichier.</p>
+                </article>
+                <article class="feature">
+                    <h3><span class="dot">◐</span>Mode lecture</h3>
+                    <p>Un toucher masque les barres d'outils et ne laisse que la page, en Normal, en
+                       Sépia pour une longue lecture, ou en Nuit pour une pièce sombre.</p>
+                </article>
+                <article class="feature">
+                    <h3><span class="dot">⧉</span>Des onglets sur votre ordinateur</h3>
+                    <p>Sur Windows, Mac et Linux, chaque PDF s'ouvre dans un onglet de la même fenêtre,
+                       avec sa propre annulation, sa recherche et son zoom.</p>
+                </article>
+                <article class="feature">
+                    <h3><span class="dot">🔑</span>PDF protégés</h3>
+                    <p>Ouvrez-en un avec son mot de passe, respectez les restrictions demandées par son
+                       auteur, ou définissez, modifiez et retirez vous-même un mot de passe.</p>
+                </article>
+                <article class="feature">
+                    <h3><span class="dot">XL</span>Très gros fichiers</h3>
+                    <p>Un PDF de 2,5 Go s'ouvre tout de suite, sans utiliser des gigaoctets de mémoire.
+                       Les pages grand format sont mesurées à leur taille réelle.</p>
+                </article>
+                <article class="feature">
+                    <h3><span class="dot">💾</span>Des enregistrements fiables</h3>
+                    <p>Chaque enregistrement est vérifié avant de remplacer votre original : un échec
+                       d'écriture ne peut jamais abîmer le fichier qu'on vous a envoyé.</p>
+                </article>
+                <article class="feature">
+                    <h3><span class="dot">M↓</span>Le texte, en Markdown</h3>
+                    <p>Exportez le texte du document, avec ses titres, ses listes et les valeurs
+                       remplies. Sur un ordinateur, <code>megapdf-cli</code> fait la même chose depuis
+                       un terminal.</p>
+                </article>
+                <article class="feature">
+                    <h3><span class="dot">🌐</span>Votre langue <span class="new">Nouveau en 2.4</span></h3>
+                    <p>Français, anglais et espagnol (pour l'Amérique latine et pour l'Espagne), selon
+                       la langue de votre appareil.</p>
+                </article>
+            </div>
+        </section>
+
+        <section class="block gallery" aria-labelledby="gallery-h">
+            <h2 id="gallery-h">La vraie application, au vrai travail</h2>
+            <p class="lead">Aucune maquette : chaque image montre MegaPDF tel que vous l'obtiendrez.</p>
+            <div class="desktops">
+                <figure>
+                    <img src="img/shot-desktop.png" width="960" height="600" loading="lazy"
+                         alt="MegaPDF sur un Mac : une seule rangée d'outils, le contrat de location ouvert dans un onglet, et sa première ligne marquée pour caviardage, avec le ✕ qui retire la marque">
+                    <figcaption>Le caviardage retire le contenu, il ne se contente pas de le cacher.</figcaption>
+                </figure>
+                <figure>
+                    <img src="../screenshots/linux/fr-CA/04-pages.png" width="1280" height="800" loading="lazy"
+                         alt="MegaPDF sur Linux : le contrat de location avec deux cases cochées et une signature, à côté d'une bande de miniatures de pages dont deux sont sélectionnées">
+                    <!--linux:live--><figcaption>La même application sur Linux, avec les outils de pages. <a href="../linux/" hreflang="en" style="color:inherit">Comment l'installer</a> (en anglais)</figcaption><!--linux:soon
+                    <figcaption>La même application sur Linux, bientôt</figcaption>
+                    linux:end-->
+                </figure>
+            </div>
+            <div class="shots">
+                <figure>
+                    <img src="img/shot-pages.png" width="440" height="956" loading="lazy"
+                         alt="La grille des pages sur iPhone, avec deux pages sélectionnées">
+                    <figcaption>Les pages, à portée de doigt</figcaption>
+                </figure>
+                <figure>
+                    <img src="img/shot-sign.png" width="440" height="956" loading="lazy" alt="La liste des signatures enregistrées">
+                    <figcaption>Vos signatures, gardées sur votre appareil</figcaption>
+                </figure>
+                <figure>
+                    <img src="img/shot-draw.png" width="440" height="956" loading="lazy" alt="Une signature dessinée au doigt">
+                    <figcaption>Dessinez-la une fois, utilisez-la partout</figcaption>
+                </figure>
+            </div>
+        </section>
+
+        <section class="block" id="download" aria-labelledby="download-h">
+            <h2 id="download-h">Obtenir MegaPDF</h2>
+            <p class="lead">Une seule application sur six plateformes, offerte dans la boutique de
+                chacune. Un document signé sur l'une s'ouvre exactement pareil sur toutes les autres.</p>
+            <ul class="platforms">
+                <li><b>Windows</b>Windows 10 version 1809 ou plus récente, Intel, AMD ou Arm.
+                    <a href="https://apps.microsoft.com/detail/9PF4TRRH4M76?hl=fr-ca">Microsoft Store</a></li>
+                <li><b>Mac</b>macOS 12 Monterey ou plus récent, puce Apple ou Intel.
+                    <a href="https://apps.apple.com/app/id6799522972?platform=mac">Mac App Store</a></li>
+                <li><b>iPhone et iPad</b>iOS ou iPadOS 16 ou plus récent.
+                    <a href="https://apps.apple.com/app/id6799522972">App Store</a></li>
+                <li><b>Android</b>Android 8.0 ou plus récent.
+                    <a href="https://play.google.com/store/apps/details?id=ca.electricrv.megapdf&amp;hl=fr_CA">Google Play</a></li>
+                <!--linux:live-->
+                <li><b>Linux</b>64 bits, Ubuntu 22.04 ou toute distribution aussi récente. APT, Snap, .deb ou archive tar.
+                    <a href="../linux/" hreflang="en">Comment l'installer</a> (en anglais)</li>
+                <!--linux:soon
+                <li><b>Linux</b>Bientôt.</li>
+                linux:end-->
+            </ul>
+        </section>
+
+        <section class="block faq" id="faq" aria-labelledby="faq-h">
+            <h2 id="faq-h">Les questions qu'on nous pose</h2>
+            <details>
+                <summary>Est-ce vraiment gratuit?</summary>
+                <p>Oui. Aucune publicité, aucun abonnement, aucune version payante et rien à acheter
+                   dans l'application. MegaPDF est libre et à code source ouvert, sous licence
+                   Apache 2.0, et conçu par Electric RV.</p>
+            </details>
+            <details>
+                <summary>Ma signature est-elle une signature numérique?</summary>
+                <p>Non. MegaPDF place une <em>signature électronique</em> : celle que vous dessinez,
+                   tapez ou photographiez, mise sur la page à l'endroit voulu. Une <em>signature
+                   numérique</em>, c'est autre chose, appuyé sur un certificat, et MegaPDF n'en crée
+                   pas. Si un document en porte déjà une, MegaPDF vous le dit. Si vous ne savez pas
+                   quel type de signature un formulaire demande, informez-vous auprès de la personne
+                   qui vous l'a envoyé.</p>
+            </details>
+            <details>
+                <summary>Faut-il une connexion Internet?</summary>
+                <p>Non. MegaPDF fonctionne de la même façon en mode avion, puisqu'il ne se connecte
+                   jamais nulle part. Vos documents et vos signatures restent sur votre appareil.</p>
+            </details>
+            <details>
+                <summary>La personne à qui je l'envoie pourra-t-elle l'ouvrir?</summary>
+                <p>Oui. MegaPDF enregistre un PDF ordinaire, qui s'ouvre dans n'importe quel lecteur
+                   PDF. Vos crochets, votre texte et votre signature sont enregistrés dans le fichier
+                   lui-même : elle verra exactement ce que vous avez fait.</p>
+            </details>
+            <details>
+                <summary>Quelles langues parle-t-il?</summary>
+                <p>Le français, l'anglais et l'espagnol (pour l'Amérique latine et pour l'Espagne).
+                   Il suit la langue de votre appareil.</p>
+            </details>
+            <!--support:live-->
+            <details>
+                <summary>Quelque chose ne fonctionne pas. À qui m'adresser?</summary>
+                <p>La <a href="../support/" hreflang="en">page de soutien</a> (en anglais) répond aux
+                   questions les plus fréquentes et vous aide à nous écrire pour tout le reste. Une seule
+                   personne lit ces messages, et rien de ce que vous tapez sur cette page n'est envoyé
+                   tant que vous ne l'envoyez pas vous-même.</p>
+            </details>
+            <!--support:soon support:end-->
+        </section>
+
+        <section class="closing">
+            <h2>Ce PDF dans votre boîte de réception vous attend.</h2>
+            <p>Gratuit sur Windows, Mac, iPhone, iPad, Android et Linux.</p>
+            <a class="cta" href="#download">Obtenir MegaPDF</a>
+        </section>
+    </main>
+
+    <footer>
+        <div class="wrap">
+            <span>© 2026 Electric RV</span>
+            <a href="../privacy/" hreflang="en">Politique de confidentialité (en anglais)</a>
+            <!--support:live--><a href="../support/" hreflang="en">Soutien (en anglais)</a><!--support:soon support:end-->
+            <a href="https://github.com/SlyWombat/MegaPDF">Code source sur GitHub</a>
+            <a href="https://electricrv.ca/">Electric RV</a>
+        </div>
+    </footer>
+
+    <script src="../site.js"></script>
+</body>
+</html>

@@ -10,6 +10,8 @@
     linux:end-->
     <link rel="canonical" href="https://megapdf.ca/">
     <link rel="alternate" hreflang="en" href="https://megapdf.ca/">
+    <link rel="alternate" hreflang="fr" href="https://megapdf.ca/fr/">
+    <link rel="alternate" hreflang="es" href="https://megapdf.ca/es/">
     <link rel="alternate" hreflang="x-default" href="https://megapdf.ca/">
     <title>MegaPDF — Fill in, sign and send back any PDF. Free and private.</title>
     <meta property="og:title" content="MegaPDF — Someone sent you a PDF. Send it back done.">
@@ -23,184 +25,7 @@
     <meta name="twitter:card" content="summary_large_image">
     <meta name="theme-color" content="#0c1220">
     <link rel="icon" href="icon.png">
-    <style>
-        /* The heading face is served from this site (#846): no font, script or
-           stylesheet on this page comes from a third party. Body text uses the
-           platform's own font. */
-        @font-face {
-            font-family: 'Space Grotesk'; font-style: normal; font-weight: 300 700; font-display: swap;
-            src: url(fonts/space-grotesk-latin.woff2) format('woff2');
-            unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
-        }
-        @font-face {
-            font-family: 'Space Grotesk'; font-style: normal; font-weight: 300 700; font-display: swap;
-            src: url(fonts/space-grotesk-latin-ext.woff2) format('woff2');
-            unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
-        }
-        :root {
-            --bg: #0c1220; --bg2: #10233b; --card: rgba(255,255,255,.04);
-            --line: rgba(15,168,198,.22); --text: #e2e8f0; --muted: #a9b4cc;
-            --blue: #0A5BC4; --teal: #0FA8C6; --accent: #35b6e0;
-            --head: 'Space Grotesk', system-ui, sans-serif;
-        }
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        html { scroll-behavior: smooth; }
-        body {
-            background: linear-gradient(160deg, var(--bg) 0%, #141c2e 50%, var(--bg2) 100%);
-            color: var(--text); line-height: 1.6; min-height: 100vh;
-            font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-        }
-        h1, h2, h3 { font-family: var(--head); line-height: 1.15; }
-        a { color: var(--accent); }
-        .wrap { max-width: 1080px; margin: 0 auto; padding: 0 20px; }
-        .skip { position: absolute; left: -9999px; }
-        .skip:focus { left: 12px; top: 12px; background: var(--accent); color: #061325; padding: 8px 12px; border-radius: 6px; z-index: 9; }
-        :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
-
-        /* Header */
-        header.site { padding: 14px 0; border-bottom: 1px solid rgba(255,255,255,.06); }
-        header.site .wrap { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-        header.site .brand { display: flex; align-items: center; gap: 10px; color: var(--text); text-decoration: none; }
-        header.site img { width: 34px; height: 34px; border-radius: 8px; }
-        header.site .name { font-family: var(--head); font-weight: 700; font-size: 19px; }
-        header.site nav { margin-left: auto; display: flex; gap: 18px; font-size: 14.5px; flex-wrap: wrap; }
-        header.site nav a { color: var(--muted); text-decoration: none; }
-        header.site nav a:hover { color: var(--text); }
-
-        /* Hero */
-        .hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 44px;
-                align-items: center; padding: 64px 0 40px; }
-        .eyebrow { display: inline-block; background: linear-gradient(135deg, var(--blue), var(--teal));
-                   color: #061325; font-family: var(--head); font-size: 11.5px; font-weight: 700;
-                   letter-spacing: 1.4px; text-transform: uppercase; padding: 4px 14px;
-                   border-radius: 20px; margin-bottom: 18px; }
-        .hero h1 { font-size: clamp(34px, 5.2vw, 52px); margin-bottom: 18px; letter-spacing: -.5px; }
-        .hero h1 span { color: var(--accent); display: block; }
-        .hero p.sub { color: var(--muted); font-size: 18px; max-width: 52ch; margin-bottom: 26px; }
-        .hero p.sub strong { color: var(--text); font-weight: 600; }
-        .foryou { font-size: 14.5px; color: var(--muted); margin-bottom: 12px; min-height: 1.6em; }
-        .foryou b { color: var(--text); }
-
-        /* Store links: each store's own official badge, unaltered (sources and
-           guidelines in website/README.md). Every badge is 48px tall, above
-           Apple's 40px minimum, and the 16px gap keeps the clear space the badge
-           guidelines ask for. The Google Play PNG carries its own transparent
-           clear space (41 of 250px each side), so it is drawn larger and pulled
-           in by that margin to line up with the others. The Linux link has no
-           store badge; it is a plain button of the same height and shape. It
-           links linux/ only in a deploy made with --linux; otherwise it is the
-           dashed "soon" button (see website/README.md). The script at the end of
-           the page only reorders these and adds a ring to the visitor's own
-           platform; with scripts off, every badge shows as written. */
-        .storelinks { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; }
-        .storelinks a { display: inline-block; line-height: 0; border-radius: 8px; }
-        .storelinks img { height: 48px; width: auto; display: block; }
-        .storelinks a.gplay img { height: 71.4px; margin: -11.7px; }
-        .storelinks a.mine { box-shadow: 0 0 0 3px var(--accent); }
-        .storelinks .linux, .storelinks .soon {
-            display: inline-flex; flex-direction: column; justify-content: center;
-            height: 48px; padding: 0 18px; border-radius: 7px; line-height: 1.15;
-            background: #000; border: 1px solid #a6a6a6; color: #fff;
-            font-size: 19px; font-weight: 600; text-decoration: none;
-        }
-        .storelinks .where { font-size: 11px; font-weight: 400; display: block; }
-        .storelinks .soon { background: transparent; border-style: dashed; border-color: rgba(255,255,255,.3); color: var(--muted); }
-
-        .proof { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 22px; color: var(--muted); font-size: 14px; list-style: none; }
-        .proof li::before { content: "✓ "; color: var(--accent); font-weight: 700; }
-
-        .heroshots { position: relative; padding: 0 10% 18% 0; }
-        .heroshots .laptop { width: 100%; height: auto; border-radius: 12px; border: 1px solid rgba(255,255,255,.12);
-                             box-shadow: 0 24px 60px rgba(4,33,61,.55); display: block; }
-        .heroshots .phone { position: absolute; width: 27%; height: auto; right: 0; bottom: 0; border-radius: 18px;
-                            border: 1px solid rgba(255,255,255,.18); box-shadow: 0 24px 50px rgba(0,0,0,.6); }
-
-        /* Sections */
-        section.block { padding: 56px 0 8px; }
-        section.block h2 { font-size: clamp(26px, 3.4vw, 34px); margin-bottom: 10px; }
-        section.block p.lead { color: var(--muted); font-size: 17px; max-width: 64ch; margin-bottom: 30px; }
-
-        .steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 22px; counter-reset: step; }
-        .step { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 18px 18px 22px; }
-        .step img { width: 100%; height: auto; aspect-ratio: 440 / 560; object-fit: cover; object-position: center 12%;
-                    border-radius: 10px; display: block; margin-bottom: 16px; border: 1px solid rgba(255,255,255,.1); }
-        .step h3 { font-size: 20px; margin-bottom: 6px; }
-        .step h3::before { counter-increment: step; content: counter(step); display: inline-grid; place-items: center;
-                           width: 28px; height: 28px; border-radius: 50%; margin-right: 10px; font-size: 15px;
-                           background: var(--accent); color: #061325; vertical-align: 2px; }
-        .step p { color: var(--muted); font-size: 15px; }
-
-        .privacy { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 40px; align-items: start; }
-        .compare { border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
-        .compare table { width: 100%; border-collapse: collapse; font-size: 15px; }
-        .compare th, .compare td { padding: 12px 14px; text-align: left; border-bottom: 1px solid rgba(255,255,255,.06); vertical-align: top; }
-        .compare thead th { font-family: var(--head); font-size: 14px; letter-spacing: .3px; background: rgba(255,255,255,.03); }
-        .compare thead th:last-child { color: var(--accent); }
-        .compare td:first-child { color: var(--muted); width: 38%; }
-        .compare td:nth-child(2) { color: var(--muted); }
-        .compare td:last-child { color: var(--text); }
-        .compare tr:last-child td { border-bottom: 0; }
-        .points { list-style: none; display: grid; gap: 18px; }
-        .points li { padding-left: 34px; position: relative; color: var(--muted); }
-        .points li::before { content: "✓"; position: absolute; left: 0; top: 0; width: 24px; height: 24px;
-                             border-radius: 50%; background: rgba(53,182,224,.15); color: var(--accent);
-                             display: grid; place-items: center; font-weight: 700; font-size: 13px; }
-        .points strong { color: var(--text); display: block; font-family: var(--head); font-size: 17px; }
-
-        .features { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
-        .feature { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 20px 22px; }
-        .feature h3 { font-size: 17px; margin-bottom: 6px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 6px; }
-        .feature h3 .dot { color: var(--accent); display: inline-block; min-width: 1.4em; }
-        .feature p { color: var(--muted); font-size: 14.5px; }
-        .new { font-family: var(--head); font-size: 10.5px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
-               color: #061325; background: var(--accent); border-radius: 10px; padding: 1px 8px; }
-
-        .gallery .desktops { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr)); gap: 22px; margin-bottom: 26px; }
-        .gallery .shots { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 230px)); gap: 24px; justify-content: center; }
-        .gallery figure { margin: 0; }
-        .gallery img { width: 100%; height: auto; border-radius: 16px; display: block; border: 1px solid rgba(255,255,255,.12);
-                       box-shadow: 0 14px 36px rgba(4,33,61,.45); }
-        .gallery .desktops img { border-radius: 12px; }
-        .gallery figcaption { color: var(--muted); font-size: 13.5px; margin-top: 10px; text-align: center; }
-
-        .platforms { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; margin-top: 28px; list-style: none; }
-        .platforms li { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; font-size: 14px; color: var(--muted); }
-        .platforms b { display: block; color: var(--text); font-family: var(--head); font-size: 16px; }
-
-        .faq details { border-bottom: 1px solid rgba(255,255,255,.08); padding: 16px 0; }
-        .faq summary { cursor: pointer; font-family: var(--head); font-size: 18px; list-style: none; display: flex; justify-content: space-between; gap: 16px; }
-        .faq summary::-webkit-details-marker { display: none; }
-        .faq summary::after { content: "+"; color: var(--accent); font-size: 22px; line-height: 1; }
-        .faq details[open] summary::after { content: "–"; }
-        .faq details p { color: var(--muted); margin-top: 10px; max-width: 72ch; }
-
-        .closing { text-align: center; padding: 64px 0 56px; }
-        .closing h2 { font-size: clamp(26px, 3.4vw, 34px); margin-bottom: 10px; }
-        .closing p { color: var(--muted); margin-bottom: 22px; }
-        .cta { display: inline-block; background: var(--accent); color: #061325; font-weight: 700; font-size: 15px;
-               padding: 13px 26px; border-radius: 10px; text-decoration: none; }
-        .cta:hover { background: #6fd0f0; }
-        .cta.ghost { background: transparent; color: var(--text); border: 1px solid rgba(255,255,255,.25); }
-        .cta.ghost:hover { border-color: var(--accent); color: var(--accent); }
-
-        footer { border-top: 1px solid rgba(255,255,255,.06); padding: 26px 0 40px; color: var(--muted); font-size: 13.5px; }
-        footer .wrap { display: flex; gap: 18px; flex-wrap: wrap; align-items: center; }
-        footer a { color: var(--muted); }
-        footer a:hover { color: var(--text); }
-
-        @media (max-width: 860px) {
-            .hero { grid-template-columns: 1fr; padding: 40px 0 24px; gap: 36px; }
-            .heroshots { max-width: 560px; }
-            .privacy { grid-template-columns: 1fr; }
-        }
-        @media (max-width: 640px) {
-            .steps { grid-template-columns: 1fr; }
-            .step img { aspect-ratio: 440 / 380; }
-            header.site nav { margin-left: 0; width: 100%; gap: 14px; }
-            .compare th, .compare td { padding: 10px; font-size: 14px; }
-        }
-        @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
-    </style>
+    <link rel="stylesheet" href="site.css">
     <!-- #501: electricrv.ca's own cookie-free page-view counter. First-party, no
          cookies, no third party, and never recorded for a browser sending Do Not
          Track or Global Privacy Control. The site only; the app reports nothing.
@@ -219,6 +44,11 @@
                 <a href="#download">Download</a>
                 <!--support:live--><a href="support/">Support</a><!--support:soon support:end-->
             </nav>
+            <nav class="langs" aria-label="Language">
+                <a href="./" hreflang="en" lang="en" aria-current="page">English</a>
+                <a href="fr/" hreflang="fr" lang="fr">Français</a>
+                <a href="es/" hreflang="es" lang="es">Español</a>
+            </nav>
         </div>
     </header>
 
@@ -232,7 +62,7 @@
                     back, from your phone or your computer. <strong>Your document never
                     leaves your device</strong>, and there is nothing to sign up for.
                 </p>
-                <p class="foryou" id="foryou" hidden></p>
+                <p class="foryou" id="foryou" data-text="You’re on {os}. Here’s MegaPDF for it, free:" hidden></p>
                 <div class="storelinks" id="stores">
                     <a data-os="windows" href="https://apps.microsoft.com/detail/9PF4TRRH4M76">
                         <img src="badges/get-it-from-microsoft.svg" width="176" height="48" alt="Download from the Microsoft Store">
@@ -298,7 +128,7 @@
         </section>
 
         <section class="block" id="private" aria-labelledby="private-h">
-            <h2 id="private-h">Online PDF tools want your document. MegaPDF doesn't.</h2>
+            <h2 id="private-h">Online PDF tools want your document. MegaPDF&nbsp;doesn't.</h2>
             <p class="lead">A lease, a tax form, a medical record: the PDFs people need to sign
                 are the ones they should least want to upload to a stranger's server. MegaPDF
                 does all of it on your own device.</p>
@@ -513,26 +343,6 @@
         </div>
     </footer>
 
-    <script>
-        // Puts the visitor's own platform first and rings its badge. Runs entirely in
-        // the browser: it reads the user agent, sends nothing, stores nothing.
-        (function () {
-            var ua = navigator.userAgent, os = null, name = '';
-            if (/iPhone|iPod/.test(ua)) { os = 'ios'; name = 'iPhone'; }
-            else if (/iPad/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)) { os = 'ios'; name = 'iPad'; }
-            else if (/Android/.test(ua)) { os = 'android'; name = 'Android'; }
-            else if (/Windows/.test(ua)) { os = 'windows'; name = 'Windows'; }
-            else if (/Macintosh/.test(ua)) { os = 'mac'; name = 'Mac'; }
-            else if (/Linux|X11/.test(ua) && !/CrOS/.test(ua)) { os = 'linux'; name = 'Linux'; }
-            var stores = document.getElementById('stores');
-            var mine = os && stores.querySelector('[data-os="' + os + '"]');
-            if (!mine) return;
-            mine.classList.add('mine');
-            stores.insertBefore(mine, stores.firstChild);
-            var p = document.getElementById('foryou');
-            p.innerHTML = 'You’re on <b>' + name + '</b>. Here’s MegaPDF for it, free:';
-            p.hidden = false;
-        })();
-    </script>
+    <script src="site.js"></script>
 </body>
 </html>
