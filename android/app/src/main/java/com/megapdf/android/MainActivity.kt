@@ -48,7 +48,11 @@ class MainActivity : ComponentActivity() {
         )
         super.onCreate(savedInstanceState)
         val screenshotState = intent.getStringExtra("screenshot")
-        handleViewIntent(intent)
+        // Only on a fresh start (#826). A recreation (rotation, any configuration change) hands
+        // the same launching intent back, and replaying it would swap whatever the user has
+        // opened since for the document the app was first launched with. The view model
+        // outlives the recreation and already holds the document.
+        if (savedInstanceState == null) handleViewIntent(intent)
         setContent {
             MegaPdfTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {

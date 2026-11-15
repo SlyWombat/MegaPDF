@@ -3,11 +3,14 @@ package com.megapdf.android
 import android.content.Intent
 import android.net.Uri
 import android.os.StrictMode
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.lifecycle.ViewModelProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
+import androidx.test.runner.lifecycle.Stage
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -110,6 +113,42 @@ class OpenWithTest {
             rule.waitUntil(SETTLE_MS) { !rule.undoButton().isEnabled() }
             assertFalse(activity.viewModel.isDirty)
             assertEquals(facts.checkMarks.size, PageFacts.of(first).checkMarks.size)
+        }
+    }
+
+    /**
+     * #826: a configuration change recreates the activity and hands it the intent it was
+     * launched with. Launch on A, switch to B through onNewIntent, make an edit, recreate:
+     * the replay would put A in front of the edited B and raise the unsaved-changes prompt.
+     */
+    @Test
+    fun recreatingTheActivityDoesNotReplayTheLaunchingIntent() {
+        val first = Fixtures.demo("launched-826.pdf")
+        val second = Fixtures.demo("opened-later-826.pdf")
+        val facts = PageFacts.of(second)
+
+        launched(viewIntent(first)) { activity ->
+            rule.waitForText(first.name)
+            rule.waitForPage()
+            instrumentation.runOnMainSync { instrumentation.callActivityOnNewIntent(activity, viewIntent(second)) }
+            rule.waitForText(second.name)
+            rule.waitForPage()
+            rule.page().tapCentreOf(facts, facts.unmarkedSquare())
+            rule.waitForText("• " + second.name)
+
+            instrumentation.runOnMainSync { activity.recreate() }
+            rule.waitUntil(SETTLE_MS) { activity.isDestroyed }
+            rule.waitForText("• " + second.name)
+            rule.waitForIdle()
+
+            rule.onAllNodes(hasText(str(R.string.unsaved_changes))).assertCountEquals(0)
+            assertTrue("the edited second document is still the one on screen", activity.viewModel.isDirty)
+
+            // `launched` finishes the instance it started, which recreation has replaced.
+            instrumentation.runOnMainSync {
+                ActivityLifecycleMonitorRegistry.getInstance().getActivitiesInStage(Stage.RESUMED)
+                    .forEach { it.finish() }
+            }
         }
     }
 }
