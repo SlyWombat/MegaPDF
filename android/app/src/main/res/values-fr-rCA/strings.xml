@@ -33,7 +33,9 @@
     <string name="copyright">© 2026 ElectricRV.ca Corporation. Tous droits réservés.</string>
     <string name="special_thanks">Merci tout spécial à Mega Woman.</string>
     <!-- FR-REVIEW #730 — new, not yet read by the reviewer. -->
-    <string name="support_link">Assistance</string>
+    <string name="support_link">Soutien</string>
+    <!-- FR-REVIEW #730 — new, not yet read by the reviewer. -->
+    <string name="source_link">Code source</string>
     <string name="third_party_notices">Avis de tiers</string>
 
     <!-- Password -->

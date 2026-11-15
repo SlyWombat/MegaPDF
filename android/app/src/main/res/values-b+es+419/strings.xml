@@ -59,6 +59,8 @@
     <!-- ES-REVIEW #724 — new, not yet read by the reviewer. -->
     <!-- ES-REVIEW #730 — new, not yet read by the reviewer. -->
     <string name="support_link">Soporte</string>
+    <!-- ES-REVIEW #730 — new, not yet read by the reviewer. -->
+    <string name="source_link">Código fuente</string>
     <string name="third_party_notices">Avisos de terceros</string>
 
     <!-- Password -->

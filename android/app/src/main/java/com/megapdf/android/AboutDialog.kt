@@ -37,7 +37,7 @@ import kotlinx.coroutines.withContext
 import androidx.compose.ui.res.stringResource
 
 internal const val SUPPORT_URL = "https://megapdf.ca/support/"
-private const val PROJECT_URL = "https://github.com/SlyWombat/MegaPDF"
+internal const val SOURCE_URL = "https://github.com/SlyWombat/MegaPDF"
 private const val NOTICES_ASSET = "THIRD-PARTY-NOTICES.txt"
 
 @Composable
@@ -77,8 +77,8 @@ fun AboutDialog(
                 TextButton(onClick = { uriHandler.openUri(SUPPORT_URL) }) {
                     Text(stringResource(R.string.support_link))
                 }
-                TextButton(onClick = { uriHandler.openUri(PROJECT_URL) }) {
-                    Text(stringResource(R.string.project_link))
+                TextButton(onClick = { uriHandler.openUri(SOURCE_URL) }) {
+                    Text(stringResource(R.string.source_link))
                 }
                 TextButton(onClick = onShowNotices) {
                     Text(stringResource(R.string.third_party_notices))

@@ -1164,9 +1164,9 @@
     <value>Soporte</value>
     <comment>ES-REVIEW #730 — new, not yet read by the reviewer. About window: the link to the support page (#730)</comment>
   </data>
-  <data name="MegaPdfOnGitHub" xml:space="preserve">
-    <value>MegaPDF en GitHub</value>
-    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. About window: the link to the source (#176)</comment>
+  <data name="SourceCodeLink" xml:space="preserve">
+    <value>Código fuente</value>
+    <comment>ES-REVIEW #730 — new, not yet read by the reviewer. About window: the link to the source code on GitHub (#176, #730)</comment>
   </data>
   <data name="ThirdPartyNoticesEllipsis" xml:space="preserve">
     <value>Avisos de terceros…</value>

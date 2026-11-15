@@ -136,8 +136,11 @@
   <data name="AboutThanks.Text" xml:space="preserve">
     <value>Special thanks to Mega Woman.</value>
   </data>
+  <data name="GitHubLink.Content" xml:space="preserve">
+    <value>Source code</value>
+  </data>
   <data name="GitHubLink.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
-    <value>MegaPDF on GitHub</value>
+    <value>Source code</value>
   </data>
   <data name="SupportLink.Content" xml:space="preserve">
     <value>Support</value>

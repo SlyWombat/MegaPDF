@@ -1054,9 +1054,9 @@
     <value>Support</value>
     <comment>About window: the link to the support page (#730)</comment>
   </data>
-  <data name="MegaPdfOnGitHub" xml:space="preserve">
-    <value>MegaPDF on GitHub</value>
-    <comment>About window: the link to the source (#176)</comment>
+  <data name="SourceCodeLink" xml:space="preserve">
+    <value>Source code</value>
+    <comment>About window: the link to the source code on GitHub (#176, #730)</comment>
   </data>
   <data name="ThirdPartyNoticesEllipsis" xml:space="preserve">
     <value>Third-Party Notices…</value>

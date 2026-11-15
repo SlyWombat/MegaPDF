@@ -40,7 +40,7 @@ struct AboutView: View {
                 }
                 Section {
                     Link("Support", destination: AboutLinks.support)
-                    Link("MegaPDF on GitHub",
+                    Link("Source code",
                          destination: AboutLinks.source)
                     NavigationLink("Third-party notices") {
                         ThirdPartyNoticesView()

@@ -351,6 +351,7 @@ refers to the same row in the French file.
 | Window | Ventana |  |
 | Help | Ayuda |  |
 | Support (the link to the support page) | Soporte | #730, About on every platform. ES-REVIEW |
+| Source code (the link to the GitHub repository) | Código fuente | #730, About on every platform. ES-REVIEW |
 | Minimize | Minimizar |  |
 | Zoom | Zoom |  |
 | Hide {0} | Ocultar {0} |  |

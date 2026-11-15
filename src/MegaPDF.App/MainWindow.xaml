@@ -482,7 +482,6 @@
                                 Margin="0,2,0,0" />
                             <HyperlinkButton
                                 NavigateUri="https://github.com/SlyWombat/MegaPDF"
-                                Content="github.com/SlyWombat/MegaPDF"
                                 ToolTipService.ToolTip="https://github.com/SlyWombat/MegaPDF"
                                 x:Uid="GitHubLink"
                                 FontSize="{ThemeResource TypeCaption}"

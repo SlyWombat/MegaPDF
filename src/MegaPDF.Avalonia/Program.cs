@@ -4158,6 +4158,7 @@ internal static class Program
         check($"it links to the support page ({AppInfo.SupportUrl})",
               about.SupportLink.NavigateUri?.ToString() == AppInfo.SupportUrl
               && about.SupportLink.Content as string == Strings.SupportLink);
+        check($"it labels the source link \"{Strings.SourceCodeLink}\"", about.ProjectLink.Content as string == Strings.SourceCodeLink);
         check($"it links to the source ({AppInfo.ProjectUrl})",
               about.ProjectLink.NavigateUri?.ToString() == AppInfo.ProjectUrl);
         check($"and its notices button is labelled \"{Strings.ThirdPartyNoticesEllipsis}\"",

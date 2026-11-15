@@ -3774,35 +3774,6 @@
         }
       }
     },
-    "MegaPDF on GitHub" : {
-      "comment" : "ES-REVIEW #724 — new, not yet read by the reviewer.",
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "MegaPDF en GitHub"
-          }
-        },
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "MegaPDF en GitHub"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "MegaPDF sur GitHub"
-          }
-        },
-        "fr-CA" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "MegaPDF sur GitHub"
-          }
-        }
-      }
-    },
     "More" : {
       "comment" : "ES-REVIEW #724 — new, not yet read by the reviewer.",
       "localizations" : {
@@ -7341,6 +7312,35 @@
         }
       }
     },
+    "Source code" : {
+      "comment" : "About: the link to the GitHub repository, labelled as the source code (#730). FR-REVIEW #730 — new, not yet read by the reviewer. ES-REVIEW #730 — new, not yet read by the reviewer.",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Código fuente"
+          }
+        },
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Código fuente"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Code source"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Code source"
+          }
+        }
+      }
+    },
     "Special thanks to Mega Woman." : {
       "comment" : "ES-REVIEW #724 — new, not yet read by the reviewer.",
       "localizations" : {
@@ -7475,13 +7475,13 @@
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Assistance"
+            "value" : "Soutien"
           }
         },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Assistance"
+            "value" : "Soutien"
           }
         }
       }

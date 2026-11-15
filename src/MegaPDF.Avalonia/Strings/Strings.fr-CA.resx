@@ -1035,12 +1035,12 @@
     <comment>FR-REVIEW #176 — lifted verbatim from the reviewed iOS catalogue (ios/MegaPDF/Localizable.xcstrings, state "translated"). About window: the credit the other three platforms carry. Mega Woman is a person and is never translated (#176)</comment>
   </data>
   <data name="SupportLink" xml:space="preserve">
-    <value>Assistance</value>
+    <value>Soutien</value>
     <comment>FR-REVIEW #730 — new, not yet read by the reviewer. About window: the link to the support page (#730)</comment>
   </data>
-  <data name="MegaPdfOnGitHub" xml:space="preserve">
-    <value>MegaPDF sur GitHub</value>
-    <comment>FR-REVIEW #176 — lifted verbatim from the reviewed iOS catalogue (ios/MegaPDF/Localizable.xcstrings, state "translated"). About window: the link to the source (#176)</comment>
+  <data name="SourceCodeLink" xml:space="preserve">
+    <value>Code source</value>
+    <comment>FR-REVIEW #730 — new, not yet read by the reviewer. About window: the link to the source code on GitHub (#176, #730)</comment>
   </data>
   <data name="ThirdPartyNoticesEllipsis" xml:space="preserve">
     <value>Avis de tiers…</value>
