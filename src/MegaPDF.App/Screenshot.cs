@@ -2202,8 +2202,14 @@ internal static partial class Screenshot
                   recorder.Saw(f => f.HasProgress && f.Total == tab.Pages.Count));
             Check("it reaches the last page",
                   recorder.Saw(f => f.Done == tab.Pages.Count && f.Total == tab.Pages.Count));
-            Check($"and says where it is in words (\"{Strings.BusyPageOfPages(1, tab.Pages.Count)}\")",
-                  recorder.Saw(f => f.Text == Strings.BusyPageOfPages(1, tab.Pages.Count)));
+            // Any count it shows, in words, and only the count it shows (#847). Not "Page 1 of 2"
+            // in particular: BusyState publishes the latest state when the UI thread gets to it, so
+            // when the worker reports page 1 and then page 2 before that, page 1 is never published
+            // -- by design, and every time on a machine whose UI thread runs behind the worker.
+            Check($"and says where it is in words (\"{Strings.BusyPageOfPages(tab.Pages.Count, tab.Pages.Count)}\")",
+                  recorder.Saw(f => f.HasProgress && f.Total == tab.Pages.Count)
+                  && recorder.Frames.Where(f => f.HasProgress && f.Total > 0)
+                                    .All(f => f.Text == Strings.BusyPageOfPages(f.Done, f.Total)));
             Check("a search offers Stop while it runs",
                   recorder.Saw(f => f.CanCancel && f.Label == Strings.BusySearching));
             Check("and offers nothing once it is over", !tab.Busy.CanCancel);
