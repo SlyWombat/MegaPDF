@@ -48,11 +48,15 @@ class MainActivity : ComponentActivity() {
         )
         super.onCreate(savedInstanceState)
         val screenshotState = intent.getStringExtra("screenshot")
-        // Only on a fresh start (#826). A recreation (rotation, any configuration change) hands
-        // the same launching intent back, and replaying it would swap whatever the user has
-        // opened since for the document the app was first launched with. The view model
-        // outlives the recreation and already holds the document.
-        if (savedInstanceState == null) handleViewIntent(intent)
+        // Handle the activity's intent once per view model (#826). A configuration change
+        // recreates the activity with the same intent but keeps the view model, so nothing is
+        // replayed (the document the user has open, or has since closed, stays as it is).
+        // After process death the view model is new and the intent is the latest one (kept by
+        // setIntent in onNewIntent), so the document the user was on reopens.
+        if (!viewModel.activityIntentHandled) {
+            viewModel.activityIntentHandled = true
+            handleViewIntent(intent)
+        }
         setContent {
             MegaPdfTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
@@ -72,6 +76,7 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        viewModel.activityIntentHandled = true
         handleViewIntent(intent)
     }
 
