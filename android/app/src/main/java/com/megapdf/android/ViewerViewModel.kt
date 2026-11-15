@@ -2052,6 +2052,14 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
     var pendingExternalOpen: Uri? by mutableStateOf(null)
         private set
 
+    /**
+     * Whether this view model has already acted on the activity's intent (#826). Deliberately a
+     * plain field, not in SavedStateHandle: a configuration change keeps the view model, so the
+     * intent is not replayed, while process death makes a new one and the restored activity's
+     * (latest) intent is handled again.
+     */
+    var activityIntentHandled = false
+
     fun requestOpenExternal(uri: Uri) {
         if (isDirty) pendingExternalOpen = uri else openUri(uri)
     }

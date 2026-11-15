@@ -129,7 +129,12 @@ class ShrinkForEmailTest {
 
         rule.menu(str(R.string.shrink_for_email))
 
-        rule.waitUntil(SETTLE_MS) { rule.viewModel.statusMessage == str(R.string.shrink_not_smaller) }
+        // The message is set inside the job's try block; the copy is deleted and the lock released
+        // later, in its finally (an IO hop). Wait for the lock to go, which is after the delete,
+        // or the assertions below race the cleanup (#820).
+        rule.waitUntil(SETTLE_MS) {
+            rule.viewModel.statusMessage == str(R.string.shrink_not_smaller) && !rule.viewModel.busy.locksDocument
+        }
         assertEquals(null, rule.viewModel.shrinkReady)
         val copy = java.io.File(shareDirectory(Fixtures.appContext.cacheDir),
             str(R.string.shrink_file_name, "shrink-593-equal") + ".pdf")
