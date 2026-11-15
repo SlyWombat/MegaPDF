@@ -532,6 +532,7 @@ public sealed partial class MainWindow : Window
         ReopenToggle.IsOn = Shell.Settings.ReopenLastFile;
         FlattenToggle.IsOn = Shell.Settings.FlattenOnSave;
         var version = typeof(MainWindow).Assembly.GetName().Version;
+        SupportLink.NavigateUri = new Uri(SupportUrl);
         AboutVersion.Text = Strings.AboutVersion(version?.ToString(3) ?? "dev");
         _settingsLoading = false;
     }
@@ -668,6 +669,12 @@ public sealed partial class MainWindow : Window
     /// <summary>The About section's version line, after <see cref="OnSettingsOpening"/> has set it —
     /// for the `about` self-test (#590), the same shape #571 found missing on Linux.</summary>
     internal string AboutVersionTextForTest => AboutVersion.Text;
+
+    /// <summary>The support page About links to (#730): the site's real home, megapdf.ca.</summary>
+    internal const string SupportUrl = "https://megapdf.ca/support/";
+
+    internal string? AboutSupportLinkTargetForTest => SupportLink.NavigateUri?.ToString();
+    internal string AboutSupportLinkLabelForTest => SupportLink.Content as string ?? "";
 
     public void ApplyTheme()
     {

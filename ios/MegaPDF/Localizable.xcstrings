@@ -7457,6 +7457,35 @@
         }
       }
     },
+    "Support" : {
+      "comment" : "About: the link to the support page (#730). FR-REVIEW #730 — new, not yet read by the reviewer. ES-REVIEW #730 — new, not yet read by the reviewer.",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Soporte"
+          }
+        },
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Soporte"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Assistance"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Assistance"
+          }
+        }
+      }
+    },
     "Tap a signature, then tap the page" : {
       "comment" : "ES-REVIEW #724 — new, not yet read by the reviewer.",
       "localizations" : {

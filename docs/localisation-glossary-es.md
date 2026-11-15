@@ -350,6 +350,7 @@ refers to the same row in the French file.
 | The notices file is missing from this build. | Falta el archivo de avisos en esta compilación. |  |
 | Window | Ventana |  |
 | Help | Ayuda |  |
+| Support (the link to the support page) | Soporte | #730, About on every platform. ES-REVIEW |
 | Minimize | Minimizar |  |
 | Zoom | Zoom |  |
 | Hide {0} | Ocultar {0} |  |

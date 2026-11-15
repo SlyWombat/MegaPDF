@@ -169,6 +169,14 @@
     <value>MegaPDF en GitHub</value>
     <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>
   </data>
+  <data name="SupportLink.Content" xml:space="preserve">
+    <value>Soporte</value>
+    <comment>ES-REVIEW #730 — new, not yet read by the reviewer. About: the link to the support page</comment>
+  </data>
+  <data name="SupportLink.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Soporte</value>
+    <comment>ES-REVIEW #730 — new, not yet read by the reviewer. About: the link to the support page</comment>
+  </data>
   <data name="NoticesLink.Content" xml:space="preserve">
     <value>Avisos de terceros</value>
     <comment>ES-REVIEW #724 — new, not yet read by the reviewer.</comment>

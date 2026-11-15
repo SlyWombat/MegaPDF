@@ -36,6 +36,7 @@
     <string name="version_label">Version %1$s</string>
     <string name="copyright">Copyright © 2026 ElectricRV.ca Corporation. All rights reserved.</string>
     <string name="special_thanks">Special thanks to Mega Woman.</string>
+    <string name="support_link">Support</string>
     <string name="third_party_notices">Third-party notices</string>
 
     <!-- Password -->

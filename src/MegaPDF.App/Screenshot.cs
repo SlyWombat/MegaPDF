@@ -3481,6 +3481,11 @@ internal static partial class Screenshot
             Check($"About shows the real assembly version (\"{window.AboutVersionTextForTest}\", expected \"{expectedVersion}\")",
                   window.AboutVersionTextForTest == Strings.AboutVersion(expectedVersion));
 
+            Check($"About links to the support page (\"{window.AboutSupportLinkTargetForTest}\")",
+                  window.AboutSupportLinkTargetForTest == MainWindow.SupportUrl);
+            Check($"  and has a visible label (\"{window.AboutSupportLinkLabelForTest}\")",
+                  window.AboutSupportLinkLabelForTest.Length > 0);
+
             var notices = await MainWindow.LoadThirdPartyNoticesForTest();
             Check("the bundled notices file loads", notices.Length > 0 && !notices.StartsWith(Strings.NoticesLoadFailed, StringComparison.Ordinal));
             Check("  and actually lists a third-party component (PDFium)", notices.Contains("PDFium", StringComparison.Ordinal));

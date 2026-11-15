@@ -1160,6 +1160,10 @@
     <value>Un agradecimiento especial a Mega Woman.</value>
     <comment>ES-REVIEW #724 — new, not yet read by the reviewer. About window: the credit the other three platforms carry. Mega Woman is a person and is never translated (#176)</comment>
   </data>
+  <data name="SupportLink" xml:space="preserve">
+    <value>Soporte</value>
+    <comment>ES-REVIEW #730 — new, not yet read by the reviewer. About window: the link to the support page (#730)</comment>
+  </data>
   <data name="MegaPdfOnGitHub" xml:space="preserve">
     <value>MegaPDF en GitHub</value>
     <comment>ES-REVIEW #724 — new, not yet read by the reviewer. About window: the link to the source (#176)</comment>

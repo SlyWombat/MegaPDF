@@ -4155,6 +4155,9 @@ internal static class Program
               texts.Contains(AppInfo.VersionLabel) && AppInfo.VersionLabel.Any(char.IsDigit));
         check("it shows the copyright", texts.Contains(Strings.Copyright));
         check("it shows the credit the other three platforms carry", texts.Contains(Strings.SpecialThanks));
+        check($"it links to the support page ({AppInfo.SupportUrl})",
+              about.SupportLink.NavigateUri?.ToString() == AppInfo.SupportUrl
+              && about.SupportLink.Content as string == Strings.SupportLink);
         check($"it links to the source ({AppInfo.ProjectUrl})",
               about.ProjectLink.NavigateUri?.ToString() == AppInfo.ProjectUrl);
         check($"and its notices button is labelled \"{Strings.ThirdPartyNoticesEllipsis}\"",
