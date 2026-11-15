@@ -114,9 +114,15 @@ def env_path():
     return os.path.join(folder, ENV_FILE_NAME), bool(override)
 DEFAULT_DEST = "/public_html/megapdf"
 
+# Every UAPI call carries the cPanel token in its Authorization header, so the server must
+# prove it is ours before anything is sent: the default context checks the certificate
+# against the system's trusted store and checks the host name (#726). Verification was off
+# here until 2026-11-15 (carried over from the Lighting Arduino deploy script); the host's
+# Let's Encrypt certificate for electricrv.ca verifies on port 2083, so nothing is pinned.
+# If it ever stops verifying, the deploy should fail -- never turn verification back off.
 CTX = ssl.create_default_context()
-CTX.check_hostname = False
-CTX.verify_mode = ssl.CERT_NONE
+TLS_NOTE = ("TLS: the server's certificate is checked against the system's trusted store, "
+            "host name included, before the token is sent")
 
 
 class Server:
@@ -600,6 +606,7 @@ def main():
         else:
             print(f"Login file ({where}): {login_path} — NOT FOUND. A real deploy stops here; "
                   f"set {ENV_DIR_VARIABLE} to the folder that holds it.")
+        print(TLS_NOTE)
         print("To do it for real, run the same command without --dry-run.")
         shutil.rmtree(tmp, ignore_errors=True)
         return 0
