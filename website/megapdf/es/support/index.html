@@ -377,7 +377,7 @@
                 <textarea id="report" class="report" rows="16" spellcheck="false"></textarea>
             </div>
             <div class="btnrow">
-                <a class="btn" id="mailbtn" href="mailto:info@electricrv.ca">Abrir tu app de correo</a>
+                <a class="btn" id="mailbtn" href="mailto:info@electricrv.ca">Abrir tu programa de correo</a>
                 <button type="button" class="btn ghost" id="copybtn">Copiar el mensaje</button>
                 <span class="said" id="said" role="status"></span>
             </div>
@@ -435,11 +435,9 @@
                             <li><span class="plat">Android</span> en los mismos dos lugares:
                                 <strong>ⓘ</strong> en la pantalla de inicio, o <strong>⋯ → Acerca de
                                 MegaPDF</strong>.</li>
-                            <li><span class="plat">Linux</span> en esta compilación no hay una ventana
-                                Acerca de a la que puedas llegar; es una carencia real, y nos toca
-                                corregirla. Mientras tanto, ejecuta <code>megapdf-cli --version</code> en
-                                una terminal, o pregúntale a tu gestor de paquetes qué versión de
-                                <code>megapdf</code> instaló.</li>
+                            <li><span class="plat">Linux</span> el menú <strong>⋯ Más → Acerca de
+                                MegaPDF</strong>, o ejecuta <code>megapdf-cli --version</code> en una
+                                terminal.</li>
                         </ul>
                         <p>Nadie necesita la versión del motor PDF: ninguna pantalla la muestra, así
                         que no la busques.</p>
@@ -450,7 +448,7 @@
                          data-match="nueva versión|última versión|desactualizado|desactualizada|versión vieja|versión anterior|más reciente"
                          data-not="markdown"
                          data-strong="actualizar|actualización|actualizaciones|actualiza">
-                    <summary>Cómo te llegan las actualizaciones, y por qué la app nunca te avisa</summary>
+                    <summary>Cómo te llegan las actualizaciones, y por qué la aplicación nunca te avisa</summary>
                     <div class="body">
                         <p><strong>MegaPDF no busca actualizaciones, en ninguna plataforma.</strong> No
                         abre ninguna conexión de red por su cuenta, así que no puede avisarte de que
@@ -482,10 +480,9 @@
                                 <strong>⋯ → Configuración → Idioma</strong>, que ofrece Según Windows,
                                 English, Français (Canada), Français (France), Español (Latinoamérica) o
                                 Español (España). Se aplica la próxima vez que se abre MegaPDF.</li>
-                            <li><span class="plat">Mac · Linux</span> sigue el idioma de tu sistema; la
-                                app no tiene ninguna opción para cambiarlo.</li>
-                            <li><span class="plat">Android</span> la app no tiene la opción, pero
-                                Android 13 y versiones posteriores te dejan elegir un idioma por app:
+                            <li><span class="plat">Mac · Linux</span> sigue el idioma de tu sistema; la aplicación no tiene ninguna opción para cambiarlo.</li>
+                            <li><span class="plat">Android</span> la aplicación no tiene la opción, pero
+                                Android 13 y versiones posteriores te dejan elegir un idioma por aplicación:
                                 <strong>Configuración → Aplicaciones → MegaPDF → Idioma</strong>.</li>
                             <li><span class="plat">iPhone / iPad</span> lo mismo en iOS:
                                 <strong>Configuración → MegaPDF → Idioma</strong>.</li>
@@ -512,7 +509,7 @@
                         <p><span class="plat">iPhone / iPad</span> <strong>Guardar una copia funciona
                         distinto ahí, y ya ha tomado a gente por sorpresa.</strong> La copia se
                         escribe donde elegiste, pero MegaPDF sigue apuntando al archivo que abriste,
-                        que todavía no tiene ninguno de tus cambios, aunque la app deje de avisarte de
+                        que todavía no tiene ninguno de tus cambios, aunque la aplicación deje de avisarte de
                         cambios sin guardar. Si querías cambiar el original, usa
                         <strong>Guardar</strong>. Ya sabemos de este problema; aun así, tu reporte
                         ayuda.</p>
@@ -524,13 +521,12 @@
                 </details>
 
                 <details class="answer" id="a-cover-vs-redact" data-plat="all"
-                         data-match="tapar|tapado|cubrir|cubierto|tachado|en negro|sigue ahí|todavía se ve|se sigue viendo|se puede copiar|texto oculto|sigue en el archivo|no se quitó nada"
+                         data-match="tapar|tapado|cubrir|cubierto|tachado|en negro|sigue ahí|todavía se ve|se sigue viendo|se puede copiar|texto oculto|sigue en el archivo|no se quitó nada|tachar|ocultar datos|testar|testado"
                          data-strong="censurar|censura|censurado|corrector">
                     <summary>Cubrir tapa. Censurar quita. No son la misma herramienta.</summary>
                     <div class="body">
                         <p>El <strong>Corrector</strong> (<strong>Cubrir</strong> en Mac) dibuja un
-                        bloque sobre la página. Lo que hay debajo <em>sigue en el archivo</em>, y otra
-                        app puede copiarlo o encontrarlo en una búsqueda. MegaPDF te lo dice la
+                        bloque sobre la página. Lo que hay debajo <em>sigue en el archivo</em>, y otra aplicación puede copiarlo o encontrarlo en una búsqueda. MegaPDF te lo dice la
                         primera vez que lo usas.</p>
                         <p><strong>Censurar</strong> quita el contenido del archivo. Marcas áreas, y no
                         pasa nada hasta que guardas: MegaPDF te pregunta primero y te ofrece escribir
@@ -547,13 +543,12 @@
                 </details>
 
                 <details class="answer" id="a-cant-edit-text" data-plat="all"
-                         data-match="editar el texto|cambiar el texto|corregir el texto|no se puede cambiar|no puedo editar|no me deja editar|no me deja cambiar|diseño|volver a escribir|error de ortografía|fecha equivocada|imagen de texto"
+                         data-match="editar el texto|cambiar el texto|corregir el texto|no se puede cambiar|no puedo editar|no me deja editar|no me deja cambiar|diseño|volver a escribir|error de ortografía|fecha equivocada|imagen de texto|editar texto|cambiar texto|modificar texto|modificar el texto|no puedo modificar|no me deja modificar|falta de ortografía"
                          data-not="markdown"
                          data-strong="escaneado|escaneada|escaneo">
                     <summary>Dice que este texto no se puede cambiar</summary>
                     <div class="body">
-                        <p>MegaPDF puede volver a escribir el texto propio de un documento, pero no lo
-                        hace si el resto de la página se movería. Antes de aplicar el cambio, reescribe
+                        <p>MegaPDF puede volver a escribir el texto propio de un documento, pero no lo hace si con eso se mueve el resto de la página. Antes de aplicar el cambio, reescribe
                         la página en una copia y compara el resultado con el original, píxel por píxel;
                         si algo fuera de tu cambio se desplaza, se niega y te dice qué habría salido
                         mal: el espaciado de otro texto, el aspecto de la página o texto que se movería
@@ -577,7 +572,7 @@
                     <div class="body">
                         <p>Algunos formularios, a menudo de gobiernos o bancos, no son realmente
                         formularios PDF. Son programas de Adobe LiveCycle (XFA) envueltos en un PDF, y
-                        solo Adobe Reader puede llenarlos. Ninguna otra app puede, MegaPDF incluida, y
+                        solo Adobe Reader puede llenarlos. Ninguna otra aplicación puede, MegaPDF incluida, y
                         no es algo que podamos arreglar de nuestro lado.</p>
                         <p>MegaPDF te lo dice en lugar de fallar sin avisar, y todo lo demás funciona:
                         puedes verlo, imprimirlo, guardarlo y reenviarlo. Llénalo en Adobe Reader, o
@@ -586,11 +581,11 @@
                 </details>
 
                 <details class="answer" id="a-password" data-plat="all"
-                         data-match="protegido|protegida|contraseña del propietario|bloqueado|bloqueada|en gris|no disponible|no disponibles|no abre|no se abre|faltan herramientas|cifrado|encriptado"
-                         data-strong="contraseña|desbloquear">
+                         data-match="protegido|protegida|contraseña del propietario|bloqueado|bloqueada|en gris|no disponible|no disponibles|no abre|no se abre|faltan herramientas|cifrado|encriptado|cifrada|encriptada|candado"
+                         data-strong="contraseña|desbloquear|clave" data-not="palabras clave|palabra clave">
                     <summary>Contraseñas, y documentos con herramientas no disponibles</summary>
                     <div class="body">
-                        <p>Dale la contraseña a MegaPDF y abre el documento normalmente. Si dice que el
+                        <p>Dale la contraseña a MegaPDF y abrirá el documento normalmente. Si dice que el
                         PDF <em>“usa un tipo de protección que MegaPDF no puede abrir”</em>, es un
                         sistema de seguridad poco común que no admitimos, y ninguna contraseña va a
                         servir.</p>
@@ -599,9 +594,7 @@
                         herramientas, MegaPDF muestra un aviso que lo dice, y el botón
                         <strong>Desbloquear</strong> acepta la contraseña del propietario. Las
                         herramientas afectadas dependen de lo que pidió el autor: editar el texto de la
-                        página y el Corrector necesitan permiso para modificar, imprimir necesita
-                        permiso para imprimir, girar, eliminar y reordenar páginas necesitan permiso
-                        para ensamblar, y cambiar o quitar la contraseña necesita acceso completo.
+                        página y el Corrector necesitan permiso para modificar; imprimir necesita permiso para imprimir; girar, eliminar y reordenar páginas necesitan permiso para ensamblar; y cambiar o quitar la contraseña necesita acceso completo.
                         <strong>Guardar una copia nunca se bloquea.</strong></p>
                         <p>MegaPDF también puede definir, cambiar o quitar la contraseña de un documento
                         que puedes abrir por completo. No puede recuperar una contraseña olvidada;
@@ -614,7 +607,7 @@
                 </details>
 
                 <details class="answer" id="a-checkbox" data-plat="all"
-                         data-match="marcar|marcada|marcadas|palomita|no se marca|campo de formulario|el campo no|no puedo escribir|escribir en la línea|línea en blanco|llenar|marcar las casillas"
+                         data-match="marcar|marcada|marcadas|palomita|no se marca|campo de formulario|el campo no|no puedo escribir|escribir en la línea|línea en blanco|llenar|marcar las casillas|la palomita|una palomita|tilde|tildar|no se tilda|chulo|chulito|visto bueno|casillero|check|checkbox|cuadrito|recuadro|palomear"
                          data-not="adobe"
                          data-strong="casilla|casillas">
                     <summary>Una casilla que no se marca, o una línea donde no puedes escribir</summary>
@@ -622,7 +615,7 @@
                         <p>Aquí MegaPDF maneja dos cosas distintas. Un <strong>campo de formulario
                         real</strong> es parte del documento, y lo llenas directamente. Un
                         <strong>cuadro impreso o una línea trazada</strong> es solo tinta en la página:
-                        MegaPDF reconoce muchas casillas dibujadas que otras apps tratan como adorno, y
+                        MegaPDF reconoce muchas casillas dibujadas que otras aplicaciones tratan como adorno, y
                         cuando no reconoce una, la solución es poner tú una marca de verificación o un
                         cuadro de texto y arrastrarlo sobre la línea.</p>
                         <p>Si un campo <em>real</em> no responde, las causas habituales son las dos que
@@ -636,9 +629,9 @@
                 </details>
 
                 <details class="answer" id="a-signature" data-plat="all"
-                         data-match="a mano|foto de mi firma|firmarlo|firmar|mi firma|fondo blanco|biblioteca de firmas|firma electrónica|rubricar"
+                         data-match="foto de mi firma|firmarlo|mi firma|fondo blanco|biblioteca de firmas|firma electrónica|rubricar|autógrafa|rúbrica"
                          data-not="firmado digitalmente|firma digital|certificado|id digital"
-                         data-strong="firma|firmas|iniciales">
+                         data-strong="firma|firmas|iniciales|firmar|firmo">
                     <summary>Firmas: dibujarlas, fotografiarlas, y dónde se guardan</summary>
                     <div class="body">
                         <p>Hay tres maneras: dibujarla, escribirla o fotografiar la que haces en papel;
@@ -655,7 +648,7 @@
                         dispositivo, y en ningún otro lugar. No se sincronizan, no hacemos ninguna
                         copia de respaldo y no se comparten entre tus dispositivos: no hay ningún
                         servidor por el cual sincronizarlas. Eliminar una firma elimina su archivo, y
-                        desinstalar la app se lleva la biblioteca con ella. Linux es la excepción: los
+                        desinstalar la aplicación se lleva la biblioteca con ella. Linux es la excepción: los
                         gestores de paquetes no tocan tus propios archivos, así que la biblioteca se
                         queda en <code>~/.local/share/MegaPDF</code> hasta que la elimines.</p>
                     </div>
@@ -685,8 +678,8 @@
                 </details>
 
                 <details class="answer" id="a-crash" data-plat="windows mac linux"
-                         data-match="se cerró|se congeló|congelado|se trabó|perdí mis cambios|perdí los cambios|sin guardar|recuperar|recuperación|restaurar|se fue la luz|apagón|se apagó"
-                         data-strong="se colgó|se crasheó|crash|cierre inesperado">
+                         data-match="se cerró|se congeló|congelado|se trabó|perdí mis cambios|perdí los cambios|sin guardar|recuperar|recuperación|restaurar|se fue la luz|apagón|se apagó|se cierra|se cuelga|se congela|se cayó|se tilda|se tildó|se queda pegado|se queda pegada"
+                         data-strong="se colgó|se crasheó|se crashea|crash|cierre inesperado">
                     <summary>MegaPDF se cerró antes de que guardara</summary>
                     <div class="body">
                         <p>En Windows, Mac y Linux, MegaPDF lleva un registro de los cambios que haces
@@ -697,7 +690,7 @@
                         <p>Dos casos en los que no hay nada que restaurar, los dos a propósito: un
                         <strong>documento protegido con contraseña</strong> nunca se registra, y
                         <strong>Android, iPhone y iPad no tienen ningún registro</strong>; su historial
-                        de deshacer dura mientras la app esté abierta.</p>
+                        de deshacer dura mientras la aplicación esté abierta.</p>
                         <p>Un caso que no es a propósito: si el documento se <strong>movió o se le
                         cambió el nombre</strong> entre el cierre inesperado y volver a abrirlo, la
                         oferta no aparece, sin ningún aviso. Pon el archivo donde estaba y vuelve a
@@ -728,7 +721,7 @@
                 </details>
 
                 <details class="answer" id="a-pages" data-plat="all"
-                         data-match="girar|rotar|eliminar una página|borrar una página|mover una página|insertar una página|combinar|unir|juntar|dividir|separar|herramientas de páginas|extraer páginas|quitar una página|página en blanco|al revés|de cabeza|de lado"
+                         data-match="girar|rotar|eliminar una página|borrar una página|mover una página|insertar una página|combinar|unir|juntar|dividir|separar|herramientas de páginas|extraer páginas|quitar una página|página en blanco|al revés|de cabeza|de lado|voltear|volteada|boca abajo|borrar una hoja|eliminar una hoja|quitar una hoja|agregar una página|eliminar página|borrar página|juntar dos|unir dos"
                          data-strong="reordenar|reorganizar">
                     <summary>Girar, eliminar, reordenar y combinar páginas</summary>
                     <div class="body">
@@ -736,12 +729,10 @@
                         páginas de otro PDF y guardar una selección de páginas como un archivo
                         aparte.</p>
                         <p>Hay dos negativas con las que te puedes topar. Un PDF tiene que tener al
-                        menos una página, así que la última no se puede eliminar; usa <strong>Guardar
-                        las páginas seleccionadas como</strong> para quedarte solo con algunas. Y en un
+                        menos una página, así que la última no se puede eliminar; usa <strong>Guardar las páginas seleccionadas como</strong> (en Windows, <strong>Guardar páginas seleccionadas como</strong>; en Android, iPhone y iPad, <strong>Guardar páginas como</strong>) para quedarte solo con algunas. Y en un
                         número pequeño de documentos, más o menos uno de cada cien, se rechaza copiar
                         páginas porque sus campos de formulario pertenecen a un grupo que MegaPDF no
-                        puede llevar consigo, y la copia perdería los nombres de los campos; MegaPDF no
-                        cambia nada antes que darte un archivo dañado sin avisar.</p>
+                        puede llevar consigo, y la copia perdería los nombres de los campos; MegaPDF prefiere no cambiar nada antes que darte un archivo dañado sin avisar.</p>
                         <p>Si el autor del documento pidió que no se toquen sus páginas, las
                         herramientas de páginas necesitan la contraseña del propietario.</p>
                     </div>
@@ -757,7 +748,7 @@
                         no cambió desde que se firmó. No es lo mismo que la firma que colocas desde tu
                         biblioteca, y MegaPDF no puede crear una.</p>
                         <p>Cambiar un PDF así invalida su firma digital; ese es justamente el propósito
-                        de una, y ninguna app puede cambiar un documento y mantener su firma válida.
+                        de una, y ninguna aplicación puede cambiar un documento y mantener su firma válida.
                         MegaPDF te avisa antes de guardar sobre él, y te ofrece <strong>guardar una
                         copia</strong> para que el original firmado se conserve.</p>
                         <p>Algunos documentos van más allá y están <em>certificados</em>: su autor
@@ -767,7 +758,7 @@
                 </details>
 
                 <details class="answer" id="a-print" data-plat="all"
-                         data-match="imprimir|no imprime|no se imprime|no hay impresoras|cups|diálogo de impresión|no imprimió|no salió nada"
+                         data-match="imprimir|no imprime|no se imprime|no hay impresoras|cups|diálogo de impresión|no imprimió|no salió nada|imprime|imprimo|no puedo imprimir|no me imprime|no aparece la impresora"
                          data-strong="impresora|impresoras|impresión">
                     <summary>Imprimir</summary>
                     <div class="body">
@@ -784,7 +775,7 @@
                 </details>
 
                 <details class="answer" id="a-privacy" data-plat="all"
-                         data-match="subir|nube|privacidad|privado|mi cuenta|una cuenta|iniciar sesión|sin conexión|internet|mis datos|es seguro|servidor|confidencial"
+                         data-match="subir|nube|privacidad|privado|mi cuenta|una cuenta|iniciar sesión|sin conexión|internet|mis datos|es seguro|servidor|confidencial|se sube|se suben|sin internet|datos personales|registrarme"
                          data-strong="rastreo|subido|subida">
                     <summary>¿Mi documento se sube a algún lado? No, y así puedes comprobarlo</summary>
                     <div class="body">
@@ -793,7 +784,7 @@
                         fallos, y tus documentos y tus firmas nunca salen de tu dispositivo porque no
                         hay ningún servidor al que puedan ir. Imprimir es lo único en lo que interviene
                         una red, y es la de tu computadora.</p>
-                        <p>No tienes que creernos. En Android, la app no pide ningún permiso; en iOS, no
+                        <p>No tienes que creernos. En Android, la aplicación no pide ningún permiso; en iOS, no
                         solicita ningún permiso de red; en una Mac, su entorno aislado no le da acceso
                         a la red; en Windows, no declara ninguna capacidad de red. Y todo el código
                         fuente es público, así que cualquiera puede revisarlo.</p>
@@ -819,7 +810,7 @@
                                 posterior: Ubuntu 22.04 y sus contemporáneas, y todo lo que vino
                                 después.</li>
                         </ul>
-                        <p>Por debajo de eso, las tiendas no te van a ofrecer la app, y no hay ninguna
+                        <p>Por debajo de eso, las tiendas no te van a ofrecer la aplicación, y no hay ninguna
                         versión anterior a la que recurrir. También hay una herramienta de línea de
                         comandos, <code>megapdf-cli</code>, para Linux, Windows y Mac, que saca el texto
                         de un PDF y reorganiza sus páginas sin pantalla.</p>
@@ -867,7 +858,7 @@
         /* Where the version number is, per platform. Checked against the app, not
            against the store listings. */
         var VER_WHERE = {
-            windows: "Windows: el menú ⋯ Más de la barra de herramientas → Acerca de MegaPDF.",
+            windows: "Windows: el botón ⋯ al final de la barra de herramientas → Configuración, al final del panel.",
             mac: "Mac: el menú MegaPDF → Acerca de MegaPDF.",
             ios: "iPhone / iPad: el menú ⋯ Más → Acerca de MegaPDF.",
             android: "Android: el menú ⋯ Más → Acerca de MegaPDF.",
