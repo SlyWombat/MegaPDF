@@ -285,6 +285,8 @@ cd ios && xcodegen generate && xcodebuild test -project MegaPDF.xcodeproj -schem
 tools/build-macos-app.sh osx-arm64 ~/app-macos
 python3 tools/gen_test_fixtures.py ~/fixtures
 python3 tools/gen_redaction_fixtures.py ~/fixtures   # the self-test's redaction half (#173); same folder, no name clashes
+python3 tools/gen_xfa_fixtures.py ~/fixtures         # the self-test's XFA checks; CI runs all four (ci.yml), and without
+python3 tools/gen_signature_fixtures.py ~/fixtures   # these two the self-test reports 23 FAILs that are missing fixtures, not defects (2.5.0, #862)
 ~/app-macos/MegaPDF.app/Contents/MacOS/MegaPDF --render-check ~/fixtures/stamped.pdf
 ~/app-macos/MegaPDF.app/Contents/MacOS/MegaPDF --self-test ~/fixtures
 dotnet test tests/MegaPDF.Core.Tests/MegaPDF.Core.Tests.csproj -c Release
