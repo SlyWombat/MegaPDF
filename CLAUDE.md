@@ -26,26 +26,57 @@ and an Android bottom sheet can be the same feature done right twice.
 
 ## Machines
 
-**`GPD-DAVE` is the machine you are already on. It is not an SSH target.** `uname -a` says
-GPD-Dave and your `/mnt/d/Projects/MegaPDF` *is* `D:\Projects\MegaPDF` there. Windows work means
-driving PowerShell from WSL, not opening a session. Two agents have burned time on
-`ssh GPD-DAVE` and one reported that the box "needs a key added". It does not.
+**You are on `gpd-worker`** (Ubuntu, the GPD laptop booted from a USB SSD since 2026-11-14,
+when GPD-DAVE's internal SSD began failing). It has no Windows and no `powershell.exe`. The
+checkout is still `/mnt/d/Projects/MegaPDF`, but that is a plain Linux path now, not `D:`.
+
+**Windows work goes to `davebook-5`** (Dave, 2026-11-15): WinUI builds, the Windows self-test,
+anything that needs `MegaPDF.exe`. Older notes, issues and memories that say GPD-DAVE, `D:`,
+`C:\Users\Sly` or "you are already on it" describe the machine that is gone.
 
 | machine | reach | use | disk |
 |---|---|---|---|
-| **GPD-DAVE** | you are on it | WinUI builds, Windows self-test | `D:` |
+| **gpd-worker** | you are on it | coordination, `gh`, website work, Linux tooling | `/`, 439G |
+| **davebook-5** | `ssh davebook-5` (lands in WSL) | WinUI builds, Windows self-test | `C:\megapdf-qa` |
 | **kdocker3** | `ssh kdocker3` | general builds, corpus batteries | `/home/claude`, 832G |
 | **kdocker2** | `ssh kdocker2` | Android (`mingc/android-build-box`, SDK, **no emulator**) | **`/data/megapdf-work` — root is only 119G and Docker lives on it** |
 | **Mac mini** | `ssh mac-mini` as `claude` | iOS/macOS builds and simulators | `~` |
+| **dave-1** | ask the IT session first | the win-arm64 check at each release, unpackaged only (#844) | — |
 
 On kdocker2 put `GRADLE_USER_HOME` on `/data` too, or you fill the root volume. `/data` is
 Dave's; only touch `/data/megapdf-work`.
 
-**Windows specifics:** per-user dotnet at `C:\Users\Sly\AppData\Local\Microsoft\dotnet` (the
-system one has no SDK); no Visual Studio; `gh.exe` not `gh`; `sleep` is blocked; `grep` is a
-shell function, not the binary. Use a `.ps1` file, never inline `-Command` — quoting and
-redirection get mangled through bash. Stage scripts in `C:\temp`, read output back from there,
-clean up after.
+**davebook-5 is Dave's own laptop, logged in as him.** `ssh davebook-5` gives WSL (user
+`claude`, with `gh` and `git`); Windows is reached through interop, and every Windows process
+runs as Dave's account, so **GUI windows open on his desktop** and
+**`%LOCALAPPDATA%\MegaPDF` there is his real data** — never touch it (#717 below is what keeps
+automation launches out of it; check it with a before/after hash).
+
+- **Run Windows code** as a `.ps1` in `C:\megapdf-qa`, via
+  `/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\megapdf-qa\<name>.ps1`.
+  `powershell.exe` is not on PATH over ssh, and inline `-Command` mangles quoting. Windows
+  PowerShell **5.1 only**, no pwsh: after `Start-Process -PassThru` read `$p.Handle` once or
+  `ExitCode` comes back empty; with `-File` an array parameter arrives as one string; native
+  stderr under `ErrorActionPreference Stop` throws.
+- **Toolchain:** per-user .NET 8 SDK at `%LOCALAPPDATA%\Microsoft\dotnet` (put it first on PATH,
+  set `DOTNET_ROOT`); VS Build Tools 2026 (`...\Microsoft Visual Studio\18\BuildTools`, MSVC
+  14.51, SDK 10.0.26100), whose CMake `tools/build-core.ps1` does not find — prepend
+  `...\18\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin` to PATH;
+  Python 3.9 at `C:\Python39`; `git.exe` and `gh.exe`.
+- **Workspace** is `C:\megapdf-qa` (clone, fixtures, `build.ps1`, `rebuild.ps1`,
+  `selftest.ps1 -Only a,b`). There is no `D:`. `C:\temp` holds Dave's own scripts: stay out.
+  Measured: core 26 s, app 69 s, all self-test states about 8 min.
+- **Never run WSL `git` on the Windows clone.** It sees every file as modified (CRLF), and a
+  checkout rewrites them all with LF, which forces a full core rebuild. Use `git.exe`, or
+  re-clone (about 2 min); copy files over as CRLF.
+- **Take the GUI lock** around any `--screenshot-state` run: create `C:\megapdf-qa\gui.lock`
+  with noclobber, remove it after (`C:\megapdf-qa\gui.sh <states>` does both), so two agents
+  don't fight over focus and the clipboard on Dave's screen.
+- **Run GUI states only while the session is unlocked.** Dave works on it remotely and it is
+  usually locked: `LogonUI` is running and a `LockScreenBackstopFrame` covers the screen, so
+  captures come back black and injected input goes nowhere. A locked run gave a `select-copy`
+  red that passes unlocked (#847). Check `WindowFromPoint` at the screen
+  centre first, never try to unlock it, and ask Dave to unlock it when a GUI state matters.
 
 **An automation launch never touches `%LOCALAPPDATA%\MegaPDF`, and a QA script never removes a
 Store-signed package (#717).** Every `--screenshot`/`--screenshot-state`/`--engine-check`/
@@ -75,7 +106,7 @@ If you must recover a dirty shared tree: `git stash push -u -m "<tag>" -- <narro
 only your files, then apply and drop **by SHA**. Never a bare `pop` — the stash stack is shared
 and a pop can take someone else's work.
 
-**Scratch** goes in the session scratchpad or `D:\megapdf-qa` on Windows. Use unique filenames;
+**Scratch** goes in the session scratchpad, or `C:\megapdf-qa` on davebook-5. Use unique filenames;
 two agents both writing `commit-msg.txt` once meant one picked up the other's message.
 
 ## Never end your turn waiting on a job

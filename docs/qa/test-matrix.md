@@ -17,7 +17,7 @@ Each cell says two things and both are checked against the code:
 | `GAP` | the feature is **missing** where it should exist — the #571 shape |
 | `+m` | a by-hand step in `TESTING.md` / `docs/RELEASING.md` covers it too |
 
-235 pairings: 144 UI, 60 eng, 13 —, 14 n/a, 4 GAP.
+235 pairings: 146 UI, 59 eng, 12 —, 14 n/a, 4 GAP.
 
 This map is about *what is covered*, not whether the covering tests pass — that is the
 other jobs' business — and it does not replace the by-hand pass in `docs/RELEASING.md`
@@ -39,13 +39,12 @@ Nothing is failing; nothing is looking. #571 (Linux had an About window with no 
 | A withheld permission is said out loud, and the person may continue (`permission-override`) | macos | same as Windows — the shared MegaPDF.Core DocumentCapabilities both desktops consume is the half that has to change, so these two land together. | #558 |
 | A withheld permission is said out loud, and the person may continue (`permission-override`) | windows | still refuses. DocumentCapabilities.cs reads the bits and the toolbar greys out what the author withheld; megapdf_security_override() is in the core and unbound in CoreNative.cs. | #558 |
 
-### Present, nothing automated (13)
+### Present, nothing automated (12)
 
 The feature is reachable and no test in CI touches it.
 
 | feature | platform | what is missing | issue |
 |---|---|---|---|
-| About, the version, and the third-party notices (`about-notices`) | ios | no test opens About or the notices on iOS. | — |
 | Keyboard-only operation (`keyboard-only`) | ios | iPad keyboard commands are declared and no test presses one, on either destination. | — |
 | The build a user installs (MSIX, App Store sandbox, .deb, Snap, Flatpak, tarball) (`packaged-install`) | ios | CI builds and tests on the simulator only; nothing checks the shipped archive beyond the release workflow's own packaging. | — |
 | Device rotation (`device-rotation`) | android | a blind spot, and rotation on Android destroys and recreates the activity, which is where unsaved edits and an armed tool would go missing. | — |
@@ -59,13 +58,12 @@ The feature is reachable and no test in CI touches it.
 | Print (`print`) | windows | nothing automated touches printing on Windows: no self-test state, no core test of PdfPrinter, and tools/windows-qa's print flow is manual. | — |
 | A small side indicator of scroll position, including in reading mode (`scroll-position-indicator`) | ios | pre-existing: SwiftUI's default fading scroll indicator, never overridden by `.scrollIndicators(...)` anywhere in the app, so reading mode (which hides only the nav/bottom bars and the tool strip) leaves it exactly as it is outside reading mode. The page list is one continuous ScrollView/LazyVStack over every page, so the indicator is whole-document position. Nothing automated asserts the indicator itself — it is not exposed to the accessibility tree XCUITest reads, the same reason ViewerZoomUITests has to sleep 1.5s for it to fade rather than assert on it directly. | — |
 
-### Engine only — this platform's own path is untested (60)
+### Engine only — this platform's own path is untested (59)
 
 The shared core proves the operation. Nothing proves this platform reaches it correctly, which is where #401 and #412 lived.
 
 | feature | platform | what is missing | issue |
 |---|---|---|---|
-| About, the version, and the third-party notices (`about-notices`) | android | the notices' paragraph formatting is unit-tested; no instrumented test opens the dialog. | — |
 | English, French (fr-CA, fr-FR) and Spanish (es-419, es-ES) (`localisation`) | android | nothing on Android runs in French at all — no locale-qualified instrumented run, unlike iOS. The catalogue is checked from the .NET side. | — |
 | The build a user installs (MSIX, App Store sandbox, .deb, Snap, Flatpak, tarball) (`packaged-install`) | android | CI assembles a debug APK and tests it; the release AAB is only verified by hand. Since #817 CI also reads the MERGED debug and release manifests and fails on any uses-permission (the app promises none; ML Kit had added INTERNET and ACCESS_NETWORK_STATE in 2.3.0 unnoticed, and its datatransport was uploading usage events to Google). That proves what the manifest declares, not what the shipped AAB contains or how the app behaves. | — |
 | The build a user installs (MSIX, App Store sandbox, .deb, Snap, Flatpak, tarball) (`packaged-install`) | macos | the App Store build runs --self-test out of the bundle; the sandboxed, signed, installed app is only ever run by hand on the Mac mini. | — |
@@ -211,7 +209,7 @@ The shared core proves the operation. Nothing proves this platform reaches it co
 | **Light and dark app chrome** | eng | eng | eng | UI | eng |
 | **Screen-reader names and announcements** | UI | UI | UI | UI | eng |
 | **Keyboard-only operation** | UI | UI | UI | — | n/a |
-| **About, the version, and the third-party notices** | UI+m | UI | UI | —+m | eng |
+| **About, the version, and the third-party notices** | UI+m | UI | UI | UI+m | UI |
 | **Protected, restricted, XFA and damaged documents** | UI | UI | UI | UI | UI |
 | **The build a user installs (MSIX, App Store sandbox, .deb, Snap, Flatpak, tarball)** | eng+m | eng+m | UI+m | —+m | eng+m |
 
@@ -661,8 +659,8 @@ cell in this row — and why `entry` for this feature has to be a menu row, neve
 - **Windows** — UI+m. coverage: UI/VM. reachable from `src/MegaPDF.App/MainWindow.xaml::NoticesLink`. tests: `.github/workflows/ci.yml::Run-Check "about"`. by hand: `TESTING.md::**About**`. #590: `about` opens the real settings flyout and checks the version line against the running assembly's own version, loads the bundled notices text and checks it actually lists a component (PDFium), then opens the real notices dialog and reads it back through DialogGate.Current — the #571 shape (a window with nothing leading to it) checked directly rather than left to drift. The notices text itself is still checked for drift by the `notices` job.
 - **macOS** — UI. coverage: UI/VM. reachable from `src/MegaPDF.Avalonia/App.axaml.cs::NativeMenuItem(Strings.AboutMegaPDF)`. tests: `src/MegaPDF.Avalonia/Program.cs::CheckAboutWindow`. the application menu is raised, About is clicked and the notices are read from what the bundle actually carries.
 - **Linux** — UI. coverage: UI/VM. reachable from `src/MegaPDF.Avalonia/Views/MainWindow.Toolbar.cs::CommandEntry(Strings.AboutMegaPDF`. tests: `src/MegaPDF.Avalonia/Program.cs::CheckAboutWindow`, `src/MegaPDF.Avalonia/Program.cs::CheckLinuxAboutRoute`. CheckLinuxAboutRoute asserts More carries About and clicking it opens the window — the check that #571's absence would have failed. #571.
-- **iOS/iPadOS** — —+m. coverage: nothing. reachable from `ios/MegaPDF/ViewerView.swift::About MegaPDF`. by hand: `docs/RELEASING.md::**About** says the version`. no test opens About or the notices on iOS.
-- **Android** — eng. coverage: engine only. reachable from `android/app/src/main/java/com/megapdf/android/ViewerScreen.kt::R.string.about_megapdf`. tests: `android/app/src/test/java/com/megapdf/android/NoticeParagraphsTest.kt::class`. the notices' paragraph formatting is unit-tested; no instrumented test opens the dialog.
+- **iOS/iPadOS** — UI+m. coverage: UI/VM. reachable from `ios/MegaPDF/ViewerView.swift::About MegaPDF`. tests: `ios/MegaPDFUITests/AboutLinksUITests.swift::testAboutOffersSupportAndSourceCode`, `ios/ui-test-lanes.txt::iphone/AboutLinksUITests`, `ios/MegaPDFTests/AboutLinksTests.swift::class`. by hand: `docs/RELEASING.md::**About** says the version`. #730: the UI test opens About from Home and finds the Support and Source code rows; the addresses they open are unit-tested on AboutLinks. Nothing opens the notices.
+- **Android** — UI. coverage: UI/VM. reachable from `android/app/src/main/java/com/megapdf/android/ViewerScreen.kt::R.string.about_megapdf`. tests: `android/app/src/test/java/com/megapdf/android/NoticeParagraphsTest.kt::class`, `android/app/src/androidTest/java/com/megapdf/android/AboutLinksTest.kt::aboutOffersSupportAndSourceCodeAndEachOpensItsAddress`. #730: the instrumented test opens About, finds Support and Source code and reads each VIEW intent's address. The notices' paragraph formatting is unit-tested; nothing opens the notices screen.
 
 ### Protected, restricted, XFA and damaged documents (`special-documents`)
 

@@ -842,8 +842,11 @@ public static partial class Strings
     /// <summary>Special thanks to Mega Woman.</summary>
     public static string SpecialThanks => Get("SpecialThanks");
 
-    /// <summary>MegaPDF on GitHub</summary>
-    public static string MegaPdfOnGitHub => Get("MegaPdfOnGitHub");
+    /// <summary>Support</summary>
+    public static string SupportLink => Get("SupportLink");
+
+    /// <summary>Source code</summary>
+    public static string SourceCodeLink => Get("SourceCodeLink");
 
     /// <summary>Third-Party Notices…</summary>
     public static string ThirdPartyNoticesEllipsis => Get("ThirdPartyNoticesEllipsis");

@@ -2415,15 +2415,23 @@ issue = 571
 [feature.ios]
 presence = "present"
 entry = "ios/MegaPDF/ViewerView.swift::About MegaPDF"
-coverage = "none"
+coverage = "ui"
+tests = [
+  "ios/MegaPDFUITests/AboutLinksUITests.swift::testAboutOffersSupportAndSourceCode",
+  "ios/ui-test-lanes.txt::iphone/AboutLinksUITests",
+  "ios/MegaPDFTests/AboutLinksTests.swift::class",
+]
 manual = "docs/RELEASING.md::**About** says the version"
-note = "no test opens About or the notices on iOS."
+note = "#730: the UI test opens About from Home and finds the Support and Source code rows; the addresses they open are unit-tested on AboutLinks. Nothing opens the notices."
 [feature.android]
 presence = "present"
 entry = "android/app/src/main/java/com/megapdf/android/ViewerScreen.kt::R.string.about_megapdf"
-coverage = "engine"
-tests = ["android/app/src/test/java/com/megapdf/android/NoticeParagraphsTest.kt::class"]
-note = "the notices' paragraph formatting is unit-tested; no instrumented test opens the dialog."
+coverage = "ui"
+tests = [
+  "android/app/src/test/java/com/megapdf/android/NoticeParagraphsTest.kt::class",
+  "android/app/src/androidTest/java/com/megapdf/android/AboutLinksTest.kt::aboutOffersSupportAndSourceCodeAndEachOpensItsAddress",
+]
+note = "#730: the instrumented test opens About, finds Support and Source code and reads each VIEW intent's address. The notices' paragraph formatting is unit-tested; nothing opens the notices screen."
 
 [[feature]]
 id = "special-documents"
