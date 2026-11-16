@@ -1445,7 +1445,7 @@
   </data>
   <data name="LinuxDownloadPage" xml:space="preserve">
     <value>Página de descargas</value>
-    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. About window, Linux: the link to electricrv.ca/megapdf/linux/, opened in the person's browser (#158)</comment>
+    <comment>ES-REVIEW #724 — new, not yet read by the reviewer. About window, Linux: the link to megapdf.ca/linux/, opened in the person's browser (#158)</comment>
   </data>
   <data name="ReadingMode" xml:space="preserve">
     <value>Modo de lectura</value>

@@ -87,7 +87,7 @@ else
         echo
         echo "    $missing screenshot URL(s) do not resolve yet, and nothing else is wrong."
         echo "    That is expected until website/deploy.py has published"
-        echo "    website/megapdf/screenshots/linux/ to electricrv.ca — see"
+        echo "    website/megapdf/screenshots/linux/ to megapdf.ca — see"
         echo "    tools/Linux-Packaging.md, \"Before a submission\"."
     fi
 fi

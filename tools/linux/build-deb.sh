@@ -141,7 +141,7 @@ ICU_DEPS="$(for n in $(seq 80 -1 70); do printf 'libicu%s | ' "$n"; done | sed '
     echo "Maintainer: Electric RV <noreply@electricrv.ca>"
     echo "Section: text"
     echo "Priority: optional"
-    echo "Homepage: https://electricrv.ca/megapdf/"
+    echo "Homepage: https://megapdf.ca/"
     echo "Depends: libc6 (>= 2.35), libgcc-s1, libstdc++6, zlib1g, libfontconfig1, libfreetype6," \
          "libx11-6, libice6, libsm6, libxext6, libxi6, libxrandr2, libxcursor1," \
          "libssl3t64 | libssl3, $ICU_DEPS"

@@ -1314,7 +1314,7 @@
   </data>
   <data name="LinuxDownloadPage" xml:space="preserve">
     <value>Page de téléchargement</value>
-    <comment>FR-REVIEW #158 — new with the Linux APT repository, not yet read by the reviewer. About window, Linux: the link to electricrv.ca/megapdf/linux/, opened in the person's browser (#158)</comment>
+    <comment>FR-REVIEW #158 — new with the Linux APT repository, not yet read by the reviewer. About window, Linux: the link to megapdf.ca/linux/, opened in the person's browser (#158)</comment>
   </data>
   <data name="ReadingMode" xml:space="preserve">
     <value>Mode lecture</value>

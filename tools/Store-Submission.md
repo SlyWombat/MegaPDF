@@ -15,7 +15,7 @@ step) all disappear, and the Store handles updates.
 - **1.7.0.0 LIVE 2026-09-10** — x64 + ARM64, en-US + en-CA. Submitted, certified,
   and published the same day; the listing at
   https://apps.microsoft.com/detail/9PF4TRRH4M76 went public at 18:55 UTC and
-  electricrv.ca/megapdf links to it. Next release: bump the version, rebuild
+  megapdf.ca links to it. Next release: bump the version, rebuild
   both architectures, new submission. **Its ARM64 package can't open a document**
   (#288: x64 `pdfium.dll` inside), so 2.0 is the first working ARM64 release.
 - Partner Center developer account: **active as of 2026-07-22.**
@@ -282,7 +282,7 @@ session.
 **Identity.** The Microsoft Entra application **"MegaPDF submission"** (tenant
 drscapital.com, role **Manager (Windows)**) was added by Dave on 2026-09-19 under
 Partner Center → ⚙ Account settings → User management → Microsoft Entra
-applications. Its reply URL, https://electricrv.ca/megapdf, is required by the form
+applications. Its reply URL, https://megapdf.ca, is required by the form
 and never used. **Its key expires 2028-09-19**: add a new key on the same page
 before then and update the credentials file.
 
@@ -352,7 +352,7 @@ The listing title stays **"Mega PDF"**, the reserved name.
 - Description, screenshots, category, **age rating** (IARC questionnaire).
 - **Privacy policy URL** — required. Data is local-only and telemetry is off by
   default (SDD §5), but the Store still wants a hosted policy page.
-  - Use **https://electricrv.ca/megapdf/privacy/** on the submission's
+  - Use **https://megapdf.ca/privacy/** on the submission's
     Properties page. Source: `website/megapdf/privacy/index.html`, deployed with
     `website/deploy.py --privacy`. It is the same URL both mobile store listings
     reference.

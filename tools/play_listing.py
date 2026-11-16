@@ -47,7 +47,7 @@ LOCALES = {"en-CA": "en", "fr-CA": "fr-CA", "fr-FR": "fr-FR",
            "es-419": "es-419", "es-ES": "es-ES"}   # Play -> capture folder
 IMAGE_TYPES = {"phone": "phoneScreenshots", "tablet": "tenInchScreenshots"}
 LIMITS = {"title": 30, "shortDescription": 80, "fullDescription": 4000, "notes": 500}
-CONTACT_WEBSITE = "https://electricrv.ca/megapdf/support/"   # #662: Play shows it under "App support"
+CONTACT_WEBSITE = "https://megapdf.ca/support/"   # #662: Play shows it under "App support"
 CONTACT_EMAIL = "info@electricrv.ca"
 UPLOAD_TRIES = 4   # one try and three retries when an image upload answers 5xx
 

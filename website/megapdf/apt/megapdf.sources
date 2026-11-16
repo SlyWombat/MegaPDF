@@ -1,5 +1,5 @@
 Types: deb
-URIs: https://electricrv.ca/megapdf/apt
+URIs: https://megapdf.ca/apt
 Suites: stable
 Components: main
 Architectures: amd64
