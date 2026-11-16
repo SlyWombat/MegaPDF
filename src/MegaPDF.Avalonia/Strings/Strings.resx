@@ -1316,7 +1316,7 @@
   </data>
   <data name="LinuxDownloadPage" xml:space="preserve">
     <value>Download page</value>
-    <comment>About window, Linux: the link to electricrv.ca/megapdf/linux/, opened in the person's browser (#158)</comment>
+    <comment>About window, Linux: the link to megapdf.ca/linux/, opened in the person's browser (#158)</comment>
   </data>
   <data name="ReadingMode" xml:space="preserve">
     <value>Reading mode</value>

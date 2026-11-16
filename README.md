@@ -40,7 +40,7 @@ No account. No cloud. No subscription. All processing is local.
 
 ## Get it
 
-**[electricrv.ca/megapdf](https://electricrv.ca/megapdf/)** has the store badges
+**[megapdf.ca](https://megapdf.ca/)** has the store badges
 for every platform plus the Linux install page. Store status as of 2.4.0 on
 2026-10-25: **Linux** (APT repository, `.deb`, tarball, or `sudo snap install
 megapdf`), **Google Play**, **Windows** (Microsoft Store), **Mac** (Mac App
@@ -111,7 +111,7 @@ tools/                      Build, packaging, store submission, test fixtures an
   stress/                   Corpus batteries over real-world PDFs
   gen_strings.py            Localisation: fr-CA is written by hand, fr-FR is derived from it
 docs/                       ADRs, the release runbook (RELEASING.md), the localisation glossary
-website/                    electricrv.ca/megapdf: the site's source and its deploy script
+website/                    megapdf.ca: the site's source and its deploy script
 assets/branding/            Logo, icon and splash artwork
 .github/workflows/          CI for every platform, and the release pipelines
 SDD.md                      Software Design Document (start here)

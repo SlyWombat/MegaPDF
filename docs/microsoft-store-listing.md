@@ -510,13 +510,13 @@ PDF ligero
 Category: **Productivity**. Pricing: **Free**. The rest are paste values:
 
 ```
-https://electricrv.ca/megapdf/privacy/
+https://megapdf.ca/privacy/
 ```
 ```
-https://electricrv.ca/megapdf/
+https://megapdf.ca/
 ```
 ```
-https://electricrv.ca/megapdf/support/
+https://megapdf.ca/support/
 ```
 ```
 © 2026 Electric RV. Licensed under Apache-2.0.

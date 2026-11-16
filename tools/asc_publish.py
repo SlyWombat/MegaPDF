@@ -49,9 +49,9 @@ REPO_LOCALE = {"en-CA": "en", "fr-FR": "fr", "es-MX": "es-419", "es-ES": "es"}
 
 # Store URLs (#662). The support page asks the four questions a useful report needs and
 # answers the common ones first; GitHub is the source, not the help desk.
-SUPPORT_URL = "https://electricrv.ca/megapdf/support/"
-MARKETING_URL = "https://electricrv.ca/megapdf/"
-PRIVACY_URL = "https://electricrv.ca/megapdf/privacy/"
+SUPPORT_URL = "https://megapdf.ca/support/"
+MARKETING_URL = "https://megapdf.ca/"
+PRIVACY_URL = "https://megapdf.ca/privacy/"
 
 # Slot order and file names: tools/store_slots.py (#656).
 # The Mac is a platform of the same record: ASC_PLATFORM=MAC_OS switches the

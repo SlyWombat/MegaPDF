@@ -23,13 +23,13 @@ description: |
 # Apache-2.0, the licence of the app (LICENSE). The bundled third-party notices ride
 # beside the binary in lib/megapdf, where every other Linux package keeps them (#194).
 license: Apache-2.0
-website: https://electricrv.ca/megapdf/
+website: https://megapdf.ca/
 source-code: https://github.com/SlyWombat/MegaPDF
 # The support page (#662): "Contact" and "Report a bug" in the Snap Store are where a person
 # who needs help clicks, and the support page asks what a useful report needs and answers
 # the common questions first. The source stays on GitHub.
-issues: https://electricrv.ca/megapdf/support/
-contact: https://electricrv.ca/megapdf/support/
+issues: https://megapdf.ca/support/
+contact: https://megapdf.ca/support/
 icon: snap/gui/megapdf.png
 
 grade: stable
