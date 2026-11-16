@@ -19,11 +19,11 @@ First in `<releases>`, above the 2.4.0 entry, in the same five paragraphs as 2.4
 ```xml
     <release version="2.5.0" date="REPLACE-AT-TAG">
       <description>
-        <p>About now links to the support page.</p>
-        <p xml:lang="fr-CA">La section À propos comprend maintenant un lien vers la page de soutien.</p>
-        <p xml:lang="fr">La section À propos comprend maintenant un lien vers la page de soutien.</p>
-        <p xml:lang="es">La sección Acerca de ahora incluye un enlace a la página de soporte.</p>
-        <p xml:lang="es-ES">La sección Acerca de ahora incluye un enlace a la página de soporte.</p>
+        <p>About MegaPDF now links to the support page.</p>
+        <p xml:lang="fr-CA">La section À propos de MegaPDF comprend maintenant un lien vers la page de soutien.</p>
+        <p xml:lang="fr">La section À propos de MegaPDF comprend maintenant un lien vers la page de soutien.</p>
+        <p xml:lang="es">La sección Acerca de MegaPDF ahora incluye un enlace a la página de soporte.</p>
+        <p xml:lang="es-ES">La sección Acerca de MegaPDF ahora incluye un enlace a la página de soporte.</p>
       </description>
     </release>
 ```

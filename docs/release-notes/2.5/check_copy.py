@@ -215,12 +215,16 @@ def main(argv: list[str]) -> int:
         check_code_points(text, name, codes, problems)
         report(text, name)
 
-    # One sentence per language, the same on every channel.
+    # One shared sentence per language on every channel. Google Play alone leads with the
+    # Android-only rotation fix (#826), so its block must END with the shared sentence.
     ref = texts["app-store.md"]
     for name, text in texts.items():
         for word in ("English", "Français (Canada)", "Español (Latinoamérica)"):
-            if block_of(text, word) != block_of(ref, "English (Canada)" if word == "English" else word):
-                problems.append(f"{name}: the {word} block differs from app-store.md's")
+            shared = block_of(ref, "English (Canada)" if word == "English" else word)
+            mine = block_of(text, word)
+            ok = mine.endswith(" " + shared) if name == "google-play.md" else mine == shared
+            if not ok:
+                problems.append(f"{name}: the {word} block does not carry app-store.md's sentence as it should")
     check_linux(ref, LINUX, problems)
 
     if problems:
