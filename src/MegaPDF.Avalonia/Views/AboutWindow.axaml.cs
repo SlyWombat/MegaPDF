@@ -17,6 +17,7 @@ public partial class AboutWindow : Window
         InitializeComponent();
 
         VersionText.Text = AppInfo.VersionLabel;
+        SupportLink.NavigateUri = new Uri(AppInfo.SupportUrl);
         ProjectLink.NavigateUri = new Uri(AppInfo.ProjectUrl);
 
         var install = LinuxInstall.Current(AppContext.BaseDirectory);

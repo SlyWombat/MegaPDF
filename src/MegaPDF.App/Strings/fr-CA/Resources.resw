@@ -131,8 +131,21 @@
   <data name="AboutThanks.Text" xml:space="preserve">
     <value>Merci tout spécial à Mega Woman.</value>
   </data>
+  <data name="GitHubLink.Content" xml:space="preserve">
+    <value>Code source</value>
+    <comment>FR-REVIEW #730 — new, not yet read by the reviewer. About: the link to the GitHub repository, labelled as the source code (#730)</comment>
+  </data>
   <data name="GitHubLink.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
-    <value>MegaPDF sur GitHub</value>
+    <value>Code source</value>
+    <comment>FR-REVIEW #730 — new, not yet read by the reviewer. About: the link to the GitHub repository, labelled as the source code (#730)</comment>
+  </data>
+  <data name="SupportLink.Content" xml:space="preserve">
+    <value>Soutien</value>
+    <comment>FR-REVIEW #730 — new, not yet read by the reviewer. About: the link to the support page</comment>
+  </data>
+  <data name="SupportLink.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Soutien</value>
+    <comment>FR-REVIEW #730 — new, not yet read by the reviewer. About: the link to the support page</comment>
   </data>
   <data name="NoticesLink.Content" xml:space="preserve">
     <value>Avis de tiers</value>

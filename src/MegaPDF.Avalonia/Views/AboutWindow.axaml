@@ -31,8 +31,13 @@
                  TextWrapping="Wrap" TextAlignment="Center" />
     </StackPanel>
 
+    <HyperlinkButton Name="SupportLink"
+                     Content="{x:Static loc:Strings.SupportLink}"
+                     FontSize="{DynamicResource TypeCaption}"
+                     HorizontalAlignment="Center" Padding="4,2" />
+
     <HyperlinkButton Name="ProjectLink"
-                     Content="{x:Static loc:Strings.MegaPdfOnGitHub}"
+                     Content="{x:Static loc:Strings.SourceCodeLink}"
                      FontSize="{DynamicResource TypeCaption}"
                      HorizontalAlignment="Center" Padding="4,2" />
 

@@ -1,5 +1,11 @@
 import SwiftUI
 
+/// Where About sends people (#730). Support is the site's real home, megapdf.ca.
+enum AboutLinks {
+    static let support = URL(string: "https://megapdf.ca/support/")!
+    static let source = URL(string: "https://github.com/SlyWombat/MegaPDF")!
+}
+
 /// About sheet: app name, version, copyright, credits, project link, and a
 /// push to the bundled third-party license notices.
 struct AboutView: View {
@@ -33,8 +39,9 @@ struct AboutView: View {
                         .font(Brand.Text.caption).foregroundStyle(.secondary)
                 }
                 Section {
-                    Link("MegaPDF on GitHub",
-                         destination: URL(string: "https://github.com/SlyWombat/MegaPDF")!)
+                    Link("Support", destination: AboutLinks.support)
+                    Link("Source code",
+                         destination: AboutLinks.source)
                     NavigationLink("Third-party notices") {
                         ThirdPartyNoticesView()
                     }

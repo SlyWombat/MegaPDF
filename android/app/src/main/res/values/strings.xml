@@ -7,7 +7,6 @@
 <resources>
     <!-- Brand and links: never translated. -->
     <string name="app_name" translatable="false">MegaPDF</string>
-    <string name="project_link" translatable="false">github.com/SlyWombat/MegaPDF</string>
 
     <!-- Common actions -->
     <string name="open">Open</string>
@@ -36,6 +35,8 @@
     <string name="version_label">Version %1$s</string>
     <string name="copyright">Copyright © 2026 ElectricRV.ca Corporation. All rights reserved.</string>
     <string name="special_thanks">Special thanks to Mega Woman.</string>
+    <string name="support_link">Support</string>
+    <string name="source_link">Source code</string>
     <string name="third_party_notices">Third-party notices</string>
 
     <!-- Password -->

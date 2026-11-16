@@ -474,8 +474,14 @@
                                 Style="{StaticResource CaptionTextBlockStyle}"
                                 Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
                             <HyperlinkButton
+                                x:Name="SupportLink"
+                                x:Uid="SupportLink"
+                                ToolTipService.ToolTip="https://megapdf.ca/support/"
+                                FontSize="{ThemeResource TypeCaption}"
+                                Padding="0,2"
+                                Margin="0,2,0,0" />
+                            <HyperlinkButton
                                 NavigateUri="https://github.com/SlyWombat/MegaPDF"
-                                Content="github.com/SlyWombat/MegaPDF"
                                 ToolTipService.ToolTip="https://github.com/SlyWombat/MegaPDF"
                                 x:Uid="GitHubLink"
                                 FontSize="{ThemeResource TypeCaption}"

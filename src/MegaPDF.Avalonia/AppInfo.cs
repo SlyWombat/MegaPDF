@@ -17,6 +17,9 @@ namespace MegaPDF.Avalonia;
 /// </summary>
 internal static partial class AppInfo
 {
+    /// <summary>The support page (#730): the site's real home, megapdf.ca.</summary>
+    internal const string SupportUrl = "https://megapdf.ca/support/";
+
     internal const string ProjectUrl = "https://github.com/SlyWombat/MegaPDF";
 
     internal const string NoticesFileName = "THIRD-PARTY-NOTICES.txt";

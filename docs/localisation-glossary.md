@@ -335,6 +335,8 @@ established French for the cryptographic sense.
 | The notices file is missing from this build. | Le fichier des avis est absent de cette version. | #176 |
 | Window | Fenêtre | #176, macOS menu bar |
 | Help | Aide | #176, macOS menu bar |
+| Support (the link to the support page) | Soutien | #730, About on every platform; « Soutien » and « page de soutien » are the website's own words for the page (#845), so the link names the page it opens. FR-REVIEW |
+| Source code (the link to the GitHub repository) | Code source | #730, About on every platform. FR-REVIEW |
 | Minimize | Minimiser | #176, macOS Window menu. macOS's own word, read from AppKit's MenuCommands.loctable (fr and fr_CA alike) on the Mac mini, 2026-09-19 (#242) |
 | Zoom | Zoom | #176, macOS Window menu; the same word in French |
 | Hide {0} | Masquer {0} | #191, macOS app menu. These five are macOS's own words, copied from TextEdit's Edit.loctable rather than translated — fr and fr-CA are identical there |
