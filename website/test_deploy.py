@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Tests for website/deploy.py: its login-file lookup (#668), its TLS verification (#726),
-and its refusal to upload a page that loads anything from a third party (#846).
+its refusal to upload a page that loads anything from a third party (#846), and its
+checks on the support page in all three languages (#859).
 
 Run as a script: python3 website/test_deploy.py -v
 
@@ -155,6 +156,112 @@ class NoPageLoadsFromAThirdParty(unittest.TestCase):
             with self.assertRaises(SystemExit) as caught:
                 self.deploy.staged([(page, "/public_html/megapdf")], {})
             self.assertIn("fonts.googleapis.com", str(caught.exception))
+
+
+class SupportPagesInEveryLanguage(unittest.TestCase):
+    """#859: support/ has French and Spanish twins under fr/ and es/. --support has to
+    check them as it checks the English one, hold them to the English one's ids, and
+    upload them; without --support none of the three may go up."""
+
+    SITE = os.path.join(os.path.dirname(DEPLOY), "megapdf")
+    PAGES = ["support/index.html", "fr/support/index.html", "es/support/index.html"]
+
+    def setUp(self):
+        self.deploy = load_deploy()
+
+    def uploaded(self, **flags):
+        return {os.path.relpath(path, self.SITE).replace(os.sep, "/")
+                for path, _ in self.deploy.plan("/d", True, **flags)}
+
+    def test_all_three_go_up_with_support_and_none_without(self):
+        with_support = self.uploaded(include_support=True)
+        without = self.uploaded(include_support=False)
+        for page in self.PAGES:
+            with self.subTest(page=page):
+                self.assertIn(page, with_support)
+                self.assertNotIn(page, without)
+        # The landing pages in fr/ and es/ are not gated by it.
+        self.assertIn("fr/index.html", without)
+        self.assertIn("es/index.html", without)
+
+    def test_the_real_pages_pass(self):
+        note = self.deploy.check_support(True)
+        self.assertIn("3 languages", note)
+
+    def copy_site(self, tmp):
+        """The parts of the site check_support reads, in a throwaway folder."""
+        import shutil
+        for rel in self.PAGES + ["privacy/index.html"]:
+            os.makedirs(os.path.dirname(os.path.join(tmp, rel)), exist_ok=True)
+            shutil.copy(os.path.join(self.SITE, rel), os.path.join(tmp, rel))
+
+    def refused_after(self, rel, old, new):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.copy_site(tmp)
+            path = os.path.join(tmp, rel)
+            with open(path, encoding="utf-8") as f:
+                page = f.read()
+            self.assertIn(old, page)
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(page.replace(old, new, 1))
+            with mock.patch.object(self.deploy, "SITE", tmp):
+                with self.assertRaises(SystemExit) as caught:
+                    self.deploy.check_support(True)
+            return str(caught.exception)
+
+    def test_a_missing_language_page_is_refused(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.copy_site(tmp)
+            os.remove(os.path.join(tmp, "es", "support", "index.html"))
+            with mock.patch.object(self.deploy, "SITE", tmp):
+                with self.assertRaises(SystemExit) as caught:
+                    self.deploy.check_support(True)
+            self.assertIn("es/support/index.html", str(caught.exception))
+
+    def test_a_renamed_id_is_refused(self):
+        why = self.refused_after("fr/support/index.html", 'id="a-print"', 'id="a-impression"')
+        self.assertIn("missing a-print", why)
+
+    def test_another_platform_list_is_refused(self):
+        why = self.refused_after("es/support/index.html",
+                                 'id="a-crash" data-plat="windows mac linux"',
+                                 'id="a-crash" data-plat="all"')
+        self.assertIn("other data-plat on a-crash", why)
+
+    def test_a_translated_interface_line_is_refused(self):
+        why = self.refused_after("fr/support/index.html", '"Answer ids: "', '"Réponses\u00a0: "')
+        self.assertIn("Answer ids", why)
+
+    def test_a_translated_subject_tag_is_refused(self):
+        why = self.refused_after("es/support/index.html", 'bug: "Something is broken"',
+                                 'bug: "Algo no funciona"')
+        self.assertIn("Something is broken", why)
+
+    def test_a_term_with_punctuation_is_refused(self):
+        why = self.refused_after("fr/support/index.html", 'data-strong="planté|',
+                                 'data-strong="l\'appli a planté|')
+        self.assertIn("unmatchable term", why)
+
+    def test_a_term_in_both_lists_accents_aside_is_refused(self):
+        why = self.refused_after("es/support/index.html", 'data-match="imprimir|',
+                                 'data-match="imprimir|impresion|')
+        self.assertIn("impresion", why)
+
+    def test_a_page_without_the_accent_folding_matcher_is_refused(self):
+        why = self.refused_after("es/support/index.html", '.normalize("NFD")', "")
+        self.assertIn("folds accents", why)
+
+    def test_a_missing_hreflang_alternate_is_refused(self):
+        why = self.refused_after("support/index.html",
+                                 '<link rel="alternate" hreflang="es" href="https://megapdf.ca/es/support/">',
+                                 "")
+        self.assertIn('hreflang="es"', why)
+
+    def test_accented_terms_fold_as_the_browser_folds_them(self):
+        fold = self.deploy.fold_term
+        self.assertEqual(fold("contraseña"), "contrasena")
+        self.assertEqual(fold("où est passé"), "ou est passe")
+        self.assertEqual(fold("cœur"), "cœur")  # œ has no decomposition, as in the browser
 
 
 class TheTokenOnlyGoesToAVerifiedServer(unittest.TestCase):

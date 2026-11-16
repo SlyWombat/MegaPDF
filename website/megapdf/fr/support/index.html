@@ -1,0 +1,1214 @@
+<!DOCTYPE html>
+<html lang="fr-CA">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <!-- FR-REVIEW #859: the whole page is new French (fr-CA, hand-written, like the
+         French landing page; fr-FR visitors get this page too). It is support/index.html
+         translated, the answers and the script's strings included. Glossary:
+         docs/localisation-glossary.md. Three things deliberately stay as they are in
+         English: the answer ids (the support mailbox links to support/#<id>), the
+         mail subject, and the composed message's first four lines plus its
+         "The support page suggested" / "Answer ids:" lines, because the support
+         system reads those (website/README.md, "The support mailbox"). Step 4 tells
+         the reader so. -->
+    <meta name="description" content="Soutien MegaPDF : les réponses aux questions les plus fréquentes, et comment nous écrire. Rien de ce que vous tapez ici n'est envoyé tant que vous ne décidez pas de l'envoyer.">
+    <link rel="canonical" href="https://megapdf.ca/fr/support/">
+    <link rel="alternate" hreflang="en" href="https://megapdf.ca/support/">
+    <link rel="alternate" hreflang="fr" href="https://megapdf.ca/fr/support/">
+    <link rel="alternate" hreflang="es" href="https://megapdf.ca/es/support/">
+    <link rel="alternate" hreflang="x-default" href="https://megapdf.ca/support/">
+    <title>MegaPDF — Soutien</title>
+    <link rel="icon" href="../../icon.png">
+    <style>
+        /* The heading face is served from this site (#846); body text uses the
+           platform's own font. No font, script or stylesheet comes from a third party. */
+        @font-face { font-family: 'Space Grotesk'; font-style: normal; font-weight: 300 700; font-display: swap;
+            src: url(../../fonts/space-grotesk-latin.woff2) format('woff2');
+            unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+        @font-face { font-family: 'Space Grotesk'; font-style: normal; font-weight: 300 700; font-display: swap;
+            src: url(../../fonts/space-grotesk-latin-ext.woff2) format('woff2');
+            unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+    </style>
+    <style>
+        :root {
+            --bg: #0c1220; --bg2: #10233b; --card: rgba(255,255,255,.04);
+            --line: rgba(15,168,198,.22); --text: #e2e8f0; --muted: #c0cade; --placeholder: #9ba7c0;
+            --blue: #0A5BC4; --teal: #0FA8C6; --accent: #35b6e0; --code: #070c16;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: linear-gradient(135deg, var(--bg) 0%, #141c2e 55%, var(--bg2) 100%);
+            color: var(--text); font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.6; min-height: 100vh;
+        }
+        h1, h2, h3 { font-family: 'Space Grotesk', sans-serif; }
+        a { color: var(--accent); }
+        code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .92em;
+               background: var(--code); border: 1px solid rgba(255,255,255,.08);
+               border-radius: 5px; padding: 1px 5px; }
+        .wrap { max-width: 860px; margin: 0 auto; padding: 0 20px; }
+        header.site { padding: 18px 0; border-bottom: 1px solid rgba(255,255,255,.06); }
+        header.site .wrap { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+        header.site img { width: 34px; height: 34px; border-radius: 8px; }
+        header.site .name { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 18px; }
+        header.site a.back { margin-left: auto; color: var(--muted); text-decoration: none; font-size: 14px; }
+        header.site a.back:hover { color: var(--text); }
+        /* The language switcher, as on the landing pages (#859). */
+        header.site .langs { display: flex; gap: 2px; font-size: 13px; border: 1px solid rgba(255,255,255,.14);
+                             border-radius: 8px; padding: 2px; }
+        header.site .langs a { color: var(--muted); text-decoration: none; padding: 2px 8px; border-radius: 6px; }
+        header.site .langs a:hover { color: var(--text); }
+        header.site .langs a[aria-current] { background: rgba(53,182,224,.18); color: var(--text); }
+
+        .intro { padding: 46px 0 6px; }
+        .intro h1 { font-size: 38px; line-height: 1.15; margin-bottom: 12px; }
+        .intro p { color: var(--muted); font-size: 17px; max-width: 64ch; }
+        .intro p + p { margin-top: 12px; }
+
+        .note { background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+                padding: 18px 20px; margin: 26px 0; }
+        .note h2 { font-size: 17px; margin-bottom: 8px; color: var(--accent); }
+        .note p, .note li { color: var(--muted); font-size: 14.5px; }
+        .note p + p { margin-top: 10px; }
+        .note ul { margin: 8px 0 0 20px; }
+        .note strong { color: var(--text); }
+        .note h2 { margin-top: 14px; }
+        .note > h2:first-child { margin-top: 0; }
+        details.privacy { padding: 0; }
+        details.privacy > summary {
+            cursor: pointer; padding: 14px 20px; font-family: 'Space Grotesk', sans-serif;
+            font-size: 16px; color: var(--accent); list-style: none;
+        }
+        details.privacy > summary::-webkit-details-marker { display: none; }
+        details.privacy > summary::before { content: "+ "; }
+        details.privacy[open] > summary::before { content: "− "; }
+        details.privacy > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+        details.privacy > :not(summary) { margin-left: 20px; margin-right: 20px; }
+        details.privacy > :last-child { margin-bottom: 18px; }
+        details.privacy > p:first-of-type { margin-top: 0; }
+
+        /* Common questions: plain links to the answers further down, so the known
+           answers are in front of the form rather than after it. Nothing here decides
+           anything; the form is below and always complete. */
+        .common { margin: 22px 0 0; }
+        .common h2 { font-size: 17px; margin-bottom: 10px; }
+        .common ul { list-style: none; display: flex; flex-wrap: wrap; gap: 10px; }
+        .common li[hidden] { display: none; }
+        .common a {
+            display: inline-block; background: var(--card); border: 1px solid var(--line);
+            border-radius: 999px; padding: 8px 16px; font-size: 14.5px; color: var(--text);
+            text-decoration: none;
+        }
+        .common a:hover { border-color: var(--accent); color: var(--accent); }
+        .common a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+        .common a.all { color: var(--accent); }
+        ::placeholder { color: var(--placeholder); opacity: 1; }
+
+        section.step { margin: 34px 0; }
+        section.step > h2 { font-size: 22px; margin-bottom: 4px; }
+        section.step > h2 .n { color: var(--accent); font-weight: 500; margin-right: 8px; }
+        section.step > p.hint { color: var(--muted); font-size: 14.5px; margin-bottom: 14px; max-width: 70ch; }
+
+        fieldset { border: 0; }
+        legend { font-family: 'Space Grotesk', sans-serif; font-size: 15px; margin-bottom: 8px; }
+        .chips { display: flex; flex-wrap: wrap; gap: 10px; }
+        .chips label {
+            display: inline-flex; align-items: center; gap: 8px; cursor: pointer;
+            background: var(--card); border: 1px solid var(--line); border-radius: 999px;
+            padding: 8px 16px; font-size: 14.5px; color: var(--text);
+        }
+        .chips label:hover { border-color: var(--accent); }
+        .chips input { accent-color: var(--accent); }
+        .chips input:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+        .chips input:checked + span { color: var(--accent); font-weight: 600; }
+
+        .field { margin: 16px 0; }
+        .field label { display: block; font-size: 14.5px; margin-bottom: 6px; }
+        .field .sub { color: var(--muted); font-size: 13.5px; margin-bottom: 6px; }
+        input[type=text], textarea, select {
+            width: 100%; background: rgba(0,0,0,.28); color: var(--text);
+            border: 1px solid var(--line); border-radius: 10px; padding: 11px 13px;
+            font-family: inherit; font-size: 15px; line-height: 1.5;
+        }
+        input[type=text]:focus, textarea:focus, select:focus {
+            outline: none; border-color: var(--accent);
+        }
+        textarea { resize: vertical; min-height: 110px; }
+        textarea.report { min-height: 260px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+                          font-size: 13px; }
+
+        .btn {
+            display: inline-block; background: var(--accent); color: #061325; font-weight: 700;
+            font-size: 15px; padding: 12px 22px; border-radius: 10px; text-decoration: none;
+            border: 1px solid var(--accent); cursor: pointer; font-family: inherit;
+        }
+        .btn:hover { background: #6fd0f0; border-color: #6fd0f0; }
+        .btn.ghost { background: transparent; color: var(--text); border-color: rgba(255,255,255,.25); }
+        .btn.ghost:hover { background: transparent; border-color: var(--accent); color: var(--accent); }
+        .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+        .btnrow { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 14px; }
+        .btnrow .said { color: var(--muted); font-size: 13.5px; }
+
+        /* Suggestions. Deliberately not styled as an answer or a verdict: they sit
+           beside the form, never in front of it, and the form below them is always
+           complete and always sendable. */
+        #suggest { margin: 18px 0 0; }
+        #suggest[hidden] { display: none; }
+        #suggest h3 { font-size: 16px; margin-bottom: 4px; }
+        #suggest .why { color: var(--muted); font-size: 13.5px; margin-bottom: 12px; max-width: 70ch; }
+        .hit { background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+               padding: 14px 16px; margin-bottom: 10px; }
+        .hit h4 { font-family: 'Space Grotesk', sans-serif; font-size: 15.5px; margin-bottom: 6px; }
+        .hit .body { color: var(--muted); font-size: 14.5px; }
+        .hit .body p + p { margin-top: 8px; }
+        .hit .acts { display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
+        .hit .acts button {
+            background: transparent; color: var(--muted); border: 1px solid rgba(255,255,255,.18);
+            border-radius: 8px; padding: 6px 12px; font-family: inherit; font-size: 13px; cursor: pointer;
+        }
+        .hit .acts button:hover { border-color: var(--accent); color: var(--accent); }
+        .hit .acts button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+        .thanks { background: rgba(53,182,224,.08); border: 1px solid var(--line);
+                  border-radius: 12px; padding: 14px 16px; margin-bottom: 10px; color: var(--muted);
+                  font-size: 14.5px; }
+        .thanks strong { color: var(--text); }
+
+        /* The whole answers list, always in the page. The suggestions above are
+           matched out of exactly these, so there is one copy of every answer and a
+           browser with no JavaScript still gets all of them. */
+        .answers { margin-top: 10px; }
+        details.answer { background: var(--card); border: 1px solid var(--line);
+                         border-radius: 12px; padding: 0; margin-bottom: 10px; }
+        details.answer > summary {
+            cursor: pointer; padding: 13px 16px; font-family: 'Space Grotesk', sans-serif;
+            font-size: 15.5px; list-style: none;
+        }
+        details.answer > summary::-webkit-details-marker { display: none; }
+        details.answer > summary::before { content: "+ "; color: var(--accent); }
+        details.answer[open] > summary::before { content: "− "; }
+        details.answer > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+        details.answer .body { padding: 0 16px 15px; color: var(--muted); font-size: 14.5px; }
+        details.answer .body p + p, details.answer .body ul { margin-top: 9px; }
+        details.answer .body ul { margin-left: 20px; }
+        details.answer .body strong { color: var(--text); }
+        .plat { color: var(--accent); font-size: 12.5px; font-family: 'Space Grotesk', sans-serif;
+                text-transform: uppercase; letter-spacing: .6px; }
+
+        .checklist { list-style: none; margin: 10px 0 0; }
+        .checklist li { color: var(--muted); font-size: 14px; padding-left: 26px; position: relative; }
+        .checklist li::before { content: "○"; position: absolute; left: 4px; color: var(--muted); }
+        .checklist li.ok::before { content: "●"; color: var(--accent); }
+
+        footer { border-top: 1px solid rgba(255,255,255,.06); margin-top: 56px; padding: 26px 0 40px;
+                 color: var(--muted); font-size: 13.5px; }
+        footer .wrap { display: flex; gap: 18px; flex-wrap: wrap; align-items: center; max-width: 1060px; }
+        footer a { color: var(--muted); }
+        footer a:hover { color: var(--text); }
+        @media (max-width: 640px) {
+            .intro { padding: 32px 0 4px; }
+            .intro h1 { font-size: 30px; }
+        }
+    </style>
+    <!-- #501: electricrv.ca's own cookie-free page-view counter, as on the English
+         support page. Disclosed in the privacy policy, section 3. It counts the visit
+         to this page and nothing about the form. -->
+    <script defer src="https://electricrv.ca/api/analytics/a.js"></script>
+</head>
+<body>
+    <header class="site">
+        <div class="wrap">
+            <img src="../../icon.png" alt="">
+            <span class="name">MegaPDF</span>
+            <a class="back" href="../">← MegaPDF</a>
+            <nav class="langs" aria-label="Langue">
+                <a href="../../support/" hreflang="en" lang="en">English</a>
+                <a href="./" hreflang="fr" lang="fr" aria-current="page">Français</a>
+                <a href="../../es/support/" hreflang="es" lang="es">Español</a>
+            </nav>
+        </div>
+    </header>
+
+    <main class="wrap">
+        <section class="intro">
+            <h1>Soutien</h1>
+            <p>Cette page porte sur MegaPDF. Parcourez les questions fréquentes ci-dessous, ou
+            décrivez ce qui se passe : la page vous montrera les réponses connues qui
+            correspondent, puis vous aidera à nous écrire si aucune ne convient.</p>
+            <p>Une personne lit votre message, et vous pouvez écrire en français ou en anglais.</p>
+        </section>
+
+        <nav class="common" aria-labelledby="common-h">
+            <h2 id="common-h">Questions fréquentes</h2>
+            <ul>
+                <li><a href="#a-password">Mot de passe ou outils indisponibles</a></li>
+                <li><a href="#a-cant-edit-text">Du texte qui ne peut pas être modifié</a></li>
+                <li><a href="#a-print">Impression</a></li>
+                <li><a href="#a-signature">Signatures</a></li>
+                <li><a href="#a-version">Quelle version j'ai</a></li>
+                <li><a href="#a-update">Les mises à jour</a></li>
+                <li><a href="#a-crash">MegaPDF s'est fermé avant que j'enregistre</a></li>
+                <li><a href="#a-large">Un PDF très volumineux</a></li>
+                <li><a href="#a-saved-where">Où est allé mon fichier enregistré</a></li>
+                <li><a class="all" href="#answers">Toutes les réponses</a></li>
+            </ul>
+        </nav>
+
+        <details class="note privacy">
+            <summary>Ce qu'il advient de ce que vous tapez, et de votre message</summary>
+            <p><strong>Une personne décide de la suite donnée à votre message.</strong> Il arrive
+            dans notre boîte de courriel de soutien, où un logiciel peut le trier et signaler ce
+            qui demande de l'attention; quelqu'un chez Electric RV décide de ce qu'il faut faire,
+            et vous recevez une réponse qui vous le dit, habituellement en quelques jours. Il n'y
+            a aucun compte à créer ni aucun numéro de billet à retenir; la référence de l'étape 4
+            garde l'échange groupé si vous nous réécrivez. Écrivez en français ou en anglais. Si
+            vous préférez en discuter publiquement, tout le développement de MegaPDF se fait au
+            grand jour, en anglais, sur
+            <a href="https://github.com/SlyWombat/MegaPDF/issues" hreflang="en">github.com/SlyWombat/MegaPDF</a>.</p>
+            <h2>Ce que cette page fait de ce que vous tapez</h2>
+            <p><strong>Rien ne quitte votre navigateur.</strong> Cette page ne soumet aucun
+            formulaire. La recherche de réponses, plus bas, se fait dans votre propre navigateur, à
+            partir d'une liste de réponses qui fait partie de la page elle-même : ce que vous
+            tapez n'est jamais téléversé, jamais conservé et jamais vu par nous — même si vous
+            fermez la page sans rien envoyer.</p>
+            <p>Une fois que vous avez terminé, la page rédige un message et le confie à
+            <em>votre</em> logiciel de courriel, ou à votre presse-papiers. Rien ne parvient à
+            Electric RV tant que vous ne l'envoyez pas vous-même. On ne vous demande ici ni votre
+            nom ni votre adresse courriel.</p>
+            <p>C'est pourquoi nous vous demandons de <strong>ne pas coller un document
+            entier</strong>, ni des renseignements personnels dont nous n'avons pas besoin — non
+            pas parce que cette page les laisserait fuir, mais parce que tout ce que vous collez se
+            retrouve dans le courriel que vous envoyez. Si un problème ne survient qu'avec un PDF
+            en particulier, dites-le et nous vous poserons des questions à son sujet; ne le
+            joignez pas d'emblée.</p>
+            <p>Ce qu'il advient d'un message une fois envoyé est expliqué dans la
+            <a href="../../privacy/#support" hreflang="en">politique de confidentialité</a>, qui
+            n'existe pour l'instant qu'en anglais.</p>
+        </details>
+
+        <!-- ─────────────────────────── the form ─────────────────────────────────
+             Not a <form> with an action: there is nowhere to post it, exactly as on the
+             English page. -->
+
+        <section class="step">
+            <h2><span class="n">1</span>Quelle application, et sur quoi</h2>
+            <p class="hint">La plateforme détermine quelles réponses peuvent s'appliquer à vous,
+            et c'est la première chose dont un rapport de bogue a besoin.</p>
+            <fieldset>
+                <legend>Application</legend>
+                <div class="chips">
+                    <label><input type="radio" name="app" value="MegaPDF" checked><span>MegaPDF</span></label>
+                </div>
+            </fieldset>
+            <fieldset style="margin-top:18px">
+                <legend>Plateforme</legend>
+                <div class="chips" id="platforms">
+                    <label><input type="radio" name="plat" value="windows"><span>Windows</span></label>
+                    <label><input type="radio" name="plat" value="mac"><span>Mac</span></label>
+                    <label><input type="radio" name="plat" value="ios"><span>iPhone ou iPad</span></label>
+                    <label><input type="radio" name="plat" value="android"><span>Android</span></label>
+                    <label><input type="radio" name="plat" value="linux"><span>Linux</span></label>
+                </div>
+            </fieldset>
+        </section>
+
+        <section class="step">
+            <h2><span class="n">2</span>Ce qui se passe</h2>
+            <p class="hint">Dans vos propres mots. Des suggestions apparaissent pendant que vous
+            tapez : ce sont des suppositions, et elles ne changent rien au message que vous
+            envoyez.</p>
+            <fieldset>
+                <legend>De quoi s'agit-il?</legend>
+                <div class="chips" id="kinds">
+                    <label><input type="radio" name="kind" value="bug"><span>Quelque chose ne fonctionne pas</span></label>
+                    <label><input type="radio" name="kind" value="question"><span>Comment faire…?</span></label>
+                    <label><input type="radio" name="kind" value="idea"><span>Une idée ou une demande</span></label>
+                </div>
+            </fieldset>
+            <div class="field" style="margin-top:18px">
+                <label for="what">Ce qui s'est passé, et ce à quoi vous vous attendiez</label>
+                <textarea id="what" rows="6" spellcheck="true"
+                          placeholder="J'ai ouvert un formulaire de mon propriétaire, coché deux cases et enregistré. Quand je l'ai rouvert, les cases étaient vides."></textarea>
+            </div>
+
+            <div id="suggest" hidden>
+                <h3>Serait-ce l'une de ces réponses?</h3>
+                <p class="why">Trouvées dans votre navigateur parmi les réponses connues, plus bas
+                sur cette page. Ce sont des suppositions fondées sur des mots-clés, pas un
+                diagnostic. Si aucune ne convient, ignorez-les et continuez — rien ici ne décide si
+                votre message sera lu.</p>
+                <div id="hits"></div>
+            </div>
+        </section>
+
+        <section class="step">
+            <h2><span class="n">3</span>Ce dont un rapport a besoin</h2>
+            <p class="hint">Rien de tout ceci n'est obligatoire, et rien ici ne vous empêche
+            d'envoyer votre message. C'est seulement ce qui nous permet de retrouver un problème
+            de notre côté : un numéro de version transforme « ça plante » en quelque chose que
+            nous pouvons reproduire.</p>
+            <div class="field">
+                <label for="ver">Quelle version de MegaPDF</label>
+                <p class="sub" id="verhelp">Choisissez une plateforme ci-dessus et cette ligne vous dira où la trouver.</p>
+                <input type="text" id="ver" placeholder="2.4.0" autocomplete="off">
+            </div>
+            <div class="field">
+                <label for="os">Quelle version de Windows, macOS, iOS, Android ou Linux</label>
+                <input type="text" id="os" placeholder="Windows 11 24H2" autocomplete="off">
+            </div>
+            <div class="field">
+                <label for="steps">Ce que vous avez fait, étape par étape, si cela se produit à chaque fois</label>
+                <textarea id="steps" rows="4" spellcheck="true"
+                          placeholder="1. Ouvrir le PDF&#10;2. Toucher la deuxième case&#10;3. Enregistrer&#10;4. Fermer le PDF et le rouvrir"></textarea>
+            </div>
+            <ul class="checklist" id="checklist" aria-live="polite">
+                <li data-need="plat">Plateforme</li>
+                <li data-need="what">Ce qui s'est passé</li>
+                <li data-need="ver">Version de MegaPDF</li>
+                <li data-need="os">Version de votre système</li>
+            </ul>
+        </section>
+
+        <section class="step">
+            <h2><span class="n">4</span>Envoyez-le</h2>
+            <p class="hint">Voici le message au complet, exactement tel qu'il partira. Relisez-le,
+            modifiez ce que vous voulez, puis envoyez-le — ou copiez-le et envoyez-le à votre
+            façon. Ses quatre premières lignes et la liste des réponses suggérées restent en
+            anglais : notre logiciel de tri les lit telles quelles.</p>
+            <div class="field">
+                <label for="report">Votre message</label>
+                <textarea id="report" class="report" rows="16" spellcheck="false"></textarea>
+            </div>
+            <div class="btnrow">
+                <a class="btn" id="mailbtn" href="mailto:info@electricrv.ca">Ouvrir votre application de courriel</a>
+                <button type="button" class="btn ghost" id="copybtn">Copier le message</button>
+                <span class="said" id="said" role="status"></span>
+            </div>
+            <div class="note">
+                <h2>Où il va, et à quoi ressemble une réponse</h2>
+                <p>Le bouton ouvre votre propre logiciel de courriel avec le message déjà dedans,
+                adressé à <a href="mailto:info@electricrv.ca">info@electricrv.ca</a>. Certains
+                ordinateurs n'ont aucun logiciel de courriel configuré, et le bouton ne fait alors
+                rien de visible; si c'est le cas, utilisez <strong>Copier le message</strong> et
+                collez-le dans ce que vous utilisez d'habitude. L'adresse est tout à fait
+                ordinaire : y écrire directement fonctionne tout aussi bien.</p>
+                <p>Le message porte une référence comme <code id="refshow">MP-0000-0000</code>.
+                Elle est créée ici, dans votre navigateur, elle ne révèle rien sur vous, et la citer
+                dans un courriel ultérieur garde l'échange groupé.</p>
+                <p><strong>Votre message reste privé.</strong> Le développement de MegaPDF est
+                public, mais vous n'écrivez pas en public ici : ce que vous envoyez est un courriel
+                privé qui nous est adressé. Si un rapport mène à un bogue qui mérite d'être suivi,
+                le billet public est rédigé par nous, dans nos propres mots, pour décrire le
+                problème — jamais en collant votre message, et jamais avec quoi que ce soit qui
+                vous identifie.</p>
+                <p>Si vous préférez que ce soit public — bien des gens le préfèrent, et c'est la
+                voie la plus rapide vers un développeur —, ouvrez vous-même un billet, en anglais,
+                sur <a href="https://github.com/SlyWombat/MegaPDF/issues/new" hreflang="en">github.com/SlyWombat/MegaPDF/issues</a>.
+                C'est une page publique, pour toujours, sous votre propre compte GitHub : n'y
+                mettez rien que vous n'afficheriez pas sur un tableau d'affichage.</p>
+            </div>
+        </section>
+
+        <section class="step">
+            <h2><span class="n">5</span>Toutes les réponses, en une seule liste</h2>
+            <p class="hint">Les mêmes réponses que celles d'où viennent les suggestions. Elles
+            valent la peine d'être parcourues : la plupart des courriels de soutien portent sur
+            l'une d'elles.</p>
+            <div class="answers" id="answers">
+                <!-- The same answers as support/index.html, with the same ids and the same
+                     data-plat, in the same order. data-match, data-strong and data-not are
+                     written in French, as people type a problem, not translated word for
+                     word. The matcher folds accents away on both sides (norm() in the
+                     script), so "protégé" here also catches "protege" typed without
+                     accents; deploy.py refuses a term it could never match. -->
+
+                <details class="answer" id="a-version" data-plat="all"
+                         data-match="quelle version|numéro de version|version de megapdf|quelle version j ai|numéro de build"
+                         data-strong="version">
+                    <summary>Quelle version vous avez, et où la trouver</summary>
+                    <div class="body">
+                        <p>La version actuelle est la <strong>2.4.0</strong> partout.</p>
+                        <ul>
+                            <li><span class="plat">Windows</span> le bouton <strong>⋯</strong> au bout
+                                de la barre d'outils → <strong>Paramètres</strong>, puis faites défiler
+                                jusqu'au bas du panneau.</li>
+                            <li><span class="plat">Mac</span> le menu <strong>MegaPDF</strong> →
+                                <strong>À propos de MegaPDF</strong>.</li>
+                            <li><span class="plat">iPhone / iPad</span> le bouton <strong>ⓘ</strong> de
+                                l'écran d'accueil, ou <strong>⋯ Plus → À propos de MegaPDF</strong> quand
+                                un document est ouvert.</li>
+                            <li><span class="plat">Android</span> aux deux mêmes endroits :
+                                <strong>ⓘ</strong> à l'écran d'accueil, ou <strong>⋯ → À propos de
+                                MegaPDF</strong>.</li>
+                            <li><span class="plat">Linux</span> le menu <strong>⋯ Plus → À propos de
+                                MegaPDF</strong>, ou lancez <code>megapdf-cli --version</code> dans un
+                                terminal.</li>
+                        </ul>
+                        <p>Personne n'a besoin de la version du moteur PDF : aucun écran ne
+                        l'affiche, alors inutile de la chercher.</p>
+                    </div>
+                </details>
+
+                <details class="answer" id="a-update" data-plat="all"
+                         data-match="nouvelle version|dernière version|pas à jour|ancienne version|vieille version|plus récente"
+                         data-not="markdown"
+                         data-strong="mise à jour|mises à jour|mettre à jour|actualiser">
+                    <summary>Comment les mises à jour vous parviennent — et pourquoi l'application ne vous en propose jamais</summary>
+                    <div class="body">
+                        <p><strong>MegaPDF ne vérifie jamais s'il existe une mise à jour, sur aucune
+                        plateforme.</strong> Il n'ouvre aucune connexion réseau de lui-même, alors il
+                        ne peut pas vous dire qu'une nouvelle version existe. Les mises à jour
+                        arrivent comme pour les autres logiciels de votre système :</p>
+                        <ul>
+                            <li><span class="plat">Windows</span> par le Microsoft Store.</li>
+                            <li><span class="plat">Mac · iPhone · iPad</span> par l'App Store.</li>
+                            <li><span class="plat">Android</span> par Google Play.</li>
+                            <li><span class="plat">Linux</span> avec les mises à jour de votre système
+                                si vous utilisez notre dépôt APT; automatiquement depuis le Snap Store;
+                                toutes seules si vous avez installé un Flatpak. Un <strong>.deb ou une
+                                archive tar téléchargés à la main ne reçoivent aucune mise à
+                                jour</strong> : il faudrait revenir chercher la suivante.</li>
+                        </ul>
+                    </div>
+                </details>
+
+                <details class="answer" id="a-language" data-plat="all"
+                         data-match="français|mauvaise langue|changer la langue|english|traduit|traduite|en quelle langue"
+                         data-strong="anglais|espagnol|traduction|langue|langues">
+                    <summary>Français, anglais et espagnol, et comment choisir la langue</summary>
+                    <div class="body">
+                        <p>MegaPDF est entièrement traduit en <strong>français</strong> (Canada et
+                        France) et en <strong>espagnol</strong> (Amérique latine et Espagne), et dans
+                        aucune autre langue pour l'instant.</p>
+                        <ul>
+                            <li><span class="plat">Windows</span> il a sa propre option :
+                                <strong>⋯ → Paramètres → Langue</strong>, qui offre Selon Windows,
+                                English, Français (Canada), Français (France), Español (Latinoamérica)
+                                ou Español (España). Le changement prend effet à la prochaine ouverture
+                                de MegaPDF.</li>
+                            <li><span class="plat">Mac · Linux</span> il suit la langue de votre
+                                système; l'application n'a aucune option pour la changer.</li>
+                            <li><span class="plat">Android</span> aucune option dans l'application, mais
+                                Android 13 et les versions plus récentes permettent de choisir une langue
+                                par application : <strong>Paramètres → Applications → MegaPDF →
+                                Langue</strong>.</li>
+                            <li><span class="plat">iPhone / iPad</span> même principe dans iOS :
+                                <strong>Réglages → MegaPDF → Langue</strong>.</li>
+                        </ul>
+                        <p>Vous avez trouvé du français qui sonne faux? Ça vaut la peine de nous le
+                        dire — notez les mots exacts que vous avez vus.</p>
+                    </div>
+                </details>
+
+                <details class="answer" id="a-saved-where" data-plat="all"
+                         data-match="où est le fichier|où est passé|où est il|enregistré où|perdu le fichier|perdu mon fichier|enregistrer une copie|enregistrer sous|deux copies|original inchangé|pas enregistré|aucun emplacement|je ne trouve pas|trouve plus|trouver le fichier|quel dossier|dans quel dossier"
+                         data-strong="disparu|disparue|introuvable">
+                    <summary>Où est allé votre fichier enregistré, et quand une copie est faite à la place</summary>
+                    <div class="body">
+                        <p><strong>Enregistrer</strong> écrit par-dessus le document que vous avez
+                        ouvert, au même endroit. MegaPDF écrit le nouveau fichier à côté, le rouvre
+                        pour vérifier qu'il se lit bien, et seulement ensuite le met à la place de
+                        l'ancien : un enregistrement qui échoue laisse donc votre original
+                        exactement comme il était, et MegaPDF vous le dit.</p>
+                        <p><strong>Enregistrer sous</strong> et <strong>Enregistrer une copie</strong>
+                        créent un deuxième fichier, là où la fenêtre d'enregistrement de votre système
+                        le place. Sur Windows, Mac, Linux et Android, ce nouveau fichier
+                        <em>devient</em> ensuite le document sur lequel vous travaillez, et les
+                        enregistrements suivants vont dans celui-là.</p>
+                        <p><span class="plat">iPhone / iPad</span> <strong>Enregistrer une copie y
+                        fonctionne autrement, et cela a déjà pris des gens au dépourvu.</strong> La
+                        copie est écrite à l'endroit choisi, mais MegaPDF continue de pointer vers le
+                        fichier que vous avez ouvert — qui ne contient toujours aucune de vos
+                        modifications, même si l'application cesse de vous avertir de modifications
+                        non enregistrées. Si vous vouliez modifier l'original, utilisez
+                        <strong>Enregistrer</strong>. Nous connaissons ce problème; un rapport de
+                        votre part aide quand même.</p>
+                        <p>Si MegaPDF dit <em>« Il n'y a aucun emplacement où enregistrer ce
+                        document »</em>, le document vient d'un endroit où il ne peut pas écrire —
+                        une pièce jointe de courriel, un dossier en lecture seule, ou une permission
+                        que votre système a retirée depuis. Utilisez Enregistrer sous et choisissez
+                        un emplacement.</p>
+                    </div>
+                </details>
+
+                <details class="answer" id="a-cover-vs-redact" data-plat="all"
+                         data-match="masquer|masqué|caché|cacher|recouvert|noirci|encore là|toujours là|encore visible|peut encore copier|on voit encore|texte caché|toujours dans le fichier|rien n a été retiré"
+                         data-strong="caviarder|caviardage|caviardé|correcteur">
+                    <summary>Masquer cache. Caviarder retire. Ce ne sont pas les mêmes outils.</summary>
+                    <div class="body">
+                        <p>Le <strong>Correcteur</strong> (<strong>Masquer</strong> sur le Mac) dessine
+                        un bloc par-dessus la page. Ce qui est dessous <em>reste dans le
+                        fichier</em>, et une autre application peut le copier ou y faire une
+                        recherche. MegaPDF vous le dit la première fois que vous l'utilisez.</p>
+                        <p><strong>Caviarder</strong> retire le contenu du fichier. Vous marquez des
+                        zones, et rien ne se passe avant l'enregistrement : MegaPDF vous le demande
+                        d'abord, et propose d'écrire une copie <code>-caviardé</code> distincte plutôt
+                        que de remplacer votre original. D'ici là, une marque peut être sélectionnée,
+                        déplacée, redimensionnée et supprimée, et Annuler remet en place une marque
+                        effacée.</p>
+                        <p>Le caviardage <strong>refuse plutôt que de faire le travail à
+                        moitié</strong>. S'il ne peut pas retirer tout ce que vous avez marqué sur une
+                        page, il ne retire rien, laisse le fichier tel quel et en donne la raison —
+                        une police qu'il ne peut pas redessiner autour de votre marque, un bloc de
+                        dessin qu'il ne peut pas défaire sans risque, ou un retrait qui changerait la
+                        page en dehors des zones marquées. Cela vaut la peine de nous le signaler :
+                        citez le message affiché.</p>
+                    </div>
+                </details>
+
+                <details class="answer" id="a-cant-edit-text" data-plat="all"
+                         data-match="modifier le texte|changer le texte|corriger le texte|peut pas être modifié|peux pas modifier|impossible de modifier|me laisse pas modifier|mise en page|retaper|faute de frappe|mauvaise date|image de texte|scan|numérisation"
+                         data-not="markdown"
+                         data-strong="numérisé|numérisée|scanné|scannée">
+                    <summary>On me dit que ce texte ne peut pas être modifié</summary>
+                    <div class="body">
+                        <p>MegaPDF peut retaper le texte d'un document, mais il refuse de le faire si
+                        le reste de la page devait bouger. Avant de valider, il réécrit la page sur
+                        une copie et compare le résultat à l'original, pixel par pixel; si quoi que
+                        ce soit bouge en dehors de votre modification, il refuse et dit ce qui aurait
+                        mal tourné — l'espacement d'un autre texte, l'apparence de la page, ou du
+                        texte qui se déplacerait ailleurs sur la page.</p>
+                        <p>La solution est celle qu'il propose : <strong>masquer la ligne et écrire
+                        par-dessus</strong>. Sur Windows, Mac et Linux, le message le dit; sur
+                        Android, iPhone et iPad, il ne le dit pas encore, ce qui est un oubli de
+                        notre part plutôt qu'une limite différente.</p>
+                        <p>Si la page est <strong>numérisée</strong>, il n'y a aucun texte à
+                        modifier : c'est une photo d'une page. MegaPDF vous le dit, et masquer puis
+                        écrire par-dessus est la seule solution.</p>
+                        <p>Une page où la modification vous semblait sans risque et où
+                        MegaPDF a quand même refusé est un rapport vraiment utile. Dites-nous ce que
+                        vous changiez, et de quel genre de document il s'agit.</p>
+                    </div>
+                </details>
+
+                <details class="answer" id="a-adobe-reader" data-plat="all"
+                         data-match="adobe reader|exige adobe|besoin d adobe|formulaire du gouvernement|formulaire gouvernemental|formulaire ne se remplit pas|rien ne se passe quand je touche"
+                         data-strong="adobe|xfa|livecycle">
+                    <summary>Un formulaire qui dit avoir besoin d'Adobe Reader</summary>
+                    <div class="body">
+                        <p>Certains formulaires — souvent ceux des gouvernements ou des banques — ne
+                        sont pas vraiment des formulaires PDF. Ce sont des programmes Adobe LiveCycle
+                        (XFA) emballés dans un PDF, et seul Adobe Reader peut les remplir. Aucune
+                        autre application ne le peut, MegaPDF compris, et ce n'est pas quelque chose
+                        que nous pouvons corriger de notre côté.</p>
+                        <p>MegaPDF vous le dit plutôt que d'échouer en silence, et tout le reste
+                        fonctionne : vous pouvez l'afficher, l'imprimer, l'enregistrer et le
+                        transmettre. Remplissez-le dans Adobe Reader, ou imprimez-le et remplissez-le
+                        à la main.</p>
+                    </div>
+                </details>
+
+                <details class="answer" id="a-password" data-plat="all"
+                         data-match="protégé|protégée|mot de passe du propriétaire|verrouillé|bloqué|grisé|grisés|indisponible|indisponibles|ouvre pas|outils manquent|outils ont disparu|chiffré|barré|barrée|crypté|encrypté|mdp"
+                         data-strong="mot de passe|déverrouiller">
+                    <summary>Mots de passe, et documents dont certains outils sont indisponibles</summary>
+                    <div class="body">
+                        <p>Donnez le mot de passe à MegaPDF et il ouvre le document normalement. S'il
+                        dit que le PDF <em>« utilise un type de protection que MegaPDF ne peut pas
+                        ouvrir »</em>, c'est un gestionnaire de sécurité inhabituel que nous ne
+                        prenons pas en charge, et aucun mot de passe n'y changera rien.</p>
+                        <p>Un document peut aussi s'ouvrir sans mot de passe tout en portant une
+                        <strong>demande de son auteur</strong>. Seuls certains outils fonctionnent
+                        alors, MegaPDF affiche une bannière qui le dit, et le bouton
+                        <strong>Déverrouiller</strong> accepte le mot de passe du propriétaire. Les
+                        outils touchés dépendent de ce que l'auteur a demandé : modifier le texte de
+                        la page et utiliser le Correcteur exigent la permission de modifier, imprimer
+                        exige la permission d'imprimer, faire pivoter, supprimer et réordonner des
+                        pages exigent la permission d'assembler, et changer ou retirer le mot de passe
+                        exige l'accès complet. <strong>Enregistrer une copie n'est jamais
+                        bloqué.</strong></p>
+                        <p>MegaPDF peut aussi définir, changer ou retirer le mot de passe d'un document
+                        que vous pouvez ouvrir au complet. Il ne peut pas retrouver un mot de passe
+                        oublié — rien ne le peut.</p>
+                        <p>Une chose bonne à savoir : sur Windows, Mac et Linux, <strong>la
+                        récupération après une fermeture inattendue est désactivée pour les documents
+                        protégés par mot de passe</strong>, délibérément, car le journal de
+                        récupération contiendrait sinon leur texte en clair.</p>
+                    </div>
+                </details>
+
+                <details class="answer" id="a-checkbox" data-plat="all"
+                         data-match="cocher|coché|cochée|cochées|crochet|coche pas|se coche pas|champ de formulaire|champ ne|peux pas écrire|écrire sur la ligne|ligne vide|remplir|cocher les cases"
+                         data-not="adobe"
+                         data-strong="case à cocher|cases à cocher">
+                    <summary>Une case qui ne se coche pas, ou une ligne où on ne peut pas écrire</summary>
+                    <div class="body">
+                        <p>MegaPDF distingue deux choses ici. Un <strong>vrai champ de
+                        formulaire</strong> fait partie du document, et vous le remplissez
+                        directement. Un <strong>carré imprimé ou une ligne tracée</strong> n'est que de
+                        l'encre sur la page : MegaPDF reconnaît beaucoup de cases dessinées que
+                        d'autres applications traitent comme de la décoration, et quand il n'en
+                        reconnaît pas une, la solution est de placer vous-même un crochet ou une zone
+                        de texte et de le glisser sur la ligne.</p>
+                        <p>Si un <em>vrai</em> champ refuse, les causes habituelles sont les deux
+                        décrites ailleurs dans cette liste : le formulaire exige Adobe Reader, ou son
+                        auteur a demandé qu'on ne le remplisse pas. Dans les deux cas, MegaPDF le dit
+                        plutôt que de ne rien faire.</p>
+                        <p>Une case imprimée que MegaPDF aurait dû repérer et qu'il a manquée est un
+                        bon rapport — dites-nous de quel formulaire il s'agit, et si la case est
+                        dessinée comme un carré, un cercle ou une ligne.</p>
+                    </div>
+                </details>
+
+                <details class="answer" id="a-signature" data-plat="all"
+                         data-match="écriture|photo de ma signature|signer|ma signature|fond blanc|arrière plan|bibliothèque de signatures|signature électronique|parapher"
+                         data-not="signé numériquement|signature numérique|certificat|id numérique"
+                         data-strong="signature|signatures|initiales">
+                    <summary>Signatures : les dessiner, les photographier, et où elles sont gardées</summary>
+                    <div class="body">
+                        <p>Trois façons de faire : la dessiner, la taper, ou photographier celle que
+                        vous faites sur papier — MegaPDF retire alors le fond blanc pour que seule
+                        l'encre se retrouve sur la page. Placez-la ensuite, déplacez-la et
+                        redimensionnez-la jusqu'à ce qu'elle repose sur la ligne.</p>
+                        <p>C'est une <em>signature électronique</em> : celle que vous dessinez, tapez ou photographiez, mise sur la page comme une image. Ce
+                        n'est pas une <em>signature numérique</em>, le type cryptographique appuyé sur
+                        un certificat, et en placer une ne rend pas le document vérifiable ni
+                        certifié, et ne permet pas de savoir s'il a été modifié. Si un document qu'on
+                        vous a envoyé porte déjà sa propre signature numérique, voyez
+                        <a href="#a-signed">Un document qui porte déjà une signature numérique</a>.</p>
+                        <p>Vos signatures sont gardées dans l'espace de stockage privé de MegaPDF sur
+                        cet appareil, et nulle part ailleurs. Elles ne sont pas synchronisées, nous
+                        n'en faisons aucune copie de secours, et elles ne sont pas partagées entre vos
+                        appareils : il n'y a aucun serveur par lequel les synchroniser. Supprimer une
+                        signature supprime son fichier, et désinstaller l'application emporte la
+                        bibliothèque avec elle. Linux fait exception : les gestionnaires de paquets
+                        ne touchent pas à vos propres fichiers, alors la bibliothèque reste dans
+                        <code>~/.local/share/MegaPDF</code> jusqu'à ce que vous la supprimiez.</p>
+                    </div>
+                </details>
+
+                <details class="answer" id="a-markdown" data-plat="all"
+                         data-match="fichier md|exporter en markdown|fichier texte|copier le texte|extraire le texte|sortir le texte|images manquantes|liens manquants|tableaux"
+                         data-strong="markdown">
+                    <summary>Exporter en Markdown : ce qui en sort, et ce qui n'en sort pas</summary>
+                    <div class="body">
+                        <p>Sur Windows, Mac et Linux, c'est un deuxième type de fichier dans
+                        <strong>Enregistrer sous</strong>; sur Android, iPhone et iPad, c'est la
+                        commande <strong>Exporter en Markdown</strong>. C'est une exportation, pas un
+                        enregistrement : votre PDF n'est pas touché, et il garde ses modifications
+                        non enregistrées s'il en avait.</p>
+                        <p><strong>Ce qui est conservé</strong> : les titres, les paragraphes, le gras
+                        et l'italique, les listes et leur numérotation, les valeurs inscrites dans les
+                        champs de formulaire, et les tableaux — ces derniers seulement pour les
+                        documents correctement balisés lors de leur création.</p>
+                        <p><strong>Ce qui ne l'est pas</strong> : les images (aucune), les
+                        hyperliens, les couleurs, les polices et les tailles, la mise en page et les
+                        annotations. Une page sans couche de texte est signalée comme telle plutôt
+                        que devinée. Les sauts de ligne à l'intérieur d'un paragraphe ordinaire ne
+                        peuvent pas être retrouvés dans un PDF, alors ils ne le sont pas.</p>
+                        <p>Le même texte peut être extrait dans un terminal avec
+                        <code>megapdf-cli extract</code>, sur Linux, Windows et Mac.</p>
+                    </div>
+                </details>
+
+                <details class="answer" id="a-crash" data-plat="windows mac linux"
+                         data-match="fermé|s est fermé|quitté|figé|gelé|perdu mes modifications|modifications non enregistrées|non enregistré|récupérer|récupération|restaurer|panne de courant|s est éteint"
+                         data-strong="planté|plantage|crash|crashé">
+                    <summary>MegaPDF s'est fermé avant que j'enregistre</summary>
+                    <div class="body">
+                        <p>Sur Windows, Mac et Linux, MegaPDF tient un journal des modifications que
+                        vous faites — une liste de ce que vous avez fait, pas une copie de votre
+                        fichier — et propose de les remettre en place la prochaine fois que vous
+                        ouvrez ce document. Il n'écrit jamais dans votre PDF sans qu'on le lui
+                        demande : la restauration rouvre le document avec les modifications en place,
+                        toujours non enregistrées.</p>
+                        <p>Deux cas où il n'y a rien à restaurer, tous deux voulus : un
+                        <strong>document protégé par mot de passe</strong> n'est jamais journalisé, et
+                        <strong>Android, iPhone et iPad n'ont aucun journal</strong> — leur historique
+                        d'annulation dure tant que l'application reste ouverte.</p>
+                        <p>Un cas qui n'est pas voulu : si le document a été <strong>déplacé ou
+                        renommé</strong> entre la fermeture inattendue et sa réouverture, la
+                        proposition n'apparaît pas, sans avertissement. Remettez le fichier où il
+                        était et réessayez.</p>
+                        <p>Une fermeture inattendue vaut toujours la peine d'être signalée. Rien ne
+                        nous est envoyé automatiquement — MegaPDF n'envoie aucun rapport de plantage —,
+                        alors une fermeture dont on ne nous parle pas est une fermeture dont nous
+                        ignorons tout. Ce que vous faisiez dans les quelques secondes avant est la
+                        partie la plus utile.</p>
+                    </div>
+                </details>
+
+                <details class="answer" id="a-large" data-plat="all"
+                         data-match="gros fichier|énorme|lent|lente|prend une éternité|ne répond plus|mémoire|trop gros|ouvre pas|bannière|très gros|tellement lent|très lent|lourd|trop lourd|fichier lourd"
+                         data-strong="gigaoctet|gigaoctets|volumineux">
+                    <summary>Un PDF très volumineux, ou qui refuse de s'ouvrir</summary>
+                    <div class="body">
+                        <p>Les gros fichiers sont censés fonctionner : un document de plusieurs
+                        gigaoctets s'ouvre tout de suite plutôt que d'être d'abord chargé en mémoire,
+                        les pages de la taille d'une bannière sont mesurées à leur taille réelle, et
+                        les pages chargées d'images se dessinent plusieurs fois plus vite
+                        qu'avant.</p>
+                        <p>La limite absolue est de <strong>4 Go</strong>. Au-delà, le moteur PDF ne
+                        peut pas adresser le fichier, et MegaPDF dit qu'il est trop volumineux pour
+                        l'ouvrir plutôt que d'essayer et d'échouer lentement.</p>
+                        <p>Un fichier sous cette limite qui est lent, ou qui ne s'ouvre pas, est un
+                        rapport qui nous intéresse : sa taille, son nombre de pages si vous le
+                        connaissez, et sa provenance. Ne le joignez pas — nous vous le demanderons au
+                        besoin.</p>
+                    </div>
+                </details>
+
+                <details class="answer" id="a-pages" data-plat="all"
+                         data-match="pivoter|faire pivoter|tourner|supprimer une page|supprimer la page|déplacer une page|insérer une page|combiner|fusionner|séparer|diviser|outils de pages|extraire des pages|retirer une page|page blanche|à l envers|page de côté|rotation"
+                         data-strong="réorganiser|réordonner">
+                    <summary>Faire pivoter, supprimer, réorganiser et combiner des pages</summary>
+                    <div class="body">
+                        <p>Tout y est : faire pivoter, supprimer, déplacer, insérer une page blanche,
+                        ajouter des pages d'un autre PDF, et enregistrer une sélection de pages dans
+                        son propre fichier.</p>
+                        <p>Deux refus possibles. Un PDF doit avoir au moins une page, alors la dernière
+                        ne peut pas être supprimée — utilisez <strong>Enregistrer les pages
+                        sélectionnées sous</strong> pour n'en garder que certaines. Et sur un petit
+                        nombre de documents, environ un sur cent, la copie de pages est refusée parce
+                        que leurs champs de formulaire appartiennent à un groupe que MegaPDF ne peut
+                        pas transporter, et la copie perdrait le nom des champs; MegaPDF ne change
+                        rien plutôt que de vous remettre un fichier discrètement abîmé.</p>
+                        <p>Si l'auteur du document a demandé qu'on ne touche pas à ses pages, les
+                        outils de pages demandent le mot de passe du propriétaire.</p>
+                    </div>
+                </details>
+
+                <details class="answer" id="a-signed" data-plat="all"
+                         data-match="signé numériquement|signature numérique|id numérique|signature invalide|invalider|invalide|document signé|brise la signature|casse la signature"
+                         data-strong="certifié|certificat|certification">
+                    <summary>Un document qui porte déjà une signature numérique</summary>
+                    <div class="body">
+                        <p>Certains documents portent une <em>signature numérique</em> : une
+                        signature cryptographique, faite avec un certificat, qui permet à un lecteur
+                        de vérifier que le document n'a pas changé depuis sa signature. Ce n'est pas
+                        la même chose que la signature que vous placez depuis votre bibliothèque, et
+                        MegaPDF ne peut pas en créer.</p>
+                        <p>Modifier un tel PDF invalide sa signature numérique — c'est tout l'intérêt
+                        d'une telle signature, et aucune application ne peut modifier un document en
+                        gardant sa signature valide. MegaPDF vous avertit avant d'enregistrer
+                        par-dessus, et propose d'<strong>enregistrer une copie</strong> pour que
+                        l'original signé reste intact.</p>
+                        <p>Certains documents vont plus loin et sont <em>certifiés</em> : leur auteur
+                        a déclaré qu'ils ne devaient subir aucune modification. MegaPDF le dit en
+                        termes plus forts, et le conseil est le même : travaillez sur une copie.</p>
+                    </div>
+                </details>
+
+                <details class="answer" id="a-print" data-plat="all"
+                         data-match="imprimer|imprime pas|aucune imprimante|cups|boîte de dialogue d impression|rien imprimé|rien ne s imprime"
+                         data-strong="imprimante|imprimantes|impression">
+                    <summary>Impression</summary>
+                    <div class="body">
+                        <p>L'impression passe par votre propre système, pas par nous. C'est la boîte
+                        de dialogue d'impression de votre ordinateur qui trouve les imprimantes, y
+                        compris celles de votre réseau; sur un Mac, macOS vous demande la permission
+                        avant de chercher, et c'est MegaPDF qui fournit la raison qui vous est
+                        montrée. Sur Linux, vous choisissez une imprimante dans la fenêtre
+                        d'impression de MegaPDF, et le document est envoyé à CUPS, le service
+                        d'impression de votre système.</p>
+                        <p>Une imprimante qui n'apparaît pas relève donc presque toujours de votre
+                        système plutôt que de MegaPDF : essayez d'abord d'imprimer autre chose. Si
+                        MegaPDF imprime la <em>mauvaise chose</em>, par contre, c'est notre affaire :
+                        dites-nous ce qui est sorti.</p>
+                    </div>
+                </details>
+
+                <details class="answer" id="a-privacy" data-plat="all"
+                         data-match="téléverser|nuage|infonuagique|confidentialité|vie privée|privé|mon compte|un compte|se connecter|hors ligne|internet|mes données|sécuritaire|est ce sûr|serveur|confidentiel|cloud|upload|uploadé"
+                         data-strong="pistage|téléversé|téléversement">
+                    <summary>Mon document est-il téléversé quelque part? Non — et voici comment le vérifier</summary>
+                    <div class="body">
+                        <p>MegaPDF n'ouvre aucune connexion réseau de lui-même, sur aucune plateforme.
+                        Il n'y a aucun compte, aucune ouverture de session, aucune statistique
+                        d'utilisation et aucun rapport de plantage, et vos documents et vos
+                        signatures ne quittent jamais votre appareil, car il n'y a aucun serveur où
+                        ils pourraient aller. L'impression est le seul moment où un réseau
+                        intervient, et c'est celui de votre ordinateur.</p>
+                        <p>Vous n'avez pas à nous croire sur parole. Sur Android, l'application ne
+                        demande aucune permission; sur iOS, elle ne demande aucun droit d'accès au
+                        réseau; sur un Mac, son bac à sable ne lui accorde aucun accès au réseau; sur
+                        Windows, elle ne déclare aucune capacité réseau. Et tout le code source est
+                        public, alors n'importe qui peut aller voir.</p>
+                        <p>Tous les détails sont dans la <a href="../../privacy/" hreflang="en">politique
+                        de confidentialité</a> (en anglais pour l'instant), qui couvre aussi ce site
+                        Web et ce qu'il advient d'un message de soutien une fois envoyé.</p>
+                    </div>
+                </details>
+
+                <details class="answer" id="a-minimum" data-plat="all"
+                         data-match="compatible|pas compatible|pris en charge|pas pris en charge|s installe pas|vieux mac|windows 7|windows 8|version de windows|catalina|mojave|trop vieux|trop ancien|configuration requise|mon téléphone|mon cellulaire|fonctionne pas sur|pas offert|pas disponible"
+                         data-strong="chromebook">
+                    <summary>Les systèmes sur lesquels MegaPDF fonctionne</summary>
+                    <div class="body">
+                        <ul>
+                            <li><span class="plat">Windows</span> Windows 10 version 1809 ou plus
+                                récente, Intel/AMD ou ARM, depuis le Microsoft Store.</li>
+                            <li><span class="plat">Mac</span> macOS 12 Monterey ou plus récent, puce Apple
+                                ou Intel.</li>
+                            <li><span class="plat">iPhone / iPad</span> iOS ou iPadOS 16 ou plus
+                                récent.</li>
+                            <li><span class="plat">Android</span> Android 8.0 ou plus récent.</li>
+                            <li><span class="plat">Linux</span> un bureau 64 bits avec glibc 2.35 ou plus
+                                récente — Ubuntu 22.04 et les distributions de la même époque, et tout ce
+                                qui a suivi.</li>
+                        </ul>
+                        <p>En deçà, les boutiques d'applications ne vous proposeront pas
+                        l'application, et il n'existe aucune version plus ancienne sur laquelle se
+                        rabattre. Il y a aussi un outil en ligne de commande, <code>megapdf-cli</code>,
+                        pour Linux, Windows et Mac, qui extrait le texte d'un PDF et réorganise ses
+                        pages sans écran.</p>
+                    </div>
+                </details>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <div class="wrap">
+            <span>© 2026 Electric RV</span>
+            <a href="../">MegaPDF</a>
+            <a href="../../privacy/" hreflang="en">Politique de confidentialité (en anglais)</a>
+            <a href="https://github.com/SlyWombat/MegaPDF" hreflang="en">Code source sur GitHub</a>
+            <a href="https://electricrv.ca/">Electric RV</a>
+        </div>
+    </footer>
+
+    <script>
+    /* Triage, such as it honestly is (#418).
+
+       It is a keyword matcher over the answers list in the page, run in this
+       browser. There is no model, no server and no request: "smart" would be
+       overselling it, so the page calls them suggestions and says where they come
+       from.
+
+       The rules that matter more than the scoring:
+         - it never blocks. The form below the suggestions is always complete and
+           the send buttons always work, whatever it matched.
+         - it never closes anything. Marking a suggestion "that was it" does not
+           hide the form; it says so and leaves the door open.
+         - a weak match shows nothing. A single common word cannot surface an
+           answer: it takes a phrase, or two separate terms (MIN_SCORE).
+         - being wrong has to be visible to us. Whatever it showed goes into the
+           message, marked with what the reader said about it, which is the only
+           way a bad rule gets found and fixed.
+       All of it degrades to a plain browsable list with JavaScript off. */
+    (function () {
+        "use strict";
+        var MIN_SCORE = 2, MAX_HITS = 3;
+
+        var PLAT_NAME = { windows: "Windows", mac: "Mac", ios: "iPhone / iPad",
+                          android: "Android", linux: "Linux" };
+        /* Where the version number is, per platform. Checked against the app, not
+           against the store listings. */
+        var VER_WHERE = {
+            windows: "Windows : le bouton ⋯ au bout de la barre d'outils → Paramètres, tout au bas du panneau.",
+            mac: "Mac : le menu MegaPDF → À propos de MegaPDF.",
+            ios: "iPhone / iPad : le menu ⋯ Plus → À propos de MegaPDF.",
+            android: "Android : le menu ⋯ Plus → À propos de MegaPDF.",
+            linux: "Linux : le menu ⋯ Plus → À propos de MegaPDF, ou lancez <code>megapdf-cli --version</code> dans un terminal.",
+        };
+        var KIND_NAME = { bug: "Something is broken", question: "How do I…?",
+                          idea: "An idea or a request" };
+
+        var $ = function (id) { return document.getElementById(id); };
+        var what = $("what"), ver = $("ver"), os = $("os"), steps = $("steps"),
+            report = $("report"), suggest = $("suggest"), hits = $("hits"),
+            said = $("said");
+
+        /* ---- the answers, read out of the page itself ---- */
+        /* Terms go through the same norm() as what the reader types, so "français" in
+           an attribute and "francais" in the box are the same word (#859). */
+        function terms(el, attr) {
+            return (el.getAttribute(attr) || "").split("|")
+                .map(function (t) { return norm(t).trim(); }).filter(Boolean);
+        }
+        var answers = [].map.call(document.querySelectorAll("details.answer"), function (el) {
+            return {
+                el: el,
+                id: el.id,
+                title: el.querySelector("summary").textContent.trim(),
+                body: el.querySelector(".body").innerHTML,
+                plats: (el.getAttribute("data-plat") || "all").split(/\s+/),
+                kinds: (el.getAttribute("data-kind") || "").split(/\s+/).filter(Boolean),
+                terms: terms(el, "data-match"),
+                strong: terms(el, "data-strong"),
+                not: terms(el, "data-not"),
+            };
+        });
+
+        /* Answers the reader has judged. id -> "no" (not it) or "yes" (that was it).
+           Kept only in this page, for this visit: nothing is stored anywhere. */
+        var verdict = {};
+        var shown = [];
+
+        function plat() {
+            var r = document.querySelector("input[name=plat]:checked");
+            return r ? r.value : "";
+        }
+        function kind() {
+            var r = document.querySelector("input[name=kind]:checked");
+            return r ? r.value : "";
+        }
+        /* Lowercased, accents folded away and punctuation turned into spaces, so
+           "Ça n'ouvre pas", "ca n ouvre pas" and "contraseña"/"contrasena" each read
+           the same however they were typed (#859). The same function, character for
+           character, is in all three languages' pages. */
+        function norm(s) {
+            return (" " + String(s).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
+                    .replace(/[^a-z0-9œæ]+/g, " ").replace(/\s+/g, " ") + " ");
+        }
+        function score(a, text) {
+            if (a.plats.indexOf("all") < 0 && plat() && a.plats.indexOf(plat()) < 0) { return 0; }
+            if (a.kinds.length && kind() && a.kinds.indexOf(kind()) < 0) { return 0; }
+            var i;
+            for (i = 0; i < a.not.length; i++) {
+                if (text.indexOf(" " + a.not[i] + " ") >= 0) { return 0; }
+            }
+            var s = 0;
+            for (i = 0; i < a.terms.length; i++) {
+                var t = a.terms[i];
+                if (text.indexOf(" " + t + " ") >= 0) { s += (t.indexOf(" ") >= 0) ? 2 : 1; }
+            }
+            /* data-strong holds the few terms that say what the message is about all by
+               themselves — "markdown", "redact", "crashed". One of those is enough; an
+               ordinary word never is. Keeping them a separate, short list is what stops
+               the scoring from quietly becoming "any word will do". */
+            for (i = 0; i < a.strong.length; i++) {
+                if (text.indexOf(" " + a.strong[i] + " ") >= 0) { s += 2; }
+            }
+            return s;
+        }
+
+        function draw() {
+            var text = norm(what.value);
+            /* One word is not a description, and guessing from one is exactly the
+               "your problem is already answered" failure this is supposed to avoid.
+               From two words up, MIN_SCORE is what holds the line: an ordinary word
+               scores 1 and so can never surface anything on its own. */
+            var words = text.trim() ? text.trim().split(" ").length : 0;
+            var ranked = [];
+            if (words >= 2) {
+                answers.forEach(function (a) {
+                    if (verdict[a.id] === "no") { return; }
+                    var s = score(a, text);
+                    if (s >= MIN_SCORE) { ranked.push({ a: a, s: s }); }
+                });
+                ranked.sort(function (x, y) { return y.s - x.s; });
+                ranked = ranked.slice(0, MAX_HITS);
+            }
+
+            shown = ranked.map(function (r) { return r.a.id; });
+            hits.textContent = "";
+            ranked.forEach(function (r) {
+                var box = document.createElement("div");
+                box.className = "hit";
+                if (verdict[r.a.id] === "yes") {
+                    box.className = "thanks";
+                    box.innerHTML = "<strong>Tant mieux si c'était ça.</strong> Rien d'autre à faire — " +
+                        "mais si le problème revient, ou si la réponse n'était pas tout à fait " +
+                        "juste, écrivez-nous quand même. Une mauvaise réponse sur cette page est " +
+                        "un bogue de cette page.";
+                    hits.appendChild(box);
+                    return;
+                }
+                var h = document.createElement("h4");
+                h.textContent = r.a.title;
+                var b = document.createElement("div");
+                b.className = "body";
+                b.innerHTML = r.a.body;
+                var acts = document.createElement("div");
+                acts.className = "acts";
+                acts.appendChild(button("C'était ça", function () { verdict[r.a.id] = "yes"; draw(); compose(); }));
+                acts.appendChild(button("Ce n'est pas ça", function () { verdict[r.a.id] = "no"; draw(); compose(); }));
+                box.appendChild(h); box.appendChild(b); box.appendChild(acts);
+                hits.appendChild(box);
+            });
+            suggest.hidden = hits.children.length === 0;
+        }
+
+        function button(label, fn) {
+            var b = document.createElement("button");
+            b.type = "button";
+            b.textContent = label;
+            b.addEventListener("click", fn);
+            return b;
+        }
+
+        /* ---- the reference, made here and never anywhere else ---- */
+        var ref = null;
+        function reference() {
+            if (ref) { return ref; }
+            var n = new Date(), pad = function (x) { return (x < 10 ? "0" : "") + x; };
+            var day = String(n.getFullYear()).slice(2) + pad(n.getMonth() + 1) + pad(n.getDate());
+            var rnd = "", pool = "ACDEFGHJKLMNPQRTUVWXY34679", i;
+            var bytes = new Uint8Array(4);
+            if (window.crypto && window.crypto.getRandomValues) {
+                window.crypto.getRandomValues(bytes);
+            } else {
+                for (i = 0; i < 4; i++) { bytes[i] = Math.floor(Math.random() * 256); }
+            }
+            for (i = 0; i < 4; i++) { rnd += pool.charAt(bytes[i] % pool.length); }
+            ref = "MP-" + day + "-" + rnd;
+            var el = $("refshow");
+            if (el) { el.textContent = ref; }
+            return ref;
+        }
+
+        function val(el, fallback) {
+            var v = el.value.replace(/\s+$/, "");
+            return v ? v : fallback;
+        }
+
+        /* #859: what the support system reads stays exactly as on the English page:
+           the subject (prefix, platform and kind tags), the first four lines
+           (Reference/App/Platform/Kind with the English values), the "The support
+           page suggested" heading, the [reader: ...] marks and the "Answer ids:" line
+           (website/README.md, "The support mailbox"). Only the parts a person reads
+           are translated. PLAT_NAME and KIND_NAME are those English values. */
+        function compose() {
+            var p = plat(), k = kind();
+            var lines = [];
+            lines.push("Reference: " + reference());
+            lines.push("App: MegaPDF" + (ver.value.trim() ? " " + ver.value.trim() : " (version not given)"));
+            lines.push("Platform: " + (p ? PLAT_NAME[p] : "(not given)") +
+                       (os.value.trim() ? " — " + os.value.trim() : ""));
+            lines.push("Kind: " + (k ? KIND_NAME[k] : "(not given)"));
+            lines.push("");
+            lines.push("Ce qui s'est passé");
+            lines.push(val(what, "(rien d'écrit pour l'instant)"));
+            if (steps.value.trim()) {
+                lines.push("");
+                lines.push("Étape par étape");
+                lines.push(steps.value.replace(/\s+$/, ""));
+            }
+
+            /* What the page guessed, and what the reader made of it. This is the
+               only way we find out the matcher told someone the wrong thing. */
+            var judged = Object.keys(verdict);
+            if (shown.length || judged.length) {
+                lines.push("");
+                lines.push("The support page suggested");
+                var listed = {}, listedIds = [];
+                shown.concat(judged).forEach(function (id) {
+                    if (listed[id]) { return; }
+                    listed[id] = true;
+                    var a = byId(id);
+                    if (!a) { return; }
+                    var mark = verdict[id] === "no" ? "  [reader: not it]"
+                             : verdict[id] === "yes" ? "  [reader: that was it]" : "";
+                    lines.push("- " + a.title + mark);
+                    listedIds.push(a.id);
+                });
+                /* The titles above are for the reader and for us to read; this line is the
+                   machine-readable twin (#635): the same answers by their stable ids, in the
+                   same order, so a support system matches exactly instead of by title text. */
+                if (listedIds.length) { lines.push("Answer ids: " + listedIds.join(", ")); }
+            } else {
+                lines.push("");
+                lines.push("The support page suggested nothing.");
+            }
+            lines.push("");
+            lines.push("Rédigé sur megapdf.ca/fr/support/ — rien n'a été envoyé depuis cette page.");
+
+            report.value = lines.join("\n");
+            var subject = "MegaPDF support " + reference() +
+                          (p ? " [" + PLAT_NAME[p] + "]" : "") +
+                          (k ? " [" + KIND_NAME[k] + "]" : "");
+            $("mailbtn").href = "mailto:info@electricrv.ca?subject=" +
+                encodeURIComponent(subject) + "&body=" + encodeURIComponent(report.value);
+            marks();
+        }
+
+        function byId(id) {
+            for (var i = 0; i < answers.length; i++) { if (answers[i].id === id) { return answers[i]; } }
+            return null;
+        }
+
+        function marks() {
+            var have = { plat: !!plat(), what: what.value.trim().length >= 20,
+                         ver: !!ver.value.trim(), os: !!os.value.trim() };
+            [].forEach.call(document.querySelectorAll("#checklist li"), function (li) {
+                li.classList.toggle("ok", !!have[li.getAttribute("data-need")]);
+            });
+        }
+
+        function versionHint() {
+            var p = plat();
+            $("verhelp").innerHTML = p ? VER_WHERE[p]
+                : "Choisissez une plateforme ci-dessus et cette ligne vous dira où la trouver.";
+        }
+
+        /* ---- wiring ---- */
+        var timer = null;
+        function typed() {
+            clearTimeout(timer);
+            timer = setTimeout(function () { draw(); compose(); }, 220);
+        }
+        what.addEventListener("input", typed);
+        [ver, os, steps].forEach(function (el) { el.addEventListener("input", function () {
+            clearTimeout(timer);
+            timer = setTimeout(compose, 220);
+        }); });
+        [].forEach.call(document.querySelectorAll("input[name=plat], input[name=kind]"), function (r) {
+            r.addEventListener("change", function () { versionHint(); draw(); compose(); });
+        });
+
+        $("copybtn").addEventListener("click", function () {
+            report.select();
+            var done = function () { said.textContent = "Copié. Collez-le dans un courriel à info@electricrv.ca — et dites-nous comment vous joindre."; };
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(report.value).then(done, function () {
+                    said.textContent = "Votre navigateur n'a pas permis à la page de le copier — le message est sélectionné, alors appuyez sur Ctrl+C (⌘C sur un Mac).";
+                });
+            } else {
+                said.textContent = "Le message est sélectionné — appuyez sur Ctrl+C (⌘C sur un Mac) pour le copier.";
+            }
+        });
+        $("mailbtn").addEventListener("click", function () {
+            said.textContent = "Si votre logiciel de courriel ne s'est pas ouvert, utilisez plutôt Copier le message.";
+        });
+
+        /* A platform guess, offered rather than assumed: it fills the radio in so the
+           version hint and the platform-specific answers work straight away, and the
+           reader can see and change it. Nothing about it is recorded or sent — the
+           message carries only what the radio says when it is composed. */
+        (function () {
+            var ua = navigator.userAgent || "";
+            var guess = /iPhone|iPad|iPod/.test(ua) ? "ios"
+                      : /Android/.test(ua) ? "android"
+                      : /Windows/.test(ua) ? "windows"
+                      : /Mac OS X/.test(ua) ? "mac"
+                      : /Linux|X11|CrOS/.test(ua) ? "linux" : "";
+            /* An iPad running iPadOS 13+ reports itself as a Mac; a touch point tells
+               them apart. Wrong either way costs one click, since it is a radio the
+               reader looks at. */
+            if (guess === "mac" && navigator.maxTouchPoints > 1) { guess = "ios"; }
+            if (guess) {
+                var r = document.querySelector("input[name=plat][value=" + guess + "]");
+                if (r) { r.checked = true; }
+            }
+        }());
+
+        /* The common-questions links open the answer they point at, and an answer
+           that does not apply to the chosen platform is left off the list by the same
+           data-plat rule the matcher uses. They are links, not verdicts: the full list
+           further down still holds every answer. */
+        function commonList() {
+            var p = plat();
+            [].forEach.call(document.querySelectorAll(".common li"), function (li) {
+                var a = li.querySelector("a[href^='#a-']"), t = a && byId(a.getAttribute("href").slice(1));
+                li.hidden = !!(t && p && t.plats.indexOf("all") < 0 && t.plats.indexOf(p) < 0);
+            });
+        }
+        [].forEach.call(document.querySelectorAll(".common a[href^='#a-']"), function (a) {
+            a.addEventListener("click", function () {
+                var t = byId(a.getAttribute("href").slice(1));
+                if (t) { t.el.open = true; }
+            });
+        });
+        [].forEach.call(document.querySelectorAll("input[name=plat]"), function (r) {
+            r.addEventListener("change", commonList);
+        });
+
+        versionHint();
+        commonList();
+        compose();
+    }());
+    </script>
+</body>
+</html>

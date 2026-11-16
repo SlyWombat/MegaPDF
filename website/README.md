@@ -19,6 +19,15 @@ website/deploy.py ...`. That is the folder, never the file's contents. The dry r
   browser-side matcher over them, and a composer that hands a message to the
   reader's own email program. **Only goes up with `--support`, which itself
   refuses to run without `--privacy`.** Policy §4 is its disclosure.
+- `megapdf/fr/support/index.html`, `megapdf/es/support/index.html` — the same
+  page in French (fr-CA) and Spanish (es-419) (#859), hand-written like the
+  landing pages. Same answer ids and platforms as the English page (the support
+  system links `support/#<id>` in any language, and `deploy.py` refuses a page
+  that differs); the matcher's terms are written in each language, and the
+  matcher folds accents away on both sides, so `contraseña` and `contrasena`
+  match alike. The mail subject and the message's machine-read lines stay in
+  English on all three (see "The support mailbox" below). `--support` checks and
+  uploads all three; without it none goes up.
 - `icon.png` (512, from the iOS AppIcon)
 - `fonts/` — Space Grotesk, the heading face, self-hosted with its licence
   (`OFL.txt`). **No page loads anything from a third party** (#846): body text
@@ -31,8 +40,9 @@ website/deploy.py ...`. That is the folder, never the file's contents. The dry r
   hand-written like the apps' own fr-CA and es-419. They are not derived:
   fr-FR and es-ES visitors get these pages. Their pictures in `fr/img/` and
   `es/img/` come from the release's localized captures, so the app and its sample
-  document are in the page's language. The privacy, support and Linux pages are
-  English only, and the French and Spanish pages say so where they link them.
+  document are in the page's language. The privacy and Linux pages are English
+  only, and the French and Spanish pages say so where they link them. Their
+  Support links go to `fr/support/` and `es/support/`.
 - `social-card.png`, `fr/social-card.png`, `es/social-card.png` — each page's
   1200 x 630 link preview (`og:image`).
 - **`python3 website/make_page_images.py`** rebuilds `fr/img/`, `es/img/` and all
@@ -163,8 +173,8 @@ do any of that, so the deploy is where that promise is kept rather than a thing 
 notice in a diff later. If it ever *should* change, the policy changes first and
 this check changes with it.
 
-`support:` regions currently appear in `index.html` (the support strip above the
-footer, and the footer link), `privacy/` (§4, where the page's URL is a link only
+`support:` regions currently appear in `index.html`, `fr/index.html` and
+`es/index.html` (the support strip above the footer, and the footer link), `privacy/` (§4, where the page's URL is a link only
 once the page is up, so the policy can go first) and `linux/` (the footer link).
 
 ### The support mailbox: what the page writes and who reads it (#635)
@@ -209,6 +219,14 @@ building the subject, and `check-support-page.js` pins every combination):
   the interface. `check-support-page.js` pins that the line is there and that every id in its
   `REQUIRED_IDS` list still exists: an id may be added, but none may be renamed or removed without
   telling the support system first.
+- **The same in every language (#859).** The French and Spanish pages write exactly
+  this subject and these lines, in English, with the English platform and kind values;
+  only what a person reads (the "What happened" and "Step by step" headings, the closing
+  line, the answer titles) is translated. Their step 4 tells the reader why. The
+  closing line names the page (`Rédigé sur megapdf.ca/fr/support/`, `Escrito en
+  megapdf.ca/es/support/`), which is how a reader of the mail can tell its language;
+  the titles under `The support page suggested` are then French or Spanish, so match
+  on the `Answer ids:` line, not on titles.
 - **Reply threads:** the page tells readers to quote the reference in a later email, so
   a reply's subject still contains `MP-YYMMDD-XXXX` after any `Re:`.
 
@@ -222,13 +240,18 @@ and the support system reads the mailbox itself.
 
 ### Checking the triage itself
 
-`website/check-support-page.js` drives the page in a real DOM and checks the
-matcher's behaviour, which no static check can see: that one ordinary word
+`website/check-support-page.js` drives all three support pages (English, French,
+Spanish) in a real DOM and checks the matcher's behaviour, which no static check can see: that one ordinary word
 surfaces nothing, that a sentence someone would actually type surfaces the right
 answer, that a desktop-only answer is withheld on a phone, that "Not it" and
 "That was it" are recorded in the composed message, and that every answer is
-reachable by its own terms. **Run it by hand after editing the page or its
-answers** — it found three real faults in the first draft:
+reachable by its own terms. Each page has its own sentences, written in its own
+language (some deliberately without accents), that must surface the right answer,
+and the French and Spanish pages must carry the English page's ids and send its
+exact subject. **Run it by hand after editing a page or its answers** — it found
+three real faults in the first draft. With no node on the machine, docker does it:
+`docker run --rm -v <dir>:/w -w /w node:22-slim sh -c 'npm install --silent jsdom && node check-support-page.js'`
+on a copy of the script and the three pages (keep the `megapdf/...` layout):
 
 ```sh
 npm install jsdom      # once
