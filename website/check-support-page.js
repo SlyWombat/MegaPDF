@@ -147,6 +147,12 @@ const PAGES = [
             { text: "El documento tiene una firma digital y MegaPDF dice que va a quedar inválida",
               want: ["a-signed"], not: ["a-signature"] },
             { text: "Mi impresora no aparece cuando quiero imprimir", want: ["a-print"] },
+            // Fable's #859 review: "se tilda" (crash, Argentina) sits inside "no se tilda"
+            // (checkbox); the checkbox answer must win and the crash answer stay out.
+            { text: "La casilla no se tilda cuando la toco", want: ["a-checkbox"], not: ["a-crash"] },
+            // "clave" is the everyday Latin American word for a PDF password.
+            { text: "El pdf me pide una clave para abrirlo", want: ["a-password"] },
+            { text: "MegaPDF se cierra solo cuando abro un archivo grande", want: ["a-crash"] },
             { text: "La aplicación está en inglés, ¿cómo la pongo en español?",
               want: ["a-language"] },
             { text: "¿Cómo giro una página que quedó de cabeza?", want: ["a-pages"] },
