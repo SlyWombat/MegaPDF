@@ -106,9 +106,9 @@ MegaPDF is deliberately simple: it doesn't bury you in toolbars. It opens, it fi
 pdf,sign,signature,fill,form,checkbox,esign,editor,search,document,annotate,fill and sign,reader
 ```
 
-**What's new** [4000] (82) — 2.4, from `docs/release-notes/2.4/app-store.md`
+**What's new** [4000] (48) — 2.5, from `docs/release-notes/2.5/app-store.md`
 ```
-MegaPDF now speaks Spanish, for Latin America and for Spain. Plus minor bug fixes.
+About MegaPDF now links to the new support page.
 ```
 
 **Screenshot captions** (optional overlay text) — iPhone 6.9", 9 files, in this order
@@ -201,9 +201,9 @@ MegaPDF est volontairement simple : il ne vous noie pas sous les barres d'outil
 pdf,signer,signature,remplir,formulaire,case,cocher,éditeur,recherche,document,annoter,lecture
 ```
 
-**What's new** [4000] (118) — 2.4, from `docs/release-notes/2.4/app-store.md`
+**What's new** [4000] (92) — 2.5, from `docs/release-notes/2.5/app-store.md`
 ```
-MegaPDF est maintenant offert en espagnol, pour l'Amérique latine et pour l'Espagne. Et quelques corrections mineures.
+La section À propos de MegaPDF comprend maintenant un lien vers la nouvelle page de soutien.
 ```
 
 **Screenshot captions** (optional overlay text) — iPhone 6.9", 9 files, in this order
@@ -296,9 +296,9 @@ MegaPDF est volontairement simple : il ne vous noie pas sous les barres d'outil
 pdf,signer,signature,remplir,formulaire,case,cocher,éditeur,recherche,document,annoter,lecture
 ```
 
-**What's new** [4000] (118) — 2.4, from `docs/release-notes/2.4/app-store.md`
+**What's new** [4000] (92) — 2.5, from `docs/release-notes/2.5/app-store.md`
 ```
-MegaPDF est maintenant offert en espagnol, pour l'Amérique latine et pour l'Espagne. Et quelques corrections mineures.
+La section À propos de MegaPDF comprend maintenant un lien vers la nouvelle page de soutien.
 ```
 
 **Screenshot captions** (optional overlay text) — iPhone 6.9", 9 files, in this order
@@ -391,9 +391,9 @@ MegaPDF es deliberadamente simple: no te entierra en barras de herramientas. Abr
 llenar,completar,formulario,casilla,editor,buscar,documento,anotar,lector,censurar,contrato
 ```
 
-**What's new** [4000] (116) — 2.4, from `docs/release-notes/2.4/app-store.md`
+**What's new** [4000] (82) — 2.5, from `docs/release-notes/2.5/app-store.md`
 ```
-MegaPDF ahora está disponible en español, para Latinoamérica y para España. Además, correcciones de errores menores.
+La sección Acerca de MegaPDF ahora incluye un enlace a la nueva página de soporte.
 ```
 
 **Screenshot captions** (optional overlay text) — iPhone 6.9", 9 files, in this order
@@ -486,9 +486,9 @@ MegaPDF es deliberadamente simple: no te entierra en barras de herramientas. Abr
 rellenar,completar,formulario,casilla,editor,buscar,documento,anotar,lector,censurar,contrato
 ```
 
-**What's new** [4000] (116) — 2.4, from `docs/release-notes/2.4/app-store.md`
+**What's new** [4000] (82) — 2.5, from `docs/release-notes/2.5/app-store.md`
 ```
-MegaPDF ahora está disponible en español, para Latinoamérica y para España. Además, correcciones de errores menores.
+La sección Acerca de MegaPDF ahora incluye un enlace a la nueva página de soporte.
 ```
 
 **Screenshot captions** (optional overlay text) — iPhone 6.9", 9 files, in this order
