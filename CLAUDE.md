@@ -72,8 +72,11 @@ automation launches out of it; check it with a before/after hash).
 - **Take the GUI lock** around any `--screenshot-state` run: create `C:\megapdf-qa\gui.lock`
   with noclobber, remove it after (`C:\megapdf-qa\gui.sh <states>` does both), so two agents
   don't fight over focus and the clipboard on Dave's screen.
-- **Known red there:** `select-copy` (#847); the WinUI ScrollViewer on this laptop settles away
-  from programmatic `ChangeView` targets. Hosted CI is green on it.
+- **Run GUI states only while the session is unlocked.** Dave works on it remotely and it is
+  usually locked: `LogonUI` is running and a `LockScreenBackstopFrame` covers the screen, so
+  captures come back black and injected input goes nowhere. A locked run gave a `select-copy`
+  red that passes unlocked (#847). Check `WindowFromPoint` at the screen
+  centre first, never try to unlock it, and ask Dave to unlock it when a GUI state matters.
 
 **An automation launch never touches `%LOCALAPPDATA%\MegaPDF`, and a QA script never removes a
 Store-signed package (#717).** Every `--screenshot`/`--screenshot-state`/`--engine-check`/
