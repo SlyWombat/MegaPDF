@@ -62,9 +62,9 @@ These are unchanged from 2.4; see [`../2.4/README.md`](../2.4/README.md#headings
 
 ## Review status, and what remains
 
-- **French: not yet reviewed.** `FR-REVIEW #730`. Fable reviews the fr-CA block, and the fr-FR
+- **French: reviewed.** `FR-REVIEW #730` stays by design. Fable approved the fr-CA sentences on 2026-11-16, and the fr-FR
   block is derived from it.
-- **Spanish: not yet reviewed.** `ES-REVIEW #730`. Fable reviews the es-419 block, and the
+- **Spanish: reviewed.** `ES-REVIEW #730` stays by design. Fable approved the es-419 sentences on 2026-11-16, and the
   es-ES block is derived from it.
 - **Dave's wording: given** (2026-11-16, above). His approval to go live comes at release time.
 - **The claim must be true in every build that ships these words.** It is. #850 merged the

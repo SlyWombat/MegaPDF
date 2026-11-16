@@ -8,7 +8,8 @@ window gained the support link in #730, and that one binary serves Mac and Linux
 Wording set by Dave on 2026-11-16 ("Just say linked to support page, no need for additional
 description"): one line, the About link to the support page added on every app by #730
 (PR #850). **Draft, not yet released.** **`FR-REVIEW #730`, `ES-REVIEW #730`: the French and the
-Spanish below are not yet reviewed** (Fable). The paragraphs below are the store blocks' sentences, and
+Spanish below were reviewed.** Fable approved all six fr-CA and es-419 sentences, and the identical fr-FR and es-ES
+derivations, on 2026-11-16. Any change needs another Fable review; the markers stay by design. The paragraphs below are the store blocks' sentences, and
 `check_copy.py` fails if they drift from them.
 
 ## What's new — the `<release>` entry to add

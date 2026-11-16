@@ -5,7 +5,8 @@ Play Console → the release → **Release notes**, per language. `tools/play_li
 Wording set by Dave on 2026-11-16 ("Just say linked to support page, no need for additional
 description"): the About link to the support page added on every app by #730
 (PR #850). Google Play also names the Android rotation fix (#826), which is Android-only. **Draft, not yet released.** **`FR-REVIEW #730`, `ES-REVIEW #730`: the French and the
-Spanish below are not yet reviewed** (Fable). The France and Spain blocks are derived by
+Spanish below were reviewed.** Fable approved all six fr-CA and es-419 sentences, and the identical fr-FR and es-ES
+derivations, on 2026-11-16. Any change needs another Fable review; the markers stay by design. The France and Spain blocks are derived by
 `check_copy.py` in this folder: edit the Canadian or Latin American block, then run it.
 
 ## English (Canada) — `en-CA`
