@@ -187,7 +187,9 @@ WACK then runs on a test-signed copy of that same x64 file, not on a local rebui
 local build is for trying things, never for upload.
 
 **What proves it runs.** WACK can't test an ARM64 package on x64 hardware (appcert runs
-against the host architecture), and nobody here has an ARM64 PC. CI's `Windows ARM64` job
+against the host architecture). The one real ARM64 PC is Dave's dave-1 (Windows build
+28000), where Dave ran 2.5's check himself (#844); it is his machine, never a QA target
+for Store packages. CI's `Windows ARM64` job
 runs on a GitHub `windows-11-arm` machine instead. There, natively on ARM64, it runs the
 engine core's tests, the .NET engine tests, and the app itself:
 `MegaPDF.exe --engine-check <report> --term <word> <doc.pdf>` opens, renders, searches, adds
