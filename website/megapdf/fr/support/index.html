@@ -405,7 +405,7 @@
                 voie la plus rapide vers un développeur —, ouvrez vous-même un billet, en anglais,
                 sur <a href="https://github.com/SlyWombat/MegaPDF/issues/new" hreflang="en">github.com/SlyWombat/MegaPDF/issues</a>.
                 C'est une page publique, pour toujours, sous votre propre compte GitHub : n'y
-                mettez rien que vous n'afficheriez pas sur un babillard.</p>
+                mettez rien que vous n'afficheriez pas sur un tableau d'affichage.</p>
             </div>
         </section>
 
@@ -440,11 +440,9 @@
                             <li><span class="plat">Android</span> aux deux mêmes endroits :
                                 <strong>ⓘ</strong> à l'écran d'accueil, ou <strong>⋯ → À propos de
                                 MegaPDF</strong>.</li>
-                            <li><span class="plat">Linux</span> cette version n'a aucune fenêtre
-                                À propos que vous pouvez atteindre — une vraie lacune, et c'est à nous de
-                                la corriger. En attendant, lancez <code>megapdf-cli --version</code> dans
-                                un terminal, ou demandez à votre gestionnaire de paquets quelle version
-                                de <code>megapdf</code> il a installée.</li>
+                            <li><span class="plat">Linux</span> le menu <strong>⋯ Plus → À propos de
+                                MegaPDF</strong>, ou lancez <code>megapdf-cli --version</code> dans un
+                                terminal.</li>
                         </ul>
                         <p>Personne n'a besoin de la version du moteur PDF : aucun écran ne
                         l'affiche, alors inutile de la chercher.</p>
@@ -455,7 +453,7 @@
                          data-match="nouvelle version|dernière version|pas à jour|ancienne version|vieille version|plus récente"
                          data-not="markdown"
                          data-strong="mise à jour|mises à jour|mettre à jour|actualiser">
-                    <summary>Comment les mises à jour vous parviennent — et pourquoi l'application ne vous le propose jamais</summary>
+                    <summary>Comment les mises à jour vous parviennent — et pourquoi l'application ne vous en propose jamais</summary>
                     <div class="body">
                         <p><strong>MegaPDF ne vérifie jamais s'il existe une mise à jour, sur aucune
                         plateforme.</strong> Il n'ouvre aucune connexion réseau de lui-même, alors il
@@ -559,7 +557,7 @@
                 </details>
 
                 <details class="answer" id="a-cant-edit-text" data-plat="all"
-                         data-match="modifier le texte|changer le texte|corriger le texte|peut pas être modifié|peux pas modifier|impossible de modifier|me laisse pas modifier|mise en page|retaper|faute de frappe|mauvaise date|image de texte"
+                         data-match="modifier le texte|changer le texte|corriger le texte|peut pas être modifié|peux pas modifier|impossible de modifier|me laisse pas modifier|mise en page|retaper|faute de frappe|mauvaise date|image de texte|scan|numérisation"
                          data-not="markdown"
                          data-strong="numérisé|numérisée|scanné|scannée">
                     <summary>On me dit que ce texte ne peut pas être modifié</summary>
@@ -577,8 +575,8 @@
                         <p>Si la page est <strong>numérisée</strong>, il n'y a aucun texte à
                         modifier : c'est une photo d'une page. MegaPDF vous le dit, et masquer puis
                         écrire par-dessus est la seule solution.</p>
-                        <p>Une page où vous croyez que la modification était sans risque et que
-                        MegaPDF a quand même refusée est un rapport vraiment utile. Dites-nous ce que
+                        <p>Une page où la modification vous semblait sans risque et où
+                        MegaPDF a quand même refusé est un rapport vraiment utile. Dites-nous ce que
                         vous changiez, et de quel genre de document il s'agit.</p>
                     </div>
                 </details>
@@ -601,7 +599,7 @@
                 </details>
 
                 <details class="answer" id="a-password" data-plat="all"
-                         data-match="protégé|protégée|mot de passe du propriétaire|verrouillé|bloqué|grisé|grisés|indisponible|indisponibles|ouvre pas|outils manquent|outils ont disparu|chiffré"
+                         data-match="protégé|protégée|mot de passe du propriétaire|verrouillé|bloqué|grisé|grisés|indisponible|indisponibles|ouvre pas|outils manquent|outils ont disparu|chiffré|barré|barrée|crypté|encrypté|mdp"
                          data-strong="mot de passe|déverrouiller">
                     <summary>Mots de passe, et documents dont certains outils sont indisponibles</summary>
                     <div class="body">
@@ -662,7 +660,7 @@
                         vous faites sur papier — MegaPDF retire alors le fond blanc pour que seule
                         l'encre se retrouve sur la page. Placez-la ensuite, déplacez-la et
                         redimensionnez-la jusqu'à ce qu'elle repose sur la ligne.</p>
-                        <p>C'est une signature manuscrite : l'image de votre nom sur la page. Ce
+                        <p>C'est une <em>signature électronique</em> : celle que vous dessinez, tapez ou photographiez, mise sur la page comme une image. Ce
                         n'est pas une <em>signature numérique</em>, le type cryptographique appuyé sur
                         un certificat, et en placer une ne rend pas le document vérifiable ni
                         certifié, et ne permet pas de savoir s'il a été modifié. Si un document qu'on
@@ -723,7 +721,7 @@
                         proposition n'apparaît pas, sans avertissement. Remettez le fichier où il
                         était et réessayez.</p>
                         <p>Une fermeture inattendue vaut toujours la peine d'être signalée. Rien ne
-                        nous est envoyé automatiquement — MegaPDF n'a aucun rapport de plantage —,
+                        nous est envoyé automatiquement — MegaPDF n'envoie aucun rapport de plantage —,
                         alors une fermeture dont on ne nous parle pas est une fermeture dont nous
                         ignorons tout. Ce que vous faisiez dans les quelques secondes avant est la
                         partie la plus utile.</p>
@@ -731,7 +729,7 @@
                 </details>
 
                 <details class="answer" id="a-large" data-plat="all"
-                         data-match="gros fichier|énorme|lent|lente|prend une éternité|ne répond plus|mémoire|trop gros|ouvre pas|bannière|très gros|tellement lent|très lent"
+                         data-match="gros fichier|énorme|lent|lente|prend une éternité|ne répond plus|mémoire|trop gros|ouvre pas|bannière|très gros|tellement lent|très lent|lourd|trop lourd|fichier lourd"
                          data-strong="gigaoctet|gigaoctets|volumineux">
                     <summary>Un PDF très volumineux, ou qui refuse de s'ouvrir</summary>
                     <div class="body">
@@ -751,7 +749,7 @@
                 </details>
 
                 <details class="answer" id="a-pages" data-plat="all"
-                         data-match="pivoter|faire pivoter|tourner|supprimer une page|supprimer la page|déplacer une page|insérer une page|combiner|fusionner|séparer|diviser|outils de pages|extraire des pages|retirer une page|page blanche|à l envers|page de côté"
+                         data-match="pivoter|faire pivoter|tourner|supprimer une page|supprimer la page|déplacer une page|insérer une page|combiner|fusionner|séparer|diviser|outils de pages|extraire des pages|retirer une page|page blanche|à l envers|page de côté|rotation"
                          data-strong="réorganiser|réordonner">
                     <summary>Faire pivoter, supprimer, réorganiser et combiner des pages</summary>
                     <div class="body">
@@ -811,7 +809,7 @@
                 </details>
 
                 <details class="answer" id="a-privacy" data-plat="all"
-                         data-match="téléverser|nuage|infonuagique|confidentialité|vie privée|privé|mon compte|un compte|se connecter|hors ligne|internet|mes données|sécuritaire|est ce sûr|serveur|confidentiel"
+                         data-match="téléverser|nuage|infonuagique|confidentialité|vie privée|privé|mon compte|un compte|se connecter|hors ligne|internet|mes données|sécuritaire|est ce sûr|serveur|confidentiel|cloud|upload|uploadé"
                          data-strong="pistage|téléversé|téléversement">
                     <summary>Mon document est-il téléversé quelque part? Non — et voici comment le vérifier</summary>
                     <div class="body">
@@ -840,8 +838,8 @@
                         <ul>
                             <li><span class="plat">Windows</span> Windows 10 version 1809 ou plus
                                 récente, Intel/AMD ou ARM, depuis le Microsoft Store.</li>
-                            <li><span class="plat">Mac</span> macOS 12 Monterey ou plus récent, Apple
-                                silicon ou Intel.</li>
+                            <li><span class="plat">Mac</span> macOS 12 Monterey ou plus récent, puce Apple
+                                ou Intel.</li>
                             <li><span class="plat">iPhone / iPad</span> iOS ou iPadOS 16 ou plus
                                 récent.</li>
                             <li><span class="plat">Android</span> Android 8.0 ou plus récent.</li>
@@ -898,7 +896,7 @@
         /* Where the version number is, per platform. Checked against the app, not
            against the store listings. */
         var VER_WHERE = {
-            windows: "Windows : le menu ⋯ Plus de la barre d'outils → À propos de MegaPDF.",
+            windows: "Windows : le bouton ⋯ au bout de la barre d'outils → Paramètres, tout au bas du panneau.",
             mac: "Mac : le menu MegaPDF → À propos de MegaPDF.",
             ios: "iPhone / iPad : le menu ⋯ Plus → À propos de MegaPDF.",
             android: "Android : le menu ⋯ Plus → À propos de MegaPDF.",

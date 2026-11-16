@@ -429,10 +429,9 @@
                                 document is open.</li>
                             <li><span class="plat">Android</span> the same two places: <strong>ⓘ</strong>
                                 on the home screen, or <strong>⋯ → About MegaPDF</strong>.</li>
-                            <li><span class="plat">Linux</span> there is no About window you can reach in
-                                this build — a real gap, and ours to fix. Meanwhile run
-                                <code>megapdf-cli --version</code> in a terminal, or ask your package
-                                manager which version of <code>megapdf</code> it installed.</li>
+                            <li><span class="plat">Linux</span> the <strong>⋯ More</strong> menu →
+                                <strong>About MegaPDF</strong>, or run <code>megapdf-cli --version</code>
+                                in a terminal.</li>
                         </ul>
                         <p>Nobody needs the PDF engine's version: no screen shows it, so don't go
                         looking for it.</p>
@@ -843,7 +842,7 @@
         /* Where the version number is, per platform. Checked against the app, not
            against the store listings. */
         var VER_WHERE = {
-            windows: "Windows: the ⋯ More menu in the toolbar → About MegaPDF.",
+            windows: "Windows: the ⋯ button at the end of the toolbar → Settings, at the bottom of the panel.",
             mac: "Mac: the MegaPDF menu → About MegaPDF.",
             ios: "iPhone / iPad: the ⋯ More menu → About MegaPDF.",
             android: "Android: the ⋯ More menu → About MegaPDF.",
