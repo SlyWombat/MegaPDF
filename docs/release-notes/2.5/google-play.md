@@ -11,40 +11,40 @@ derivations, on 2026-11-16. Any change needs another Fable review; the markers s
 
 ## English (Canada) — `en-CA`
 
-**Release notes** [500] (139)
+**Release notes** [500] (143)
 
 ```
-Turning your phone no longer reopens a different document; you stay on the one you're reading. About MegaPDF now links to the support page.
+Turning your phone no longer reopens a different document; you stay on the one you're reading. About MegaPDF now links to the new support page.
 ```
 
 ## Français (Canada) — `fr-CA`
 
-**Notes de version** [500] (185)
+**Notes de version** [500] (194)
 
 ```
-Faire pivoter votre téléphone ne rouvre plus un autre document. Vous restez sur celui que vous lisez. La section À propos de MegaPDF comprend maintenant un lien vers la page de soutien.
+Faire pivoter votre téléphone ne rouvre plus un autre document. Vous restez sur celui que vous lisez. La section À propos de MegaPDF comprend maintenant un lien vers la nouvelle page de soutien.
 ```
 
 ## Français (France) — `fr-FR`
 
-**Notes de version** [500] (185)
+**Notes de version** [500] (194)
 
 ```
-Faire pivoter votre téléphone ne rouvre plus un autre document. Vous restez sur celui que vous lisez. La section À propos de MegaPDF comprend maintenant un lien vers la page de soutien.
+Faire pivoter votre téléphone ne rouvre plus un autre document. Vous restez sur celui que vous lisez. La section À propos de MegaPDF comprend maintenant un lien vers la nouvelle page de soutien.
 ```
 
 ## Español (Latinoamérica) — `es-419`
 
-**Notas de la versión** [500] (166)
+**Notas de la versión** [500] (172)
 
 ```
-Girar el teléfono ya no vuelve a abrir otro documento. Te quedas en el que estás leyendo. La sección Acerca de MegaPDF ahora incluye un enlace a la página de soporte.
+Girar el teléfono ya no vuelve a abrir otro documento. Te quedas en el que estás leyendo. La sección Acerca de MegaPDF ahora incluye un enlace a la nueva página de soporte.
 ```
 
 ## Español (España) — `es-ES`
 
-**Notas de la versión** [500] (166)
+**Notas de la versión** [500] (172)
 
 ```
-Girar el teléfono ya no vuelve a abrir otro documento. Te quedas en el que estás leyendo. La sección Acerca de MegaPDF ahora incluye un enlace a la página de soporte.
+Girar el teléfono ya no vuelve a abrir otro documento. Te quedas en el que estás leyendo. La sección Acerca de MegaPDF ahora incluye un enlace a la nueva página de soporte.
 ```

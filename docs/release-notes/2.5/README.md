@@ -27,17 +27,17 @@ python3 docs/release-notes/2.5/check_copy.py --check  # fail on drift
 
 The shared sentence, in English, on all five channels:
 
-> About MegaPDF now links to the support page.
+> About MegaPDF now links to the new support page.
 
 Français (Canada) is written by hand, and Français (France) is derived from it. The France
 block comes out identical, because nothing in the sentence is in `FR_CA_TO_FR_FR`:
 
-> La section À propos de MegaPDF comprend maintenant un lien vers la page de soutien.
+> La section À propos de MegaPDF comprend maintenant un lien vers la nouvelle page de soutien.
 
 Español (Latinoamérica) is written by hand, and Español (España) is derived from it by
 `to_spain`. It also comes out identical:
 
-> La sección Acerca de MegaPDF ahora incluye un enlace a la página de soporte.
+> La sección Acerca de MegaPDF ahora incluye un enlace a la nueva página de soporte.
 
 "About" is a window on the desktops and a screen or sheet on the phones. So the French and the
 Spanish say *section* and *sección* instead of naming a window. They use the apps' own words:

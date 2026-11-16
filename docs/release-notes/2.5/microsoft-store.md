@@ -11,40 +11,40 @@ derivations, on 2026-11-16. Any change needs another Fable review; the markers s
 
 ## English — `en-US` and `en-CA`
 
-**What's new** [1500] (44)
+**What's new** [1500] (48)
 
 ```
-About MegaPDF now links to the support page.
+About MegaPDF now links to the new support page.
 ```
 
 ## Français (Canada) — `fr-CA`
 
-**Quoi de neuf** [1500] (83)
+**Quoi de neuf** [1500] (92)
 
 ```
-La section À propos de MegaPDF comprend maintenant un lien vers la page de soutien.
+La section À propos de MegaPDF comprend maintenant un lien vers la nouvelle page de soutien.
 ```
 
 ## Français (France) — `fr-FR`
 
-**Quoi de neuf** [1500] (83)
+**Quoi de neuf** [1500] (92)
 
 ```
-La section À propos de MegaPDF comprend maintenant un lien vers la page de soutien.
+La section À propos de MegaPDF comprend maintenant un lien vers la nouvelle page de soutien.
 ```
 
 ## Español (Latinoamérica) — `es-MX`
 
-**Novedades** [1500] (76)
+**Novedades** [1500] (82)
 
 ```
-La sección Acerca de MegaPDF ahora incluye un enlace a la página de soporte.
+La sección Acerca de MegaPDF ahora incluye un enlace a la nueva página de soporte.
 ```
 
 ## Español (España) — `es-ES`
 
-**Novedades** [1500] (76)
+**Novedades** [1500] (82)
 
 ```
-La sección Acerca de MegaPDF ahora incluye un enlace a la página de soporte.
+La sección Acerca de MegaPDF ahora incluye un enlace a la nueva página de soporte.
 ```
