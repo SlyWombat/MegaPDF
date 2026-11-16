@@ -14,7 +14,7 @@ should only change deliberately.
 
 The support page is opt-in and, unlike everything else, it *needs* --privacy:
 
-    /usr/bin/python3 website/deploy.py --support --privacy   # also support/
+    /usr/bin/python3 website/deploy.py --support --privacy   # also support/, fr/support/, es/support/
 
 The policy's own §11 promises it is updated before anything that collects data
 ships, and a page that composes a message to us is that kind of thing. So
@@ -78,6 +78,7 @@ import shutil
 import ssl
 import subprocess
 import tempfile
+import unicodedata
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -178,6 +179,21 @@ class Server:
 
 # Directories that go up only when asked for, and the flag that asks.
 OPT_IN = {"privacy": "privacy", "linux": "linux", "apt": "linux", "support": "support"}
+# The language folders (#845). An opt-in directory inside one (fr/support/, #859) is
+# gated by the same flag as the English one, so --support carries all three languages
+# and leaving it off keeps all three off the server.
+LANGS = ("fr", "es")
+
+
+def opt_in_key(rel):
+    """The OPT_IN key that gates a directory under website/megapdf/ (a relative path
+    with os.sep separators), or None when it always goes up."""
+    parts = [p for p in rel.split(os.sep) if p]
+    if not parts:
+        return None
+    if parts[0] in LANGS and len(parts) > 1 and parts[1] in OPT_IN:
+        return parts[1]
+    return parts[0] if parts[0] in OPT_IN else None
 
 REGION = r"<!--{name}:live-->(.*?)<!--{name}:soon(.*?){name}:end-->"
 
@@ -255,10 +271,110 @@ SUPPORT_ADDRESS = "info@electricrv.ca"
 SUPPORT_SUBJECT_PREFIX = '"MegaPDF support " + reference()'
 
 
+# The support page in each language (#859), as paths under website/megapdf/, and the
+# lang attribute each one must carry. English is the reference the others are held to.
+SUPPORT_PAGES = {"en": ("support/index.html", "en"),
+                 "fr": ("fr/support/index.html", "fr-CA"),
+                 "es": ("es/support/index.html", "es-419")}
+# Lines of the composed message that the support system parses (#635). They stay in
+# English on every page; a translated page that translated one of them would be a page
+# whose mail the system cannot read.
+SUPPORT_INTERFACE = ['"Reference: "', '"App: MegaPDF"', '"Platform: "', '"Kind: "',
+                     '"The support page suggested"', '"The support page suggested nothing."',
+                     '"  [reader: not it]"', '"  [reader: that was it]"', '"Answer ids: "',
+                     'windows: "Windows", mac: "Mac", ios: "iPhone / iPad"',
+                     'android: "Android", linux: "Linux"',
+                     'bug: "Something is broken", question: "How do I…?"',
+                     'idea: "An idea or a request"']
+# The matcher's normaliser (#859): accents folded away on both the typed text and the
+# terms. Every page must carry this exact line, because fold_term() below assumes it.
+SUPPORT_NORM = 'String(s).normalize("NFD").replace(/[\\u0300-\\u036f]/g, "").toLowerCase()'
+
+
+def fold_term(term):
+    """A data-match/data-strong/data-not term as the page's norm() sees it: accents
+    folded away, as `normalize("NFD")` and dropping U+0300-U+036F do in the browser."""
+    decomposed = unicodedata.normalize("NFD", term)
+    return "".join(c for c in decomposed if not "\u0300" <= c <= "\u036f")
+
+
+def support_answers(page, where):
+    """The answers list of one support page, checked for what its own matcher needs:
+    [(id, data-plat), ...] in page order. Refuses on the first fault, naming `where`."""
+    blocks = re.findall(r'<details class="answer"([^>]*)>(.*?)</details>', page, flags=re.S)
+    if len(blocks) < 5:
+        raise SystemExit(f"--support: {where}: the answers list holds {len(blocks)} answers. "
+                         "That is not a support page; check that details.answer markup is intact.")
+    found = []
+    for attrs, body in blocks:
+        aid = re.search(r'\bid="([^"]+)"', attrs)
+        if not aid:
+            raise SystemExit(f"--support: {where}: an answer has no id (attributes: "
+                             f"{attrs.strip()!r}). The composed message names answers by id.")
+        aid = aid.group(1)
+        if "<summary>" not in body or 'class="body"' not in body:
+            raise SystemExit(f"--support: {where}: answer {aid} has no <summary> or no .body; the "
+                             "matcher reads the title from one and the text from the other.")
+        plats = (re.search(r'\bdata-plat="([^"]*)"', attrs) or _empty()).group(1).split()
+        if not plats:
+            raise SystemExit(f"--support: {where}: answer {aid} has no data-plat (use "
+                             'data-plat="all" for one that applies everywhere)')
+        unknown = sorted(set(plats) - SUPPORT_PLATFORMS)
+        if unknown:
+            raise SystemExit(f"--support: {where}: answer {aid} names the unknown platform(s) "
+                             f"{', '.join(unknown)}; known: {', '.join(sorted(SUPPORT_PLATFORMS))}")
+        if "all" in plats and len(plats) > 1:
+            raise SystemExit(f'--support: {where}: answer {aid} is data-plat="all" and also '
+                             "names platforms; pick one or the other")
+
+        def listed(name):
+            return [t.strip() for t in
+                    (re.search(rf'\b{name}="([^"]*)"', attrs) or _empty()).group(1).split("|")
+                    if t.strip()]
+        terms, strong, nots = listed("data-match"), listed("data-strong"), listed("data-not")
+        if not terms and not strong:
+            raise SystemExit(f"--support: {where}: answer {aid} has no data-match or data-strong "
+                             "terms, so nothing anyone types can ever surface it")
+        for t in terms + strong + nots:
+            # The matcher folds accents away, lowercases, and replaces everything that is
+            # not a letter or a digit with a space, then looks for the term between
+            # spaces. A term with a capital or a symbol in it is written in a form
+            # nobody's text will ever be in; write it as plain lowercase words.
+            if t != t.lower() or re.search(r"[^a-z0-9 œæ]", fold_term(t)):
+                raise SystemExit(f"--support: {where}: answer {aid} has the unmatchable term "
+                                 f"{t!r} — the matcher lowercases, folds accents and strips "
+                                 "punctuation, so a term with a capital or a symbol in it "
+                                 "never fires")
+        # data-strong is worth 2 on its own and data-match 1, so a term in both would
+        # quietly score 3 and outrank everything. Compared as the matcher compares them,
+        # so "français" and "francais" are the same term.
+        both = sorted({fold_term(t) for t in terms} & {fold_term(t) for t in strong})
+        if both:
+            raise SystemExit(f"--support: {where}: answer {aid} lists {', '.join(both)} in both "
+                             "data-match and data-strong (accents aside); pick one")
+        # A short list is the whole point of data-strong: one of these words alone
+        # surfaces the answer, so a long list of them is the matcher guessing again.
+        if len(strong) > 6:
+            raise SystemExit(f"--support: {where}: answer {aid} has {len(strong)} data-strong "
+                             "terms. Those fire on their own, so keep them to the few words "
+                             "that really can only mean this answer (six at most).")
+        found.append((aid, " ".join(plats)))
+    ids = [a for a, _ in found]
+    dupes = sorted({i for i in ids if ids.count(i) > 1})
+    if dupes:
+        raise SystemExit(f"--support: {where}: duplicate answer id(s) {', '.join(dupes)}")
+    return found
+
+
 def check_support(include_privacy):
-    """Refuse a --support deploy that would publish the support page without the
-    privacy section covering it, or with an answers list its own matcher cannot
+    """Refuse a --support deploy that would publish the support pages without the
+    privacy section covering them, or with an answers list their own matcher cannot
     use. Returns a line describing what was checked.
+
+    There is one support page per language (#859): English, French and Spanish. Each
+    gets every check below, and the French and Spanish ones are also held to the
+    English one: the same answer ids with the same platforms (the mailbox links
+    support/#<id> in any language), and the same machine-read message lines.
 
     The page is static and posts nothing, but it is still the page that composes a
     message to us, so the policy has to be part of the same upload (#418, the same
@@ -267,11 +383,13 @@ def check_support(include_privacy):
     attribute the matcher cannot read is an answer nobody will ever be shown, and
     that is worth refusing a deploy over rather than discovering months later.
     """
-    page_path = os.path.join(SITE, "support", "index.html")
-    if not os.path.isfile(page_path):
-        raise SystemExit("--support: website/megapdf/support/index.html is not there")
-    with open(page_path, encoding="utf-8") as f:
-        page = f.read()
+    pages = {}
+    for lang, (rel, _) in SUPPORT_PAGES.items():
+        path = os.path.join(SITE, rel)
+        if not os.path.isfile(path):
+            raise SystemExit(f"--support: website/megapdf/{rel} is not there")
+        with open(path, encoding="utf-8") as f:
+            pages[lang] = f.read()
 
     if not include_privacy:
         raise SystemExit("--support needs --privacy: the support page is disclosed in "
@@ -295,118 +413,106 @@ def check_support(include_privacy):
                          "system (#635), and the policy has to say so before, or in the "
                          "same deploy as, the page that sends mail to it.")
 
-    # #635: the support system sorts mail by the subject this page writes, so the
-    # subject's shape is an interface, not wording. See website/README.md, 'The support
-    # mailbox'. Refuse a page that no longer builds it.
-    if SUPPORT_SUBJECT_PREFIX not in page:
-        raise SystemExit(f"--support: the support page no longer builds a subject that "
-                         f"starts {SUPPORT_SUBJECT_PREFIX!r}. The Outlook rule and the "
-                         "support system key on it (#635); change them first.")
+    reference = None
+    for lang, page in pages.items():
+        rel, lang_attr = SUPPORT_PAGES[lang]
+        where = rel
+        if not re.search(rf'<html lang="{re.escape(lang_attr)}">', page):
+            raise SystemExit(f'--support: {where} is not <html lang="{lang_attr}">')
 
-    if SUPPORT_ADDRESS not in page:
-        raise SystemExit(f"--support: the support page never names {SUPPORT_ADDRESS}. "
-                         "It is the one page whose job is that address.")
+        # #635: the support system sorts mail by the subject this page writes, so the
+        # subject's shape is an interface, not wording. See website/README.md, 'The
+        # support mailbox'. Refuse a page that no longer builds it, in any language.
+        if SUPPORT_SUBJECT_PREFIX not in page:
+            raise SystemExit(f"--support: {where} no longer builds a subject that starts "
+                             f"{SUPPORT_SUBJECT_PREFIX!r}. The Outlook rule and the support "
+                             "system key on it (#635); change them first.")
+        missing = [k for k in SUPPORT_INTERFACE if k not in page]
+        if missing:
+            raise SystemExit(f"--support: {where} no longer writes {', '.join(missing)} into "
+                             "the message. The support system parses those lines in English "
+                             "on every page (#635, #859); translate only what a person reads.")
+        if SUPPORT_NORM not in page:
+            raise SystemExit(f"--support: {where}'s matcher no longer folds accents with "
+                             f"{SUPPORT_NORM!r}. The term check here assumes it does (#859).")
 
-    # The policy says, in so many words, that this page submits nothing and sends
-    # nothing. That is a promise about the bytes, so the deploy checks the bytes:
-    # anything that could carry what a reader typed off their machine has to fail here
-    # rather than be noticed by someone reading the source months later. Checked on the
-    # page as it will be uploaded — regions resolved and comments stripped — because the
-    # source's own notes talk about forms and fetches in prose.
-    for label, live in (("with Linux live", True), ("with Linux held back", False)):
-        sent = resolve(page, {"linux": live, "snap": live, "support": True})
-        if re.search(r"<form\b", sent, flags=re.I):
-            raise SystemExit(f"--support: the support page has a <form> ({label}). Policy §4 "
-                             "says it has no form to submit and nothing to submit it to. If "
-                             "that is changing, the policy changes first.")
-        leak = re.search(r"\bfetch\s*\(|XMLHttpRequest|sendBeacon|WebSocket|EventSource"
-                         r"|method\s*=\s*[\"']post", sent, flags=re.I)
-        if leak:
-            raise SystemExit(f"--support: the support page contains {leak.group(0)!r} ({label}), "
-                             "which could send what someone typed. Policy §4 promises it "
-                             "cannot. If that is changing, the policy changes first.")
-        scripts = re.findall(r'<script[^>]*\bsrc="([^"]+)"', sent)
-        if scripts != ["https://electricrv.ca/api/analytics/a.js"]:
-            raise SystemExit(f"--support: the support page's external scripts are {scripts} "
-                             f"({label}) — the only one it may load is the page-view counter "
-                             "disclosed in policy §3.")
-        origins = sorted({m for m in re.findall(r"https?://([a-z0-9.\-]+)/", sent)})
-        allowed = ["electricrv.ca", "github.com"]  # #846: no third-party fonts
-        if origins != allowed:
-            raise SystemExit(f"--support: the support page names the origin(s) {origins} "
-                             f"({label}); only {allowed} are accounted for in the privacy "
-                             "policy.")
+        if SUPPORT_ADDRESS not in page:
+            raise SystemExit(f"--support: {where} never names {SUPPORT_ADDRESS}. "
+                             "It is the one page whose job is that address.")
 
-    # Each answer, as <details class="answer" ...> ... </details>.
-    blocks = re.findall(r'<details class="answer"([^>]*)>(.*?)</details>', page, flags=re.S)
-    if len(blocks) < 5:
-        raise SystemExit(f"--support: the answers list holds {len(blocks)} answers. That is "
-                         "not a support page; check that details.answer markup is intact.")
-    ids = []
-    for attrs, body in blocks:
-        aid = re.search(r'\bid="([^"]+)"', attrs)
-        if not aid:
-            raise SystemExit(f"--support: an answer has no id (attributes: {attrs.strip()!r}). "
-                             "The composed message names answers by id.")
-        aid = aid.group(1)
-        ids.append(aid)
-        if "<summary>" not in body or 'class="body"' not in body:
-            raise SystemExit(f"--support: answer {aid} has no <summary> or no .body; the "
-                             "matcher reads the title from one and the text from the other.")
-        plats = (re.search(r'\bdata-plat="([^"]*)"', attrs) or _empty()).group(1).split()
-        if not plats:
-            raise SystemExit(f"--support: answer {aid} has no data-plat (use "
-                             'data-plat="all" for one that applies everywhere)')
-        unknown = sorted(set(plats) - SUPPORT_PLATFORMS)
-        if unknown:
-            raise SystemExit(f"--support: answer {aid} names the unknown platform(s) "
-                             f"{', '.join(unknown)}; known: {', '.join(sorted(SUPPORT_PLATFORMS))}")
-        if "all" in plats and len(plats) > 1:
-            raise SystemExit(f'--support: answer {aid} is data-plat="all" and also names '
-                             "platforms; pick one or the other")
-        terms = [t.strip() for t in
-                 (re.search(r'\bdata-match="([^"]*)"', attrs) or _empty()).group(1).split("|")
-                 if t.strip()]
-        strong = [t.strip() for t in
-                  (re.search(r'\bdata-strong="([^"]*)"', attrs) or _empty()).group(1).split("|")
-                  if t.strip()]
-        if not terms and not strong:
-            raise SystemExit(f"--support: answer {aid} has no data-match or data-strong terms, "
-                             "so nothing anyone types can ever surface it")
-        for t in terms + strong:
-            # The matcher lowercases the text and replaces everything that is not a
-            # letter, a digit or an accented letter with a space, then looks for the
-            # term between spaces. A term with anything else in it, or with a capital,
-            # can never match.
-            if t != t.lower() or re.search(r"[^a-z0-9 àâäçéèêëîïôöùûüÿœæ]", t):
-                raise SystemExit(f"--support: answer {aid} has the unmatchable term {t!r} — "
-                                 "the matcher lowercases and strips punctuation, so a term "
-                                 "with a capital or a symbol in it never fires")
-        # data-strong is worth 2 on its own and data-match 1, so a term in both would
-        # quietly score 3 and outrank everything. Whichever it belongs in, it belongs in
-        # one of them.
-        both = sorted(set(terms) & set(strong))
-        if both:
-            raise SystemExit(f"--support: answer {aid} lists {', '.join(both)} in both "
-                             "data-match and data-strong; pick one")
-        # A short list is the whole point of data-strong: one of these words alone
-        # surfaces the answer, so a long list of them is the matcher guessing again.
-        if len(strong) > 6:
-            raise SystemExit(f"--support: answer {aid} has {len(strong)} data-strong terms. "
-                             "Those fire on their own, so keep them to the few words that "
-                             "really can only mean this answer (six at most).")
-    dupes = sorted({i for i in ids if ids.count(i) > 1})
-    if dupes:
-        raise SystemExit(f"--support: duplicate answer id(s) {', '.join(dupes)}")
+        # Every page names the other two, both as hreflang alternates and in its
+        # language switcher, so a reader and a search engine can each find their own.
+        for other in SUPPORT_PAGES:
+            if not re.search(rf'<link rel="alternate" hreflang="{other}" href="https://megapdf\.ca/'
+                             rf'{"" if other == "en" else other + "/"}support/">', page):
+                raise SystemExit(f'--support: {where} has no <link rel="alternate" '
+                                 f'hreflang="{other}"> for the {other} support page')
+            if not re.search(rf'<nav class="langs"[^>]*>(?:(?!</nav>).)*hreflang="{other}"',
+                             page, flags=re.S):
+                raise SystemExit(f"--support: {where}'s language switcher has no link to the "
+                                 f"{other} page")
 
-    # The support page must not link a part of the site a deploy can leave off.
-    # Resolved with Linux held back, no reference to linux/ may survive.
-    held = resolve(page, {"linux": False, "snap": False, "support": True})
-    if "../linux/" in held:
-        raise SystemExit("--support: the support page links ../linux/ outside a "
-                         "<!--linux:live--> region, so that link 404s on a deploy without "
-                         "--linux. Move it inside one.")
-    return (f"support/ checked: {len(blocks)} answers, all matchable; "
+        # The policy says, in so many words, that this page submits nothing and sends
+        # nothing. That is a promise about the bytes, so the deploy checks the bytes:
+        # anything that could carry what a reader typed off their machine has to fail
+        # here rather than be noticed by someone reading the source months later.
+        # Checked on the page as it will be uploaded — regions resolved and comments
+        # stripped — because the source's own notes talk about forms and fetches in prose.
+        for label, live in (("with Linux live", True), ("with Linux held back", False)):
+            sent = resolve(page, {"linux": live, "snap": live, "support": True})
+            if re.search(r"<form\b", sent, flags=re.I):
+                raise SystemExit(f"--support: {where} has a <form> ({label}). Policy §4 says "
+                                 "it has no form to submit and nothing to submit it to. If "
+                                 "that is changing, the policy changes first.")
+            leak = re.search(r"\bfetch\s*\(|XMLHttpRequest|sendBeacon|WebSocket|EventSource"
+                             r"|method\s*=\s*[\"']post", sent, flags=re.I)
+            if leak:
+                raise SystemExit(f"--support: {where} contains {leak.group(0)!r} ({label}), "
+                                 "which could send what someone typed. Policy §4 promises it "
+                                 "cannot. If that is changing, the policy changes first.")
+            scripts = re.findall(r'<script[^>]*\bsrc="([^"]+)"', sent)
+            if scripts != ["https://electricrv.ca/api/analytics/a.js"]:
+                raise SystemExit(f"--support: {where}'s external scripts are {scripts} "
+                                 f"({label}) — the only one it may load is the page-view "
+                                 "counter disclosed in policy §3.")
+            # <link rel="canonical"> and rel="alternate" name pages and load nothing
+            # (third_party_loads() skips them for the same reason); everything else
+            # that names an origin has to be one the policy accounts for.
+            named = re.sub(r'<link\b[^>]*\brel="(?:canonical|alternate)"[^>]*>', "", sent)
+            origins = sorted({m for m in re.findall(r"https?://([a-z0-9.\-]+)/", named)})
+            allowed = ["electricrv.ca", "github.com"]  # #846: no third-party fonts
+            if origins != allowed:
+                raise SystemExit(f"--support: {where} names the origin(s) {origins} "
+                                 f"({label}); only {allowed} are accounted for in the privacy "
+                                 "policy.")
+
+        answers = support_answers(page, where)
+        if reference is None:
+            reference = answers
+        elif answers != reference:
+            # The mailbox links support/#<id> whatever language the reader wrote in, and
+            # the platform filter has to treat a reader the same in every language.
+            ref, got = dict(reference), dict(answers)
+            lost = sorted(set(ref) - set(got))
+            extra = sorted(set(got) - set(ref))
+            plats = sorted(a for a in set(ref) & set(got) if ref[a] != got[a])
+            raise SystemExit(f"--support: {where}'s answers differ from support/index.html's"
+                             + (f"; missing {', '.join(lost)}" if lost else "")
+                             + (f"; extra {', '.join(extra)}" if extra else "")
+                             + (f"; other data-plat on {', '.join(plats)}" if plats else "")
+                             + ("; same answers in another order" if not (lost or extra or plats)
+                                else "")
+                             + ". Ids and platforms are the same in every language.")
+
+        # The support page must not link a part of the site a deploy can leave off.
+        # Resolved with Linux held back, no reference to linux/ may survive.
+        held = resolve(page, {"linux": False, "snap": False, "support": True})
+        if re.search(r'href="(?:\.\./)+linux/', held):
+            raise SystemExit(f"--support: {where} links linux/ outside a <!--linux:live--> "
+                             "region, so that link 404s on a deploy without --linux. Move it "
+                             "inside one.")
+    return (f"support/ checked in {len(pages)} languages ({', '.join(pages)}): "
+            f"{len(reference)} answers each, all matchable, same ids and platforms; "
             f'privacy/ carries the id="support" section and the id="support-triage" '
             "paragraph and goes up with it")
 
@@ -431,7 +537,8 @@ def plan(dest, include_privacy, include_linux=False, include_support=False):
         rel = os.path.relpath(root, SITE)
         rel = "" if rel == "." else rel
         top = rel.split(os.sep)[0]
-        if top in OPT_IN and not wanted[OPT_IN[top]]:
+        key = opt_in_key(rel)
+        if key and not wanted[OPT_IN[key]]:
             dirs[:] = []
             continue
         dirs.sort()

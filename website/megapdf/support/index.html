@@ -4,7 +4,11 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="description" content="MegaPDF support: answers to the things people ask most, and how to write to us. Nothing you type here is sent anywhere until you choose to send it.">
-    <link rel="canonical" href="https://electricrv.ca/megapdf/support/">
+    <link rel="canonical" href="https://megapdf.ca/support/">
+    <link rel="alternate" hreflang="en" href="https://megapdf.ca/support/">
+    <link rel="alternate" hreflang="fr" href="https://megapdf.ca/fr/support/">
+    <link rel="alternate" hreflang="es" href="https://megapdf.ca/es/support/">
+    <link rel="alternate" hreflang="x-default" href="https://megapdf.ca/support/">
     <title>MegaPDF — Support</title>
     <link rel="icon" href="../icon.png">
     <style>
@@ -36,11 +40,17 @@
                border-radius: 5px; padding: 1px 5px; }
         .wrap { max-width: 860px; margin: 0 auto; padding: 0 20px; }
         header.site { padding: 18px 0; border-bottom: 1px solid rgba(255,255,255,.06); }
-        header.site .wrap { display: flex; align-items: center; gap: 12px; }
+        header.site .wrap { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
         header.site img { width: 34px; height: 34px; border-radius: 8px; }
         header.site .name { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 18px; }
         header.site a.back { margin-left: auto; color: var(--muted); text-decoration: none; font-size: 14px; }
         header.site a.back:hover { color: var(--text); }
+        /* The language switcher, as on the landing pages (#859). */
+        header.site .langs { display: flex; gap: 2px; font-size: 13px; border: 1px solid rgba(255,255,255,.14);
+                             border-radius: 8px; padding: 2px; }
+        header.site .langs a { color: var(--muted); text-decoration: none; padding: 2px 8px; border-radius: 6px; }
+        header.site .langs a:hover { color: var(--text); }
+        header.site .langs a[aria-current] { background: rgba(53,182,224,.18); color: var(--text); }
 
         .intro { padding: 46px 0 6px; }
         .intro h1 { font-size: 38px; line-height: 1.15; margin-bottom: 12px; }
@@ -205,6 +215,11 @@
             <img src="../icon.png" alt="">
             <span class="name">MegaPDF</span>
             <a class="back" href="../">← MegaPDF</a>
+            <nav class="langs" aria-label="Language">
+                <a href="./" hreflang="en" lang="en" aria-current="page">English</a>
+                <a href="../fr/support/" hreflang="fr" lang="fr">Français</a>
+                <a href="../es/support/" hreflang="es" lang="es">Español</a>
+            </nav>
         </div>
     </header>
 
@@ -447,17 +462,17 @@
                 </details>
 
                 <details class="answer" id="a-language" data-plat="all"
-                         data-match="language|english|in french|wrong language"
-                         data-strong="french|francais|français|langue|translation|traduction">
-                    <summary>English and French, and how to change which one you get</summary>
+                         data-match="language|english|in french|in spanish|wrong language|langue|idioma"
+                         data-strong="french|spanish|français|español|translation|traduction">
+                    <summary>English, French and Spanish, and how to change which one you get</summary>
                     <div class="body">
-                        <p>MegaPDF is fully translated into <strong>Canadian French and European
-                        French</strong>, and nothing else yet.</p>
+                        <p>MegaPDF is fully translated into <strong>French</strong> (Canada and France)
+                        and <strong>Spanish</strong> (Latin America and Spain), and nothing else yet.</p>
                         <ul>
                             <li><span class="plat">Windows</span> it has its own setting:
                                 <strong>⋯ → Settings → Language</strong>, offering Windows' choice,
-                                English, French (Canada) or French (France). It takes effect when you
-                                restart MegaPDF.</li>
+                                English, French (Canada), French (France), Spanish (Latin America) or
+                                Spanish (Spain). It takes effect when you restart MegaPDF.</li>
                             <li><span class="plat">Mac · Linux</span> it follows your system language;
                                 there is no setting in the app.</li>
                             <li><span class="plat">Android</span> no setting in the app, but Android 13
@@ -466,8 +481,8 @@
                             <li><span class="plat">iPhone / iPad</span> the same idea in iOS:
                                 <strong>Settings → MegaPDF → Language</strong>.</li>
                         </ul>
-                        <p>Found French that reads wrongly? That is worth telling us — write down the
-                        exact words you saw.</p>
+                        <p>Found French or Spanish that reads wrongly? That is worth telling us — write
+                        down the exact words you saw.</p>
                     </div>
                 </details>
 
@@ -796,7 +811,7 @@
             <a href="../">MegaPDF</a>
             <a href="../privacy/">Privacy policy</a>
             <a href="https://github.com/SlyWombat/MegaPDF">Source on GitHub</a>
-            <a href="/">ElectricRV</a>
+            <a href="https://electricrv.ca/">Electric RV</a>
         </div>
     </footer>
 
@@ -843,10 +858,13 @@
             said = $("said");
 
         /* ---- the answers, read out of the page itself ---- */
+        /* Terms go through the same norm() as what the reader types, so "français" in
+           an attribute and "francais" in the box are the same word (#859). */
+        function terms(el, attr) {
+            return (el.getAttribute(attr) || "").split("|")
+                .map(function (t) { return norm(t).trim(); }).filter(Boolean);
+        }
         var answers = [].map.call(document.querySelectorAll("details.answer"), function (el) {
-            var terms = (el.getAttribute("data-match") || "").split("|")
-                .map(function (t) { return t.trim().toLowerCase(); })
-                .filter(Boolean);
             return {
                 el: el,
                 id: el.id,
@@ -854,11 +872,9 @@
                 body: el.querySelector(".body").innerHTML,
                 plats: (el.getAttribute("data-plat") || "all").split(/\s+/),
                 kinds: (el.getAttribute("data-kind") || "").split(/\s+/).filter(Boolean),
-                terms: terms,
-                strong: (el.getAttribute("data-strong") || "").split("|")
-                    .map(function (t) { return t.trim().toLowerCase(); }).filter(Boolean),
-                not: (el.getAttribute("data-not") || "").split("|")
-                    .map(function (t) { return t.trim().toLowerCase(); }).filter(Boolean),
+                terms: terms(el, "data-match"),
+                strong: terms(el, "data-strong"),
+                not: terms(el, "data-not"),
             };
         });
 
@@ -875,9 +891,13 @@
             var r = document.querySelector("input[name=kind]:checked");
             return r ? r.value : "";
         }
+        /* Lowercased, accents folded away and punctuation turned into spaces, so
+           "Ça n'ouvre pas", "ca n ouvre pas" and "contraseña"/"contrasena" each read
+           the same however they were typed (#859). The same function, character for
+           character, is in all three languages' pages. */
         function norm(s) {
-            return (" " + String(s).toLowerCase().replace(/[^a-z0-9àâäçéèêëîïôöùûüÿœæ]+/g, " ")
-                    .replace(/\s+/g, " ") + " ");
+            return (" " + String(s).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
+                    .replace(/[^a-z0-9œæ]+/g, " ").replace(/\s+/g, " ") + " ");
         }
         function score(a, text) {
             if (a.plats.indexOf("all") < 0 && plat() && a.plats.indexOf(plat()) < 0) { return 0; }
@@ -1023,7 +1043,7 @@
                 lines.push("The support page suggested nothing.");
             }
             lines.push("");
-            lines.push("Written on electricrv.ca/megapdf/support/ — nothing was sent from that page.");
+            lines.push("Written on megapdf.ca/support/ — nothing was sent from that page.");
 
             report.value = lines.join("\n");
             var subject = "MegaPDF support " + reference() +
