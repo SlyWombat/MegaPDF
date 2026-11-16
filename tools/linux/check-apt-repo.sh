@@ -126,8 +126,8 @@ echo "-- subscribe, exactly as the website says (URI aside)"
 install -d -m 0755 /etc/apt/keyrings
 curl -fsSL "$BASE/r1/megapdf.gpg" | tee /etc/apt/keyrings/megapdf.gpg > /dev/null
 curl -fsSL "$BASE/r1/megapdf.sources" | tee /etc/apt/sources.list.d/megapdf.sources > /dev/null
-grep -q '^URIs: https://electricrv.ca/megapdf/apt$' /etc/apt/sources.list.d/megapdf.sources \
-    && ok "the published .sources names https://electricrv.ca/megapdf/apt" \
+grep -q '^URIs: https://megapdf.ca/apt$' /etc/apt/sources.list.d/megapdf.sources \
+    && ok "the published .sources names https://megapdf.ca/apt" \
     || fail "the published .sources does not name the site"
 point r1
 

@@ -6,7 +6,7 @@
 #
 # or, in CI, with the armoured key in APT_SIGNING_KEY (the Actions secret of that name).
 #
-# <out-dir> becomes the repository root that https://electricrv.ca/megapdf/apt/ serves:
+# <out-dir> becomes the repository root that https://megapdf.ca/apt/ serves:
 #
 #     pool/main/m/megapdf/megapdf_<version>_amd64.deb
 #     dists/stable/main/binary-amd64/Packages{,.gz,.xz}

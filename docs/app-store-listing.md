@@ -29,9 +29,9 @@ pricing. Done that way for 1.7.0 on 2026-09-11.
 
 | Field | Value |
 |---|---|
-| **Support URL** | `https://electricrv.ca/megapdf/support/` *(the support page, live since 2026-10-02, #418/#662)* |
-| **Marketing URL** (optional) | `https://electricrv.ca/megapdf/` |
-| **Privacy Policy URL** | `https://electricrv.ca/megapdf/privacy/` *(hosted on electricrv.ca alongside SlyLED's — created by issue #25; the page must be live before submission. Same for Google Play's listing.)* |
+| **Support URL** | `https://megapdf.ca/support/` *(the support page, live since 2026-10-02, #418/#662)* |
+| **Marketing URL** (optional) | `https://megapdf.ca/` |
+| **Privacy Policy URL** | `https://megapdf.ca/privacy/` *(hosted on electricrv.ca alongside SlyLED's — created by issue #25; the page must be live before submission. Same for Google Play's listing.)* |
 
 <!-- copy-by-language -->
 ## Copy by language

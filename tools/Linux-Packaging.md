@@ -350,6 +350,11 @@ the three copyright tags).
 
 ## Going live
 
+**The site moved to https://megapdf.ca/ on 2026-11-16** (#845, house-network-ops#540).
+- From 2.5 on, new instructions and packages name `https://megapdf.ca/apt`.
+- Machines set up before that keep `https://electricrv.ca/megapdf/apt` in their `megapdf.sources`. That path is the one exception to the permanent 301s: both hosts serve the same files, from the same folder.
+- So existing installs keep updating without anyone editing a sources file.
+
 **Linux 2.0.0 was released on 2026-09-19** (Dave: "lets get a linux version released"),
 while the store versions of 2.0 were still in review:
 
@@ -441,8 +446,8 @@ to miss the date.
    `apt/`, and the landing page and privacy policy with their Linux text live (the Linux
    chip links the Linux page).
 6. **Check it from outside**, on any Debian or Ubuntu machine or container, with the
-   commands on `https://electricrv.ca/megapdf/linux/` exactly as written:
-   `apt update` must fetch `electricrv.ca/megapdf/apt stable InRelease`, and after
+   commands on `https://megapdf.ca/linux/` exactly as written:
+   `apt update` must fetch `megapdf.ca/apt stable InRelease`, and after
    `apt install megapdf`, `/opt/MegaPDF/MegaPDF --install-kind` must print `AptRepository`.
 7. **The Snap Store**: `gh workflow run snap.yml -f upload=true --ref main` puts the
    build on **edge**, and promoting that revision to stable in the dashboard is what makes
@@ -679,7 +684,7 @@ following can be decided here.
      for l in en fr-CA fr-FR; do for s in 01-reading 02-text 03-sign 04-pages 05-search 06-redact 07-home; do
        printf '%s/%s ' "$l" "$s"
        curl -s -o /dev/null -w '%{http_code}\n' \
-         "https://electricrv.ca/megapdf/screenshots/linux/$l/$s.png"
+         "https://megapdf.ca/screenshots/linux/$l/$s.png"
      done; done
      ```
 

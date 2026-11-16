@@ -46,7 +46,7 @@ public static class LinuxInstall
     public const string AptSourcesPath = "/etc/apt/sources.list.d/megapdf.sources";
 
     /// <summary>The page with every way to install MegaPDF on Linux.</summary>
-    public const string DownloadPage = "https://electricrv.ca/megapdf/linux/";
+    public const string DownloadPage = "https://megapdf.ca/linux/";
 
     /// <summary>The decision, with the environment and the file system passed in so it can be tested anywhere.</summary>
     /// <param name="environment">Reads an environment variable; null or empty when unset.</param>

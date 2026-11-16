@@ -96,7 +96,7 @@ files.
 **Permissions and privacy**
 No permissions are requested. Signing from a photo uses PhotosPicker, which runs
 out of process and returns only the chosen image. No data is collected; privacy
-policy: https://electricrv.ca/megapdf/privacy/
+policy: https://megapdf.ca/privacy/
 
 ---
 
@@ -164,7 +164,7 @@ document utility working on the user's own files.
 **Permissions and privacy** Sandboxed. Entitlements: user-selected file access,
 printing, and `com.apple.security.cs.allow-jit`, which the .NET runtime needs to
 compile its code; nothing else. No data is collected; privacy policy:
-https://electricrv.ca/megapdf/privacy/
+https://megapdf.ca/privacy/
 
 ---
 

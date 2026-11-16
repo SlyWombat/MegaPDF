@@ -215,7 +215,7 @@ jobs:
             artifacts/flathub/ca.electricrv.MegaPDF.flatpak
           if-no-files-found: error
 
-      # What website/deploy.py uploads to electricrv.ca/megapdf/apt/ on the day: download
+      # What website/deploy.py uploads to megapdf.ca/apt/ on the day: download
       # it into website/megapdf/apt/ (tools/Linux-Packaging.md, "Going live").
       - uses: actions/upload-artifact@v4
         if: steps.apt.outputs.built == '1'
@@ -254,7 +254,7 @@ jobs:
           VERSION="${TAG#linux-v}"
           gh release view "$TAG" >/dev/null 2>&1 || \
             gh release create "$TAG" --draft --verify-tag --title "MegaPDF $VERSION for Linux" \
-              --notes "MegaPDF $VERSION for Linux (x86-64). How to install it, including the APT repository that keeps it up to date: https://electricrv.ca/megapdf/linux/ — each file's sha256 is beside it."
+              --notes "MegaPDF $VERSION for Linux (x86-64). How to install it, including the APT repository that keeps it up to date: https://megapdf.ca/linux/ — each file's sha256 is beside it."
           gh release upload "$TAG" \
             artifacts/release/megapdf-linux-x64-*.tar.gz \
             artifacts/release/megapdf-linux-x64-*.tar.gz.sha256 \

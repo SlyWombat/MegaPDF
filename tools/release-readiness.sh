@@ -271,7 +271,7 @@ head_ "7b. store support links (#662)"
 emit < <(python3 -I - "$ROOT" <<'PY'
 import re, sys
 root = sys.argv[1]
-S = "https://electricrv.ca/megapdf/support/"
+S = "https://megapdf.ca/support/"
 def text(p):
     try:
         return open(f"{root}/{p}", encoding="utf-8").read()
@@ -406,14 +406,14 @@ if [ $STORES = 1 ]; then
   code=$(curl -s -m 20 -o /dev/null -w '%{http_code}' 'https://play.google.com/store/apps/details?id=ca.electricrv.megapdf')
   if [ "$code" = 200 ]; then ok "Google Play listing: HTTP 200 (public; the page does not state the version, see tools/play.sh listing status)"
   else attn "Google Play listing: HTTP $code (404 until public; tools/play.sh listing status for the track)"; fi
-  l=$(curl -s -m 20 https://electricrv.ca/megapdf/apt/dists/stable/main/binary-amd64/Packages | awk '/^Version:/{print $2}' | sort -V | tail -1)   # the pool keeps the newest three; the newest must be the shipped one
+  l=$(curl -s -m 20 https://megapdf.ca/apt/dists/stable/main/binary-amd64/Packages | awk '/^Version:/{print $2}' | sort -V | tail -1)   # the pool keeps the newest three; the newest must be the shipped one
   cmp_ver "APT repository (Linux)" "${l%-*}"
   snapinfo=$(curl -s -m 20 -H 'Snap-Device-Series: 16' 'https://api.snapcraft.io/v2/snaps/info/megapdf?fields=version,revision,links')
   s=$(printf '%s' "$snapinfo" | python3 -I -c 'import json,sys; c=json.load(sys.stdin)["channel-map"]; print(" ".join(sorted({x["channel"]["name"]+"="+x["version"] for x in c})))' 2>/dev/null)
   if [ -n "$s" ]; then
     case " $s " in *"=$VERSION "*) ok "Snap Store: $s" ;; *) attn "Snap Store: $s, repo $VERSION" ;; esac
     sc=$(printf '%s' "$snapinfo" | python3 -I -c 'import json,sys; print((json.load(sys.stdin)["snap"].get("links",{}).get("contact") or [""])[0])' 2>/dev/null)
-    if [ "$sc" = "https://electricrv.ca/megapdf/support/" ]; then ok "Snap Store contact link: the support page (#662)"
+    if [ "$sc" = "https://megapdf.ca/support/" ]; then ok "Snap Store contact link: the support page (#662)"
     else attn "Snap Store contact link is '${sc:-unreadable}', not the support page (#662; the next snap upload carries it)"; fi
   else attn "Snap Store: could not read"; fi
   rel=$(gh release list --limit 40 --json tagName,isDraft -q '.[]|select(.tagName|test("'"$VERSION"'"))|.tagName+(if .isDraft then " (DRAFT)" else "" end)' 2>/dev/null | tr '\n' ' ')

@@ -448,7 +448,7 @@ tools/play.sh listing status
 tools/play.sh listing push artifacts/store/captures-<x.y.z> --production <versionCode> --phone-only
 tools/play.sh listing push artifacts/store/captures-<x.y.z> --production <versionCode> --phone-only --commit
 tools/play.sh listing readback artifacts/store/captures-<x.y.z> --production <versionCode> --phone-only
-tools/play.sh listing contact                       # says "(the support page)"; the first time add --website https://electricrv.ca/megapdf/support/ --commit (#662)
+tools/play.sh listing contact                       # says "(the support page)"; the first time add --website https://megapdf.ca/support/ --commit (#662)
 ```
 
 `contact --commit` prints a harmless 400 afterwards (it deletes an already-committed edit),
@@ -468,7 +468,7 @@ The dry run comes **before** `gh release edit --draft=false`. Publishing cannot 
 back, and the rehearsal exists to fail while failing is free (#668).
 
 **The metainfo's screenshot URLs must answer before the `.deb` is public.** The metainfo
-inside the package points at `https://electricrv.ca/megapdf/screenshots/linux/<locale>/…`;
+inside the package points at `https://megapdf.ca/screenshots/linux/<locale>/…`;
 for a **new locale** those images must already be in `website/megapdf/screenshots/linux/` and
 go up with the release's `deploy.py`, or the shipped package points at 404s and cannot be
 fixed without a new one. 2.4.0's es-419 and es-ES were missing (14 of the 35 URLs, #724).
@@ -539,12 +539,12 @@ tools/msstore.sh status                                                  # and h
 for c in us ca fr gb; do curl -s "https://itunes.apple.com/lookup?id=6799522972&country=$c&_=$(date +%s)" | python3 -c 'import json,sys; r=json.load(sys.stdin)["results"][0]; print(r["version"], r["currentVersionReleaseDate"])'; done
 curl -sL -A 'Mozilla/5.0' 'https://apps.apple.com/ca/app/id6799522972?platform=mac' | grep -o 'Version [0-9.]*' | head -1   # the Mac record
 curl -s -o /dev/null -w '%{http_code}\n' 'https://play.google.com/store/apps/details?id=ca.electricrv.megapdf'   # 404 until public; tools/play.sh listing status for the track
-curl -s https://electricrv.ca/megapdf/apt/dists/stable/InRelease | head -5
-curl -s https://electricrv.ca/megapdf/apt/dists/stable/main/binary-amd64/Packages | grep -A1 '^Package: megapdf'
+curl -s https://megapdf.ca/apt/dists/stable/InRelease | head -5
+curl -s https://megapdf.ca/apt/dists/stable/main/binary-amd64/Packages | grep -A1 '^Package: megapdf'
 curl -s -H 'Snap-Device-Series: 16' 'https://api.snapcraft.io/v2/snaps/info/megapdf?fields=version,revision,private,publisher'
 curl -s -H 'Snap-Device-Series: 16' 'https://api.snapcraft.io/v2/snaps/info/megapdf?fields=links'   # contact and issues are the support page (#662)
 gh release view linux-v<x.y.z> --json assets -q '.assets[].name'      # and the two CLI tags
-grep -o 'https://electricrv.ca/[^<"]*\.png' tools/linux/flatpak/ca.electricrv.MegaPDF.metainfo.xml | sort -u | while read -r u; do curl -s -o /dev/null -w "%{http_code} %{content_type} $u\n" "$u"; done   # every line: 200 image/png
+grep -o 'https://megapdf.ca/[^<"]*\.png' tools/linux/flatpak/ca.electricrv.MegaPDF.metainfo.xml | sort -u | while read -r u; do curl -s -o /dev/null -w "%{http_code} %{content_type} $u\n" "$u"; done   # every line: 200 image/png
 ```
 
 How to read each store, because the obvious read is often wrong:

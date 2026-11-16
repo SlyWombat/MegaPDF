@@ -1,4 +1,4 @@
-# electricrv.ca/megapdf — site source
+# megapdf.ca — site source
 
 Deployed to `/public_html/megapdf/` on electricrv.ca via cPanel UAPI
 (the login lives in the Lighting Arduino project's `.env` —
@@ -47,12 +47,12 @@ website/deploy.py ...`. That is the folder, never the file's contents. The dry r
   from is below.
 - `megapdf/screenshots/linux/` — the AppStream screenshots for the Flatpak
   (#254 A1). The metainfo points at
-  `https://electricrv.ca/megapdf/screenshots/linux/…`, so **those URLs only
+  `https://megapdf.ca/screenshots/linux/…`, so **those URLs only
   resolve after a deploy**, and a Flathub submission has to follow one.
 - `megapdf/linux/index.html` — how to install MegaPDF on Linux: the APT
   repository, the Snap Store, the .deb, the tarball, and how updates arrive for
   each (#158). **Only goes up with `--linux`.**
-- `megapdf/apt/` — the APT repository that `https://electricrv.ca/megapdf/apt`
+- `megapdf/apt/` — the APT repository that `https://megapdf.ca/apt`
   serves. Committed: `megapdf.gpg` (the public signing key, for
   `/etc/apt/keyrings`), `megapdf.asc` (the same, readable), `megapdf.sources`
   (the deb822 entry), and `FINGERPRINT` (what `make-apt-repo.sh` checks the
@@ -316,7 +316,7 @@ done
 | iPhone / iPad | `https://apps.apple.com/app/id6799522972` | live — approved 2026-09-16 |
 | Mac | `https://apps.apple.com/app/id6799522972?platform=mac` | live — approved 2026-09-16 |
 | Android | `https://play.google.com/store/apps/details?id=ca.electricrv.megapdf` | live — public 2026-09-09 |
-| Linux | `https://electricrv.ca/megapdf/linux/` | our own page: goes up with `--linux`, on Linux's own day (below) |
+| Linux | `https://megapdf.ca/linux/` | our own page: goes up with `--linux`, on Linux's own day (below) |
 
 **Apple is one app ID for both platforms.** `6799522972` is the whole record;
 `tools/asc_publish.py` switches platform with `ASC_PLATFORM=MAC_OS` against the
@@ -394,9 +394,9 @@ last one you are linking to is up, or deploy twice.
    macOS, Linux, redaction and document protection; the old one names three
    platforms. Both store listings point at this URL, so it should be right
    before a reviewer follows it, not after.
-5. **Check the live page**: `https://electricrv.ca/megapdf/` — the five
+5. **Check the live page**: `https://megapdf.ca/` — the five
    platform chips, the "New in 2.0" cards, the gallery, and the footer's privacy
-   link. Then `https://electricrv.ca/megapdf/privacy/` and confirm the header
+   link. Then `https://megapdf.ca/privacy/` and confirm the header
    reads *Effective 19 September 2026*. If 2.0 lands a long way past that date,
    bump the date in the file and redeploy rather than shipping a stale one.
 6. **Tear down the preview**, if you made one.
