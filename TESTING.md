@@ -2995,6 +2995,36 @@ language, so the state sets the banner's text from the catalogue for the run's l
 what the packaged app does by itself); a real macOS run (same Avalonia binary as Linux, not run on the
 mini); Narrator or VoiceOver reading the new sentences. Not reviewed by Fable.
 
+## Release 2.5.0 corpus batteries (#862), 2026-11-16
+
+All four batteries plus the edits phase ran on kdocker3 over the five corpora. They compared the 2.5.0 release candidate `3921aea6` with 2.4.0 `72268e9f`.
+- **Builds:** each build is a `git archive` built in a throwaway `megapdf:dotnet` container. The two builds ran side by side under the same load.
+- **Same core:** `libmegapdf_core.so` is byte-identical between the two builds. The only `core/` change since 2.4.0 is the CLI version string.
+- **Where results are:** `tests/Private/stress/release-2.5.0-kdocker3/` (gitignored), in `GATES.txt` and `PER-DOCUMENT.txt`.
+
+| corpus | structure F1 | τ | redacted / refused | leaked | changed outside | hung |
+|---|---|---|---|---|---|---|
+| private | 0.999069 | 0.951 | 2581 / 1503 | 0 | 43 | 0 |
+| public | 0.981815 | 0.978 | 1278 / 205 | 8 | 0 | 1 |
+| ca | 0.999938 | 0.994 | 65 / 69 | 1 | 0 | 0 |
+| un | 0.999801 | 0.967 | 52 / 38 | 0 | 0 | 0 |
+| vendor | 0.998199 | 0.986 | 9 / 17 | 0 | 0 | 0 |
+
+- **Structure:** the per-document output differs between the builds on 0 documents (every field except timing and memory).
+- **Markdown and pages:** per-document lines are identical between the builds, with 0 crashes, hangs, cmark failures and qpdf failures.
+- **Edits (`compare_runs.py`):** 0 changes across 30,057 edits.
+- **Time:** battery wall times match within 1%.
+
+Every line above that is not zero reads the same on 2.4.0, on the same documents, checked by hash:
+- #498: public F1;
+- #822: leaks;
+- #823: the hang;
+- #825: changed outside the marked area;
+- #824: 6 `delete_word` read-back failures;
+- #445: 9 "REFUSED, other".
+
+A fresh 2.4.0 pages run hit qpdf's 300 s `--check` limit once, on a 287 MB output that takes 153-168 s when re-measured. That limit belongs to the harness under load, not to MegaPDF (#868). Dave released with these known lines, as he did for 2.4.0.
+
 ## Reporting
 
 For each issue: what you clicked, what you expected, what happened, and the PDF

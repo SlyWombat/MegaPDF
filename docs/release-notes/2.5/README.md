@@ -1,6 +1,6 @@
 # MegaPDF 2.5 — what's new
 
-**Draft, not yet released.** There are two things to say:
+**Approved and released.** Live on 2.5.0: Google Play (vc 17), Linux (APT, `.deb`, tarball) and both CLI archives on 2026-11-16; Snap stable (revision 5) on 2026-11-17 UTC; iOS (build 37, released 2026-11-17T20:34Z) and Windows (2.5.0.0, submission 1152921505702432143) on 2026-11-17; Mac (build 2.5.0) on 2026-11-18. Release checklist #862. There are two things to say:
 
 - **On every channel:** the About link to the support page, which #730 added to all four apps (PR #850): Windows, the Avalonia app for Mac and Linux, iOS and Android.
 - **On Google Play only, first:** the Android rotation fix (#826). Turning the phone used to reopen the document the app was launched with.

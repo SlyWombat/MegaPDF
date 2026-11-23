@@ -7,7 +7,7 @@ window gained the support link in #730, and that one binary serves Mac and Linux
 
 Wording set by Dave on 2026-11-16 ("Just say linked to support page, no need for additional
 description"): one line, the About link to the support page added on every app by #730
-(PR #850). **Draft, not yet released.** **`FR-REVIEW #730`, `ES-REVIEW #730`: the French and the
+(PR #850). **Approved and released.** Live on 2.5.0: Google Play (vc 17), Linux (APT, `.deb`, tarball) and both CLI archives on 2026-11-16; Snap stable (revision 5) on 2026-11-17 UTC; iOS (build 37, released 2026-11-17T20:34Z) and Windows (2.5.0.0, submission 1152921505702432143) on 2026-11-17; Mac (build 2.5.0) on 2026-11-18. Release checklist #862. **`FR-REVIEW #730`, `ES-REVIEW #730`: the French and the
 Spanish below were reviewed.** Fable approved all six fr-CA and es-419 sentences, and the identical fr-FR and es-ES
 derivations, on 2026-11-16. Any change needs another Fable review; the markers stay by design. The paragraphs below are the store blocks' sentences, and
 `check_copy.py` fails if they drift from them.
