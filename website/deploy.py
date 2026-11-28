@@ -276,6 +276,38 @@ def check_linux(snap):
             f"linux/index.html offers {offered[0]}; Snap section {'live' if snap else 'held back'}")
 
 
+def check_linux_downloads():
+    """Refuse a --linux deploy whose page links a GitHub release download that does not
+    answer. The page names each file by URL, and the repository checks above say nothing
+    about the release: when the arm64 links were added (#871) the page pointed at
+    linux-v2.5.0, which has no arm64 files, and every check above would still have
+    passed once the repository had them. A draft release's assets 404 publicly too,
+    which is what this should catch. Network, so a real deploy only: a dry run promises
+    to contact nothing. Returns a line describing what was checked."""
+    with open(os.path.join(SITE, "linux", "index.html"), encoding="utf-8") as f:
+        page = f.read()
+    urls = sorted(set(re.findall(
+        r"https://github\.com/SlyWombat/MegaPDF/releases/download/[^\"'\s<>]+", page)))
+    if not urls:
+        raise SystemExit("--linux: linux/index.html links no release download at all")
+    ctx = ssl.create_default_context()
+    bad = []
+    for url in urls:
+        req = urllib.request.Request(url, method="HEAD", headers={"User-Agent": "megapdf-deploy"})
+        try:
+            with urllib.request.urlopen(req, timeout=30, context=ctx) as resp:
+                if resp.status != 200:
+                    bad.append(f"{url} ({resp.status})")
+        except urllib.error.HTTPError as e:
+            bad.append(f"{url} ({e.code})")
+        except urllib.error.URLError as e:
+            bad.append(f"{url} ({e.reason})")
+    if bad:
+        raise SystemExit("--linux: linux/index.html links release downloads that do not answer "
+                         "(is the release published, with these files?):\n  " + "\n  ".join(bad))
+    return f"linux/index.html: all {len(urls)} release downloads answer 200"
+
+
 # The platforms the support page's answers may be tagged for; "all" means every
 # one. Kept here so a typo in data-plat is a refused deploy rather than an answer
 # that silently never appears.
@@ -684,6 +716,12 @@ def main():
     # A real deploy reads the login file before anything is staged, so a missing
     # one stops here with no temporary folder left behind (#668).
     server = None if args.dry_run else Server(login_path)
+    if args.linux:
+        # Before anything is staged or uploaded, for the same reason as the login (#871).
+        downloads_note = ("linux/index.html release downloads: not checked (a dry run contacts "
+                          "nothing; the real deploy checks each one answers 200)"
+                          if args.dry_run else check_linux_downloads())
+        linux_note = linux_note + "\n" + downloads_note
     tmp, targets = staged(chosen, live)
     if args.landing:
         # Uploads keep the local file's name, so the landing page goes up from a
