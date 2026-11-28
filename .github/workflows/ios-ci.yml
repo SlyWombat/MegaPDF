@@ -322,6 +322,10 @@ jobs:
           # what hands them to xcodebuild as separate arguments. Python 3.9 and bash 3.2 safe.
           LANE_ARGS=$(python3 ../tools/qa/ios_ui_lanes.py xcodebuild-args iphone)
           echo "iPhone lane (ios/ui-test-lanes.txt): $LANE_ARGS"
+          # xcodebuild refuses a -resultBundlePath that exists, and the self-hosted runner keeps
+          # its _temp between jobs: a cancelled run leaves its bundle behind and every later run
+          # then fails with exit 64 (seen on #871 after two cancelled runs).
+          rm -rf "$RUNNER_TEMP/ui-tests.xcresult"
           xcodebuild test-without-building \
             -project MegaPDF.xcodeproj \
             -scheme MegaPDFDemo \
@@ -343,6 +347,10 @@ jobs:
         run: |
           LANE_ARGS=$(python3 ../tools/qa/ios_ui_lanes.py xcodebuild-args ipad)
           echo "iPad lane (ios/ui-test-lanes.txt): $LANE_ARGS"
+          # xcodebuild refuses a -resultBundlePath that exists, and the self-hosted runner keeps
+          # its _temp between jobs: a cancelled run leaves its bundle behind and every later run
+          # then fails with exit 64 (seen on #871 after two cancelled runs).
+          rm -rf "$RUNNER_TEMP/ui-tests-ipad.xcresult"
           xcodebuild test-without-building \
             -project MegaPDF.xcodeproj \
             -scheme MegaPDFDemo \
