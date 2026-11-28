@@ -24,7 +24,14 @@ set(REPO ${CMAKE_CURRENT_SOURCE_DIR}/..)
 # directory — a local tools/pdfium/build-pdfium.sh run, to test a patch before it is
 # released (#120). Declared before the library so its headers can be used as well as its
 # library.
-set(MEGAPDF_PDFIUM_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../libs/pdfium/linux-x64" CACHE PATH
+# The directory is the host's architecture's (#871): tools/fetch-pdfium-linux.sh puts
+# linux-x64 or linux-arm64 there by `uname -m`, and the core is built natively.
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64|ARM64)$")
+    set(MEGAPDF_LINUX_ARCH "linux-arm64")
+else()
+    set(MEGAPDF_LINUX_ARCH "linux-x64")
+endif()
+set(MEGAPDF_PDFIUM_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../libs/pdfium/${MEGAPDF_LINUX_ARCH}" CACHE PATH
     "PDFium to link on Linux (include/, lib/, VERSION)")
 
 option(MEGAPDF_CORE_TESTS "Build and register the core test target (#104)" OFF)
@@ -132,7 +139,7 @@ else()
     # tools/pdfium/build-pdfium.sh run, to test a PDFium patch before it is released (#120).
     set(PDFIUM_LINUX ${MEGAPDF_PDFIUM_DIR})
     if(NOT EXISTS ${PDFIUM_LINUX}/lib/libpdfium.so)
-        message(FATAL_ERROR "libs/pdfium/linux-x64 is missing (fetch the pinned pdfium-binaries linux-x64 build)")
+        message(FATAL_ERROR "${MEGAPDF_PDFIUM_DIR} is missing (tools/fetch-pdfium-linux.sh fetches the pinned ${MEGAPDF_LINUX_ARCH} build)")
     endif()
     set(PDFIUM_LINK ${PDFIUM_LINUX}/lib/libpdfium.so)
     set(PDFIUM_RUNTIME ${PDFIUM_LINK})
