@@ -274,7 +274,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: MegaPDF-linux-release-arm64
-          path: artifacts
+          path: artifacts/release
 
       - name: Generate fixtures
         run: |
@@ -389,7 +389,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: MegaPDF-linux-release-arm64
-          path: artifacts
+          path: artifacts/release
 
       # Neither creates a tag nor touches any other release. `--verify-tag` refuses a
       # tag that is not already pushed. A re-run of the same tag replaces the files in
