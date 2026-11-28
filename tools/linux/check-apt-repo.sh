@@ -130,6 +130,7 @@ apt-get install -y -qq curl ca-certificates binutils >/dev/null 2>&1
 INSTALL=(apt-get install -y -qq)
 [ "${NORECS:-0}" = 1 ] && INSTALL+=(--no-install-recommends)
 
+echo "-- this container is $(dpkg --print-architecture) ($(. /etc/os-release; echo "$PRETTY_NAME"))"
 echo "-- subscribe, exactly as the website says (URI aside)"
 install -d -m 0755 /etc/apt/keyrings
 curl -fsSL "$BASE/r1/megapdf.gpg" | tee /etc/apt/keyrings/megapdf.gpg > /dev/null
@@ -233,7 +234,7 @@ for entry in "${IMAGES[@]}"; do
     echo
     echo "=== $entry"
     # shellcheck disable=SC2086  # DOCKER_OPTS is a list of options on purpose
-    if docker run --rm --network host ${DOCKER_OPTS:-} -e PORT="$PORT" -e NEXT="$NEXT" \
+    if docker run --rm --network host --platform "linux/$ARCH" ${DOCKER_OPTS:-} -e PORT="$PORT" -e NEXT="$NEXT" \
             -e VERSION="$VERSION" -e OLDEST="$OLDEST" -e NORECS="$norecs" \
             -v "$ROOT:/src:ro" -v "$FIXTURES:/fixtures:ro" -v "$WORK/inside.sh:/inside.sh:ro" \
             "$image" bash /inside.sh; then
