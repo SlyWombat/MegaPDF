@@ -540,10 +540,11 @@ for c in us ca fr gb; do curl -s "https://itunes.apple.com/lookup?id=6799522972&
 curl -sL -A 'Mozilla/5.0' 'https://apps.apple.com/ca/app/id6799522972?platform=mac' | grep -o 'Version [0-9.]*' | head -1   # the Mac record
 curl -s -o /dev/null -w '%{http_code}\n' 'https://play.google.com/store/apps/details?id=ca.electricrv.megapdf'   # 404 until public; tools/play.sh listing status for the track
 curl -s https://megapdf.ca/apt/dists/stable/InRelease | head -5
-curl -s https://megapdf.ca/apt/dists/stable/main/binary-amd64/Packages | grep -A1 '^Package: megapdf'
+for a in amd64 arm64; do curl -s https://megapdf.ca/apt/dists/stable/main/binary-$a/Packages | grep -A1 '^Package: megapdf'; done
 curl -s -H 'Snap-Device-Series: 16' 'https://api.snapcraft.io/v2/snaps/info/megapdf?fields=version,revision,private,publisher'
 curl -s -H 'Snap-Device-Series: 16' 'https://api.snapcraft.io/v2/snaps/info/megapdf?fields=links'   # contact and issues are the support page (#662)
 gh release view linux-v<x.y.z> --json assets -q '.assets[].name'      # and the two CLI tags
+# the Linux release carries both architectures: megapdf-linux-{x64,arm64}-<v>.tar.gz and megapdf_<v>_{amd64,arm64}.deb, each with its .sha256 (8 files)
 grep -o 'https://megapdf.ca/[^<"]*\.png' tools/linux/flatpak/ca.electricrv.MegaPDF.metainfo.xml | sort -u | while read -r u; do curl -s -o /dev/null -w "%{http_code} %{content_type} $u\n" "$u"; done   # every line: 200 image/png
 ```
 

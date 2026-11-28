@@ -226,7 +226,8 @@ def check_linux(snap):
     apt = os.path.join(SITE, "apt")
     need = ["megapdf.gpg", "megapdf.sources", "dists/stable/InRelease",
             "dists/stable/Release", "dists/stable/Release.gpg",
-            "dists/stable/main/binary-amd64/Packages"]
+            "dists/stable/main/binary-amd64/Packages",
+            "dists/stable/main/binary-arm64/Packages"]
     missing = [n for n in need if not os.path.isfile(os.path.join(apt, n))]
     if missing:
         raise SystemExit("--linux: apt/ is not a complete repository (missing "
@@ -239,8 +240,14 @@ def check_linux(snap):
                              capture_output=True, text=True)
         if run.returncode != 0:
             raise SystemExit(f"--linux: {args[0]} does not verify against apt/megapdf.gpg")
-    with open(os.path.join(apt, "dists/stable/main/binary-amd64/Packages")) as f:
-        versions = re.findall(r"^Version: (.+)$", f.read(), flags=re.M)
+    # Both architectures (#871): the amd64 index sets the versions, and the arm64 one must
+    # list the newest of them too, or an ARM machine subscribed to the repository would be
+    # offered nothing while the page says it is supported.
+    def index_versions(arch):
+        with open(os.path.join(apt, f"dists/stable/main/binary-{arch}/Packages")) as f:
+            return re.findall(r"^Version: (.+)$", f.read(), flags=re.M)
+    versions = index_versions("amd64")
+    arm_versions = index_versions("arm64")
     with open(os.path.join(SITE, "linux", "index.html")) as f:
         page = f.read()
     offered = sorted(set(re.findall(r"megapdf_([0-9][^_\s\"]*)_amd64\.deb", page)))
@@ -254,11 +261,51 @@ def check_linux(snap):
     if newer:
         raise SystemExit(f"--linux: linux/index.html offers {offered[0]}, but the repository "
                          f"also holds the newer {', '.join(newer)}. Offer the newest.")
-    pool = os.path.join(apt, "pool/main/m/megapdf", f"megapdf_{offered[0]}_amd64.deb")
-    if not os.path.isfile(pool):
-        raise SystemExit(f"--linux: {os.path.relpath(pool, SITE)} is not in the pool")
-    return (f"apt/ verified: signed by apt/megapdf.gpg, holds {', '.join(versions)}; "
+    offered_arm = sorted(set(re.findall(r"megapdf_([0-9][^_\s\"]*)_arm64\.deb", page)))
+    if offered_arm != offered:
+        raise SystemExit(f"--linux: linux/index.html offers the amd64 .deb {offered} but the "
+                         f"arm64 .deb {offered_arm or 'not at all'}. Offer both, same version.")
+    if offered[0] not in arm_versions:
+        raise SystemExit(f"--linux: the arm64 index holds {arm_versions or 'nothing'}, "
+                         f"not the {offered[0]} the page offers.")
+    for arch in ("amd64", "arm64"):
+        pool = os.path.join(apt, "pool/main/m/megapdf", f"megapdf_{offered[0]}_{arch}.deb")
+        if not os.path.isfile(pool):
+            raise SystemExit(f"--linux: {os.path.relpath(pool, SITE)} is not in the pool")
+    return (f"apt/ verified (amd64 and arm64): signed by apt/megapdf.gpg, holds {', '.join(versions)}; "
             f"linux/index.html offers {offered[0]}; Snap section {'live' if snap else 'held back'}")
+
+
+def check_linux_downloads():
+    """Refuse a --linux deploy whose page links a GitHub release download that does not
+    answer. The page names each file by URL, and the repository checks above say nothing
+    about the release: when the arm64 links were added (#871) the page pointed at
+    linux-v2.5.0, which has no arm64 files, and every check above would still have
+    passed once the repository had them. A draft release's assets 404 publicly too,
+    which is what this should catch. Network, so a real deploy only: a dry run promises
+    to contact nothing. Returns a line describing what was checked."""
+    with open(os.path.join(SITE, "linux", "index.html"), encoding="utf-8") as f:
+        page = f.read()
+    urls = sorted(set(re.findall(
+        r"https://github\.com/SlyWombat/MegaPDF/releases/download/[^\"'\s<>]+", page)))
+    if not urls:
+        raise SystemExit("--linux: linux/index.html links no release download at all")
+    ctx = ssl.create_default_context()
+    bad = []
+    for url in urls:
+        req = urllib.request.Request(url, method="HEAD", headers={"User-Agent": "megapdf-deploy"})
+        try:
+            with urllib.request.urlopen(req, timeout=30, context=ctx) as resp:
+                if resp.status != 200:
+                    bad.append(f"{url} ({resp.status})")
+        except urllib.error.HTTPError as e:
+            bad.append(f"{url} ({e.code})")
+        except urllib.error.URLError as e:
+            bad.append(f"{url} ({e.reason})")
+    if bad:
+        raise SystemExit("--linux: linux/index.html links release downloads that do not answer "
+                         "(is the release published, with these files?):\n  " + "\n  ".join(bad))
+    return f"linux/index.html: all {len(urls)} release downloads answer 200"
 
 
 # The platforms the support page's answers may be tagged for; "all" means every
@@ -669,6 +716,12 @@ def main():
     # A real deploy reads the login file before anything is staged, so a missing
     # one stops here with no temporary folder left behind (#668).
     server = None if args.dry_run else Server(login_path)
+    if args.linux:
+        # Before anything is staged or uploaded, for the same reason as the login (#871).
+        downloads_note = ("linux/index.html release downloads: not checked (a dry run contacts "
+                          "nothing; the real deploy checks each one answers 200)"
+                          if args.dry_run else check_linux_downloads())
+        linux_note = linux_note + "\n" + downloads_note
     tmp, targets = staged(chosen, live)
     if args.landing:
         # Uploads keep the local file's name, so the landing page goes up from a

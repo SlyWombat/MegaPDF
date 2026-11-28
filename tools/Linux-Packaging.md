@@ -38,14 +38,14 @@ by their environment. `MegaPDF --install-kind` prints the decision, and `package
 | `tools/linux/package-check.sh` | what any package must be true of. Run against whatever a package installed. |
 | `tools/linux/check-flatpak.sh` | installs the bundle and drives the app inside the sandbox. |
 | `tools/linux/check-deb.sh` | installs the `.deb` on a bare machine, runs the app out of it, removes it again. |
-| `tools/linux/make-apt-repo.sh` | the signed APT repository (`dists/stable`, `pool/main`) from one or more `.deb`s. The pool is bounded to the current release and the two before it (#372): older `.deb`s are dropped from `pool/` and `Packages`. Refuses any key but the one in `website/megapdf/apt/FINGERPRINT`, and checks its own signature with gpgv before it finishes. |
-| `tools/linux/check-apt-repo.sh` | subscribes to that repository in clean Debian 12, Ubuntu 22.04 and 24.04 containers exactly as the website says, installs, runs the app, publishes a newer version and watches `apt upgrade` take it, and checks that a forged signature is refused. |
+| `tools/linux/make-apt-repo.sh` | the signed APT repository (`dists/stable`, `pool/main`) from one or more `.deb`s, amd64 and arm64 under one signed `InRelease` (#871). The pool is bounded to the current release and the two before it (#372): older `.deb`s are dropped from `pool/` and `Packages`. Refuses any key but the one in `website/megapdf/apt/FINGERPRINT`, and checks its own signature with gpgv before it finishes. |
+| `tools/linux/check-apt-repo.sh` | subscribes to that repository, for the host's architecture (amd64, or arm64 on an arm64 machine), in clean Debian 12 and 13 and Ubuntu 22.04, 24.04 and 26.04 containers exactly as the website says, installs, runs the app, publishes a newer version and watches `apt upgrade` take it, and checks that a forged signature is refused. |
 | `website/megapdf/apt/` | the public half of the repository: `megapdf.gpg`, `megapdf.asc`, `megapdf.sources`, `FINGERPRINT`. |
 | `tools/linux/flatpak/ca.electricrv.MegaPDF.yml` | the manifest. |
 | `tools/linux/flatpak/ca.electricrv.MegaPDF.metainfo.xml` | the AppStream data a software centre shows. |
 | `tools/linux/store-captures.sh` | the seven listing screenshots the metainfo points at, one language per run, under its own Xvfb. |
 | `tools/linux/check-metainfo.sh` | the listing, through both the tools a Flathub reviewer runs: `appstreamcli validate` and `flatpak-builder-lint`. In CI on every push. |
-| `tools/linux/make-release-tarball.sh` | `megapdf-linux-x64-<ver>.tar.gz` and its sha256 — the archive the Flathub manifest fetches. |
+| `tools/linux/make-release-tarball.sh` | `megapdf-linux-<x64\|arm64>-<ver>.tar.gz` (the host's architecture) and its sha256; the x64 one is the archive the Flathub manifest fetches. |
 | `tools/linux/flatpak/flathub/…yml.in` | the manifest as Flathub would build it, with the `sources:` block left to be filled in. |
 | `tools/linux/make-flathub-manifest.sh` | fills it in, from a tarball's URL and checksum (or its path, for a dry run). |
 | `tools/linux/build-flathub-flatpak.sh` | builds *that* manifest, so the one Flathub runs is the one that has been run. |
@@ -522,7 +522,7 @@ the Snap section of `website/megapdf/linux/index.html`.
 
 ### What the snap is
 
-`megapdf`, core24, **strict confinement**, amd64. It wraps the same published tree as
+`megapdf`, core24, **strict confinement**, amd64 and arm64 (#871; a Chromebook has no snapd, so arm64 is there for completeness). It wraps the same published tree as
 the `.deb` and the Flatpak, in one piece under `$SNAP/lib/megapdf`. The listing text is
 the metainfo's (`make-snapcraft-yaml.py`) with one paragraph swapped: the Flatpak asks
 for no access to your files and the snap does, so the snap's listing says what the snap
@@ -826,55 +826,40 @@ following can be decided here.
    `$XDG_DATA_HOME`. A run that starts the portal under one `HOME` and restarts it under
    another reads an empty database, every handle looks lost, and the wrong answer arrives
    looking exactly like the right one. This is how the first run of the check said "NO".
-4. **`linux-arm64`: the engine cross-builds. The app cannot ship from it yet, and should
-   not be in 2.0.** (#254 A6.)
+4. **`linux-arm64`: built, packaged and tested natively (#871).** Measured first on
+   2026-09-18 (#254 A6): the patched PDFium series builds for arm64 unchanged
+   (`tools/pdfium/build-pdfium.sh <work> linux arm64`, 435 `FPDF*` symbols, the same as
+   x64), `core/` builds for aarch64 with no CMake change, and `dotnet publish -r
+   linux-arm64 --self-contained` works with SkiaSharp and HarfBuzzSharp arm64 natives. What
+   was missing was the plumbing and an archive; both are in now.
 
-   This used to say the patched PDFium series did not build for arm64. It does, without a
-   patch or a workaround. `tools/pdfium/build-pdfium.sh <work> linux arm64` runs
-   pdfium-binaries' own arm64 path — it downloads the Debian arm64 sysroot itself and
-   `steps/05-configure.sh` has a `linux-arm64` case already — and produces an
-   `ELF 64-bit LSB shared object, ARM aarch64` `libpdfium.so` exporting **exactly the same
-   435 `FPDF*` symbols** as the x64 build of the same series, at a comparable size
-   (7.86 MB against 7.66 MB). Measured 2026-09-18 on series `a02dc04f63e3` (30 patches).
-   `pdfium-build.yml` now has the `linux/arm64` entry.
-
-   The rest was measured too, on the same day:
-
-   | | |
-   |---|---|
-   | `core/` → `libmegapdf_core.so` for aarch64 | **builds**, with a four-line CMake toolchain file and `g++-aarch64-linux-gnu`. `core/CMakeLists.txt` needed no change at all. |
-   | `dotnet publish -r linux-arm64 --self-contained` | **works**. The apphost comes out AArch64, and SkiaSharp and HarfBuzzSharp both ship arm64 natives. |
-   | the two native libraries in that publish | **x86-64**. `MegaPDF.Core.csproj` copies from `libs/pdfium/linux-x64` and `core/build/linux-x64` whatever the runtime identifier is, so the output is an arm64 app carrying an x64 engine. |
-
-   So three code changes remain, all small and none of them unknown:
-
-   1. `tools/fetch-pdfium-linux.sh` takes an architecture and fetches
-      `pdfium-linux-arm64.tgz` (it hardcodes `pdfium-linux-x64.tgz`);
-   2. `tools/build-core.sh` takes an architecture and passes a toolchain file (it
-      hardcodes `linux-x64` from `uname`);
-   3. `MegaPDF.Core.csproj` picks the native pair by runtime identifier, and
-      `tools/build-linux-app.sh` stops refusing `linux-arm64`.
-
-   **What blocks all three is not code.** The pinned PDFium release carries no
-   `pdfium-linux-arm64.tgz`, so nothing can fetch one. Publishing it is Dave's, because
-   it means running the release workflow and pushing a release tag:
-
-   ```
-   gh workflow run "PDFium (patched) build" -f branch=chromium/7934 -f release=true
-   ```
-
-   That rebuilds every target and publishes a new `pdfium-<branch>-megapdf-<series>`
-   prerelease. It does **not** change the patch series, so the x64, Windows, macOS, iOS
-   and Android binaries are the same sources as the pinned ones — but it is a new release
-   and a new pin, and re-pinning every platform during a release hold is not a thing to do
-   for a stretch item.
-
-   **The recommendation is to leave `linux-arm64` out of 2.0.** Not because it cannot be
-   built — it can — but because nothing about it has been *run*. There is no corpus
-   battery on arm64, no QA pass, no baseline to compare against, and this server cannot
-   execute an arm64 binary (no `qemu-aarch64` binfmt, and registering one is a change to
-   the host). GitHub's `ubuntu-24.04-arm` runners would make an arm64 `--self-test` and a
-   battery possible, which is what 2.1 should do. Shipping a Flathub arm64 package that
-   has never been executed is worse than shipping none.
-
-   The manifest and the `.deb` are therefore still x86-64 only, deliberately.
+   - **PDFium:** `pdfium-linux-arm64.tgz` is attached to the pinned release
+     (`libs/pdfium/RELEASE`), built by `pdfium-build.yml` from the same series as every
+     other platform's archive. `tools/fetch-pdfium-linux.sh` picks the archive and
+     `libs/pdfium/linux-<arch>` by `uname -m` and checks the archive's `VERSION` against
+     `libs/pdfium/win-x64/VERSION`, as before.
+   - **Native, never cross-built.** `fetch-pdfium-linux.sh`, `build-core.sh` and
+     `build-linux-app.sh` take a `linux-x64` / `linux-arm64` rid, default to the host's, and
+     refuse the other with a message. `MegaPDF.Core.csproj` picks the pair the same way
+     `MegaPdfWinArch` does (an explicit `MegaPdfLinuxArch`, else the RuntimeIdentifier,
+     else the machine's architecture). The apphost therefore never wraps the wrong
+     engine.
+   - **The glibc / GLIBCXX ceilings** (2.35 / 3.4.30, Debian 12 and Ubuntu 22.04) are checked
+     on the arm64 tree too, by the same loop in `build-linux-app.sh`.
+   - **Packages:** `build-deb.sh` writes `Architecture: arm64` on an arm64 host,
+     `make-release-tarball.sh` names `megapdf-linux-arm64-<ver>.tar.gz`, and `build-snap.sh`
+     / `snapcraft.yaml.in` build the snap for `amd64` and `arm64` (one per architecture, each
+     on its own kind of machine). `make-apt-repo.sh` takes the `.deb`s of both and writes
+     `binary-amd64` and `binary-arm64` `Packages` under the one signed `InRelease`;
+     the pool is pruned by version across both architectures.
+   - **CI:** `ci.yml`'s `Linux app` and `Linux packages` jobs have an arm64 leg on
+     `ubuntu-24.04-arm` that runs the same checks, including the core tests and
+     `--self-test` (only the Flatpak steps are x64 only). `linux-release.yml` has an
+     `arm64` job, a joint `apt` job, and `apt-arm64`, which runs `check-apt-repo.sh` on an
+     arm64 runner (its containers are the arm64 images of Debian 12 and 13 and Ubuntu).
+     `snap.yml` builds both snaps; upload and promote are unchanged and opt-in.
+   - **Not done:** the Flatpak and the Flathub manifest stay x86-64 only
+     (`make-flathub-manifest.sh` is keyed to the x64 tarball name), and there is no corpus
+     battery on arm64 yet.
+   - **Chromebook note:** a Chromebook's Linux is Debian 13 aarch64, usually with no snapd,
+     so its install is the arm64 `.deb` or the APT repository.

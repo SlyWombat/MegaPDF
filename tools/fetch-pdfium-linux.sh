@@ -1,18 +1,27 @@
 #!/usr/bin/env bash
-# Fetches the pinned PDFium linux-x64 prebuilt (MegaPDF's patched build, libs/pdfium/RELEASE) for the
+# Fetches the pinned PDFium linux-x64 or linux-arm64 prebuilt (MegaPDF's patched build, libs/pdfium/RELEASE) for the
 # shared engine core's test target (#104, ADR-003). No app ships from Linux; this
 # exists so `core/` can be built and tested on the cheapest CI runner, with
 # AddressSanitizer. Same doctrine as tools/fetch-pdfium-mac.sh: the build is read
 # from libs/pdfium/win-x64/VERSION and the download is verified against it.
 #
-# Usage: tools/fetch-pdfium-linux.sh [dest-dir]
-#   dest-dir defaults to libs/pdfium/linux-x64 (gitignored), where
+# Usage: tools/fetch-pdfium-linux.sh [dest-dir] [rid]
+#   rid       linux-x64 or linux-arm64; defaults to the host's (uname -m). The other one is
+#             refused: the engine fetched must be one this machine can load (#871).
+#   dest-dir defaults to libs/pdfium/<rid> (gitignored), where
 #   core/CMakeLists.txt looks for lib/libpdfium.so.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PIN="$ROOT/libs/pdfium/win-x64/VERSION"
-DEST="${1:-$ROOT/libs/pdfium/linux-x64}"
+case "$(uname -m)" in
+    x86_64)        HOST="linux-x64" ;;
+    aarch64|arm64) HOST="linux-arm64" ;;
+    *) echo "::error::unsupported Linux architecture $(uname -m)" >&2; exit 1 ;;
+esac
+RID="${2:-$HOST}"
+[ "$RID" = "$HOST" ] || { echo "::error::asked for $RID but this host is $HOST" >&2; exit 1; }
+DEST="${1:-$ROOT/libs/pdfium/$RID}"
 
 [ -f "$PIN" ] || { echo "::error::pin file not found: $PIN" >&2; exit 1; }
 BUILD="$(grep -E '^BUILD=' "$PIN" | cut -d= -f2 | tr -d '[:space:]')"
@@ -25,14 +34,14 @@ fi
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
-URL="$(tr -d '[:space:]' < "$ROOT/libs/pdfium/RELEASE")/pdfium-linux-x64.tgz"
+URL="$(tr -d '[:space:]' < "$ROOT/libs/pdfium/RELEASE")/pdfium-$RID.tgz"
 echo "fetching $URL"
 curl -fsSL "$URL" -o "$TMP/linux.tgz"
 mkdir -p "$TMP/x"
 tar xzf "$TMP/linux.tgz" -C "$TMP/x"
 
 if ! diff -q "$PIN" "$TMP/x/VERSION" >/dev/null 2>&1; then
-    echo "::error::PDFium version mismatch — the linux-x64 build is not the pinned one."
+    echo "::error::PDFium version mismatch — the $RID build is not the pinned one."
     echo "--- expected:"; cat "$PIN"; echo "--- got:"; cat "$TMP/x/VERSION"
     exit 1
 fi

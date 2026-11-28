@@ -117,7 +117,8 @@
                has to go, and save it back — several documents at once, as tabs in one
                window. Save As can write the document's text as Markdown, and
                <code>megapdf-cli</code> does the same from a terminal. For 64-bit PCs
-               (x86-64); ARM computers aren't supported yet.</p>
+               (x86-64) and for 64-bit ARM computers (arm64), including the Linux on a
+               Chromebook.</p>
             <div class="picker">
                 <a href="#apt"><b>Debian, Ubuntu, Mint, Pop!_OS</b>
                     <span>Add the MegaPDF repository. Updates arrive with your system's.</span></a>
@@ -199,9 +200,15 @@ sudo apt update</code></pre>
         <section class="way" id="deb">
             <h2>Just the .deb</h2>
             <p class="for">Debian and Ubuntu, if you'd rather not add a repository</p>
-            <p>Download <a href="https://github.com/SlyWombat/MegaPDF/releases/download/linux-v2.5.0/megapdf_2.5.0_amd64.deb">megapdf_2.5.0_amd64.deb</a>
-               and install it, which also pulls in anything it needs:</p>
+            <p>Download the one for your computer, and install it, which also pulls in
+               anything it needs. Not sure which? <code>dpkg --print-architecture</code>
+               prints <code>amd64</code> or <code>arm64</code>.</p>
+            <ul>
+                <li>64-bit PC (amd64): <a href="https://github.com/SlyWombat/MegaPDF/releases/download/linux-v2.5.0/megapdf_2.5.0_amd64.deb">megapdf_2.5.0_amd64.deb</a></li>
+                <li>64-bit ARM, such as a Chromebook (arm64): <a href="https://github.com/SlyWombat/MegaPDF/releases/download/linux-v2.5.0/megapdf_2.5.0_arm64.deb">megapdf_2.5.0_arm64.deb</a></li>
+            </ul>
 <pre><code>sudo apt install ./megapdf_2.5.0_amd64.deb</code></pre>
+            <p>(or <code>./megapdf_2.5.0_arm64.deb</code> on ARM.)</p>
             <div class="note">
                 <p><strong>This copy won't update itself.</strong> For updates, add the
                    repository as shown <a href="#apt">above</a>. It takes over this install
@@ -214,8 +221,13 @@ sudo apt update</code></pre>
         <section class="way" id="tarball">
             <h2>The tarball</h2>
             <p class="for">Any distribution. Installs into your home folder, no root needed.</p>
-            <p>Download <a href="https://github.com/SlyWombat/MegaPDF/releases/download/linux-v2.5.0/megapdf-linux-x64-2.5.0.tar.gz">megapdf-linux-x64-2.5.0.tar.gz</a>,
-               then:</p>
+            <p>Download the one for your computer (<code>uname -m</code> prints
+               <code>x86_64</code> or <code>aarch64</code>):</p>
+            <ul>
+                <li>64-bit PC (x86-64): <a href="https://github.com/SlyWombat/MegaPDF/releases/download/linux-v2.5.0/megapdf-linux-x64-2.5.0.tar.gz">megapdf-linux-x64-2.5.0.tar.gz</a></li>
+                <li>64-bit ARM (arm64): <a href="https://github.com/SlyWombat/MegaPDF/releases/download/linux-v2.5.0/megapdf-linux-arm64-2.5.0.tar.gz">megapdf-linux-arm64-2.5.0.tar.gz</a></li>
+            </ul>
+            <p>then, for the x86-64 one (use <code>arm64</code> in the names for ARM):</p>
 <pre><code>tar -xzf megapdf-linux-x64-2.5.0.tar.gz
 cd megapdf-linux-x64-2.5.0
 ./install.sh</code></pre>
@@ -246,6 +258,7 @@ cd megapdf-linux-x64-2.5.0
                <a href="https://github.com/SlyWombat/MegaPDF/releases/tag/linux-v2.5.0">release page</a>
                has a <code>.sha256</code> file beside it. Save both in the same folder and run:</p>
 <pre><code>sha256sum -c megapdf_2.5.0_amd64.deb.sha256</code></pre>
+            <p>(<code>_arm64</code> for the ARM downloads.)</p>
             <p>Packages from the APT repository<!--snap:live--> and the Snap Store<!--snap:soon snap:end-->
                are checked automatically.</p>
         </section>

@@ -2,7 +2,7 @@
 # Builds a .deb of MegaPDF from a tree that tools/build-linux-app.sh has already
 # produced (#158) — the portable format, for GitHub Releases.
 #
-#     tools/build-linux-app.sh linux-x64 artifacts/linux
+#     tools/build-linux-app.sh artifacts/linux     # host architecture, linux-x64 or linux-arm64
 #     tools/linux/build-deb.sh [tree-dir] [out-dir]
 #
 # A .deb rather than an AppImage: dpkg-deb --build needs no privileges, no FUSE and no
@@ -28,7 +28,13 @@ VERSION="$(cat "$TREE/VERSION" 2>/dev/null || echo 0.1.0)"
 # The package's own version: the app's, plus a packaging revision when the package was
 # rebuilt around an unchanged app (tools/linux/PACKAGE-REVISION, #315).
 PKG_VERSION="$("$ROOT/tools/linux/package-version.sh" "$VERSION")"
-ARCH=amd64
+# amd64 or arm64, the host's: the tree was built natively (tools/build-linux-app.sh refuses
+# any other), so the package says the architecture of what is in it (#871).
+case "$(uname -m)" in
+    x86_64)        ARCH=amd64 ;;
+    aarch64|arm64) ARCH=arm64 ;;
+    *) echo "::error::unsupported architecture $(uname -m)" >&2; exit 1 ;;
+esac
 
 STAGE="$OUT/$PKG-$PKG_VERSION"
 rm -rf "$STAGE"

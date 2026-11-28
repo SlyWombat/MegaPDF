@@ -6,7 +6,7 @@
 #     sudo tools/linux/build-snap.sh [tree-dir] [out-dir]
 #
 #   tree-dir  the unpacked app, default artifacts/linux/MegaPDF
-#   out-dir   default artifacts/snap; holds context/ and megapdf_<version>_amd64.snap
+#   out-dir   default artifacts/snap; holds context/ and megapdf_<version>_<amd64|arm64>.snap
 #
 # Runs `snapcraft pack --destructive-mode`, which builds on this machine rather than
 # in an LXD container: the machine must therefore be Ubuntu 24.04, the release core24
@@ -71,12 +71,17 @@ python3 "$SRC/make-snapcraft-yaml.py" "$SRC/snapcraft.yaml.in" "$METAINFO" \
 # --- build ----------------------------------------------------------------------
 
 mkdir -p "$OUT"
-SNAP_FILE="$OUT/megapdf_${APP_VERSION}_amd64.snap"
+case "$(uname -m)" in
+    x86_64)        SNAP_ARCH=amd64 ;;
+    aarch64|arm64) SNAP_ARCH=arm64 ;;
+    *) echo "::error::unsupported architecture $(uname -m)" >&2; exit 1 ;;
+esac
+SNAP_FILE="$OUT/megapdf_${APP_VERSION}_${SNAP_ARCH}.snap"
 rm -f "$SNAP_FILE"
 # A newer snapcraft refuses to write outside its project tree, which is $CONTEXT (the
 # cwd holding snap/snapcraft.yaml) — not $OUT, its parent. Pack inside $CONTEXT, then
 # move the result out to $SNAP_FILE, which is the contract callers rely on.
-BUILT_SNAP="$CONTEXT/megapdf_${APP_VERSION}_amd64.snap"
+BUILT_SNAP="$CONTEXT/megapdf_${APP_VERSION}_${SNAP_ARCH}.snap"
 ( cd "$CONTEXT" && snapcraft pack --destructive-mode --output "$BUILT_SNAP" )
 mv "$BUILT_SNAP" "$SNAP_FILE"
 

@@ -57,10 +57,19 @@ on:
 
 jobs:
   snap:
-    name: Snap (build, strict confinement)
+    name: Snap (build, strict confinement)${{ matrix.suffix }}
     # 24.04 by name, not ubuntu-latest: `snapcraft pack --destructive-mode` builds a core24
-    # snap only on the release core24 is made from.
-    runs-on: ubuntu-24.04
+    # snap only on the release core24 is made from. One leg per architecture (#871), each
+    # built natively, since destructive-mode builds for the machine it runs on; the arm64
+    # one runs on GitHub's ubuntu-24.04-arm. Upload and promote behave exactly as before,
+    # per leg.
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {arch: amd64, rid: linux-x64, runner: ubuntu-24.04, suffix: ''}
+          - {arch: arm64, rid: linux-arm64, runner: ubuntu-24.04-arm, suffix: ' (arm64)'}
     steps:
       - uses: actions/checkout@v4
 
@@ -75,7 +84,7 @@ jobs:
           sudo apt-get install -y -qq cmake ninja-build desktop-file-utils squashfs-tools
 
       - name: Build the app tree
-        run: tools/build-linux-app.sh linux-x64 "$RUNNER_TEMP/linux"
+        run: tools/build-linux-app.sh ${{ matrix.rid }} "$RUNNER_TEMP/linux"
 
       - name: Snapcraft
         run: |
@@ -95,7 +104,7 @@ jobs:
         continue-on-error: true
         run: |
           sudo snap install review-tools
-          /snap/bin/review-tools.snap-review "$RUNNER_TEMP"/snap/megapdf_*_amd64.snap || true
+          /snap/bin/review-tools.snap-review "$RUNNER_TEMP"/snap/megapdf_*_${{ matrix.arch }}.snap || true
 
       # dbus-user-session puts the session bus under the user's systemd manager, which is
       # where snapd asks for the transient scope it tracks a snap in.
@@ -135,13 +144,13 @@ jobs:
           sudo systemd-run --machine="$USER@.host" --user --pipe --wait --quiet --collect \
             --working-directory="$GITHUB_WORKSPACE" \
             "$GITHUB_WORKSPACE/tools/linux/check-snap.sh" \
-            "$(ls "$RUNNER_TEMP"/snap/megapdf_*_amd64.snap)" \
+            "$(ls "$RUNNER_TEMP"/snap/megapdf_*_${{ matrix.arch }}.snap)" \
             "$RUNNER_TEMP/fixtures" "$RUNNER_TEMP/linux/MegaPDF"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: MegaPDF-snap
-          path: ${{ runner.temp }}/snap/megapdf_*_amd64.snap
+          name: MegaPDF-snap-${{ matrix.arch }}
+          path: ${{ runner.temp }}/snap/megapdf_*_${{ matrix.arch }}.snap
           if-no-files-found: error
 
       # Off unless asked for, and off without the credential: see the top of this file.
@@ -154,7 +163,7 @@ jobs:
             echo "::error::no SNAPCRAFT_STORE_CREDENTIALS secret; see tools/Linux-Packaging.md, \"The Snap Store\""
             exit 1
           fi
-          snapcraft upload --release=edge "$(ls "$RUNNER_TEMP"/snap/megapdf_*_amd64.snap)"
+          snapcraft upload --release=edge "$(ls "$RUNNER_TEMP"/snap/megapdf_*_${{ matrix.arch }}.snap)"
 
   # Promotion only. Builds nothing and uploads nothing: it moves a revision that is
   # already in the store onto the stable channel, which is the Linux go-live.
