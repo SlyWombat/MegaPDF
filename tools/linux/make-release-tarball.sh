@@ -7,7 +7,7 @@
 #   tree-dir  the built app, default artifacts/linux/MegaPDF
 #   out-dir   default artifacts/release
 #
-# Output: megapdf-linux-x64-<version>.tar.gz and megapdf-linux-x64-<version>.tar.gz.sha256,
+# Output: megapdf-linux-<x64|arm64>-<version>.tar.gz and its .sha256 (the host's architecture, #871),
 # the same shape the other platforms' tag builds attach to a release.
 #
 # **One archive, one checksum.** Flathub's manifest lives in its own repository and has
@@ -44,7 +44,12 @@ VERSION="$(tr -d '[:space:]' < "$TREE/VERSION")"
 # was rebuilt around an unchanged app (tools/linux/PACKAGE-REVISION, #315), so a
 # rebuilt tarball never shares a name with the published one it replaces. The
 # metainfo check below is about the app, so it stays on VERSION.
-NAME="megapdf-linux-x64-$("$ROOT/tools/linux/package-version.sh" "$VERSION")"
+case "$(uname -m)" in
+    x86_64)        TARCH=x64 ;;
+    aarch64|arm64) TARCH=arm64 ;;
+    *) echo "::error::unsupported architecture $(uname -m)" >&2; exit 1 ;;
+esac
+NAME="megapdf-linux-$TARCH-$("$ROOT/tools/linux/package-version.sh" "$VERSION")"
 
 # --- the metainfo has to agree with what is being released ------------------------
 # A release history whose top entry is the *previous* version is the kind of thing a

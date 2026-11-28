@@ -8,9 +8,13 @@
 #
 # <out-dir> becomes the repository root that https://megapdf.ca/apt/ serves:
 #
-#     pool/main/m/megapdf/megapdf_<version>_amd64.deb
-#     dists/stable/main/binary-amd64/Packages{,.gz,.xz}
+#     pool/main/m/megapdf/megapdf_<version>_{amd64,arm64}.deb
+#     dists/stable/main/binary-{amd64,arm64}/Packages{,.gz,.xz}
 #     dists/stable/{Release,Release.gpg,InRelease}
+#
+# Both architectures (#871) sit under the one signed InRelease. Give it the .debs of
+# both; a repository built from one architecture's .deb alone still has an (empty)
+# index for the other, so apt on that machine finds no package instead of a 404.
 #
 # plus the three files a person needs to subscribe to it, copied from
 # website/megapdf/apt/ where they are committed: megapdf.gpg (the public key, binary,
@@ -41,7 +45,7 @@ OUT=${1:?$USAGE}; shift
 
 SUITE=stable
 COMPONENT=main
-ARCH=amd64
+ARCHS=(amd64 arm64)
 EXPECTED="$(tr -d '[:space:]' < "$PUBLIC/FINGERPRINT")"
 
 for tool in gpg gpgv apt-ftparchive dpkg-deb; do
@@ -68,13 +72,15 @@ echo "signing with $FPR"
 
 # --- pool ---------------------------------------------------------------------------
 POOL="pool/$COMPONENT/m/megapdf"
-mkdir -p "$OUT/$POOL" "$OUT/dists/$SUITE/$COMPONENT/binary-$ARCH"
+mkdir -p "$OUT/$POOL"
+for a in "${ARCHS[@]}"; do mkdir -p "$OUT/dists/$SUITE/$COMPONENT/binary-$a"; done
 for deb in "$@"; do
     pkg="$(dpkg-deb -f "$deb" Package)"
     ver="$(dpkg-deb -f "$deb" Version)"
     arch="$(dpkg-deb -f "$deb" Architecture)"
-    [ "$pkg" = megapdf ] && [ "$arch" = "$ARCH" ] || {
-        echo "::error::$deb is $pkg/$arch, not megapdf/$ARCH" >&2; exit 1; }
+    case " ${ARCHS[*]} " in *" $arch "*) ok=1 ;; *) ok= ;; esac
+    [ "$pkg" = megapdf ] && [ -n "$ok" ] || {
+        echo "::error::$deb is $pkg/$arch, not megapdf/{${ARCHS[*]}}" >&2; exit 1; }
     cp "$deb" "$OUT/$POOL/${pkg}_${ver}_${arch}.deb"
     echo "  pool: ${pkg}_${ver}_${arch}.deb"
 done
@@ -93,36 +99,43 @@ newest_first() {
     done
     printf '%s\n' "${v[@]}"
 }
-declare -A file_of=()
+# Pruned by version, not by file: a version's amd64 and arm64 .debs stand or fall together.
+declare -A files_of=()
 for d in "$OUT/$POOL"/*.deb; do
-    file_of["$(dpkg-deb -f "$d" Version)"]="$d"
+    v="$(dpkg-deb -f "$d" Version)"
+    files_of["$v"]+="$d"$'\n'
 done
 n=0
-for ver in $(newest_first "${!file_of[@]}"); do
+for ver in $(newest_first "${!files_of[@]}"); do
     n=$((n + 1))
-    if [ "$n" -le "$KEEP" ]; then
-        echo "  keep: $(basename "${file_of[$ver]}")"
-    else
-        rm -f "${file_of[$ver]}"
-        echo "  drop: $(basename "${file_of[$ver]}") (the pool keeps the newest $KEEP)"
-    fi
+    while IFS= read -r f; do
+        [ -n "$f" ] || continue
+        if [ "$n" -le "$KEEP" ]; then
+            echo "  keep: $(basename "$f")"
+        else
+            rm -f "$f"
+            echo "  drop: $(basename "$f") (the pool keeps the newest $KEEP)"
+        fi
+    done <<< "${files_of[$ver]}"
 done
 
 # --- indices ------------------------------------------------------------------------
 # apt-ftparchive writes paths relative to the directory it runs in, which has to be
 # the repository root for the Filename: fields to resolve against the URL.
-BIN="dists/$SUITE/$COMPONENT/binary-$ARCH"
 (
     cd "$OUT"
-    apt-ftparchive packages "pool/$COMPONENT" > "$BIN/Packages"
-    gzip -9nkf "$BIN/Packages"
-    xz -9kf "$BIN/Packages"
+    for a in "${ARCHS[@]}"; do
+        BIN="dists/$SUITE/$COMPONENT/binary-$a"
+        apt-ftparchive --arch "$a" packages "pool/$COMPONENT" > "$BIN/Packages"
+        gzip -9nkf "$BIN/Packages"
+        xz -9kf "$BIN/Packages"
+    done
     apt-ftparchive \
         -o "APT::FTPArchive::Release::Origin=Electric RV" \
         -o "APT::FTPArchive::Release::Label=MegaPDF" \
         -o "APT::FTPArchive::Release::Suite=$SUITE" \
         -o "APT::FTPArchive::Release::Codename=$SUITE" \
-        -o "APT::FTPArchive::Release::Architectures=$ARCH" \
+        -o "APT::FTPArchive::Release::Architectures=${ARCHS[*]}" \
         -o "APT::FTPArchive::Release::Components=$COMPONENT" \
         -o "APT::FTPArchive::Release::Description=MegaPDF for Debian and Ubuntu" \
         release "dists/$SUITE" > "dists/$SUITE/Release.tmp"
@@ -145,5 +158,7 @@ gpgv --keyring "$PUBLIC/megapdf.gpg" "$OUT/dists/$SUITE/InRelease" 2>/dev/null \
 gpgv --keyring "$PUBLIC/megapdf.gpg" "$OUT/dists/$SUITE/Release.gpg" "$OUT/dists/$SUITE/Release" 2>/dev/null \
     || { echo "::error::Release.gpg does not verify against website/megapdf/apt/megapdf.gpg" >&2; exit 1; }
 echo "  InRelease and Release.gpg verify against the committed public key"
-grep -E '^(Package|Version|Filename):' "$OUT/$BIN/Packages" | paste - - - | sed 's/^/  /'
+for a in "${ARCHS[@]}"; do
+    grep -E '^(Package|Version|Filename):' "$OUT/dists/$SUITE/$COMPONENT/binary-$a/Packages" | paste - - - | sed 's/^/  /' || true
+done
 echo "repository: $OUT"

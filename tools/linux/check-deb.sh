@@ -13,7 +13,7 @@
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-DEB=${1:-$(ls "$ROOT"/artifacts/deb/megapdf_*_amd64.deb 2>/dev/null | head -1)}
+DEB=${1:-$(ls "$ROOT"/artifacts/deb/megapdf_*_"$(dpkg --print-architecture)".deb 2>/dev/null | head -1)}
 FIXTURES=${2:-$ROOT/artifacts/fixtures}
 OPTDIR=/opt/MegaPDF
 

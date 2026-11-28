@@ -36,6 +36,14 @@ REPO="$(cd "${1:?$USAGE}" && pwd)"
 FIXTURES="$(cd "${2:?$USAGE}" && pwd)"
 shift 2
 IMAGES=("$@")
+# The architecture under test is the host's: docker pulls the matching image variant, so on an
+# arm64 machine debian:13 is Debian 13 aarch64 -- the Chromebook's system (#871). Each machine
+# checks its own architecture's .debs and index; the repository holds both.
+case "$(uname -m)" in
+    x86_64)        ARCH=amd64 ;;
+    aarch64|arm64) ARCH=arm64 ;;
+    *) echo "::error::unsupported architecture $(uname -m)" >&2; exit 1 ;;
+esac
 [ ${#IMAGES[@]} -gt 0 ] || IMAGES=(debian:12 debian:13 ubuntu:22.04 ubuntu:24.04 ubuntu:26.04 debian:12+norecs)
 
 WORK="$(mktemp -d)"
@@ -51,25 +59,25 @@ cp -a "$REPO" "$SERVE/r1"
 # Newest and oldest by dpkg's own ordering: sort -V puts 2.0.0-2 and 2.0.0 the wrong
 # way round, and apt goes by dpkg.
 VERSION="" OLDEST="" DEB=""
-for d in "$REPO"/pool/main/m/megapdf/megapdf_*_amd64.deb; do
+for d in "$REPO"/pool/main/m/megapdf/megapdf_*_$ARCH.deb; do
     v="$(dpkg-deb -f "$d" Version)"
     if [ -z "$VERSION" ] || dpkg --compare-versions "$v" gt "$VERSION"; then VERSION="$v"; DEB="$d"; fi
     if [ -z "$OLDEST" ] || dpkg --compare-versions "$v" lt "$OLDEST"; then OLDEST="$v"; fi
 done
 [ -n "$DEB" ] || { echo "::error::no .deb in $REPO/pool" >&2; exit 1; }
-echo "repository holds $OLDEST … $VERSION"
+echo "repository holds $OLDEST … $VERSION ($ARCH)"
 NEXT="$VERSION.1"
 dpkg-deb -R "$DEB" "$WORK/repack"
 sed -i "s/^Version: .*/Version: $NEXT/" "$WORK/repack/DEBIAN/control"
 echo "$NEXT" > "$WORK/repack/opt/MegaPDF/UPGRADE-TEST"
-dpkg-deb --root-owner-group -Zxz --build "$WORK/repack" "$WORK/megapdf_${NEXT}_amd64.deb" >/dev/null
+dpkg-deb --root-owner-group -Zxz --build "$WORK/repack" "$WORK/megapdf_${NEXT}_$ARCH.deb" >/dev/null
 cp -a "$REPO" "$SERVE/r2"
-"$ROOT/tools/linux/make-apt-repo.sh" "$SERVE/r2" "$WORK/megapdf_${NEXT}_amd64.deb" >/dev/null
+"$ROOT/tools/linux/make-apt-repo.sh" "$SERVE/r2" "$WORK/megapdf_${NEXT}_$ARCH.deb" >/dev/null
 
 # --- the pool is bounded (#372): the newest three, in the pool and in Packages -------
 KEEP=3
-pool_count() { ls "$1"/pool/main/m/megapdf/megapdf_*_amd64.deb 2>/dev/null | wc -l; }
-index_count() { grep -c '^Package: megapdf$' "$1/dists/stable/main/binary-amd64/Packages" || true; }
+pool_count() { ls "$1"/pool/main/m/megapdf/megapdf_*_$ARCH.deb 2>/dev/null | wc -l; }
+index_count() { grep -c '^Package: megapdf$' "$1/dists/stable/main/binary-$ARCH/Packages" || true; }
 bound_fails=0
 for r in r1 r2; do
     p=$(pool_count "$SERVE/$r"); i=$(index_count "$SERVE/$r")
@@ -81,8 +89,8 @@ for r in r1 r2; do
     fi
 done
 if [ "$(pool_count "$SERVE/r1")" -eq "$KEEP" ]; then
-    if [ -e "$SERVE/r2/pool/main/m/megapdf/megapdf_${OLDEST}_amd64.deb" ] \
-        || grep -q "^Version: $OLDEST$" "$SERVE/r2/dists/stable/main/binary-amd64/Packages"; then
+    if [ -e "$SERVE/r2/pool/main/m/megapdf/megapdf_${OLDEST}_$ARCH.deb" ] \
+        || grep -q "^Version: $OLDEST$" "$SERVE/r2/dists/stable/main/binary-$ARCH/Packages"; then
         echo "  FAIL  r2: publishing $NEXT did not drop $OLDEST"
         bound_fails=$((bound_fails + 1))
     else

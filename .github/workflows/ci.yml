@@ -66,8 +66,16 @@ jobs:
   # the #144 toolbar menus through Avalonia's headless platform, so the expensive
   # part of the coverage costs no X server at all.
   linux-app:
-    name: Linux app
-    runs-on: ubuntu-latest
+    name: Linux app${{ matrix.suffix }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {arch: x64, deb: amd64, runner: ubuntu-latest, suffix: ''}
+          # GitHub's free arm64 runner (#871): the app is built and proven natively on
+          # aarch64, the Chromebook's architecture, never cross-compiled.
+          - {arch: arm64, deb: arm64, runner: ubuntu-24.04-arm, suffix: ' (arm64)'}
     steps:
       - uses: actions/checkout@v4
 
@@ -116,7 +124,7 @@ jobs:
             --logger "trx;LogFileName=linux-core.trx"
 
       - name: Build the app
-        run: tools/build-linux-app.sh linux-x64 "$RUNNER_TEMP/app"
+        run: tools/build-linux-app.sh linux-${{ matrix.arch }} "$RUNNER_TEMP/app"
 
       - name: Generate fixtures
         run: |
@@ -378,14 +386,14 @@ jobs:
 
       - name: Package
         run: |
-          tar -C "$RUNNER_TEMP/app" -czf "$RUNNER_TEMP/MegaPDF-linux-x64.tar.gz" MegaPDF
-          ls -lh "$RUNNER_TEMP/MegaPDF-linux-x64.tar.gz"
+          tar -C "$RUNNER_TEMP/app" -czf "$RUNNER_TEMP/MegaPDF-linux-${{ matrix.arch }}.tar.gz" MegaPDF
+          ls -lh "$RUNNER_TEMP/MegaPDF-linux-${{ matrix.arch }}.tar.gz"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: MegaPDF-linux-x64
+          name: MegaPDF-linux-${{ matrix.arch }}
           path: |
-            ${{ runner.temp }}/MegaPDF-linux-x64.tar.gz
+            ${{ runner.temp }}/MegaPDF-linux-${{ matrix.arch }}.tar.gz
             ${{ runner.temp }}/linux-window.png
             ${{ runner.temp }}/linux-fr-CA.png
             ${{ runner.temp }}/linux-es-MX.png
@@ -396,7 +404,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: linux-test-results
+          name: linux-test-results-${{ matrix.arch }}
           path: '**/TestResults/*.trx'
 
   # Both Linux packages, built from what the job above published and checked by
@@ -414,8 +422,16 @@ jobs:
   # `github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')`
   # and keep the .deb here — that is the cheap half and it catches most of what breaks.
   linux-package:
-    name: Linux packages
-    runs-on: ubuntu-latest
+    name: Linux packages${{ matrix.suffix }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {arch: x64, deb: amd64, runner: ubuntu-latest, suffix: ''}
+          # GitHub's free arm64 runner (#871): the app is built and proven natively on
+          # aarch64, the Chromebook's architecture, never cross-compiled.
+          - {arch: arm64, deb: arm64, runner: ubuntu-24.04-arm, suffix: ' (arm64)'}
     needs: linux-app
     steps:
       - uses: actions/checkout@v4
@@ -436,13 +452,13 @@ jobs:
       # the same commit.
       - uses: actions/download-artifact@v4
         with:
-          name: MegaPDF-linux-x64
+          name: MegaPDF-linux-${{ matrix.arch }}
           path: ${{ runner.temp }}/artifact
 
       - name: Unpack the tree that was tested
         run: |
           mkdir -p "$RUNNER_TEMP/app"
-          tar -C "$RUNNER_TEMP/app" -xzf "$RUNNER_TEMP/artifact/MegaPDF-linux-x64.tar.gz"
+          tar -C "$RUNNER_TEMP/app" -xzf "$RUNNER_TEMP/artifact/MegaPDF-linux-${{ matrix.arch }}.tar.gz"
           test -x "$RUNNER_TEMP/app/MegaPDF/bin/MegaPDF"
           test -x "$RUNNER_TEMP/app/MegaPDF/bin/megapdf-cli"
 
@@ -467,7 +483,7 @@ jobs:
       # would. .NET dlopens ICU and Avalonia.X11 dlopens the X libraries, so a
       # dependency the control file forgot is invisible to every other check there is.
       - name: Install the .deb and run the app out of it
-        run: sudo tools/linux/check-deb.sh "$(ls "$RUNNER_TEMP"/deb/megapdf_*_amd64.deb)" "$RUNNER_TEMP/fixtures"
+        run: sudo tools/linux/check-deb.sh "$(ls "$RUNNER_TEMP"/deb/megapdf_*_${{ matrix.deb }}.deb)" "$RUNNER_TEMP/fixtures"
 
       # Enforced against the table in tools/Linux-Packaging.md ("What lintian says about
       # the .deb"): every tag that table answers is deliberate and is suppressed here;
@@ -481,7 +497,7 @@ jobs:
       # the verdict.
       - name: lintian finds nothing the packaging notes have not answered
         run: |
-          deb=$(ls "$RUNNER_TEMP"/deb/megapdf_*_amd64.deb)
+          deb=$(ls "$RUNNER_TEMP"/deb/megapdf_*_${{ matrix.deb }}.deb)
           echo "--- the full report, for the record (each tag is answered in tools/Linux-Packaging.md):"
           lintian --tag-display-limit 0 --fail-on none "$deb"
           accepted=dir-or-file-in-opt,embedded-library,unstripped-binary-or-object,no-changelog,copyright-file-contains-full-apache-2-license,copyright-not-using-common-license-for-apache2,copyright-without-copyright-notice,no-manual-page
@@ -492,6 +508,7 @@ jobs:
       # --- the Flatpak ----------------------------------------------------------
 
       - name: The freedesktop runtime the manifest names
+        if: matrix.arch == 'x64'
         run: |
           flatpak remote-add --if-not-exists --user flathub https://dl.flathub.org/repo/flathub.flatpakrepo
           runtime=$(grep -E '^runtime-version:' tools/linux/flatpak/*.yml | head -1 | tr -d "' " | cut -d: -f2)
@@ -503,6 +520,7 @@ jobs:
       # inside org.flatpak.Builder and is built on the Sdk the step above has already
       # installed, so this is a small download rather than another runtime.
       - name: Flathub's linter
+        if: matrix.arch == 'x64'
         run: flatpak install -y --noninteractive --user flathub org.flatpak.Builder
 
       # The listing, checked by both the tools a Flathub reviewer would run: appstreamcli
@@ -510,9 +528,11 @@ jobs:
       # thing it tolerates is the screenshot URLs not resolving until the site is
       # deployed, and it tolerates nothing else — see the script (#254 A1, A2).
       - name: The listing a software centre will show
+        if: matrix.arch == 'x64'
         run: tools/linux/check-metainfo.sh
 
       - name: Build the Flatpak
+        if: matrix.arch == 'x64'
         run: tools/linux/build-flatpak.sh "$RUNNER_TEMP/app/MegaPDF" "$RUNNER_TEMP/flatpak"
 
       # The bundle existing proves nothing. This installs it and drives the app inside
@@ -520,13 +540,14 @@ jobs:
       # under Xvfb and draws a document, and the person's home is not readable from
       # inside — which is the permission set the manifest is asserting.
       - name: Install the Flatpak and run the app inside its sandbox
+        if: matrix.arch == 'x64'
         run: tools/linux/check-flatpak.sh "$RUNNER_TEMP/flatpak/ca.electricrv.MegaPDF.flatpak" "$RUNNER_TEMP/fixtures"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: MegaPDF-linux-packages
+          name: MegaPDF-linux-packages-${{ matrix.arch }}
           path: |
-            ${{ runner.temp }}/deb/megapdf_*_amd64.deb
+            ${{ runner.temp }}/deb/megapdf_*_${{ matrix.deb }}.deb
             ${{ runner.temp }}/flatpak/ca.electricrv.MegaPDF.flatpak
           if-no-files-found: error
 

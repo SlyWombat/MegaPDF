@@ -5,10 +5,10 @@
 # entry, the application/pdf association, and the hicolor icons.
 #
 # Usage: tools/build-linux-app.sh [rid] [out-dir]
-#   rid     linux-x64 (default). linux-arm64 is refused: the patched PDFium series
-#           cross-builds for it (#254 A6) but no release carries the arm64 archive
-#           yet, and this script would produce an arm64 app with an x64 engine in it.
-#           tools/Linux-Packaging.md lists the three changes and who unblocks them.
+#   rid     linux-x64 or linux-arm64; defaults to the host's (uname -m). The other one is
+#           refused: the native pieces (PDFium, the core, megapdf-cli) are built or
+#           fetched for the host, never cross-built, so a mismatched rid would put the
+#           wrong engine in the tree (#871).
 #   out-dir defaults to artifacts/linux
 #
 # NOT a package. Flathub, AppImage and .deb are separate work with their own
@@ -17,21 +17,24 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-RID="${1:-linux-x64}"
+case "$(uname -m)" in
+    x86_64)        HOST_RID="linux-x64" ;;
+    aarch64|arm64) HOST_RID="linux-arm64" ;;
+    *) echo "::error::unsupported Linux architecture $(uname -m)" >&2; exit 1 ;;
+esac
+RID="${1:-$HOST_RID}"
 OUT="${2:-$ROOT/artifacts/linux}"
 PROJECT="$ROOT/src/MegaPDF.Avalonia/MegaPDF.Avalonia.csproj"
 APP="$OUT/MegaPDF"
 
 case "$RID" in
-    linux-x64) ;;
-    linux-arm64)
-        echo "::error::linux-arm64 needs an arm64 PDFium archive in the pinned release." >&2
-        echo "         The series cross-builds for arm64 (#254 A6); no release carries the" >&2
-        echo "         archive yet, so this would ship an arm64 app around an x64 engine." >&2
-        echo "         See tools/Linux-Packaging.md, \"linux-arm64\"." >&2
-        exit 1 ;;
-    *) echo "::error::unsupported rid '$RID' (expected linux-x64)" >&2; exit 1 ;;
+    linux-x64|linux-arm64) ;;
+    *) echo "::error::unsupported rid '$RID' (expected linux-x64 or linux-arm64)" >&2; exit 1 ;;
 esac
+if [ "$RID" != "$HOST_RID" ]; then
+    echo "::error::asked for $RID but this host is $HOST_RID; build on a $RID machine (no cross-build)" >&2
+    exit 1
+fi
 
 if [ "$(uname -s)" != "Linux" ]; then
     echo "::error::this script must run on Linux (the linux apphost is produced there)" >&2
@@ -43,8 +46,8 @@ VERSION="${VERSION:-0.1.0}"
 echo "building MegaPDF $VERSION for $RID"
 
 # PDFium must be present before publish: MegaPDF.Core.csproj copies it from
-# libs/pdfium/linux-x64 when building on Linux, and silently omits it otherwise.
-"$ROOT/tools/fetch-pdfium-linux.sh"
+# libs/pdfium/<rid> when building on Linux, and silently omits it otherwise.
+"$ROOT/tools/fetch-pdfium-linux.sh" "$ROOT/libs/pdfium/$RID" "$RID"
 
 rm -rf "$APP"
 mkdir -p "$APP/bin"
@@ -57,7 +60,7 @@ command -v cmake >/dev/null 2>&1 || {
     echo "::error::cmake not found. apt install cmake." >&2
     exit 1
 }
-CLI_BUILD="$ROOT/core/build/linux-x64"
+CLI_BUILD="$ROOT/core/build/$RID"
 CLI_GEN=()
 command -v ninja >/dev/null 2>&1 && CLI_GEN=(-G Ninja)
 cmake -S "$ROOT/core" -B "$CLI_BUILD" -DCMAKE_BUILD_TYPE=Release "${CLI_GEN[@]+"${CLI_GEN[@]}"}"

@@ -131,10 +131,13 @@ dotnet test MegaPDF.sln
 
 ### Linux (#158)
 
-The cross-platform app in `src/MegaPDF.Avalonia` builds and runs on Linux x64.
+The cross-platform app in `src/MegaPDF.Avalonia` builds and runs on Linux x64 and
+linux-arm64 (#871; arm64 is built natively and CI runs its `--self-test` on a GitHub
+arm64 runner; the Flatpak stays x86-64 only).
 Tested on **Ubuntu 24.04 LTS**; **Fedora current** is the other target
-distribution. `linux-arm64` is not buildable yet — the patched PDFium series has
-no arm64 build.
+distribution. Build on the architecture you target: `tools/build-linux-app.sh` takes
+the host's (`linux-x64` or `linux-arm64`) and refuses the other, since nothing is
+cross-compiled.
 
 Needs the .NET 8 SDK, CMake and a C++ toolchain. Ninja is used when present:
 
